@@ -462,12 +462,12 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
 
         case TType::EKind::Pg: {
             if (!value) {
-                // do not set Bytes field
+                // do not set Text field
                 return;
             }
             auto pgType = static_cast<TPgType*>(type);
-            auto binaryValue = NYql::NCommon::PgValueToNativeBinary(value, pgType->GetTypeId());
-            res.SetBytes(binaryValue);
+            auto textValue = NYql::NCommon::PgValueToString(value, pgType->GetTypeId());
+            res.SetText(textValue);
             break;
         }
 

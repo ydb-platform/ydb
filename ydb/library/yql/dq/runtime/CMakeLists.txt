@@ -25,6 +25,7 @@ target_link_libraries(yql-dq-runtime PUBLIC
   yql-dq-common
   yql-dq-expr_nodes
   yql-dq-type_ann
+  parser-pg_wrapper-interface
   common-schema-mkql
   tools-enum_parser-enum_serialization_runtime
 )

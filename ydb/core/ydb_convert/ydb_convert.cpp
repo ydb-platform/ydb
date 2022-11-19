@@ -123,6 +123,12 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             }
             break;
         }
+        case NKikimrMiniKQL::ETypeKind::Pg: {
+            const NKikimrMiniKQL::TPgType& pgType = input.GetPg();
+            auto pgOut = output.mutable_pg_type();
+            pgOut->Setoid(pgType.Getoid());
+            break;
+        }
         default: {
             Y_FAIL("Unknown protobuf type: %s", input.DebugString().c_str());
         }
@@ -557,6 +563,11 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
                     ythrow yexception() << "Unknown variant type representation: "
                                         << protoVariantType.DebugString();
             }
+            break;
+        }
+        case NKikimrMiniKQL::ETypeKind::Pg: {
+            const auto& stringRef = inputValue.GetText();
+            output.set_text_value(stringRef.data(), stringRef.size());
             break;
         }
         default: {

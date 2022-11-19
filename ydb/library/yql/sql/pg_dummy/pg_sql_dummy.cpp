@@ -130,6 +130,12 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
    Y_UNUSED(stable);
    Y_UNUSED(type);
@@ -249,7 +255,14 @@ std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
 std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,
     const NKikimr::NMiniKQL::TComputationNodeFactoryContext&)> GetPgFactory()
 {
-    return {};
+    return [] (
+        NKikimr::NMiniKQL::TCallable& callable,
+        const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
+    ) -> NKikimr::NMiniKQL::IComputationNode* {
+        Y_UNUSED(callable);
+        Y_UNUSED(ctx);
+        return nullptr;
+    };
 }
 
 } // NYql

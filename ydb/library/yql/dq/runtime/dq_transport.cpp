@@ -4,6 +4,8 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -380,6 +382,13 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
             return 2 + EstimateSizeImpl(value.GetVariantItem(), innerType, fixed);
         }
 
+        case TType::EKind::Pg: {
+            if (value) {
+                auto pgType = static_cast<const TPgType*>(type);
+                return NKikimr::NMiniKQL::PgValueSize(pgType, value);
+            }
+            return 0;
+        }
         case TType::EKind::Type:
         case TType::EKind::Stream:
         case TType::EKind::Callable:
@@ -389,7 +398,6 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::ReservedKind:
         case TType::EKind::Tagged:
         case TType::EKind::Block:
-        case TType::EKind::Pg:
             THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }
 }

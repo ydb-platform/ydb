@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
         rows.EndList();
 
-        result = db.BulkUpsert("/Root/Pg", rows.Build()).GetValueSync();;
+        result = db.BulkUpsert("/Root/Pg", rows.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         session.Close().GetValueSync();
@@ -156,6 +156,40 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
         }
    }
+
+   Y_UNIT_TEST(EmptyQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            --!syntax_pg
+        )").GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        Y_ENSURE(result.GetResultSets().empty());
+    }
+
+    Y_UNIT_TEST(NoTableQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            --!syntax_pg
+            SELECT * FROM (VALUES
+                (1, 'one'),
+                (2, 'two'),
+                (3, 'three')
+            ) AS t (int8, varchar);
+        )").GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            ["1";"one"];
+            ["2";"two"];
+            ["3";"three"]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

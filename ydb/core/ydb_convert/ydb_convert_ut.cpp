@@ -364,6 +364,18 @@ Variant {
         TestConvertTypeFromYdb(expected, input);
     }
 
+    Y_UNIT_TEST(PgType) {
+        const TString input =
+            "Kind: Pg\n"
+            "Pg {\n"
+            "  oid: 16\n"
+            "}\n";
+        const TString expected =
+            "pg_type {\n"
+            "  oid: 16\n"
+            "}\n";
+        TestConvertTypeToYdb(input, expected);
+    }
 } // ConvertMiniKQLTypeToYdbTypeTest
 
 Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) {
@@ -1015,6 +1027,19 @@ variant_index: 3435973836
         const TString expected = "";
 
         UNIT_ASSERT_EXCEPTION(TestConvertValueFromYdb(inputType, inputValue, expected), yexception);
+    }
+
+    Y_UNIT_TEST(PgValue) {
+        const TString inputType =
+            "Kind: Pg\n"
+            "Pg {\n"
+            "  oid: 16\n"
+            "}\n";
+        const TString inputValue =
+            "Text: \"123\"\n";
+        const TString expectedValue =
+            "text_value: \"123\"\n";
+        TestConvertValueToYdb(inputType, inputValue, expectedValue);
     }
 
 } // ConvertYdbValueToMiniKQLValueTest

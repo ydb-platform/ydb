@@ -2336,6 +2336,22 @@ namespace NMiniKQL {
 
 using namespace NYql;
 
+ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
+    const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+    if (typeDesc.TypeLen >= 0) {
+        return typeDesc.TypeLen;
+    }
+    Y_ENSURE(typeDesc.TypeLen == -1 || typeDesc.TypeLen == -2);
+    auto datum = PointerDatumFromPod(value);
+    if (typeDesc.TypeLen == -1) {
+        const auto x = (const text*)PointerDatumFromPod(value);
+        return GetCleanVarSize(x);
+    } else {
+        const auto x = (const char*)PointerDatumFromPod(value);
+        return strlen(x);
+    }
+}
+
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
     switch (type->GetTypeId()) {
     case BOOLOID: {
@@ -3167,4 +3183,3 @@ ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
 }
 
 } // namespace NKikimr::NPg
-

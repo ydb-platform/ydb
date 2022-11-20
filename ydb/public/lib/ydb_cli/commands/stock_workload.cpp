@@ -71,7 +71,7 @@ int TCommandStockInit::Run(TConfig& config) {
 }
 
 TCommandStockClean::TCommandStockClean()
-    : TWorkloadCommand("clean", {}, "drop tables created in init phase") {}
+    : TWorkloadCommand("clean", {}, "Drop tables created in init phase") {}
 
 void TCommandStockClean::Config(TConfig& config) {
     TWorkloadCommand::Config(config);

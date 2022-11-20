@@ -7,7 +7,7 @@
 namespace NYdb::NConsoleClient {
 
 TCommandKv::TCommandKv()
-    : TClientCommandTree("kv", {}, "YDB kv workload")
+    : TClientCommandTree("kv", {}, "YDB Key-Value workload")
 {
     AddCommand(std::make_unique<TCommandKvInit>());
     AddCommand(std::make_unique<TCommandKvClean>());
@@ -15,7 +15,7 @@ TCommandKv::TCommandKv()
 }
 
 TCommandKvInit::TCommandKvInit()
-    : TWorkloadCommand("init", {}, "Create and initialize tables for workload")
+    : TWorkloadCommand("init", {}, "Create and initialize a table for workload")
     , InitRowCount(NYdbWorkload::KvWorkloadConstants::INIT_ROW_COUNT)
     , MinPartitions(NYdbWorkload::KvWorkloadConstants::MIN_PARTITIONS)
     , MaxFirstKey(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY)
@@ -36,13 +36,13 @@ void TCommandKvInit::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MIN_PARTITIONS).StoreResult(&MinPartitions);
     config.Opts->AddLongOption("auto-partition", "Enable auto partitioning by load.")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::PARTITIONS_BY_LOAD).StoreResult(&PartitionsByLoad);
-    config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
+    config.Opts->AddLongOption("max-first-key", "Maximum value of a first primary key")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
     config.Opts->AddLongOption("len", "String len")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
     config.Opts->AddLongOption("cols", "Number of columns")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
-    config.Opts->AddLongOption("rows", "Number of rows to upsert")
+    config.Opts->AddLongOption("rows", "Number of rows")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
 
@@ -71,7 +71,7 @@ int TCommandKvInit::Run(TConfig& config) {
 
 
 TCommandKvClean::TCommandKvClean()
-    : TWorkloadCommand("clean", {}, "drop tables created in init phase") {}
+    : TWorkloadCommand("clean", {}, "Drop table created in init phase") {}
 
 void TCommandKvClean::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
@@ -95,7 +95,7 @@ int TCommandKvClean::Run(TConfig& config) {
 }
 
 TCommandKvRun::TCommandKvRun()
-    : TClientCommandTree("run", {}, "Run YDB KV workload")
+    : TClientCommandTree("run", {}, "Run YDB Key-Value workload")
 {
     AddCommand(std::make_unique<TCommandKvRunUpsertRandom>());
     AddCommand(std::make_unique<TCommandKvRunInsertRandom>());
@@ -103,18 +103,18 @@ TCommandKvRun::TCommandKvRun()
 }
 
 TCommandKvRunUpsertRandom::TCommandKvRunUpsertRandom()
-    : TWorkloadCommand("upsert", {}, "upsert random rows into table")
+    : TWorkloadCommand("upsert", {}, "Upsert random rows into table")
 {}
 
 void TCommandKvRunUpsertRandom::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
+    config.Opts->AddLongOption("max-first-key", "Maximum value of a first primary key")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
     config.Opts->AddLongOption("len", "String len")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
-    config.Opts->AddLongOption("cols", "Number of columns")
+    config.Opts->AddLongOption("cols", "Number of columns to upsert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows to upsert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
@@ -141,18 +141,18 @@ int TCommandKvRunUpsertRandom::Run(TConfig& config) {
 }
 
 TCommandKvRunInsertRandom::TCommandKvRunInsertRandom()
-    : TWorkloadCommand("insert", {}, "insert random rows into table")
+    : TWorkloadCommand("insert", {}, "Insert random rows into table")
 {}
 
 void TCommandKvRunInsertRandom::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
+    config.Opts->AddLongOption("max-first-key", "Maximum value of a first primary key")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
     config.Opts->AddLongOption("len", "String len")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
-    config.Opts->AddLongOption("cols", "Number of columns")
+    config.Opts->AddLongOption("cols", "Number of columns insert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows to insert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
@@ -179,18 +179,18 @@ int TCommandKvRunInsertRandom::Run(TConfig& config) {
 }
 
 TCommandKvRunSelectRandom::TCommandKvRunSelectRandom()
-    : TWorkloadCommand("select", {}, "select rows by exactly matching of a")
+    : TWorkloadCommand("select", {}, "Select rows matching primary key(s)")
 {}
 
 void TCommandKvRunSelectRandom::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
+    config.Opts->AddLongOption("max-first-key", "Maximum value of a first primary key")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
-    config.Opts->AddLongOption("cols", "Number of columns")
+    config.Opts->AddLongOption("cols", "Number of columns to select for a single query")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
-    config.Opts->AddLongOption("rows", "Number of rows to select")
+    config.Opts->AddLongOption("rows", "Number of rows to select for a single query")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
 
@@ -213,4 +213,4 @@ int TCommandKvRunSelectRandom::Run(TConfig& config) {
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TKvWorkloadGenerator::EType::SelectRandom));
 }
 
-} // namespace NYdb::NConsoleClient {
+} // namespace NYdb::NConsoleClient

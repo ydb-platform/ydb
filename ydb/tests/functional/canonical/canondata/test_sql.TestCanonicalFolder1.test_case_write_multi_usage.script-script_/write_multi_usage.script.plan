@@ -10,151 +10,6 @@
                     "name": "/local/base_write_multi_usage_script_script/Input1",
                     "reads": [
                         {
-                            "lookup_by": [
-                                "Group (2)"
-                            ],
-                            "columns": [
-                                "Amount"
-                            ],
-                            "scan_by": [
-                                "Name (-\u221e, +\u221e)"
-                            ],
-                            "type": "Lookup"
-                        }
-                    ],
-                    "writes": [
-                        {
-                            "type": "MultiErase"
-                        }
-                    ]
-                },
-                {
-                    "name": "/local/base_write_multi_usage_script_script/Temp",
-                    "writes": [
-                        {
-                            "columns": [
-                                "Name",
-                                "Value"
-                            ],
-                            "type": "MultiUpsert"
-                        }
-                    ]
-                }
-            ],
-            "Plan": {
-                "Plans": [
-                    {
-                        "PlanNodeId": 6,
-                        "Subplan Name": "CTE tx_result_binding_0_0",
-                        "Plans": [
-                            {
-                                "PlanNodeId": 5,
-                                "Node Type": "Stage"
-                            }
-                        ],
-                        "Node Type": "Precompute_0_0",
-                        "Parent Relationship": "InitPlan"
-                    },
-                    {
-                        "PlanNodeId": 4,
-                        "Subplan Name": "CTE tx_result_binding_0_1",
-                        "Plans": [
-                            {
-                                "PlanNodeId": 3,
-                                "Plans": [
-                                    {
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Tables": [
-                                                    "base_write_multi_usage_script_script/Input1"
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Operators": [
-                                                    {
-                                                        "ReadRange": [
-                                                            "Group (2)",
-                                                            "Name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadColumns": [
-                                                            "Amount"
-                                                        ],
-                                                        "Name": "TablePointLookup",
-                                                        "Table": "base_write_multi_usage_script_script/Input1"
-                                                    }
-                                                ],
-                                                "Node Type": "TablePointLookup"
-                                            }
-                                        ],
-                                        "Node Type": "UnionAll",
-                                        "PlanNodeType": "Connection"
-                                    }
-                                ],
-                                "Node Type": "Collect"
-                            }
-                        ],
-                        "Node Type": "Precompute_0_1",
-                        "Parent Relationship": "InitPlan"
-                    },
-                    {
-                        "PlanNodeId": 11,
-                        "Plans": [
-                            {
-                                "Tables": [
-                                    "base_write_multi_usage_script_script/Temp"
-                                ],
-                                "PlanNodeId": 10,
-                                "Operators": [
-                                    {
-                                        "Name": "Upsert",
-                                        "Table": "base_write_multi_usage_script_script/Temp"
-                                    },
-                                    {
-                                        "Iterator": "%kqp%tx_result_binding_0_1",
-                                        "Name": "Iterator"
-                                    }
-                                ],
-                                "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_1"
-                            }
-                        ],
-                        "Node Type": "Effect"
-                    },
-                    {
-                        "PlanNodeId": 9,
-                        "Plans": [
-                            {
-                                "Tables": [
-                                    "base_write_multi_usage_script_script/Input1"
-                                ],
-                                "PlanNodeId": 8,
-                                "Operators": [
-                                    {
-                                        "Name": "Delete",
-                                        "Table": "base_write_multi_usage_script_script/Input1"
-                                    },
-                                    {
-                                        "Iterator": "%kqp%tx_result_binding_0_0",
-                                        "Name": "Iterator"
-                                    }
-                                ],
-                                "Node Type": "Delete-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_0"
-                            }
-                        ],
-                        "Node Type": "Effect"
-                    }
-                ],
-                "Node Type": "Query",
-                "PlanNodeType": "Query"
-            }
-        },
-        {
-            "tables": [
-                {
-                    "name": "/local/base_write_multi_usage_script_script/Input1",
-                    "reads": [
-                        {
                             "columns": [
                                 "Amount",
                                 "Comment",
@@ -300,6 +155,153 @@
                         ],
                         "Node Type": "ResultSet_1",
                         "PlanNodeType": "ResultSet"
+                    }
+                ],
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
+            }
+        },
+        {
+            "tables": [
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Input1",
+                    "reads": [
+                        {
+                            "lookup_by": [
+                                "Group (2)"
+                            ],
+                            "columns": [
+                                "Amount"
+                            ],
+                            "scan_by": [
+                                "Name (-\u221e, +\u221e)"
+                            ],
+                            "type": "Lookup"
+                        }
+                    ],
+                    "writes": [
+                        {
+                            "type": "MultiErase"
+                        }
+                    ]
+                },
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Temp",
+                    "writes": [
+                        {
+                            "columns": [
+                                "Name",
+                                "Value"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Tables": [
+                                    "base_write_multi_usage_script_script/Temp"
+                                ],
+                                "PlanNodeId": 10,
+                                "Operators": [
+                                    {
+                                        "Name": "Upsert",
+                                        "Table": "base_write_multi_usage_script_script/Temp"
+                                    },
+                                    {
+                                        "Iterator": "%kqp%tx_result_binding_0_1",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "Upsert-ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_1"
+                            }
+                        ],
+                        "Node Type": "Effect"
+                    },
+                    {
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Tables": [
+                                    "base_write_multi_usage_script_script/Input1"
+                                ],
+                                "PlanNodeId": 8,
+                                "Operators": [
+                                    {
+                                        "Name": "Delete",
+                                        "Table": "base_write_multi_usage_script_script/Input1"
+                                    },
+                                    {
+                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "Delete-ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_0"
+                            }
+                        ],
+                        "Node Type": "Effect"
+                    },
+                    {
+                        "PlanNodeId": 6,
+                        "Subplan Name": "CTE tx_result_binding_0_0",
+                        "Plans": [
+                            {
+                                "PlanNodeId": 5,
+                                "Node Type": "Stage"
+                            }
+                        ],
+                        "Node Type": "Precompute_0_0",
+                        "Parent Relationship": "InitPlan",
+                        "PlanNodeType": "Materialize"
+                    },
+                    {
+                        "PlanNodeId": 4,
+                        "Subplan Name": "CTE tx_result_binding_0_1",
+                        "Plans": [
+                            {
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Tables": [
+                                                    "base_write_multi_usage_script_script/Input1"
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Operators": [
+                                                    {
+                                                        "ReadRange": [
+                                                            "Group (2)",
+                                                            "Name (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadColumns": [
+                                                            "Amount"
+                                                        ],
+                                                        "Name": "TablePointLookup",
+                                                        "Table": "base_write_multi_usage_script_script/Input1"
+                                                    }
+                                                ],
+                                                "Node Type": "TablePointLookup"
+                                            }
+                                        ],
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeType": "Connection"
+                                    }
+                                ],
+                                "Node Type": "Collect"
+                            }
+                        ],
+                        "Node Type": "Precompute_0_1",
+                        "Parent Relationship": "InitPlan",
+                        "PlanNodeType": "Materialize"
                     }
                 ],
                 "Node Type": "Query",

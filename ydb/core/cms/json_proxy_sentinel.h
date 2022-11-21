@@ -34,7 +34,7 @@ public:
                 ui32 begin = 0;
                 ui32 end = 0;
                 if (!StringSplitter(strRange).Split('-').TryCollectInto(&begin, &end)) {
-                    if (TryFromString<ui32>(strRange), begin) {
+                    if (TryFromString<ui32>(strRange, begin)) {
                         end = begin;
                     } else {
                         break; // TODO

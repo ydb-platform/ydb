@@ -403,7 +403,7 @@ class CmsSentinelState {
 
     initTab() {
         $("#sentinel-anim").addClass("anim");
-        $("#sentinel-refresh-range").click(this.refreshRange);
+        $("#sentinel-refresh-range").click(this.refreshRange.bind(this));
 
         for (var name of ["Config", "StateUpdater", "ConfigUpdater"]) {
             this.preparePVTable(name);

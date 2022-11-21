@@ -87,8 +87,11 @@ struct TPDiskInfo
     , public TPDiskStatus
 {
     using TPtr = TIntrusivePtr<TPDiskInfo>;
+
     TActorId StatusChanger;
+    TInstant LastStatusChange;
     TStatusChangerState::TPtr StatusChangerState;
+    TStatusChangerState::TPtr PrevStatusChangerState;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
 
@@ -128,6 +131,7 @@ struct TSentinelState: public TSimpleRefCount<TSentinelState> {
     TMap<TNodeId, TNodeInfo> Nodes;
     THashSet<ui32> StateUpdaterWaitNodes;
     TConfigUpdaterState ConfigUpdaterState;
+    TConfigUpdaterState PrevConfigUpdaterState;
 };
 
 class TClusterMap {

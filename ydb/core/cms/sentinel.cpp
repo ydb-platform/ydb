@@ -476,6 +476,7 @@ public:
     }
 
     void PassAway() override {
+        SentinelState->PrevConfigUpdaterState = SentinelState->ConfigUpdaterState;
         SentinelState->ConfigUpdaterState.Clear();
         TActor::PassAway();
     }
@@ -753,6 +754,8 @@ public:
     }
 
     void PassAway() override {
+        Info->LastStatusChange = Now();
+        Info->PrevStatusChangerState = Info->StatusChangerState;
         Info->StatusChangerState.Reset();
         TActor::PassAway();
     }
@@ -820,13 +823,24 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
     };
 
-    struct TUpdaterInfo {
+    struct TUpdaterState {
         TActorId Id;
         TInstant StartedAt;
         bool Delayed;
 
+        void Clear() {
+            Id = TActorId();
+            StartedAt = TInstant::Zero();
+            Delayed = false;
+        }
+    };
+
+    struct TUpdaterInfo: public TUpdaterState {
+        TUpdaterState PrevState;
+
         TUpdaterInfo() {
-            Clear();
+            PrevState.Clear();
+            TUpdaterState::Clear();
         }
 
         void Start(const TActorId& id, const TInstant& now) {
@@ -836,9 +850,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         void Clear() {
-            Id = TActorId();
-            StartedAt = TInstant::Zero();
-            Delayed = false;
+            PrevState = *this;
+            TUpdaterState::Clear();
         }
     };
 
@@ -1021,41 +1034,99 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev) {
+        const auto& reqRecord = ev->Get()->Record;
+
+        auto show = NKikimrCms::TGetSentinelStateRequest::UNHEALTHY;
+
+        if (reqRecord.HasShow()) {
+            show = reqRecord.GetShow();
+        }
+
+        TMap<ui32, ui32> ranges = {{1, 20}};
+
+        if (reqRecord.RangesSize() > 0) {
+            ranges.clear();
+            for (size_t i = 0; i < reqRecord.RangesSize(); i++) {
+                auto range = reqRecord.GetRanges(i);
+                if (range.HasBegin() && range.HasEnd()) {
+                    ranges.emplace(range.GetBegin(), range.GetEnd());
+                }
+            }
+        }
+
+        auto checkRanges = [&](ui32 NodeId) {
+            auto next = ranges.upper_bound(NodeId);
+            if (next != ranges.begin()) {
+                --next;
+                return next->second >= NodeId;
+            }
+
+            return false;
+        };
+
+        auto filterByStatus = [](const TPDiskInfo& info, NKikimrCms::TGetSentinelStateRequest::EShow filter) {
+            switch(filter) {
+                case NKikimrCms::TGetSentinelStateRequest::UNHEALTHY:
+                    return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal || info.GetStatus() != EPDiskStatus::ACTIVE;
+                case NKikimrCms::TGetSentinelStateRequest::SUSPICIOUS:
+                    return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal
+                        || info.GetStatus() != EPDiskStatus::ACTIVE
+                        || info.StatusChangerState
+                        || !info.IsTouched()
+                        || !info.IsChangingAllowed();
+                default:
+                    return true;
+            }
+        };
+
         auto response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
 
         auto& record = response->Record;
         record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
         Config.Serialize(*record.MutableSentinelConfig());
 
+        auto serializeUpdater = [](const auto& updater, auto* out){
+            out->SetActorId(updater.Id.ToString());
+            out->SetStartedAt(updater.StartedAt.ToString());
+            out->SetDelayed(updater.Delayed);
+        };
+
         if (SentinelState) {
             auto& stateUpdater = *record.MutableStateUpdater();
-            stateUpdater.MutableUpdaterInfo()->SetActorId(StateUpdater.Id.ToString());
-            stateUpdater.MutableUpdaterInfo()->SetStartedAt(StateUpdater.StartedAt.ToString());
-            stateUpdater.MutableUpdaterInfo()->SetDelayed(StateUpdater.Delayed);
+            serializeUpdater(StateUpdater, stateUpdater.MutableUpdaterInfo());
+            serializeUpdater(StateUpdater.PrevState, stateUpdater.MutablePrevUpdaterInfo());
             for (const auto& waitNode : SentinelState->StateUpdaterWaitNodes) {
                 stateUpdater.AddWaitNodes(waitNode);
             }
 
             auto& configUpdater = *record.MutableConfigUpdater();
-            configUpdater.MutableUpdaterInfo()->SetActorId(ConfigUpdater.Id.ToString());
-            configUpdater.MutableUpdaterInfo()->SetStartedAt(ConfigUpdater.StartedAt.ToString());
-            configUpdater.MutableUpdaterInfo()->SetDelayed(ConfigUpdater.Delayed);
+            serializeUpdater(ConfigUpdater, configUpdater.MutableUpdaterInfo());
+            serializeUpdater(ConfigUpdater.PrevState, configUpdater.MutablePrevUpdaterInfo());
             configUpdater.SetBSCAttempt(SentinelState->ConfigUpdaterState.BSCAttempt);
+            configUpdater.SetPrevBSCAttempt(SentinelState->PrevConfigUpdaterState.BSCAttempt);
             configUpdater.SetCMSAttempt(SentinelState->ConfigUpdaterState.CMSAttempt);
+            configUpdater.SetPrevCMSAttempt(SentinelState->PrevConfigUpdaterState.CMSAttempt);
 
             for (const auto& [id, info] : SentinelState->PDisks) {
-                auto& entry = *record.AddPDisks();
-                entry.MutableId()->SetNodeId(id.NodeId);
-                entry.MutableId()->SetDiskId(id.DiskId);
-                entry.MutableInfo()->SetState(info->GetState());
-                entry.MutableInfo()->SetPrevState(info->GetPrevState());
-                entry.MutableInfo()->SetStateCounter(info->GetStateCounter());
-                entry.MutableInfo()->SetStatus(info->GetStatus());
-                entry.MutableInfo()->SetChangingAllowed(info->IsChangingAllowed());
-                entry.MutableInfo()->SetTouched(info->IsTouched());
-                if(info->StatusChangerState) {
-                    entry.MutableInfo()->SetDesiredStatus(info->StatusChangerState->Status);
-                    entry.MutableInfo()->SetStatusChangeAttempts(info->StatusChangerState->Attempt);
+                if (filterByStatus(*info, show) && checkRanges(id.NodeId)) {
+                    auto& entry = *record.AddPDisks();
+                    entry.MutableId()->SetNodeId(id.NodeId);
+                    entry.MutableId()->SetDiskId(id.DiskId);
+                    entry.MutableInfo()->SetState(info->GetState());
+                    entry.MutableInfo()->SetPrevState(info->GetPrevState());
+                    entry.MutableInfo()->SetStateCounter(info->GetStateCounter());
+                    entry.MutableInfo()->SetStatus(info->GetStatus());
+                    entry.MutableInfo()->SetChangingAllowed(info->IsChangingAllowed());
+                    entry.MutableInfo()->SetTouched(info->IsTouched());
+                    entry.MutableInfo()->SetLastStatusChange(info->LastStatusChange.ToString());
+                    if (info->StatusChangerState) {
+                        entry.MutableInfo()->SetDesiredStatus(info->StatusChangerState->Status);
+                        entry.MutableInfo()->SetStatusChangeAttempts(info->StatusChangerState->Attempt);
+                    }
+                    if (info->PrevStatusChangerState) {
+                        entry.MutableInfo()->SetPrevDesiredStatus(info->PrevStatusChangerState->Status);
+                        entry.MutableInfo()->SetPrevStatusChangeAttempts(info->PrevStatusChangerState->Attempt);
+                    }
                 }
             }
         }

@@ -69,8 +69,9 @@ class ProxyCell {
 }
 
 class Table {
-  constructor(elem, onCellUpdate) {
+  constructor(elem, onCellUpdate, onInsertColumn) {
     this.elem = elem;
+    this.onInsertColumn = onInsertColumn;
     this.rows = [];
     this.onCellUpdate = onCellUpdate;
   }
@@ -78,11 +79,31 @@ class Table {
   addRow(columns) {
     var cells = [];
     for (var column in columns) {
-      cells.push(new Cell(columns[column], this.onCellUpdate));
+      var cell = new Cell(columns[column], this.onCellUpdate);
+      if (this.onInsertColumnt !== undefined) {
+        onInsertColumn(cell, column);
+      }
+      cells.push(cell);
     }
     this.rows.push(cells);
     this._drawRow(this.rows.length - 1);
     return this.rows[this.rows.length - 1];
+  }
+
+  removeRow(rowId) {
+    this.elem.children().eq(rowId).remove();
+    var row = this.rows[rowId];
+    this.rows.splice(rowId, 1);
+    for (var cell of row) {
+      if (cell.isProxy()) {
+        cell.cell.setRowspan(cell.cell.rowspan - 1)
+      }
+    }
+  }
+
+  removeRowByElem(cell) {
+    var index = cell.elem.parent().index();
+    return this.removeRow(index);
   }
 
   insertRow(rowId, columns) {
@@ -93,7 +114,11 @@ class Table {
         this.rows[rowId] === undefined ||
         !this.rows[rowId][column].isProxy()
       ) {
-        cells.push(new Cell(columns[column], this.onCellUpdate));
+        var cell = new Cell(columns[column], this.onCellUpdate);
+        if (this.onInsertColumnt !== undefined) {
+          this.onInsertColumn(cell, column);
+        }
+        cells.push(cell);
       } else {
         var spanCell = this.at(rowId, column);
         if (ignoreColspan === 0) {

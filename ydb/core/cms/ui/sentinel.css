@@ -5,6 +5,20 @@
   border: #cdcdcd 1px solid;
 }
 
+.sentinel-checkbox {
+  display: inline-block;
+  padding-right: 8px;
+  padding-top: 4px;
+}
+
+.sentinel-checkbox > label {
+  padding: 0 4px;
+}
+
+#sentinel-state > form {
+  margin-bottom: 0;
+}
+
 #sentinel-state th {
     background-color: #99bfe6;
     font-weight: bold;

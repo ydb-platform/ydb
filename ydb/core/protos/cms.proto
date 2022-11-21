@@ -590,7 +590,19 @@ message TGetLogTailResponse {
     repeated TLogRecord LogRecords = 2;
 }
 
+message TFilterRange {
+    optional uint32 Begin = 1;
+    optional uint32 End = 2;
+}
+
 message TGetSentinelStateRequest {
+    enum EShow {
+        UNHEALTHY = 1;
+        SUSPICIOUS = 2;
+        ALL = 3;
+    }
+    optional EShow Show = 1;
+    repeated TFilterRange Ranges = 2;
 }
 
 message TPDiskInfo {
@@ -602,7 +614,9 @@ message TPDiskInfo {
     optional bool Touched = 6;
     optional uint32 DesiredStatus = 7;
     optional uint32 StatusChangeAttempts = 8;
-    optional uint64 LastStatusChange = 9;
+    optional uint32 PrevDesiredStatus = 9;
+    optional uint32 PrevStatusChangeAttempts = 10;
+    optional string LastStatusChange = 11;
 }
 
 message TPDisk {
@@ -618,13 +632,17 @@ message TUpdaterInfo {
 
 message TStateUpdaterState {
     optional TUpdaterInfo UpdaterInfo = 1;
-    repeated uint32 WaitNodes = 2;
+    optional TUpdaterInfo PrevUpdaterInfo = 2;
+    repeated uint32 WaitNodes = 3;
 }
 
 message TConfigUpdaterState {
     optional TUpdaterInfo UpdaterInfo = 1;
-    optional uint32 BSCAttempt = 2;
-    optional uint32 CMSAttempt = 3;
+    optional TUpdaterInfo PrevUpdaterInfo = 2;
+    optional uint32 BSCAttempt = 3;
+    optional uint32 PrevBSCAttempt = 4;
+    optional uint32 CMSAttempt = 5;
+    optional uint32 PrevCMSAttempt = 6;
 }
 
 message TGetSentinelStateResponse {

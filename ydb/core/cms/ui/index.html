@@ -97,6 +97,21 @@
           <table id="sentinel-config"></table>
           <table id="sentinel-state-updater"></table>
           <table id="sentinel-config-updater"></table>
+          <form autocomplete="off" id="sentinel-switch">
+            <input autocomplete="off" type="radio" id="sentinel-unhealthy" name="sentinel-switch" value="UNHEALTHY" checked/>
+            <label for="sentinel-unhealthy">Unhealthy</label>
+            <input autocomplete="off" type="radio" id="sentinel-suspicious" name="sentinel-switch" value="SUSPICIOUS" />
+            <label for="sentinel-suspicious">Suspicious</label>
+            <input autocomplete="off" type="radio" id="sentinel-all" name="sentinel-switch" value="ALL" />
+            <label for="sentinel-all">All</label>
+          </form>
+          <div>
+            Show nodes:
+            <input autocomplete="off" type="text" id="sentinel-range" name="sentinel-range" required value="1-20"/>
+            <input type="button" id="sentinel-refresh-range" value="Go"/>
+            <div id="sentinel-range-error" class="error"></div>
+            <div id="sentinel-filter-controls"></div>
+          </div>
           <table id="sentinel-nodes"></table>
         </div>
       </div>

@@ -921,8 +921,10 @@ namespace NKikimr {
                 const ui64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const ui64 b = ReplMonGroup.ReplWorkUnitsRemaining();
                 ev->Record.SetReplicationProgress((double)a / (a + b));
+                ev->Record.SetReplicationSecondsRemaining(ReplMonGroup.ReplSecondsRemaining());
             } else {
                 ev->Record.SetReplicationProgress(1.0);
+                ev->Record.SetReplicationSecondsRemaining(0);
             }
             ctx.Send(SelfId(), ev.release());
             // repeat later

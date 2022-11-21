@@ -71,6 +71,18 @@ public:
         return TIterator(Vec, Pos + Vec.size());
     }
 
+    const T& First() const {
+        return Vec[Pos];
+    }
+
+    const T& Last() const {
+        return Vec[(Pos + Vec.size() - 1) % Vec.size()];
+    }
+
+    operator bool() const {
+        return !Vec.empty();
+    }
+
 private:
     TVec Vec;
     size_t Size;

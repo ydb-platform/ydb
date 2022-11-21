@@ -172,6 +172,7 @@ namespace NKikimr {
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
         std::set<TVDiskID> ConnectedPeerDisks, ConnectedDonorDisks;
         TEvResumeForce *ResumeForceToken = nullptr;
+        TInstant ReplicationEndTime;
 
         friend class TActorBootstrapped<TReplScheduler>;
 
@@ -367,6 +368,26 @@ namespace NKikimr {
             }
 
             History.Push(info);
+            
+#ifndef NDEBUG
+            // validate history -- work units must decrease consistently with work units processed
+            TEvReplFinished::TInfoPtr prev = nullptr;
+            for (auto it = History.Begin(); it != History.End(); ++it) {
+                TEvReplFinished::TInfoPtr cur = *it;
+                Y_VERIFY_DEBUG_S((!prev || cur->WorkUnitsTotal <= prev->WorkUnitsTotal - prev->WorkUnitsProcessed) &&
+                    cur->WorkUnitsProcessed <= cur->WorkUnitsPlanned && cur->WorkUnitsPlanned <= cur->WorkUnitsTotal,
+                    "cur WorkUnitsTotal# " << cur->WorkUnitsTotal
+                    << " cur WorkUnitsPlanned# " << cur->WorkUnitsPlanned
+                    << " cur WorkUnitsProcessed# " << cur->WorkUnitsProcessed
+                    << " prev WorkUnitsTotal# " << prev->WorkUnitsTotal
+                    << " prev WorkUnitsPlanned# " << prev->WorkUnitsPlanned
+                    << " prev WorkUnitsProcessed# " << prev->WorkUnitsProcessed);
+                prev = cur;
+            }
+#endif
+
+            TDuration timeRemaining;
+
             if (finished) {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR17, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL COMPLETED"),
                     (BlobsToReplicate, BlobsToReplicatePtr->size()));
@@ -396,7 +417,11 @@ namespace NKikimr {
             } else {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR18, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"));
                 RunRepl(info->KeyPos);
+                timeRemaining = EstimateTimeOfArrival();
             }
+
+            ReplCtx->MonGroup.ReplSecondsRemaining() = timeRemaining.Seconds();
+            ReplicationEndTime = finished ? TInstant::Zero() : TInstant::Now() + timeRemaining;
         }
 
         void RunRepl(const TLogoBlobID& from) {
@@ -443,6 +468,29 @@ namespace NKikimr {
             }
         }
 
+        TDuration EstimateTimeOfArrival() {
+            if (!History) {
+                return {};
+            }
+
+            TEvReplFinished::TInfoPtr first = History.First();
+            TEvReplFinished::TInfoPtr last = History.Last();
+
+            const ui64 workAtBegin = first->WorkUnitsTotal;
+            const ui64 workAtEnd = last->WorkUnitsTotal - last->WorkUnitsProcessed;
+            const TInstant timeAtBegin = first->Start;
+            const TInstant timeAtEnd = last->End;
+
+            if (workAtBegin < workAtEnd || timeAtEnd < timeAtBegin) {
+                Y_VERIFY_DEBUG(false);
+                return {};
+            }
+
+            const double workPerSecond = (workAtBegin - workAtEnd) / (timeAtEnd - timeAtBegin).SecondsFloat();
+
+            return TDuration::Seconds(workAtEnd / workPerSecond);
+        }
+
         void Handle(NMon::TEvHttpInfo::TPtr &ev) {
             Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::ReplId);
 
@@ -470,7 +518,8 @@ namespace NKikimr {
                             << "LastReplQuantumStart: " << ToStringLocalTimeUpToSeconds(LastReplQuantumStart) << "<br>"
                             << "LastReplQuantumEnd: " << ToStringLocalTimeUpToSeconds(LastReplQuantumEnd) << "<br>"
                             << "NumConnectedPeerDisks: " << ConnectedPeerDisks.size() << "<br>"
-                            << "ConnectedDonorDisks: " << makeConnectedDonorDisks() << "<br>";
+                            << "ConnectedDonorDisks: " << makeConnectedDonorDisks() << "<br>"
+                            << "ReplicationEndTime: " << ReplicationEndTime << "<br>";
 
                         TABLE_CLASS ("table table-condensed") {
                             CAPTION() STRONG() {str << "Last " << historySize << " replication quantums"; }

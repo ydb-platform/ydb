@@ -53,6 +53,11 @@ namespace NKikimr {
         void Bootstrap(const TActorId& parentId) {
             Recipient = parentId;
 
+            // count unreplicated so far blobs in this work too
+            for (const TLogoBlobID& id : *UnreplicatedBlobsPtr) {
+                ReplInfo->WorkUnitsTotal += id.BlobSize();
+            }
+
             // prepare the recovery machine
             RecoveryMachine = std::make_unique<TRecoveryMachine>(ReplCtx, ReplInfo, std::move(UnreplicatedBlobsPtr));
 
@@ -107,9 +112,8 @@ namespace NKikimr {
                     ProcessItem(it, barriers, allowKeepFlags);
                 }
                 if (it.Valid()) {
-                    StartKey = it.GetCurKey().LogoBlobID(); // we gonna resume later starting from this key
-                    if (!ReplyKey) {
-                        ReplyKey = StartKey;
+                    if (!ReplyKey) { // remember key for the next quantum
+                        ReplyKey = it.GetCurKey().LogoBlobID();
                     }
 
                     const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
@@ -117,14 +121,15 @@ namespace NKikimr {
                     for (; it.Valid(); it.Next()) {
                         if (++counter % 1024 == 0 && GetCycleCountFast() > plannedEndTime) {
                             resume = true;
+                            StartKey = it.GetCurKey().LogoBlobID();
                             break;
                         }
 
                         const TLogoBlobID key = it.GetCurKey().LogoBlobID();
                         const TMemRecLogoBlob memRec = it.GetMemRec();
                         const TIngress ingress = memRec.GetIngress();
-                        const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
-                            key) - ingress.LocalParts(topology.GType);
+                        const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk, key) -
+                            ingress.LocalParts(topology.GType);
                         if (!parts.Empty()) {
                             ReplInfo->WorkUnitsTotal += key.BlobSize();
                         }

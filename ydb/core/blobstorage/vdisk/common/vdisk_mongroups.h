@@ -210,6 +210,7 @@ public:                                                                         
                 COUNTER_INIT(ReplWorkUnitsRemaining, false);
                 COUNTER_INIT(ReplUnreplicatedPhantoms, false);
                 COUNTER_INIT(ReplUnreplicatedNonPhantoms, false);
+                COUNTER_INIT(ReplSecondsRemaining, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -229,6 +230,7 @@ public:                                                                         
             COUNTER_DEF(ReplWorkUnitsRemaining);
             COUNTER_DEF(ReplUnreplicatedPhantoms);
             COUNTER_DEF(ReplUnreplicatedNonPhantoms);
+            COUNTER_DEF(ReplSecondsRemaining);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

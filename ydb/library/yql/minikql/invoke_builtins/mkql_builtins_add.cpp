@@ -192,8 +192,8 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TInterval>, TDateTimeAdd, TBinaryArgsOptWithNullableResult>(registry, "Add");
 }
 
-void RegisterAdd(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TAdd>>("Add"));
+void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Add"] = std::make_unique<TBinaryNumericKernelFamily<TAdd>>();
 }
 
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {

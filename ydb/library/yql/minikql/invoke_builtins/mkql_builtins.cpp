@@ -2,6 +2,8 @@
 #include "mkql_builtins_impl.h"
 #include "mkql_builtins_compare.h"
 
+#include <ydb/library/yql/minikql/arrow/arrow_defs.h>
+
 #include <util/digest/murmur.h>
 #include <util/generic/yexception.h>
 #include <util/generic/maybe.h>
@@ -16,18 +18,77 @@ namespace NMiniKQL {
 
 namespace {
 
-void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, arrow::compute::FunctionRegistry& arrowRegistry) {
+class TForeignKernel : public TKernel {
+public:
+    TForeignKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType,
+        const std::shared_ptr<arrow::compute::Function>& function)
+        : TKernel(family, argTypes, returnType)
+        , Function(function)
+        , ArrowKernel(ResolveKernel(Function, argTypes))
+    {}
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final {
+        return ArrowKernel;
+    }
+
+private:
+    static const arrow::compute::ScalarKernel& ResolveKernel(const std::shared_ptr<arrow::compute::Function>& function,
+        const std::vector<NUdf::TDataTypeId>& argTypes) {
+        std::vector<arrow::ValueDescr> args;
+        for (const auto& t : argTypes) {
+            args.emplace_back();
+            auto slot = NUdf::FindDataSlot(t);
+            MKQL_ENSURE(slot, "Unexpected data type");
+            MKQL_ENSURE(ConvertArrowType(*slot, args.back().type), "Can't get arrow type");
+        }
+
+        const auto kernel = ARROW_RESULT(function->DispatchExact(args));
+        return *static_cast<const arrow::compute::ScalarKernel*>(kernel);
+    }
+
+private:
+    const std::shared_ptr<arrow::compute::Function> Function;
+    const arrow::compute::ScalarKernel& ArrowKernel;
+};
+
+template <typename TInput1, typename TOutput>
+void RegisterUnary(const arrow::compute::FunctionRegistry& registry, std::string_view name, TKernelFamilyMap& kernelFamilyMap) {
+    auto func = ARROW_RESULT(registry.GetFunction(std::string(name)));
+
+    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id });
+    NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
+
+    auto family = std::make_unique<TKernelFamilyBase>();
+    family->KernelMap.emplace(argTypes, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
+
+    Y_ENSURE(kernelFamilyMap.emplace(TString(name), std::move(family)).second);
+}
+
+template <typename TInput1, typename TInput2, typename TOutput>
+void RegisterBinary(const arrow::compute::FunctionRegistry& registry, std::string_view name, TKernelFamilyMap& kernelFamilyMap) {
+    auto func = ARROW_RESULT(registry.GetFunction(std::string(name)));
+
+    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id });
+    NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
+
+    auto family = std::make_unique<TKernelFamilyBase>();
+    family->KernelMap.emplace(argTypes, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
+
+    Y_ENSURE(kernelFamilyMap.emplace(TString(name), std::move(family)).second);
+}
+
+void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamilyMap& kernelFamilyMap) {
     RegisterAdd(registry);
-    RegisterAdd(arrowRegistry);
+    RegisterAdd(kernelFamilyMap);
     RegisterAggrAdd(registry);
     RegisterSub(registry);
-    RegisterSub(arrowRegistry);
+    RegisterSub(kernelFamilyMap);
     RegisterMul(registry);
-    RegisterMul(arrowRegistry);
+    RegisterMul(kernelFamilyMap);
     RegisterDiv(registry);
-    RegisterDiv(arrowRegistry);
+    RegisterDiv(kernelFamilyMap);
     RegisterMod(registry);
-    RegisterMod(arrowRegistry);
+    RegisterMod(kernelFamilyMap);
     RegisterIncrement(registry);
     RegisterDecrement(registry);
     RegisterBitAnd(registry);
@@ -56,17 +117,17 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, arrow::comput
     RegisterAggrMax(registry);
     RegisterAggrMin(registry);
     RegisterEquals(registry);
-    RegisterEquals(arrowRegistry);
+    RegisterEquals(kernelFamilyMap);
     RegisterNotEquals(registry);
-    RegisterNotEquals(arrowRegistry);
+    RegisterNotEquals(kernelFamilyMap);
     RegisterLess(registry);
-    RegisterLess(arrowRegistry);
+    RegisterLess(kernelFamilyMap);
     RegisterLessOrEqual(registry);
-    RegisterLessOrEqual(arrowRegistry);
+    RegisterLessOrEqual(kernelFamilyMap);
     RegisterGreater(registry);
-    RegisterGreater(arrowRegistry);
+    RegisterGreater(kernelFamilyMap);
     RegisterGreaterOrEqual(registry);
-    RegisterGreaterOrEqual(arrowRegistry);
+    RegisterGreaterOrEqual(kernelFamilyMap);
 }
 
 void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out)
@@ -153,25 +214,31 @@ private:
 
     const TFunctionsMap& GetFunctions() const final;
 
-    arrow::compute::FunctionRegistry* GetArrowFunctionRegistry() const final;
-
     void CalculateMetadataEtag();
 
     std::optional<TFunctionDescriptor> FindBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const;
 
     const TDescriptionList& FindCandidates(const std::string_view& name) const;
 
+    const TKernel* FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const final;
+
+    void RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) final;
+
     TFunctionsMap Functions;
     TFunctionParamMetadataList ArgumentsMetadata;
     std::optional<ui64> MetadataEtag;
-    std::unique_ptr<arrow::compute::FunctionRegistry> ArrowRegistry;
+    TKernelFamilyMap KernelFamilyMap;
 };
 
 TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
-    : ArrowRegistry(arrow::compute::FunctionRegistry::Make())
 {
-    RegisterDefaultOperations(*this, *ArrowRegistry);
-    arrow::compute::internal::RegisterScalarBoolean(ArrowRegistry.get());
+    RegisterDefaultOperations(*this, KernelFamilyMap);
+    auto arrowRegistry = arrow::compute::FunctionRegistry::Make();
+    arrow::compute::internal::RegisterScalarBoolean(arrowRegistry.get());
+    RegisterUnary<bool, bool>(*arrowRegistry, "invert", KernelFamilyMap);
+    RegisterBinary<bool, bool, bool>(*arrowRegistry, "and_kleene", KernelFamilyMap);
+    RegisterBinary<bool, bool, bool>(*arrowRegistry, "or_kleene", KernelFamilyMap);
+    RegisterBinary<bool, bool, bool>(*arrowRegistry, "xor", KernelFamilyMap);
     CalculateMetadataEtag();
 }
 
@@ -296,8 +363,17 @@ void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const
     }
 }
 
-arrow::compute::FunctionRegistry* TBuiltinFunctionRegistry::GetArrowFunctionRegistry() const {
-   return ArrowRegistry.get();
+const TKernel* TBuiltinFunctionRegistry::FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const {
+    auto fit = KernelFamilyMap.find(TString(name));
+    if (fit == KernelFamilyMap.end()) {
+        return nullptr;
+    }
+
+    return fit->second->FindKernel(argTypes, argTypesCount);
+}
+
+void TBuiltinFunctionRegistry::RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) {
+    Y_ENSURE(KernelFamilyMap.emplace(TString(name), std::move(family)).second);
 }
 
 } // namespace
@@ -305,11 +381,6 @@ arrow::compute::FunctionRegistry* TBuiltinFunctionRegistry::GetArrowFunctionRegi
 IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry() {
     return MakeIntrusive<TBuiltinFunctionRegistry>();
 }
-
-void AddFunction(arrow::compute::FunctionRegistry& registry, const std::shared_ptr<arrow::compute::ScalarFunction>& f) {
-    ARROW_OK(registry.AddFunction(f));
-}
-
 
 } // namespace NMiniKQL
 } // namespace NKikimr

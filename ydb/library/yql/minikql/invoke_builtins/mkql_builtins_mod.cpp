@@ -90,8 +90,8 @@ void RegisterMod(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryIntegralFunctionOpt<TIntegralMod, TBinaryArgsOptWithNullableResult>(registry, "Mod");
 }
 
-void RegisterMod(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TIntegralMod>>("Mod?"));
+void RegisterMod(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Mod"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralMod>>(TKernelFamily::ENullMode::AlwaysNull);
 }
 
 } // namespace NMiniKQL

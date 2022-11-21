@@ -470,17 +470,17 @@ void RegisterAggrCompareStrings(IBuiltinFunctionRegistry& registry, const std::s
 }
 
 void RegisterEquals(IBuiltinFunctionRegistry& registry);
-void RegisterEquals(arrow::compute::FunctionRegistry& registry);
+void RegisterEquals(TKernelFamilyMap& kernelFamilyMap);
 void RegisterNotEquals(IBuiltinFunctionRegistry& registry);
-void RegisterNotEquals(arrow::compute::FunctionRegistry& registry);
+void RegisterNotEquals(TKernelFamilyMap& kernelFamilyMap);
 void RegisterLess(IBuiltinFunctionRegistry& registry);
-void RegisterLess(arrow::compute::FunctionRegistry& registry);
+void RegisterLess(TKernelFamilyMap& kernelFamilyMap);
 void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry);
-void RegisterLessOrEqual(arrow::compute::FunctionRegistry& registry);
+void RegisterLessOrEqual(TKernelFamilyMap& kernelFamilyMap);
 void RegisterGreater(IBuiltinFunctionRegistry& registry);
-void RegisterGreater(arrow::compute::FunctionRegistry& registry);
+void RegisterGreater(TKernelFamilyMap& kernelFamilyMap);
 void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry);
-void RegisterGreaterOrEqual(arrow::compute::FunctionRegistry& registry);
+void RegisterGreaterOrEqual(TKernelFamilyMap& kernelFamilyMap);
 
 }
 }

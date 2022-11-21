@@ -1313,18 +1313,8 @@ private:
 
 namespace NMiniKQL {
 
-bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type) {
-    auto unpacked = UnpackOptional(itemType, isOptional);
-    if (!unpacked->IsData()) {
-        return false;
-    }
-
-    auto slot = AS_TYPE(TDataType, unpacked)->GetDataSlot();
-    if (!slot) {
-        return false;
-    }
-
-    switch (*slot) {
+bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+    switch (slot) {
     case NUdf::EDataSlot::Bool:
         type = arrow::boolean();
         return true;
@@ -1359,6 +1349,20 @@ bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::
     default:
         return false;
     }
+}
+
+bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type) {
+    auto unpacked = UnpackOptional(itemType, isOptional);
+    if (!unpacked->IsData()) {
+        return false;
+    }
+
+    auto slot = AS_TYPE(TDataType, unpacked)->GetDataSlot();
+    if (!slot) {
+        return false;
+    }
+
+    return ConvertArrowType(*slot, type);
 }
 
 void TArrowType::Export(ArrowSchema* out) const {

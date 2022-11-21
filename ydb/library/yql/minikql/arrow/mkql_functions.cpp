@@ -123,41 +123,34 @@ bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std
 }
 
 bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType*& outputType, TTypeEnvironment& env, const IBuiltinFunctionRegistry& registry) {
-    auto resFunc = registry.GetArrowFunctionRegistry()->GetFunction(TString(name));
-    if (!resFunc.ok()) {
-        return false;
-    }
-
-    const auto& func = *resFunc;
-    if (func->kind() != arrow::compute::Function::SCALAR) {
-        return false;
-    }
-
-    std::vector<arrow::ValueDescr> values;
     bool hasOptionals = false;
-    for (const auto& type : inputTypes) {
-        arrow::ValueDescr descr;
+    bool many = false;
+    std::vector<NUdf::TDataTypeId> argTypes;
+    for (const auto& t : inputTypes) {
         bool isOptional;
-        if (!ConvertInputArrowType(type, isOptional, descr)) {
-            return false;
+        auto asBlockType = AS_TYPE(TBlockType, t);
+        if (asBlockType->GetShape() == TBlockType::EShape::Many) {
+            many = true;
         }
 
+        auto dataType = UnpackOptionalData(asBlockType->GetItemType(), isOptional);
         hasOptionals = hasOptionals || isOptional;
-        values.push_back(descr);
+        argTypes.push_back(dataType->GetSchemeType());
     }
 
-    auto resKernel = func->DispatchExact(values);
-    if (!resKernel.ok()) {
+    auto kernel = registry.FindKernel(name, argTypes.data(), argTypes.size());
+    if (!kernel) {
         return false;
     }
 
-    const auto& kernel = static_cast<const arrow::compute::ScalarKernel*>(*resKernel);
-    auto notNull = (kernel->null_handling == arrow::compute::NullHandling::OUTPUT_NOT_NULL);
-    const auto& outType = kernel->signature->out_type();
-    if (!ConvertOutputArrowType(outType, values, name.EndsWith("?") || (hasOptionals && !notNull), outputType, env)) {
-        return false;
+    outputType = TDataType::Create(kernel->ReturnType, env);
+    if (kernel->Family.NullMode != TKernelFamily::ENullMode::AlwaysNotNull) {
+        if (hasOptionals || kernel->Family.NullMode == TKernelFamily::ENullMode::AlwaysNull) {
+            outputType = TOptionalType::Create(outputType, env);
+        }
     }
 
+    outputType = TBlockType::Create(outputType, many ? TBlockType::EShape::Many : TBlockType::EShape::Scalar, env);
     return true;
 }
 

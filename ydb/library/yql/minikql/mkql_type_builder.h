@@ -11,6 +11,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type);
+bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
 class TArrowType : public NUdf::IArrowType {
 public:

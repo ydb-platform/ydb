@@ -284,8 +284,8 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrNotEquals, TCompareArgsOpt>(registry, aggrName);
 }
 
-void RegisterNotEquals(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TNotEqualsOp>>("NotEquals"));
+void RegisterNotEquals(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["NotEquals"] = std::make_unique<TBinaryNumericPredicateKernelFamily<TNotEqualsOp>>();
 }
 
 

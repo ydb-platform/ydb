@@ -97,8 +97,8 @@ void RegisterMul(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
 }
 
-void RegisterMul(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TMul>>("Mul"));
+void RegisterMul(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Mul"] = std::make_unique<TBinaryNumericKernelFamily<TMul>>();
 }
 
 } // namespace NMiniKQL

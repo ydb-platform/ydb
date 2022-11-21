@@ -281,8 +281,8 @@ void RegisterGreater(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrGreater, TCompareArgsOpt>(registry, aggrName);
 }
 
-void RegisterGreater(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TGreaterOp>>("Greater"));
+void RegisterGreater(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Greater"] = std::make_unique<TBinaryNumericPredicateKernelFamily<TGreaterOp>>();
 }
 
 } // namespace NMiniKQL

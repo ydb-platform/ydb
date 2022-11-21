@@ -281,8 +281,8 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrLess, TCompareArgsOpt>(registry, aggrName);
 }
 
-void RegisterLess(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TLessOp>>("Less"));
+void RegisterLess(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Less"] = std::make_unique<TBinaryNumericPredicateKernelFamily<TLessOp>>();
 }
 
 } // namespace NMiniKQL

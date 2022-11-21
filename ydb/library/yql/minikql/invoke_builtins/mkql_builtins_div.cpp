@@ -166,8 +166,8 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
 }
 
-void RegisterDiv(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericFunction<TIntegralDiv>>("Div?"));
+void RegisterDiv(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Div"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralDiv>>(TKernelFamily::ENullMode::AlwaysNull);
 }
 
 } // namespace NMiniKQL

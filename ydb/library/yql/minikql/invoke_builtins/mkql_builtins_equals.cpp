@@ -284,8 +284,8 @@ void RegisterEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrEquals, TCompareArgsOpt>(registry, aggrName);
 }
 
-void RegisterEquals(arrow::compute::FunctionRegistry& registry) {
-    AddFunction(registry, std::make_shared<TBinaryNumericPredicate<TEqualsOp>>("Equals"));
+void RegisterEquals(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Equals"] = std::make_unique<TBinaryNumericPredicateKernelFamily<TEqualsOp>>();
 }
 
 } // namespace NMiniKQL

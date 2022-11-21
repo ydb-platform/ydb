@@ -143,8 +143,4 @@ inline NActors::TActorId MakeAuditServiceID() {
 THolder<NActors::IActor> CreateAuditWriter(
     THolder<TLogBackend> auditFile, NKikimrConfig::TAuditConfig_EFormat format);
 
-constexpr size_t TimeBufSize = 512;
-
-const char* FormatLocalTimestamp(TInstant time, char* buf);
-
 }   // namespace NKikimr::NAudit

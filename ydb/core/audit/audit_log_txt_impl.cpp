@@ -30,9 +30,7 @@ void TAuditTxtLogActor::HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog:
     const auto* msg = ev->Get();
     try {
         TStringStream ss;
-        char buf[TimeBufSize];
-        ss << FormatLocalTimestamp(msg->Time, buf) << ": ";
-
+        ss << msg->Time << ": ";
         for (auto it = msg->Parts.begin(); it != msg->Parts.end(); it++) {
             if (it != msg->Parts.begin())
                 ss << ", ";
@@ -40,7 +38,7 @@ void TAuditTxtLogActor::HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog:
         }
         ss << Endl;
         auto text = ss.Str();
-        
+
         AuditFile->WriteData(
             TLogRecord(
                 ELogPriority::TLOG_INFO,

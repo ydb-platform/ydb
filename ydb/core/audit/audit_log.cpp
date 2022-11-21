@@ -15,7 +15,7 @@ THolder<NActors::IActor> CreateAuditWriter(THolder<TLogBackend> auditFile, NKiki
 {
     AUDIT_LOG_ENABLED.store(true);
     switch (format) {
-        case NKikimrConfig::TAuditConfig::JSON:        
+        case NKikimrConfig::TAuditConfig::JSON:
             return MakeHolder<TAuditJsonLogActor>(std::move(auditFile));
         case NKikimrConfig::TAuditConfig::TXT:
             return MakeHolder<TAuditTxtLogActor>(std::move(auditFile));
@@ -24,19 +24,10 @@ THolder<NActors::IActor> CreateAuditWriter(THolder<TLogBackend> auditFile, NKiki
     }
 }
 
-
 void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TStringBuf, TString>>& parts)
 {
     auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), parts);
     sys->Send(MakeAuditServiceID(), request.Release());
-}
-
-const char* FormatLocalTimestamp(TInstant time, char* buf) {
-    struct tm localTime;
-    time.LocalTime(&localTime);
-    int r = strftime(buf, TimeBufSize, "%Y-%m-%d-%H-%M-%S", &localTime);
-    Y_VERIFY(r != 0);
-    return buf;
 }
 
 }    // namespace NKikimr::NAudit

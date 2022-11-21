@@ -31,11 +31,9 @@ STFUNC(TAuditJsonLogActor::StateWork)
 void TAuditJsonLogActor::HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     const auto* msg = ev->Get();
-    try {        
+    try {
         TStringStream ss;
-        char buf[TimeBufSize];
-        ss << FormatLocalTimestamp(msg->Time, buf) << ": ";
-        
+        ss << msg->Time << ": ";
         NJson::TJsonMap m;
         for (auto& [k, v] : msg->Parts) {
             m[k] = v;
@@ -43,7 +41,7 @@ void TAuditJsonLogActor::HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog
         NJson::WriteJson(&ss, &m, false, false);
         ss << Endl;
         auto json = ss.Str();
-        
+
         AuditFile->WriteData(
             TLogRecord(
                 ELogPriority::TLOG_INFO,

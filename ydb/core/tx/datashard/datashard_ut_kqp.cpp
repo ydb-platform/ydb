@@ -1,7 +1,7 @@
 #include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
 
-#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>

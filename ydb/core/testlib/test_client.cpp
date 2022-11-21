@@ -46,8 +46,8 @@
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/rm/kqp_rm.h>
-#include <ydb/core/kqp/proxy/kqp_proxy_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>

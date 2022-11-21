@@ -1,7 +1,7 @@
 #include <ydb/core/client/minikql_result_lib/converter.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
-#include <ydb/core/kqp/kqp_impl.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <util/generic/maybe.h>

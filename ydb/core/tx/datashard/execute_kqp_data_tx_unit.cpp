@@ -6,7 +6,7 @@
 #include "datashard_locks_db.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/kqp/rm/kqp_rm.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
 namespace NKikimr {
 namespace NDataShard {

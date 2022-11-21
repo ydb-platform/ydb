@@ -1,6 +1,6 @@
 #include "kqp_session_actor.h"
 
-#include <ydb/core/kqp/kqp_impl.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>

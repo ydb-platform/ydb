@@ -1,7 +1,7 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/compile/kqp_compile.h>
+#include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>

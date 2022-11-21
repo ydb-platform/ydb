@@ -64,7 +64,7 @@ target_link_libraries(run PUBLIC
   core-kesus-tablet
   ydb-core-keyvalue
   ydb-core-kqp
-  core-kqp-rm
+  core-kqp-rm_service
   ydb-core-metering
   ydb-core-mind
   core-mind-address_classification

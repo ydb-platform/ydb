@@ -5,12 +5,13 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
-#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/kqp/compile_service/kqp_compile_service.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/util/ulid.h>

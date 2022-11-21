@@ -6,7 +6,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/kikimr_issue.h>
-#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>

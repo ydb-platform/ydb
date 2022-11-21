@@ -7,18 +7,19 @@
 
 
 add_subdirectory(common)
-add_subdirectory(compile)
+add_subdirectory(compile_service)
 add_subdirectory(compute_actor)
 add_subdirectory(counters)
-add_subdirectory(executer)
+add_subdirectory(executer_actor)
 add_subdirectory(expr_nodes)
 add_subdirectory(gateway)
 add_subdirectory(host)
-add_subdirectory(node)
+add_subdirectory(node_service)
 add_subdirectory(opt)
 add_subdirectory(provider)
-add_subdirectory(proxy)
-add_subdirectory(rm)
+add_subdirectory(proxy_service)
+add_subdirectory(query_compiler)
+add_subdirectory(rm_service)
 add_subdirectory(runtime)
 add_subdirectory(session_actor)
 add_subdirectory(ut)
@@ -43,14 +44,19 @@ target_link_libraries(ydb-core-kqp PUBLIC
   ydb-core-formats
   core-grpc_services-local_rpc
   core-kqp-common
+  core-kqp-compile_service
   core-kqp-compute_actor
   core-kqp-counters
-  core-kqp-executer
+  core-kqp-executer_actor
+  core-kqp-expr_nodes
   core-kqp-gateway
   core-kqp-host
-  core-kqp-node
-  core-kqp-proxy
-  core-kqp-rm
+  core-kqp-node_service
+  core-kqp-opt
+  core-kqp-provider
+  core-kqp-proxy_service
+  core-kqp-query_compiler
+  core-kqp-rm_service
   core-kqp-runtime
   core-kqp-session_actor
   ydb-core-protos
@@ -68,9 +74,6 @@ target_link_libraries(ydb-core-kqp PUBLIC
   library-cpp-resource
 )
 target_sources(ydb-core-kqp PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compile_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compute.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_shutdown_controller.cpp
 )
@@ -95,14 +98,19 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
   ydb-core-formats
   core-grpc_services-local_rpc
   core-kqp-common
+  core-kqp-compile_service
   core-kqp-compute_actor
   core-kqp-counters
-  core-kqp-executer
+  core-kqp-executer_actor
+  core-kqp-expr_nodes
   core-kqp-gateway
   core-kqp-host
-  core-kqp-node
-  core-kqp-proxy
-  core-kqp-rm
+  core-kqp-node_service
+  core-kqp-opt
+  core-kqp-provider
+  core-kqp-proxy_service
+  core-kqp-query_compiler
+  core-kqp-rm_service
   core-kqp-runtime
   core-kqp-session_actor
   ydb-core-protos

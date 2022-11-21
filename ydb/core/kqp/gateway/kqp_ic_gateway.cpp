@@ -9,8 +9,8 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/executer/kqp_executer.h>
-#include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>

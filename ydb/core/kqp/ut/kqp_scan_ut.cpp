@@ -6,7 +6,7 @@
 
 #include <util/generic/size_literals.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
 namespace NKikimr {
 namespace NKqp {

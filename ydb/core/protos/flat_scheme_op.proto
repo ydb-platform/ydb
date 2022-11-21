@@ -425,10 +425,6 @@ message TColumnTableSchema {
     //optional EColumnCodec DefaultCompressionCodec = 6; // deprecated, not used before replace
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
-
-    // Storage tiers usage flag.
-    // Tiers detail information contains in storage_path/parent/.external_info/tiers
-    optional bool EnableTiering = 10 [default = false];
 }
 
 message TAlterColumnTableSchema {
@@ -476,15 +472,8 @@ message TColumnDataLifeCycle {
         optional TTTLSettings.EUnit ColumnUnit = 3;
     }
 
-    message TStorageTier {
-        optional string Name = 1; // name of TStorageTierConfig in TColumnTableSchema
-        optional TTtl Eviction = 2;
-    }
-
     message TStorageTiering {
-        // An ordered list of tiers. Data moves from tier0 to tier1, from tier1 to tier2 and so on.
-        // Setting a single tier is logically equivalent to setting a TTL (but with named storage tier).
-        repeated TStorageTier Tiers = 1;
+        optional bool EnableTiering = 1[default = false];
     }
 
     message TDisabled {

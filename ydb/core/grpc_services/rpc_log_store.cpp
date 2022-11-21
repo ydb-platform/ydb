@@ -241,7 +241,6 @@ private:
                 LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
-            toSchemaPreset->MutableSchema()->SetEnableTiering(req->enable_tiering());
         }
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }

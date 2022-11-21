@@ -177,6 +177,7 @@ class TColumnShard
 
     NOlap::TIndexInfo GetActualIndexInfo(const bool tiersUsage = true) const;
 
+    void ActivateTiering(const ui64 pathId, const bool enableTiering);
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
@@ -311,6 +312,7 @@ private:
         ui64 PathId;
         std::map<TRowVersion, TTableVersionInfo> Versions;
         TRowVersion DropVersion = TRowVersion::Max();
+        bool TieringEnabled = false;
 
         bool IsDropped() const {
             return DropVersion != TRowVersion::Max();
@@ -355,7 +357,6 @@ private:
     TActorId EvictionActor;
     TActorId StatsReportPipe;
 
-    bool EnableTiering = false;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;

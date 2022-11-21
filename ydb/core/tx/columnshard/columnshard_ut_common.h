@@ -195,8 +195,6 @@ struct TTestSchema {
         if (specials.CompressionLevel) {
             schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
         }
-
-        schema->SetEnableTiering(specials.HasTiers());
     }
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
@@ -204,6 +202,11 @@ struct TTestSchema {
         auto* enable = ttlSettings->MutableEnabled();
         enable->SetColumnName(specials.GetTtlColumn());
         enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
+    }
+
+    static void InitTiers(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
+        Y_VERIFY(specials.HasTiers());
+        ttlSettings->MutableTiering()->SetEnableTiering(true);
     }
 
     static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
@@ -224,6 +227,8 @@ struct TTestSchema {
 
         if (specials.HasTtl()) {
             InitTtl(specials, table->MutableTtlSettings());
+        } else if (specials.HasTiers()) {
+            InitTiers(specials, table->MutableTtlSettings());
         }
 
         TString out;
@@ -242,6 +247,8 @@ struct TTestSchema {
         InitSchema(columns, pk, specials, table->MutableSchema());
         if (specials.HasTtl()) {
             InitTtl(specials, table->MutableTtlSettings());
+        } else if (specials.HasTiers()) {
+            InitTiers(specials, table->MutableTtlSettings());
         }
 
         TString out;
@@ -280,6 +287,8 @@ struct TTestSchema {
             auto* enable = ttlSettings->MutableEnabled();
             enable->SetColumnName(specials.GetTtlColumn());
             enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
+        } else if (specials.HasTiers()) {
+            ttlSettings->MutableTiering()->SetEnableTiering(true);
         } else {
             ttlSettings->MutableDisabled();
         }

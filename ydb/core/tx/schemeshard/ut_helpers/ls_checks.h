@@ -105,8 +105,7 @@ namespace NLs {
     TCheckFunc HasColumnTableTtlSettingsVersion(ui64 ttlSettingsVersion);
     TCheckFunc HasColumnTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
     TCheckFunc HasColumnTableTtlSettingsDisabled();
-    TCheckFunc HasColumnTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
-                                              const TDuration& evictAfter);
+    TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tierName);
 
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);

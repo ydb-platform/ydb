@@ -17,6 +17,12 @@ using namespace NTxUT;
 using namespace NColumnShard;
 using NWrappers::NTestHelpers::TS3Mock;
 
+enum class EStartTtlSettings {
+    None,
+    Ttl,
+    Tiering
+};
+
 namespace {
 
 static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
@@ -407,7 +413,7 @@ public:
 };
 
 std::vector<std::pair<ui32, ui64>>
-TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTestSchema::TTableSpecials>& specs) {
+TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTestSchema::TTableSpecials>& specs, const ui32 startTieringIndex) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -438,8 +444,9 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
         UNIT_ASSERT(ok);
     }
     PlanSchemaTx(runtime, sender, {planStep, txId});
-
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0], "test", tableId));
+    if (specs[0].Tiers.size()) {
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0], "test", tableId));
+    }
 
     for (auto& data : blobs) {
         UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data));
@@ -459,6 +466,13 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     TCountersContainer counter;
     runtime.SetEventFilter(TEventsCounter(counter, runtime, sender));
     for (ui32 i = 0; i < specs.size(); ++i) {
+        bool hasEvictionSettings = false;
+        for (auto&& i : specs[i].Tiers) {
+            if (!!i.S3) {
+                hasEvictionSettings = true;
+                break;
+            }
+        }
         if (i) {
             ui32 version = i + 1;
             {
@@ -468,23 +482,15 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
                 UNIT_ASSERT(ok);
                 PlanSchemaTx(runtime, sender, { planStep, txId });
             }
-
+        }
+        if (specs[i].Tiers.size()) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i], "test", tableId));
-
         }
-        bool hasEvictionSettings = false;
-        for (auto&& i : specs[i].Tiers) {
-            if (!!i.S3) {
-                hasEvictionSettings = true;
-                break;
-            }
-        }
-
         counter.SetRestartTabletOnPutData(reboots ? 1 : 0);
 
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, specs[i].GetTtlColumn());
+        TriggerTTL(runtime, sender, { ++planStep, ++txId }, {}, 0, specs[i].GetTtlColumn());
         if (hasEvictionSettings) {
-            if (i == 1 || i == 2) {
+            if (i == startTieringIndex + 1 || i == startTieringIndex + 2) {
                 counter.WaitEvents(runtime, sender, i, 1, TDuration::Seconds(40));
             } else {
                 counter.WaitEvents(runtime, sender, i, 0, TDuration::Seconds(20));
@@ -540,53 +546,73 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     return resColumns;
 }
 
-void TestTwoTiers(const TTestSchema::TTableSpecials& spec, bool compressed, bool reboots) {
-    std::vector<ui64> ts = {1600000000, 1620000000};
+void TestTwoTiers(const TTestSchema::TTableSpecials& spec, bool compressed, bool reboots, const EStartTtlSettings startConf) {
+    const std::vector<ui64> ts = { 1600000000, 1620000000 };
     ui64 nowSec = TInstant::Now().Seconds();
-
-    std::vector<TTestSchema::TTableSpecials> alters(4, spec);
-
-    ui64 allowBoth = nowSec - ts[0] + 600;
-    ui64 allowOne = nowSec - ts[1] + 600;
-    ui64 allowNone = nowSec - ts[1] - 600;
-
-    alters[0].Tiers[0].SetEvictAfterSeconds(allowBoth); // tier0 allows/has: data[0], data[1]
-    alters[0].Tiers[1].SetEvictAfterSeconds(allowBoth); // tier1 allows: data[0], data[1], has: nothing
-
-    alters[1].Tiers[0].SetEvictAfterSeconds(allowOne); // tier0 allows/has: data[1]
-    alters[1].Tiers[1].SetEvictAfterSeconds(allowBoth); // tier1 allows: data[0], data[1], has: data[0]
-
-    alters[2].Tiers[0].SetEvictAfterSeconds(allowNone); // tier0 allows/has: nothing
-    alters[2].Tiers[1].SetEvictAfterSeconds(allowOne); // tier1 allows/has: data[1]
-
-    alters[3].Tiers[0].SetEvictAfterSeconds(allowNone); // tier0 allows/has: nothing
-    alters[3].Tiers[1].SetEvictAfterSeconds(allowNone); // tier1 allows/has: nothing
 
     ui32 portionSize = 80 * 1000;
     ui32 overlapSize = 40 * 1000;
     std::vector<TString> blobs = MakeData(ts, portionSize, overlapSize, spec.GetTtlColumn());
 
-    auto columns = TestTiers(reboots, blobs, alters);
+    ui64 allowBoth = nowSec - ts[0] + 600;
+    ui64 allowOne = nowSec - ts[1] + 600;
+    ui64 allowNone = nowSec - ts[1] - 600;
+    ui32 startTieringIndex = 0;
+    std::vector<TTestSchema::TTableSpecials> alters;
+    if (startConf != EStartTtlSettings::Tiering) {
+        if (startConf == EStartTtlSettings::None) {
+            alters.emplace_back(TTestSchema::TTableSpecials());
+        }
+        if (startConf == EStartTtlSettings::Ttl) {
+            alters.emplace_back(TTestSchema::TTableSpecials());
+            alters.back().SetTtlColumn("timestamp");
+            alters.back().SetEvictAfterSeconds(allowBoth);
+        }
+        std::vector<TString> blobsOld = MakeData({ 1500000000, 1620000000 }, portionSize, overlapSize, spec.GetTtlColumn());
+        blobs.emplace_back(std::move(blobsOld[0]));
+        blobs.emplace_back(std::move(blobsOld[1]));
+    }
+    startTieringIndex = alters.size();
+    alters.resize(alters.size() + 4, spec);
+    alters[startTieringIndex].Tiers[0].SetEvictAfterSeconds(allowBoth); // tier0 allows/has: data[0], data[1]
+    alters[startTieringIndex].Tiers[1].SetEvictAfterSeconds(allowBoth); // tier1 allows: data[0], data[1], has: nothing
 
-    UNIT_ASSERT_EQUAL(columns.size(), 4);
-    UNIT_ASSERT(columns[0].first);
-    UNIT_ASSERT(columns[1].first);
-    UNIT_ASSERT(columns[2].first);
-    UNIT_ASSERT(!columns[3].first);
-    UNIT_ASSERT(columns[0].second);
-    UNIT_ASSERT(columns[1].second);
-    UNIT_ASSERT(columns[2].second);
-    UNIT_ASSERT(!columns[3].second);
+    alters[startTieringIndex + 1].Tiers[0].SetEvictAfterSeconds(allowOne); // tier0 allows/has: data[1]
+    alters[startTieringIndex + 1].Tiers[1].SetEvictAfterSeconds(allowBoth); // tier1 allows: data[0], data[1], has: data[0]
 
-    UNIT_ASSERT_EQUAL(columns[0].first, 2 * portionSize/* - overlapSize*/);
-    UNIT_ASSERT_EQUAL(columns[0].first, columns[1].first);
-    UNIT_ASSERT_EQUAL(columns[2].first, portionSize);
+    alters[startTieringIndex + 2].Tiers[0].SetEvictAfterSeconds(allowNone); // tier0 allows/has: nothing
+    alters[startTieringIndex + 2].Tiers[1].SetEvictAfterSeconds(allowOne); // tier1 allows/has: data[1]
 
-    Cerr << "read bytes: " << columns[0].second << ", " << columns[1].second << ", " << columns[2].second << "\n";
+    alters[startTieringIndex + 3].Tiers[0].SetEvictAfterSeconds(allowNone); // tier0 allows/has: nothing
+    alters[startTieringIndex + 3].Tiers[1].SetEvictAfterSeconds(allowNone); // tier1 allows/has: nothing
+
+    auto columns = TestTiers(reboots, blobs, alters, startTieringIndex);
+
+    for (auto&& i : columns) {
+        Cerr << i.first << "/" << i.second << Endl;
+    }
+
+    UNIT_ASSERT_EQUAL(columns.size(), alters.size());
+    UNIT_ASSERT(columns[startTieringIndex].second);
+    UNIT_ASSERT(columns[startTieringIndex].first);
+
+    UNIT_ASSERT(columns[startTieringIndex + 1].second);
+    UNIT_ASSERT(columns[startTieringIndex + 1].first);
+
+    UNIT_ASSERT(columns[startTieringIndex + 2].second);
+    UNIT_ASSERT(columns[startTieringIndex + 2].first);
+
+    UNIT_ASSERT(!columns[startTieringIndex + 3].first);
+    UNIT_ASSERT(!columns[startTieringIndex + 3].second);
+
+    UNIT_ASSERT_EQUAL(columns[startTieringIndex].first, 2 * portionSize/* - overlapSize*/);
+    UNIT_ASSERT_EQUAL(columns[startTieringIndex].first, columns[startTieringIndex + 1].first);
+    UNIT_ASSERT_EQUAL(columns[startTieringIndex + 2].first, portionSize);
+
     if (compressed) {
-        UNIT_ASSERT_GT(columns[0].second, columns[1].second);
+        UNIT_ASSERT_GT(columns[startTieringIndex].second, columns[startTieringIndex + 1].second);
     } else {
-        UNIT_ASSERT_EQUAL(columns[0].second, columns[1].second);
+        UNIT_ASSERT_EQUAL(columns[startTieringIndex].second, columns[startTieringIndex + 1].second);
     }
 }
 
@@ -597,10 +623,10 @@ void TestTwoHotTiers(bool reboot) {
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
     spec.Tiers.back().SetCodec("zstd");
 
-    TestTwoTiers(spec, true, reboot);
+    TestTwoTiers(spec, true, reboot, EStartTtlSettings::None);
 }
 
-void TestHotAndColdTiers(bool reboot) {
+void TestHotAndColdTiers(bool reboot, const EStartTtlSettings startConf) {
     const TString bucket = "tiering-test-01";
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
@@ -635,7 +661,7 @@ void TestHotAndColdTiers(bool reboot) {
         s3Config.SetConnectionTimeoutMs(10000);
     }
 
-    TestTwoTiers(spec, false, reboot);
+    TestTwoTiers(spec, false, reboot, startConf);
 }
 
 void TestDrop(bool reboots) {
@@ -901,8 +927,23 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(ColdTiers) {
-        // Disabled KIKIMR-14942
-        TestHotAndColdTiers(false);
+        TestHotAndColdTiers(false, EStartTtlSettings::Tiering);
+    }
+
+    Y_UNIT_TEST(ColdTiersWithNoneTtlTiering) {
+        TestHotAndColdTiers(false, EStartTtlSettings::None);
+    }
+
+    Y_UNIT_TEST(ColdTiersWithTtlTiering) {
+        TestHotAndColdTiers(false, EStartTtlSettings::Ttl);
+    }
+
+    Y_UNIT_TEST(ColdTiersWithNoneTtlTieringAndReboot) {
+        TestHotAndColdTiers(true, EStartTtlSettings::None);
+    }
+
+    Y_UNIT_TEST(ColdTiersWithTtlTieringAndReboot) {
+        TestHotAndColdTiers(true, EStartTtlSettings::Ttl);
     }
 
     Y_UNIT_TEST(RebootColdTiers) {

@@ -164,7 +164,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    EnableTiering : true
                 }
             }
         )";
@@ -320,7 +319,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                EnableTiering : true
             }
         )", {NKikimrScheme::StatusAccepted});
     }
@@ -427,7 +425,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    EnableTiering : true
                 }
             }
         )";
@@ -471,8 +468,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "Table3"
             TtlSettings {
                 Tiering {
-                    Tiers { Name: "tier0" Eviction { ColumnName: "timestamp" ExpireAfterSeconds: 300 } }
-                    Tiers { Name: "tier1" Eviction { ColumnName: "timestamp" ExpireAfterSeconds: 600 } }
+                    EnableTiering : true
                 }
             }
         )";
@@ -484,15 +480,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTiering(0, "tier0", "timestamp", TDuration::Seconds(300)),
-            NLs::HasColumnTableTtlSettingsTiering(1, "tier1", "timestamp", TDuration::Seconds(600))));
+            NLs::HasColumnTableTtlSettingsTiering("tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
             TtlSettings {
                 Tiering {
-                    Tiers { Name: "tier0" Eviction { ColumnName: "timestamp" ExpireAfterSeconds: 300 } }
-                    Tiers { Name: "tier1" Eviction { ColumnName: "data" ExpireAfterSeconds: 600 } }
+                    EnableTiering : true
                 }
             }
         )";
@@ -568,7 +562,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    EnableTiering : true
                 }
             }
         )";
@@ -624,13 +617,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "ColumnTable"
             AlterTtlSettings {
                 Tiering {
-                    Tiers {
-                        Name: "tier0"
-                        Eviction {
-                            ColumnName: "timestamp"
-                            ExpireAfterSeconds: 600
-                        }
-                    }
+                    EnableTiering : true
                 }
             }
         )", {NKikimrScheme::StatusInvalidParameter});

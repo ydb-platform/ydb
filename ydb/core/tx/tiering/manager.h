@@ -38,6 +38,7 @@ private:
     const TActorId TabletActorId;
     TString OwnerPath;
     TActor* Actor = nullptr;
+    std::unordered_set<ui64> EnabledPathId;
     YDB_READONLY_DEF(TManagers, Managers);
     YDB_READONLY_FLAG(Active, false);
 
@@ -54,6 +55,12 @@ public:
     TActorId GetActorId() const;
     THashMap<ui64, NOlap::TTiersInfo> GetTiering() const;
     void TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshot);
+    void EnablePathId(const ui64 pathId) {
+        EnabledPathId.emplace(pathId);
+    }
+    void DisablePathId(const ui64 pathId) {
+        EnabledPathId.erase(pathId);
+    }
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop();
     TActorId GetStorageActorId(const NTiers::TGlobalTierId& tierId);

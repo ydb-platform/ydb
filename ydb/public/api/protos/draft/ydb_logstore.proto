@@ -69,7 +69,6 @@ message CreateLogStoreRequest {
     string path = 2;        // Full path
     uint32 shards_count = 3;
     repeated SchemaPreset schema_presets = 4;
-    bool enable_tiering = 6;
 }
 
 message CreateLogStoreResponse {

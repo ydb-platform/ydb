@@ -504,8 +504,14 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
         if (tableProto.HasTtlSettings()) {
             *tableVerProto.MutableTtlSettings() = tableProto.GetTtlSettings();
-            Ttl.SetPathTtl(pathId, TTtl::TDescription(tableProto.GetTtlSettings()));
-            SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
+            auto& ttlInfo = tableProto.GetTtlSettings();
+            if (ttlInfo.HasEnabled()) {
+                Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlInfo));
+                SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
+            } else if (ttlInfo.HasTiering()) {
+                table.TieringEnabled = ttlInfo.GetTiering().GetEnableTiering();
+                ActivateTiering(pathId, table.TieringEnabled);
+            }
         }
 
         if (!PrimaryIndex) {
@@ -521,7 +527,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
         tableVerProto.SetTtlSettingsPresetVersionAdj(tableProto.GetTtlSettingsPresetVersionAdj());
 
-        Schema::SaveTableInfo(db, table.PathId);
+        Schema::SaveTableInfo(db, table.PathId, table.TieringEnabled);
         Schema::SaveTableVersionInfo(db, table.PathId, version, tableVerProto);
         SetCounter(COUNTER_TABLES, Tables.size());
     } else {
@@ -541,14 +547,15 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     LOG_S_DEBUG("AlterTable for pathId: " << pathId << " at tablet " << TabletID());
 
     Y_VERIFY(!alterProto.HasSchema(), "Tables with explicit schema are not supported");
-
     auto& info = table.Versions[version];
 
     if (alterProto.HasSchemaPreset()) {
         info.SetSchemaPresetId(EnsureSchemaPreset(db, alterProto.GetSchemaPreset(), version));
     }
 
-    if (alterProto.HasTtlSettings()) {
+    const bool tieringEnabled = alterProto.HasTtlSettings() && alterProto.GetTtlSettings().HasTiering() && alterProto.GetTtlSettings().GetTiering().GetEnableTiering();
+    ActivateTiering(pathId, tieringEnabled);
+    if (alterProto.HasTtlSettings() && alterProto.GetTtlSettings().HasEnabled()) {
         *info.MutableTtlSettings() = alterProto.GetTtlSettings();
         Ttl.SetPathTtl(pathId, TTtl::TDescription(alterProto.GetTtlSettings()));
     } else {
@@ -556,7 +563,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     }
 
     info.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-
+    Schema::SaveTableInfo(db, table.PathId, tieringEnabled);
     Schema::SaveTableVersionInfo(db, table.PathId, version, info);
 }
 
@@ -950,18 +957,6 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
         indexInfo.SetDefaultCompression(compression);
     }
 
-    EnableTiering = schema.GetEnableTiering();
-    if (OwnerPath && !Tiers && EnableTiering) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), OwnerPath);
-    }
-    if (!!Tiers) {
-        if (EnableTiering) {
-            Tiers->Start(Tiers);
-        } else {
-            Tiers->Stop();
-        }
-    }
-
     return indexInfo;
 }
 
@@ -1046,9 +1041,6 @@ TActorId TColumnShard::GetS3ActorForTier(const NTiers::TGlobalTierId& tierId) co
 void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(Tiers);
     Tiers->TakeConfigs(ev->Get()->GetSnapshot());
-    if (EnableTiering) {
-        Tiers->Start(Tiers);
-    }
 }
 
 NOlap::TIndexInfo TColumnShard::GetActualIndexInfo(const bool tiersUsage) const {
@@ -1059,6 +1051,20 @@ NOlap::TIndexInfo TColumnShard::GetActualIndexInfo(const bool tiersUsage) const 
         }
     }
     return indexInfo;
+}
+
+void TColumnShard::ActivateTiering(const ui64 pathId, const bool enableTiering) {
+    if (OwnerPath && !Tiers) {
+        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), OwnerPath);
+        Tiers->Start(Tiers);
+    }
+    if (!!Tiers) {
+        if (enableTiering) {
+            Tiers->EnablePathId(pathId);
+        } else {
+            Tiers->DisablePathId(pathId);
+        }
+    }
 }
 
 }

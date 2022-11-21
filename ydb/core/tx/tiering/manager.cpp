@@ -219,6 +219,9 @@ THashMap<ui64, NKikimr::NOlap::TTiersInfo> TTiersManager::GetTiering() const {
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
     Y_VERIFY(snapshotPtr);
     for (auto&& i : snapshotPtr->GetTableTierings()) {
+        if (!EnabledPathId.contains(i.second.GetTablePathId())) {
+            continue;
+        }
         result.emplace(i.second.GetTablePathId(), i.second.BuildTiersInfo());
     }
     return result;

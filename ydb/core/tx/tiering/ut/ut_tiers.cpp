@@ -47,7 +47,6 @@ public:
                      #Columns { Name: "request_id" Type: "Utf8" }
                      KeyColumnNames: "timestamp"
                      Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                     EnableTiering : true
                  }
              }
         )", storeName.c_str(), storeShardsCount));
@@ -60,6 +59,11 @@ public:
         TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
+            TtlSettings: {
+                Tiering: {
+                    EnableTiering: true
+                }
+            }
             Sharding {
                 HashSharding {
                     Function: %s

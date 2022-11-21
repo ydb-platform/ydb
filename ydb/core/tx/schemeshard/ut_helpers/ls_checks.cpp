@@ -924,19 +924,13 @@ TCheckFunc HasColumnTableTtlSettingsDisabled() {
     };
 }
 
-TCheckFunc HasColumnTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
-                                          const TDuration& evictAfter) {
+TCheckFunc HasColumnTableTtlSettingsTiering(const TString& /*tierName*/) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
         UNIT_ASSERT(ttl.HasTiering());
-        UNIT_ASSERT(ttl.GetTiering().TiersSize() > tierNo);
-        const auto& tier = ttl.GetTiering().GetTiers()[tierNo];
-        UNIT_ASSERT_VALUES_EQUAL(tier.GetName(), tierName);
-        UNIT_ASSERT(tier.HasEviction());
-        UNIT_ASSERT_VALUES_EQUAL(tier.GetEviction().GetColumnName(), columnName);
-        UNIT_ASSERT_VALUES_EQUAL(tier.GetEviction().GetExpireAfterSeconds(), evictAfter.Seconds());
+        UNIT_ASSERT(ttl.GetTiering().GetEnableTiering());
     };
 }
 

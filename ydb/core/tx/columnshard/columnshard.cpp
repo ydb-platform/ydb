@@ -29,7 +29,9 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
     CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID));
     EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
-
+    for (auto&& i : Tables) {
+        ActivateTiering(i.first, i.second.TieringEnabled);
+    }
     SignalTabletActive(ctx);
 }
 

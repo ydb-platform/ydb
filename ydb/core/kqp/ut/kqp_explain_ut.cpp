@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             },
             {
                 "SELECT * FROM `/Root/TwoKeys` WHERE Key2 < 10 Or Cast(Key2 As Int64) < Value",
-                "item.Key2 < 10 Or ..."
+                "item.Key2 < 10 Or item.Key2 < item.Value"
             }
         };
 

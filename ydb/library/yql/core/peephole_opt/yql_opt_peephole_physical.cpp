@@ -6165,6 +6165,12 @@ template <bool Equals, bool IsDistinct>
 TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto lType = node->Head().GetTypeAnn();
     const auto rType = node->Tail().GetTypeAnn();
+    if constexpr (!IsDistinct) {
+        if (IsDataOrOptionalOfData(lType) && IsDataOrOptionalOfData(rType)) {
+            // this case is supported by runtime
+            return node;
+        }
+    }
     if (const auto lKind = lType->GetKind(), rKind = rType->GetKind(); lKind == rKind) {
         switch (rKind) {
             case ETypeAnnotationKind::Void:
@@ -6214,6 +6220,10 @@ template<bool Asc, bool Equals>
 TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto lType = node->Head().GetTypeAnn();
     const auto rType = node->Tail().GetTypeAnn();
+    if (IsDataOrOptionalOfData(lType) && IsDataOrOptionalOfData(rType)) {
+        // this case is supported by runtime
+        return node;
+    }
     if (const auto lKind = lType->GetKind(), rKind = rType->GetKind(); lKind == rKind) {
         switch (rKind) {
             case ETypeAnnotationKind::Void:

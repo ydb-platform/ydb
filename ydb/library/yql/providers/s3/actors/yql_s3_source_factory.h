@@ -13,6 +13,7 @@ namespace NYql::NDq {
 
 struct TS3ReadActorFactoryConfig {
     ui64 RowsInBatch = 1000;
+    ui64 MaxInflight = 1000;
 };
 
 void RegisterS3ReadActorFactory(

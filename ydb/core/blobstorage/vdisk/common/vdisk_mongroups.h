@@ -208,6 +208,8 @@ public:                                                                         
                 COUNTER_INIT(ReplPhantomLikeDropped, false);
                 COUNTER_INIT(ReplWorkUnitsDone, false);
                 COUNTER_INIT(ReplWorkUnitsRemaining, false);
+                COUNTER_INIT(ReplItemsDone, false);
+                COUNTER_INIT(ReplItemsRemaining, false);
                 COUNTER_INIT(ReplUnreplicatedPhantoms, false);
                 COUNTER_INIT(ReplUnreplicatedNonPhantoms, false);
                 COUNTER_INIT(ReplSecondsRemaining, false);
@@ -228,6 +230,8 @@ public:                                                                         
             COUNTER_DEF(ReplPhantomLikeDropped);
             COUNTER_DEF(ReplWorkUnitsDone);
             COUNTER_DEF(ReplWorkUnitsRemaining);
+            COUNTER_DEF(ReplItemsDone);
+            COUNTER_DEF(ReplItemsRemaining);
             COUNTER_DEF(ReplUnreplicatedPhantoms);
             COUNTER_DEF(ReplUnreplicatedNonPhantoms);
             COUNTER_DEF(ReplSecondsRemaining);

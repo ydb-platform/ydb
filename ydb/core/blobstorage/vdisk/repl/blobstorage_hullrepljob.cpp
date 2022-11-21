@@ -42,12 +42,12 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TActorId Recipient;
         TLogoBlobID StartKey;
-        std::optional<TLogoBlobID> ReplyKey;
+        std::optional<TLogoBlobID> KeyToResumeNextTime;
         TEvReplFinished::TInfoPtr ReplInfo;
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr;
         ui64 QuantumBytes = 0;
-        ui32 QuantumParts = 0;
+        bool AddingTasks = true;
 
     public:
         void Bootstrap(const TActorId& parentId) {
@@ -57,6 +57,7 @@ namespace NKikimr {
             for (const TLogoBlobID& id : *UnreplicatedBlobsPtr) {
                 ReplInfo->WorkUnitsTotal += id.BlobSize();
             }
+            ReplInfo->ItemsTotal += UnreplicatedBlobsPtr->size();
 
             // prepare the recovery machine
             RecoveryMachine = std::make_unique<TRecoveryMachine>(ReplCtx, ReplInfo, std::move(UnreplicatedBlobsPtr));
@@ -78,132 +79,124 @@ namespace NKikimr {
             // create iterator for the logoblobs metabase
             TLogoBlobsSnapshot::TIndexForwardIterator it(snap.HullCtx, &snap.LogoBlobsSnap);
             bool eof = false;
-            bool resume = false;
-
             const ui64 plannedEndTime = GetCycleCountFast() + DurationToCycles(ReplCtx->VDiskCfg->ReplPlanQuantum);
-            auto going = [&, first = true]() mutable { // the predicate that determines the length of the quantum
-                if (first) {
-                    first = false;
-                    return true;
-                } else {
-                    return !RecoveryMachine->FullOfTasks() && QuantumBytes < ReplCtx->VDiskCfg->ReplMaxQuantumBytes &&
-                        GetCycleCountFast() <= plannedEndTime;
-                }
-            };
+            ui32 counter = 0;
 
             if (BlobsToReplicatePtr) {
                 // iterate over queue items and match them with iterator
-                for (; !BlobsToReplicatePtr->empty() && going(); BlobsToReplicatePtr->pop_front()) {
-                    const TLogoBlobID& key = BlobsToReplicatePtr->front();
-                    it.Seek(key);
-                    if (it.Valid() && it.GetCurKey().LogoBlobID() == key) {
-                        ProcessItem(it, barriers, allowKeepFlags);
+                for (; !BlobsToReplicatePtr->empty() && AddingTasks; BlobsToReplicatePtr->pop_front()) {
+                    if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
+                        Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
+                        return;
+                    } else {
+                        const TLogoBlobID& key = BlobsToReplicatePtr->front();
+                        it.Seek(key);
+                        if (it.Valid() && it.GetCurKey().LogoBlobID() == key) {
+                            ProcessItem(it, *barriers, allowKeepFlags);
+                        }
                     }
                 }
-                if (RecoveryMachine->FullOfTasks() || QuantumBytes >= ReplCtx->VDiskCfg->ReplMaxQuantumBytes) {
-                    for (const TLogoBlobID& id : *BlobsToReplicatePtr) {
-                        ReplInfo->WorkUnitsTotal += id.BlobSize();
+                if (!AddingTasks) {
+                    for (const TLogoBlobID& key : *BlobsToReplicatePtr) {
+                        ReplInfo->WorkUnitsTotal += key.BlobSize();
                     }
+                    ReplInfo->ItemsTotal += BlobsToReplicatePtr->size();
                 }
                 eof = BlobsToReplicatePtr->empty();
             } else {
                 // scan through the index until we have enough blobs to recover or the time is out
-                for (it.Seek(StartKey); it.Valid() && going(); it.Next()) {
-                    ProcessItem(it, barriers, allowKeepFlags);
-                }
-                if (it.Valid()) {
-                    if (!ReplyKey) { // remember key for the next quantum
-                        ReplyKey = it.GetCurKey().LogoBlobID();
-                    }
-
-                    const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
-                    ui32 counter = 0;
-                    for (; it.Valid(); it.Next()) {
-                        if (++counter % 1024 == 0 && GetCycleCountFast() > plannedEndTime) {
-                            resume = true;
-                            StartKey = it.GetCurKey().LogoBlobID();
-                            break;
-                        }
-
-                        const TLogoBlobID key = it.GetCurKey().LogoBlobID();
+                const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
+                for (it.Seek(StartKey); it.Valid(); it.Next()) {
+                    StartKey = it.GetCurKey().LogoBlobID();
+                    if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
+                        // we have event processing timer expired, restart processing later with new snapshot starting
+                        // with current key
+                        Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
+                        return;
+                    } else if (AddingTasks) {
+                        // we still have some space in recovery machine logic, so we can add new item
+                        ProcessItem(it, *barriers, allowKeepFlags);
+                    } else {
+                        // no space in recovery machine logic, but we still have to count remaining work
                         const TMemRecLogoBlob memRec = it.GetMemRec();
                         const TIngress ingress = memRec.GetIngress();
-                        const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk, key) -
-                            ingress.LocalParts(topology.GType);
-                        if (!parts.Empty()) {
-                            ReplInfo->WorkUnitsTotal += key.BlobSize();
+                        const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
+                            StartKey) - ingress.LocalParts(topology.GType);
+                        if (!parts.Empty() && barriers->Keep(StartKey, memRec, it.GetMemRecsMerged(), allowKeepFlags).KeepData) {
+                            ++ReplInfo->ItemsTotal;
+                            ReplInfo->WorkUnitsTotal += StartKey.BlobSize();
+                        }
+
+                        if (!KeyToResumeNextTime) {
+                            // this is first valid key that is not processed with ProcessItem, so we remember it to
+                            // start next quantum with this exact key
+                            KeyToResumeNextTime.emplace(StartKey);
                         }
                     }
-                } else {
-                    eof = true;
                 }
+
+                // we shall run next quantum only if we have KeyToResumeNextTime filled in
+                eof = !KeyToResumeNextTime;
             }
 
-            if (!resume && (eof || RecoveryMachine->FullOfTasks() || QuantumBytes >= ReplCtx->VDiskCfg->ReplMaxQuantumBytes)) {
-                // the planning stage has finished, issue reply to the job actor
-                Send(Recipient, new TEvReplPlanFinished(std::move(RecoveryMachine), ReplyKey.value_or(TLogoBlobID()), eof));
+            // the planning stage has finished, issue reply to the job actor
+            Send(Recipient, new TEvReplPlanFinished(std::move(RecoveryMachine), KeyToResumeNextTime.value_or(TLogoBlobID()), eof));
 
-                // finish processing for this actor
-                PassAway();
-            } else {
-                // resume processing a bit later with newer snapshot; this one gets released
-                Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
-            }
+            // finish processing for this actor
+            PassAway();
         }
 
         void ProcessItem(const TLogoBlobsSnapshot::TIndexForwardIterator& it,
-                TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers, bool allowKeepFlags) {
+                TBarriersSnapshot::TBarriersEssence& barriers, bool allowKeepFlags) {
             // aliases for convenient access
             const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
             const TBlobStorageGroupType gtype = topology.GType;
             const TLogoBlobID& key = it.GetCurKey().LogoBlobID();
+            const TMemRecLogoBlob &memRec = it.GetMemRec();
+            const TIngress &ingress = memRec.GetIngress();
+            NMatrix::TVectorType parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
+                key) - ingress.LocalParts(topology.GType);
+            if (parts.Empty()) {
+                return; // nothing to recover
+            }
 
-            NGc::TKeepStatus status = barriers->Keep(key, it.GetMemRec(), it.GetMemRecsMerged(), allowKeepFlags);
-            if (status.KeepData) {
-                const TMemRecLogoBlob &memRec = it.GetMemRec();
-                const TIngress &ingress = memRec.GetIngress();
+            const NGc::TKeepStatus status = barriers.Keep(key, it.GetMemRec(), it.GetMemRecsMerged(), allowKeepFlags);
+            if (!status.KeepData) {
+                return; // no need to recover
+            }
 
-                // calculate set of parts to recover
-                NMatrix::TVectorType parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
-                    key) - ingress.LocalParts(topology.GType);
-
-                if (!parts.Empty()) {
-                    // scan for metadata parts
-                    for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
-                        const TLogoBlobID id(key, i + 1);
-                        if (!gtype.PartSize(id)) {
-                            parts.Clear(i);
-                            RecoveryMachine->AddMetadataPart(id);
-                        }
-                    }
-
-                    const bool phantomLike = !status.KeepByBarrier && ReplInfo->DonorVDiskId == TVDiskID();
-                    RecoveryMachine->AddTask(key, parts, phantomLike, ingress);
-
-                    ReplInfo->WorkUnitsPlanned += key.BlobSize();
-                    ReplInfo->WorkUnitsTotal += key.BlobSize();
-                    ReplInfo->PhantomLike += phantomLike;
-
-                    if (phantomLike) {
-                        ++ReplCtx->MonGroup.ReplPhantomLikeDiscovered();
-                        ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 1;
-                    } else {
-                        ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 1;
-                    }
-
-                    // calculate part size and total size to recover
-                    for (ui8 partIdx = parts.FirstPosition(); partIdx != parts.GetSize(); partIdx = parts.NextPosition(partIdx)) {
-                        QuantumBytes += gtype.PartSize(TLogoBlobID(key, partIdx + 1));
-                        ++QuantumParts;
-                        ++ReplInfo->PartsPlanned;
-                    }
-
-                    ReplInfo->RecoveryScheduled++;
-                } else {
-                    ReplInfo->ReplicaOk++;
+            // scan for metadata parts
+            for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+                const TLogoBlobID id(key, i + 1);
+                if (!gtype.PartSize(id)) {
+                    parts.Clear(i);
+                    RecoveryMachine->AddMetadataPart(id);
                 }
+            }
+
+            const bool phantomLike = !status.KeepByBarrier && ReplInfo->DonorVDiskId == TVDiskID();
+            RecoveryMachine->AddTask(key, parts, phantomLike, ingress);
+
+            ++ReplInfo->ItemsPlanned;
+            ReplInfo->WorkUnitsPlanned += key.BlobSize();
+
+            ++ReplInfo->ItemsTotal;
+            ReplInfo->WorkUnitsTotal += key.BlobSize();
+
+            if (phantomLike) {
+                ++ReplCtx->MonGroup.ReplPhantomLikeDiscovered();
+                ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 1;
             } else {
-                ReplInfo->IgnoredDueToGC++;
+                ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 1;
+            }
+
+            // calculate part size and total size to recover
+            for (ui8 partIdx = parts.FirstPosition(); partIdx != parts.GetSize(); partIdx = parts.NextPosition(partIdx)) {
+                QuantumBytes += gtype.PartSize(TLogoBlobID(key, partIdx + 1));
+            }
+
+            if (RecoveryMachine->FullOfTasks() || QuantumBytes >= ReplCtx->VDiskCfg->ReplMaxQuantumBytes) {
+                AddingTasks = false;
             }
         }
 
@@ -286,8 +279,7 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<THullReplJobActor>;
 
-        std::optional<TLogoBlobID> CurrentKey;
-        std::optional<TRecoveryMachine::TPartSet> CurrentParts;
+        std::optional<std::pair<TLogoBlobID, TRecoveryMachine::TPartSet>> CurrentKeyAndParts;
         TLogoBlobID LastProcessedKey;
 
         void Finish() {
@@ -345,10 +337,14 @@ namespace NKikimr {
             Eof = ev->Get()->Eof;
 
             auto& mon = ReplCtx->MonGroup;
-            mon.ReplPhantomLikeDiscovered() += ReplInfo->PhantomLike;
-            Y_VERIFY_DEBUG_S(mon.ReplWorkUnitsRemaining() == 1 || ReplInfo->WorkUnitsTotal <= (ui64)mon.ReplWorkUnitsRemaining(),
+
+            Y_VERIFY_DEBUG_S(mon.ReplWorkUnitsRemaining() == -1 || ReplInfo->WorkUnitsTotal <= (ui64)mon.ReplWorkUnitsRemaining(),
                 "WorkUnitsTotal# " << ReplInfo->WorkUnitsTotal << " ReplWorkUnitsRemaining# " << mon.ReplWorkUnitsRemaining());
             mon.ReplWorkUnitsRemaining() = ReplInfo->WorkUnitsTotal;
+
+            Y_VERIFY_DEBUG_S(mon.ReplItemsRemaining() == -1 || ReplInfo->ItemsTotal <= (ui64)mon.ReplItemsRemaining(),
+                "ItemsTotal# " << ReplInfo->ItemsTotal << " ReplItemsRemaining# " << mon.ReplItemsRemaining());
+            mon.ReplItemsRemaining() = ReplInfo->ItemsTotal;
 
             if (RecoveryMachine->NoTasks()) {
                 Finish();
@@ -534,21 +530,17 @@ namespace NKikimr {
             while (!MergeHeap.empty()) {
                 TimeAccount.SetState(ETimeState::MERGE);
 
-                // check that we have no missing proxies in merger queue (i.e. awaiting TEvReplProxyNextResult)
-                Y_VERIFY_DEBUG(MergeHeap.size() == NumRunningProxies);
-
                 // acquire current key; front item contains the least key
-                if (!CurrentKey) {
-                    auto& front = MergeHeap.front();
-                    CurrentKey = front->GenLogoBlobId();
-                    CurrentParts.emplace(ReplCtx->VCtx->Top->GType);
-                    Y_VERIFY(LastProcessedKey < *CurrentKey);
-                    LastProcessedKey = *CurrentKey;
+                if (!CurrentKeyAndParts) {
+                    const TLogoBlobID id = MergeHeap.front()->GenLogoBlobId();
+                    CurrentKeyAndParts.emplace(id, ReplCtx->VCtx->Top->GType);
+                    Y_VERIFY(std::exchange(LastProcessedKey, id) < id);
                 }
+                auto& [currentKey, currentParts] = *CurrentKeyAndParts;
 
                 // find out which proxies carry items with the same key
                 TVector<TVDiskProxyPtr>::iterator lastIter = MergeHeap.end();
-                while (lastIter != MergeHeap.begin() && MergeHeap.front()->GenLogoBlobId() == *CurrentKey) {
+                while (lastIter != MergeHeap.begin() && MergeHeap.front()->GenLogoBlobId() == currentKey) {
                     PopHeap(MergeHeap.begin(), lastIter, TVDiskProxy::TPtrGreater());
                     --lastIter;
                 }
@@ -559,16 +551,17 @@ namespace NKikimr {
                 while (lastIter != MergeHeap.end()) {
                     // process all items with specified current key
                     TVDiskProxyPtr proxy = *lastIter;
-                    while (proxy->Valid() && proxy->GenLogoBlobId() == *CurrentKey) {
+                    while (proxy->Valid() && proxy->GenLogoBlobId() == currentKey) {
                         TLogoBlobID id;
                         NKikimrProto::EReplyStatus status;
                         TTrackableString data(TMemoryConsumer(ReplCtx->VCtx->Replication));
                         proxy->GetData(&id, &status, &data);
                         if (status != NKikimrProto::OK || data.size()) {
-                            CurrentParts->AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, data.GetBaseConstRef());
+                            currentParts.AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, data.GetBaseConstRef());
                         }
                         proxy->Next();
                     }
+                    Y_VERIFY_DEBUG(!proxy->Valid() || currentKey < proxy->GenLogoBlobId());
 
                     // if proxy is not exhausted yet, then put it back into merge queue
                     if (proxy->Valid()) {
@@ -599,13 +592,12 @@ namespace NKikimr {
 
                 // recover data
                 NMatrix::TVectorType parts;
-                if (!RecoveryMachine->Recover(*CurrentKey, *CurrentParts, RecoveryQueue, parts)) {
+                if (!RecoveryMachine->Recover(currentKey, currentParts, RecoveryQueue, parts)) {
                     STLOG(PRI_INFO, BS_REPL, BSVR33, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Sending phantom validation query"),
-                        (GroupId, GInfo->GroupID), (CurKey, *CurrentKey));
-                    PhantomChecksPending.emplace_back(*CurrentKey, parts);
+                        (GroupId, GInfo->GroupID), (CurKey, currentKey));
+                    PhantomChecksPending.emplace_back(currentKey, parts);
                 }
-                CurrentKey.reset();
-                CurrentParts.reset();
+                CurrentKeyAndParts.reset();
 
                 // process recovered items, if any; queueProcessed.first will be false when writer is not ready for new data
                 EProcessQueueAction action = ProcessQueue();
@@ -755,10 +747,6 @@ namespace NKikimr {
                 }
 
                 if (Writer.AddRecoveredBlob(front)) {
-                    if (front.LocalParts.CountBits() > 1) {
-                        ++ReplInfo->MultipartBlobs;
-                    }
-
                     ++ReplCtx->MonGroup.ReplBlobsRecovered();
                     ReplCtx->MonGroup.ReplBlobBytesRecovered() += front.Data.GetSize();
                     RecoveryQueue.pop();

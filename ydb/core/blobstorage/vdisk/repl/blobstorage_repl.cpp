@@ -35,9 +35,11 @@ namespace NKikimr {
     // TEvReplFinished::TInfo
     ////////////////////////////////////////////////////////////////////////////
     TString TEvReplFinished::TInfo::ToString() const {
-        return Sprintf("{KeyPos: %s Eof: %s ReplicaOk: %" PRIu64 " RecoveryScheduled: %" PRIu64 " DataRecoverySuccess: %"
-            PRIu64 " DataRecoveryFailure: %" PRIu64 "}", KeyPos.ToString().data(), (Eof ? "true" : "false"),
-            ReplicaOk, RecoveryScheduled, DataRecoverySuccess, DataRecoveryFailure);
+        return TStringBuilder()
+            << "{KeyPos# " << KeyPos
+            << " Eof# " << (Eof ? "true" : "false")
+            << " Items# " << Items()
+            << "}";
     }
 
     void TEvReplFinished::TInfo::OutputHtml(IOutputStream &str) const {
@@ -58,7 +60,7 @@ namespace NKikimr {
                         TABLEH() { str << "Value"; }
                     }
                     STRONG() {
-                        PARAM(Summary, DataRecoverySuccess << "/" << RecoveryScheduled << "/" << (ReplicaOk + RecoveryScheduled));
+                        PARAM(Summary, ItemsRecovered << "/" << ItemsPlanned << "/" << ItemsTotal);
                     }
                     PARAM(Start, ToStringLocalTimeUpToSeconds(Start));
                     PARAM(End, ToStringLocalTimeUpToSeconds(End));
@@ -68,20 +70,19 @@ namespace NKikimr {
                     PARAM_V(DonorVDiskId);
                     PARAM_V(DropDonor);
                     GROUP("Plan Generation Stats") {
-                        PARAM_V(ReplicaOk);
-                        PARAM_V(RecoveryScheduled);
-                        PARAM_V(IgnoredDueToGC);
-                        PARAM_V(WorkUnitsPlanned);
+                        PARAM_V(ItemsTotal);
+                        PARAM_V(ItemsPlanned);
                         PARAM_V(WorkUnitsTotal);
-                        PARAM_V(WorkUnitsProcessed);
-                        PARAM_V(PhantomLike);
+                        PARAM_V(WorkUnitsPlanned);
                     }
                     GROUP("Plan Execution Stats") {
-                        PARAM_V(DataRecoverySuccess);
-                        PARAM_V(DataRecoveryFailure);
-                        PARAM_V(DataRecoveryNoParts);
-                        PARAM_V(DataRecoverySkip);
-                        PARAM_V(DataRecoveryPhantomCheck);
+                        PARAM_V(ItemsRecovered);
+                        PARAM_V(ItemsNotRecovered);
+                        PARAM_V(ItemsException);
+                        PARAM_V(ItemsPartiallyRecovered);
+                        PARAM_V(ItemsPhantom);
+                        PARAM_V(ItemsNonPhantom);
+                        PARAM_V(WorkUnitsPerformed);
                     }
                     GROUP("Detailed Stats") {
                         PARAM_V(BytesRecovered);
@@ -89,12 +90,7 @@ namespace NKikimr {
                         PARAM_V(HugeLogoBlobsRecovered);
                         PARAM_V(ChunksWritten);
                         PARAM_V(SstBytesWritten);
-                        PARAM_V(MultipartBlobs);
                         PARAM_V(MetadataBlobs);
-                        PARAM_V(PartsPlanned);
-                        PARAM_V(PartsExact);
-                        PARAM_V(PartsRestored);
-                        PARAM_V(PartsMissing);
                     }
                     GROUP("Durations") {
                         PARAM_V(PreparePlanDuration);
@@ -256,8 +252,10 @@ namespace NKikimr {
 
             LastReplStart = TAppData::TimeProvider->Now();
             ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 1;
-            ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 1;
+            ReplCtx->MonGroup.ReplWorkUnitsRemaining() = -1;
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
+            ReplCtx->MonGroup.ReplItemsRemaining() = -1;
+            ReplCtx->MonGroup.ReplItemsDone() = 0;
 
             Become(&TThis::StateRepl);
 
@@ -374,14 +372,22 @@ namespace NKikimr {
             TEvReplFinished::TInfoPtr prev = nullptr;
             for (auto it = History.Begin(); it != History.End(); ++it) {
                 TEvReplFinished::TInfoPtr cur = *it;
-                Y_VERIFY_DEBUG_S((!prev || cur->WorkUnitsTotal <= prev->WorkUnitsTotal - prev->WorkUnitsProcessed) &&
-                    cur->WorkUnitsProcessed <= cur->WorkUnitsPlanned && cur->WorkUnitsPlanned <= cur->WorkUnitsTotal,
-                    "cur WorkUnitsTotal# " << cur->WorkUnitsTotal
-                    << " cur WorkUnitsPlanned# " << cur->WorkUnitsPlanned
-                    << " cur WorkUnitsProcessed# " << cur->WorkUnitsProcessed
-                    << " prev WorkUnitsTotal# " << prev->WorkUnitsTotal
-                    << " prev WorkUnitsPlanned# " << prev->WorkUnitsPlanned
-                    << " prev WorkUnitsProcessed# " << prev->WorkUnitsProcessed);
+                if (prev) {
+                    Y_VERIFY_DEBUG_S(
+                        cur->WorkUnitsTotal <= prev->WorkUnitsTotal - prev->WorkUnitsPerformed &&
+                        cur->ItemsTotal <= prev->ItemsTotal - prev->ItemsRecovered - prev->ItemsPhantom,
+                        "cur.WorkUnits# " << cur->WorkUnits()
+                        << " prev.WorkUnits# " << prev->WorkUnits()
+                        << " cur.Items# " << cur->Items()
+                        << " prev.Items# " << prev->Items());
+                }
+                Y_VERIFY_DEBUG_S(
+                    cur->WorkUnitsPlanned <= cur->WorkUnitsTotal &&
+                    cur->WorkUnitsPerformed <= cur->WorkUnitsPlanned &&
+                    cur->ItemsPlanned <= cur->ItemsTotal &&
+                    cur->ItemsPlanned == cur->ItemsRecovered + cur->ItemsNotRecovered + cur->ItemsException +
+                        cur->ItemsPartiallyRecovered + cur->ItemsPhantom + cur->ItemsNonPhantom,
+                    "WorkUnits# " << cur->WorkUnits() << " Items# " << cur->Items());
                 prev = cur;
             }
 #endif
@@ -411,6 +417,8 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 1;
                     ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 0;
                     ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
+                    ReplCtx->MonGroup.ReplItemsRemaining() = 0;
+                    ReplCtx->MonGroup.ReplItemsDone() = 0;
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                         SelfId(), nullptr, 0));
                 }
@@ -477,7 +485,7 @@ namespace NKikimr {
             TEvReplFinished::TInfoPtr last = History.Last();
 
             const ui64 workAtBegin = first->WorkUnitsTotal;
-            const ui64 workAtEnd = last->WorkUnitsTotal - last->WorkUnitsProcessed;
+            const ui64 workAtEnd = last->WorkUnitsTotal - last->WorkUnitsPerformed;
             const TInstant timeAtBegin = first->Start;
             const TInstant timeAtEnd = last->End;
 

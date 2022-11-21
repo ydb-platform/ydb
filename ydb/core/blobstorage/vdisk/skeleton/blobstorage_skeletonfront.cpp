@@ -918,9 +918,9 @@ namespace NKikimr {
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
                 replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
-                const ui64 a = ReplMonGroup.ReplWorkUnitsDone();
-                const ui64 b = ReplMonGroup.ReplWorkUnitsRemaining();
-                ev->Record.SetReplicationProgress((double)a / (a + b));
+                const i64 a = ReplMonGroup.ReplWorkUnitsDone();
+                const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();
+                ev->Record.SetReplicationProgress(b != -1 ? (double)a / (a + b) : 0.0);
                 ev->Record.SetReplicationSecondsRemaining(ReplMonGroup.ReplSecondsRemaining());
             } else {
                 ev->Record.SetReplicationProgress(1.0);

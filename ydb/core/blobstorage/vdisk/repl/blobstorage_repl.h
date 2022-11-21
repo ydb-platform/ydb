@@ -29,21 +29,20 @@ namespace NKikimr {
             TVDiskID DonorVDiskId;
             bool DropDonor = false;
 
-            // generate plan stats
-            ui64 ReplicaOk = 0;
-            ui64 RecoveryScheduled = 0;
-            ui64 IgnoredDueToGC = 0;
-            ui64 WorkUnitsPlanned = 0;
+            // plan generation stats
+            ui64 ItemsTotal = 0; // total blobs to be recovered
+            ui64 ItemsPlanned = 0; // total blobs to be recovered in this quantum
             ui64 WorkUnitsTotal = 0;
-            ui64 WorkUnitsProcessed = 0;
-            ui64 PhantomLike = 0;
+            ui64 WorkUnitsPlanned = 0;
 
             // plan execution stats
-            ui64 DataRecoverySuccess = 0;
-            ui64 DataRecoveryFailure = 0;
-            ui64 DataRecoveryNoParts = 0;
-            ui64 DataRecoverySkip = 0;
-            ui64 DataRecoveryPhantomCheck = 0;
+            ui64 ItemsRecovered = 0; // blobs successfully recovered
+            ui64 ItemsNotRecovered = 0; // blobs with not enough parts to recover
+            ui64 ItemsException = 0; // blobs with exception during restoration
+            ui64 ItemsPartiallyRecovered = 0; // partially recovered blobs -- with exact parts, but not complete
+            ui64 ItemsPhantom = 0; // actual phantom blobs that are dropped
+            ui64 ItemsNonPhantom = 0; // phantom-like blobs kept
+            ui64 WorkUnitsPerformed = 0;
 
             // detailed stats
             ui64 BytesRecovered = 0;
@@ -51,12 +50,7 @@ namespace NKikimr {
             ui64 HugeLogoBlobsRecovered = 0;
             ui64 ChunksWritten = 0;
             ui64 SstBytesWritten = 0;
-            ui64 MultipartBlobs = 0;
             ui64 MetadataBlobs = 0;
-            ui64 PartsPlanned = 0;
-            ui64 PartsExact = 0;
-            ui64 PartsRestored = 0;
-            ui64 PartsMissing = 0;
 
             // time durations
             TDuration PreparePlanDuration;
@@ -79,6 +73,27 @@ namespace NKikimr {
 
             TString ToString() const;
             void OutputHtml(IOutputStream &str) const;
+
+            TString WorkUnits() const {
+                return TStringBuilder()
+                    << "{Total# " << WorkUnitsTotal
+                    << " Planned# " << WorkUnitsPlanned
+                    << " Performed# " << WorkUnitsPerformed
+                    << "}";
+            }
+
+            TString Items() const {
+                return TStringBuilder()
+                    << "{Total# " << ItemsTotal
+                    << " Planned# " << ItemsPlanned
+                    << " Recovered# " << ItemsRecovered
+                    << " NotRecovered# " << ItemsNotRecovered
+                    << " Exception# " << ItemsException
+                    << " PartiallyRecovered# " << ItemsPartiallyRecovered
+                    << " Phantom# " << ItemsPhantom
+                    << " NonPhantom# " << ItemsNonPhantom
+                    << "}";
+            }
 
             TInfo();
             ~TInfo();

@@ -134,21 +134,23 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
 
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
-    if (auto uniq = src.GetConstraint<TUniqueConstraintNode>()) {
-        res = ctx.Builder(node->Pos())
-            .Callable("AssumeUnique")
-                .Add(0, std::move(res))
-                .List(1)
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        size_t index = 0;
-                        for (auto col: uniq->GetColumns()) {
-                            parent.Atom(index++, ToString(col), TNodeFlags::Default);
-                        }
-                        return parent;
-                    })
+    if (const auto uniq = src.GetConstraint<TUniqueConstraintNode>()) {
+        for (const auto& set : uniq->GetAllSets()) {
+            res = ctx.Builder(node->Pos())
+                .Callable("AssumeUnique")
+                    .Add(0, std::move(res))
+                    .List(1)
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            size_t index = 0;
+                            for (const auto& path : set) {
+                                parent.Atom(index++, path.front());
+                            }
+                            return parent;
+                        })
+                    .Seal()
                 .Seal()
-            .Seal()
-            .Build();
+                .Build();
+        }
     }
     return res;
 }
@@ -496,8 +498,7 @@ TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, c
 
     TEquiJoinLinkSettings linkSettings = GetEquiJoinLinkSettings(*joinTree->Child(5));
     bool updateSettings = false;
-    auto left = joinTree->ChildPtr(1);
-    if (!left->IsAtom()) {
+    if (auto left = joinTree->ChildPtr(1); !left->IsAtom()) {
         left = UpdateJoinTreeUniqueRecursive(left, labels, unique, ctx);
         if (left != joinTree->ChildPtr(1)) {
             res = ctx.ChangeChild(*res, 1, std::move(left));
@@ -507,21 +508,23 @@ TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, c
             if (auto ndx = labels.FindInputIndex(left->Content())) {
                 if (auto u = unique[*ndx]) {
                     auto keys = joinTree->Child(3);
-                    THashSet<TString> keySet;
+                    std::unordered_set<std::string_view> keySet;
                     for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
                         keySet.insert((*label)->MemberName(keys->Child(i)->Content(), keys->Child(i + 1)->Content()));
                     }
-                    if (AllOf(u->GetColumns(), [&keySet](TStringBuf col) { return keySet.find(col) != keySet.end(); })) {
-                        linkSettings.LeftHints.insert("unique");
-                        updateSettings = true;
+                    for (const auto& set : u->GetAllSets()) {
+                        if (std::all_of(set.cbegin(), set.cend(), [&keySet](const TConstraintNode::TPathType& path) { return !path.empty() && keySet.contains(path.front()); })) {
+                            linkSettings.LeftHints.insert("unique");
+                            updateSettings = true;
+                            break;
+                        }
                     }
                 }
             }
         }
     }
 
-    auto right = joinTree->ChildPtr(2);
-    if (!right->IsAtom()) {
+    if (auto right = joinTree->ChildPtr(2); !right->IsAtom()) {
         right = UpdateJoinTreeUniqueRecursive(right, labels, unique, ctx);
         if (right != joinTree->ChildPtr(2)) {
             res = ctx.ChangeChild(*res, 2, std::move(right));
@@ -531,13 +534,16 @@ TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, c
             if (auto ndx = labels.FindInputIndex(right->Content())) {
                 if (auto u = unique[*ndx]) {
                     auto keys = joinTree->Child(4);
-                    THashSet<TString> keySet;
+                    std::unordered_set<std::string_view> keySet;
                     for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
                         keySet.insert((*label)->MemberName(keys->Child(i)->Content(), keys->Child(i + 1)->Content()));
                     }
-                    if (AllOf(u->GetColumns(), [&keySet](TStringBuf col) { return keySet.find(col) != keySet.end(); })) {
-                        linkSettings.RightHints.insert("unique");
-                        updateSettings = true;
+                    for (const auto& set : u->GetAllSets()) {
+                        if (std::all_of(set.cbegin(), set.cend(), [&keySet](const TConstraintNode::TPathType& path) { return !path.empty() && keySet.contains(path.front()); })) {
+                            linkSettings.RightHints.insert("unique");
+                            updateSettings = true;
+                            break;
+                        }
                     }
                 }
             }

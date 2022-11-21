@@ -363,11 +363,12 @@ private:
     }
 
     TStatus AssumeUniqueWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        TVector<TStringBuf> columns;
-        for (auto column: input->Child(1)->Children()) {
-            columns.push_back(column->Content());
+        std::vector<std::string_view> columns;
+        columns.reserve(input->Child(1)->ChildrenSize());
+        for (const auto& column: input->Child(1)->Children()) {
+            columns.emplace_back(column->Content());
         }
-        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(columns)));
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
         return FromFirst<TPassthroughConstraintNode, TSortedConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
@@ -583,8 +584,14 @@ private:
             input->AddConstraint(sorted);
 
         if (const auto uniq = input->Head().GetConstraint<TUniqueConstraintNode>()) {
-            if (std::none_of(uniq->GetColumns().cbegin(), uniq->GetColumns().cend(), [outItemType](const std::string_view& col) { return !outItemType->FindItem(col); } )) {
-                input->AddConstraint(uniq);
+            if (const auto filtered = uniq->FilterFields(ctx, [outItemType](const TConstraintNode::TPathType& path) { return !path.empty() && outItemType->FindItem(path.front()); } )) {
+                input->AddConstraint(filtered);
+            }
+        }
+
+        if (const auto part = input->Head().GetConstraint<TPartOfUniqueConstraintNode>()) {
+            if (const auto filtered = part->FilterFields(ctx, [outItemType](const TConstraintNode::TPathType& path) { return !path.empty() && outItemType->FindItem(path.front()); } )) {
+                input->AddConstraint(filtered);
             }
         }
 
@@ -1275,7 +1282,7 @@ private:
     TStatus RemoveMemberWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         const auto& name = input->Tail().Content();
         if (const auto structPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
-            const TPassthroughConstraintNode::TKeyType key(1U, name);
+            const TConstraintNode::TPathType key(1U, name);
             auto mapping = structPassthrough->GetColumnMapping();
             if (const auto self = mapping.find(nullptr); mapping.cend() != self)
                 mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped()));
@@ -1315,7 +1322,7 @@ private:
             auto mapping = structPassthrough ? structPassthrough->GetColumnMapping() : TPassthroughConstraintNode::TMapType();
             if (const auto self = mapping.find(nullptr); mapping.cend() != self)
                 mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped()));
-            const TPassthroughConstraintNode::TKeyType key(1U, name);
+            const TConstraintNode::TPathType key(1U, name);
             for (auto p = mapping.begin(); mapping.end() != p;) {
                 if (auto it = p->second.lower_bound(key); p->second.cend() > it && it->first.front() == key.front()) {
                     do p->second.erase(it++);
@@ -1962,7 +1969,11 @@ private:
 
         if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
             if (const auto outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn())) {
-                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(*outItemType));
+                std::vector<std::string_view> columns;
+                columns.reserve(outItemType->GetSize());
+                for (const auto& item: outItemType->GetItems())
+                    columns.emplace_back(item->GetName());
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             }
         }
         else {
@@ -1974,12 +1985,12 @@ private:
             }
             if (!groupByKeys.empty() && commonPassthrough) {
                 const auto& mapping = commonPassthrough->GetReverseMapping();
-                TUniqueConstraintNode::TSetType uniqColumns;
+                std::vector<std::string_view> uniqColumns;
                 for (auto key: groupByKeys) {
                     auto range = mapping.equal_range(key);
                     if (range.first != range.second) {
                         for (auto i = range.first; i != range.second; ++i) {
-                            uniqColumns.insert_unique(i->second);
+                            uniqColumns.emplace_back(i->second);
                         }
                     } else {
                         uniqColumns.clear();
@@ -1987,7 +1998,7 @@ private:
                     }
                 }
                 if (!uniqColumns.empty()) {
-                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
                 }
             }
         }
@@ -2045,7 +2056,7 @@ private:
         }
 
         if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
-            std::vector<TStringBuf> fields(initLambda->Head().ChildrenSize());
+            std::vector<std::string_view> fields(initLambda->Head().ChildrenSize());
             ui32 i = 0U;
             std::generate_n(fields.begin(), initLambda->Head().ChildrenSize(), [&i, &ctx](){ return ctx.GetIndexAsString(i++); });
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(fields));
@@ -2058,12 +2069,12 @@ private:
             }
             if (!groupByKeys.empty() && commonPassthrough) {
                 auto mapping = commonPassthrough->GetReverseMapping();
-                TUniqueConstraintNode::TSetType uniqColumns;
+                std::vector<std::string_view> uniqColumns;
                 for (auto key: groupByKeys) {
                     auto range = mapping.equal_range(key);
                     if (range.first != range.second) {
                         for (auto i = range.first; i != range.second; ++i) {
-                            uniqColumns.insert_unique(i->second);
+                            uniqColumns.emplace_back(i->second);
                         }
                     } else {
                         uniqColumns.clear();
@@ -2071,7 +2082,7 @@ private:
                     }
                 }
                 if (!uniqColumns.empty()) {
-                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
                 }
             }
         }
@@ -2100,12 +2111,12 @@ private:
                 if (!groupKeys.empty()) {
                     if (const auto passthrough = handlerLambda->GetConstraint<TPassthroughConstraintNode>()) {
                         const auto mapping = passthrough->GetReverseMapping();
-                        TUniqueConstraintNode::TSetType uniqColumns;
+                        std::vector<std::string_view> uniqColumns;
                         for (auto key: groupKeys) {
                             auto range = mapping.equal_range(key);
                             if (range.first != range.second) {
                                 for (auto i = range.first; i != range.second; ++i) {
-                                    uniqColumns.insert_unique(i->second);
+                                    uniqColumns.emplace_back(i->second);
                                 }
                             } else {
                                 uniqColumns.clear();
@@ -2113,7 +2124,7 @@ private:
                             }
                         }
                         if (!uniqColumns.empty()) {
-                            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
                         }
                     }
                 }
@@ -2168,20 +2179,20 @@ private:
         if (!partitionKeys.empty() && lambdaPassthrough) {
             if (auto uniq = handlerLambda->GetConstraint<TUniqueConstraintNode>()) {
                 auto mapping = lambdaPassthrough->GetReverseMapping();
-                TUniqueConstraintNode::TSetType uniqColumns;
+                std::vector<std::string_view> uniqColumns;
                 for (auto key: partitionKeys) {
                     auto range = mapping.equal_range(key);
                     if (range.first != range.second) {
                         for (auto i = range.first; i != range.second; ++i) {
-                            uniqColumns.insert_unique(i->second);
+                            uniqColumns.emplace_back(i->second);
                         }
                     } else {
                         uniqColumns.clear();
                         break;
                     }
                 }
-                if (!uniqColumns.empty() && AllOf(uniqColumns, [uniq](TStringBuf key) { return uniq->GetColumns().has(key); })) {
-                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                if (uniq->HasEqualColumns(uniqColumns)) {
+                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
                 }
             }
         }
@@ -2232,20 +2243,20 @@ private:
                         }
                         if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
                             auto mapping = lambdaPassthrough->GetReverseMapping();
-                            TUniqueConstraintNode::TSetType uniqColumns;
+                            std::vector<std::string_view> uniqColumns;
                             for (auto key: partitionKeys) {
                                 auto range = mapping.equal_range(key);
                                 if (range.first != range.second) {
                                     for (auto i = range.first; i != range.second; ++i) {
-                                        uniqColumns.insert_unique(i->second);
+                                        uniqColumns.emplace_back(i->second);
                                     }
                                 } else {
                                     uniqColumns.clear();
                                     break;
                                 }
                             }
-                            if (!uniqColumns.empty() && AllOf(uniqColumns, [lambdaUnique](TStringBuf key) { return lambdaUnique->GetColumns().has(key); })) {
-                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                            if (lambdaUnique->HasEqualColumns(uniqColumns)) {
+                                remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
                             }
                         }
                     }
@@ -2272,20 +2283,20 @@ private:
                                 }
                                 if (const auto lambdaUnique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
                                     auto mapping = lambdaPassthrough->GetReverseMapping();
-                                    TUniqueConstraintNode::TSetType uniqColumns;
+                                    std::vector<std::string_view> uniqColumns;
                                     for (auto key: partitionKeys) {
                                         auto range = mapping.equal_range(key);
                                         if (range.first != range.second) {
                                             for (auto i = range.first; i != range.second; ++i) {
-                                                uniqColumns.insert_unique(i->second);
+                                                uniqColumns.emplace_back(i->second);
                                             }
                                         } else {
                                             uniqColumns.clear();
                                             break;
                                         }
                                     }
-                                    if (!uniqColumns.empty() && AllOf(uniqColumns, [lambdaUnique](TStringBuf key) { return lambdaUnique->GetColumns().has(key); })) {
-                                        remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(uniqColumns)));
+                                    if (lambdaUnique->HasEqualColumns(uniqColumns)) {
+                                        remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
                                     }
                                 }
                             }
@@ -2343,12 +2354,13 @@ private:
     }
 
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        if (input->Child(1)->ChildrenSize()) {
-            TUniqueConstraintNode::TSetType columns;
-            for (auto& child: input->Child(1)->Children()) {
-                columns.insert(child->Content());
+        if (const auto size = input->Child(1)->ChildrenSize()) {
+            std::vector<std::string_view> columns;
+            columns.reserve(size);
+            for (const auto& child: input->Child(1)->Children()) {
+                columns.emplace_back(child->Content());
             }
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(columns)));
+            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
         }
         return TStatus::Ok;
     }
@@ -2497,28 +2509,6 @@ private:
 
         if (!filtered.empty()) {
             return ctx.MakeConstraint<TSortedConstraintNode>(std::move(filtered));
-        }
-        return nullptr;
-    }
-
-    static const TUniqueConstraintNode* GetPassthroughUniqueConstraint(const TUniqueConstraintNode& inputUnique,
-        const TPassthroughConstraintNode& passthrough, TExprContext& ctx)
-    {
-        const auto reverseMapping = passthrough.GetReverseMapping();
-        TUniqueConstraintNode::TSetType remappedColumns;
-        for (auto col: inputUnique.GetColumns()) {
-            auto range = reverseMapping.equal_range(col);
-            if (range.first != range.second) {
-                for (auto it = range.first; it != range.second; ++it) {
-                    remappedColumns.insert(it->second);
-                }
-            } else {
-                remappedColumns.clear();
-                break;
-            }
-        }
-        if (remappedColumns) {
-            return ctx.MakeConstraint<TUniqueConstraintNode>(std::move(remappedColumns));
         }
         return nullptr;
     }

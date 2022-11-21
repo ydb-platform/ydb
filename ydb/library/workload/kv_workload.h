@@ -52,7 +52,8 @@ public:
     enum class EType {
         UpsertRandom,
         InsertRandom,
-        SelectRandom
+        SelectRandom,
+        MaxType
     };
 
 private:

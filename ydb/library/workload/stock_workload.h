@@ -44,7 +44,8 @@ public:
         SubmitRandomOrder,
         SubmitSameOrder,
         GetRandomCustomerHistory,
-        GetCustomerHistory
+        GetCustomerHistory,
+        MaxType
     };
 
 private:

@@ -4918,12 +4918,12 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
 
     std::deque<TMessage> newRequests;
     for (auto& w : Requests) {
+        if (!w.IsWrite() || w.GetWrite().Msg.IgnoreQuotaDeadline) {
+            newRequests.emplace_back(std::move(w));
+            continue;
+        }
         if (w.IsWrite()) {
             const auto& msg = w.GetWrite().Msg;
-            if (msg.IgnoreQuotaDeadline) {
-                newRequests.emplace_back(std::move(w));
-                continue;
-            }
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());

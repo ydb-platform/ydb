@@ -68,7 +68,7 @@ private:
         auto issueCode = thisPtr->IssueCode->GetValue(*ctxPtr);
         auto message = thisPtr->Message->GetValue(*ctxPtr);
 
-        throw TKqpEnsureFail(issueCode.Get<ui32>(), TString(message.AsStringRef().Data()));
+        throw TKqpEnsureFail(issueCode.Get<ui32>(), TString(TStringBuf(message.AsStringRef())));
     }
 
     void RegisterDependencies() const final {

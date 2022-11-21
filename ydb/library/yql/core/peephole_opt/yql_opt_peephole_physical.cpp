@@ -4330,8 +4330,8 @@ struct TBlockRules {
         {"+", { "Add" } },
         {"-", { "Sub" } },
         {"*", { "Mul" } },
-        {"/", { "Div?" } }, // kernel produces optional output on non-optional inputs
-        {"%", { "Mod?" } }, // kernel produces optional output on non-optional inputs
+        {"/", { "Div" } },
+        {"%", { "Mod" } }, 
 
         // logical operators
         {"Not", { "invert" }},

@@ -22,7 +22,6 @@ static constexpr ui64 EVREAD_MAX_ROWS = 32767;
 static constexpr ui64 EVREAD_MAX_BYTES = 200_MB;
 
 static constexpr ui64 MAX_SHARD_RETRIES = 5;
-//static constexpr ui64 MAX_TOTAL_SHARD_RETRIES = 20;
 static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
 bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::EComponent component) {
@@ -55,6 +54,8 @@ public:
 
         size_t ResolveAttempt = 0;
         size_t RetryAttempt = 0;
+
+        bool NeedResolve = false;
 
         TShardState(ui64 tabletId)
             : TabletId(tabletId)
@@ -251,7 +252,6 @@ public:
     }
 
     void Bootstrap() {
-        //TODO: resolve if hint is not set
         THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings.GetShardIdHint());
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
@@ -272,7 +272,12 @@ public:
             }
         }
 
-        StartTableScan();
+        if (!Settings.HasShardIdHint()) {
+            state.NeedResolve = true;
+            ResolveShard(&state);
+        } else {
+            StartTableScan();
+        }
         Become(&TKqpReadActor::ReadyState);
     }
 
@@ -386,6 +391,13 @@ public:
             state = THolder<TShardState>(ptr);
             ResolveShards.erase(request->ResultSet[0].UserData);
         } else {
+            return;
+        }
+
+        if (keyDesc->GetPartitions().size() == 1 && !state->NeedResolve) {
+            // we re-resolved the same shard
+            RuntimeError(TStringBuilder() << "too many retries for shard " << state->TabletId, NDqProto::StatusIds::StatusIds::INTERNAL_ERROR);
+            PendingShards.PushBack(state.Release());
             return;
         }
 

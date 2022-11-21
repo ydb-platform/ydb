@@ -12,10 +12,13 @@ message TEvTestLoadRequest {
     }
 
     message TUpdateStart {
+        // specified by user
         optional uint64 RowCount = 1;
+        optional uint32 Inflight = 4;
+
+        // enriched by load actor starter
         optional uint64 TabletId = 2;
         optional uint64 TableId = 3;
-        optional uint32 Inflight = 4;
 
         // in some cases we need full DB path with table
         optional string Path = 6;
@@ -61,4 +64,17 @@ message TEvTestLoadResponse {
 
     // if load acter has been started, then it is the assigned tag
     optional uint64 Tag = 4;
+}
+
+message TLoadInfo {
+    optional uint64 Tag = 1;
+    optional string Data = 2;
+}
+
+message TEvTestLoadInfoRequest {
+}
+
+// collector puts Infos sorted by Tag
+message TEvTestLoadInfoResponse {
+    repeated TLoadInfo Infos = 1;
 }

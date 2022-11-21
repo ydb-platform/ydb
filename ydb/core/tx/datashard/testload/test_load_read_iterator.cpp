@@ -782,12 +782,12 @@ private:
         return Die(ctx);
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
             str << "ReadIteratorLoadScenario# " << Tag << " started on " << StartTs;
         }
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
     }
 
     void HandlePoison(const TActorContext& ctx) {
@@ -813,7 +813,7 @@ private:
 
     STRICT_STFUNC(StateFunc,
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
-        HFunc(NMon::TEvHttpInfo, Handle)
+        HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle)
         HFunc(TEvPrivate::TEvKeys, Handle)
@@ -823,8 +823,8 @@ private:
 
 } // anonymous
 
-NActors::IActor *CreateReadIteratorActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
-        const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+IActor *CreateReadIteratorActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
+        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     return new TReadIteratorLoadScenario(cmd, parent, std::move(counters), tag);
 }

@@ -23,6 +23,7 @@ target_link_libraries(tx-datashard-testload PUBLIC
 )
 target_sources(tx-datashard-testload PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/bulk_mkql_upsert.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/info_collector.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/kqp_upsert.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_read_iterator.cpp

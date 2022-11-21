@@ -1,4 +1,5 @@
 #include "actors.h"
+#include "info_collector.h"
 #include "test_load_actor.h"
 
 #include <ydb/core/base/appdata.h>
@@ -11,13 +12,11 @@
 
 namespace NKikimr::NDataShardLoad {
 
-class TLoadActor : public TActorBootstrapped<TLoadActor> {
-    // per-actor HTTP info
-    struct TActorInfo {
-        ui64 Tag; // load tag
-        TString Data; // HTML response
-    };
+namespace {
 
+// TLoadManager
+
+class TLoadManager : public TActorBootstrapped<TLoadManager> {
     struct TRunningActorInfo {
         TActorId ActorId;
         TActorId Parent; // if set we notify parent when actor finishes
@@ -27,15 +26,6 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
             , Parent(parent)
         {
         }
-    };
-
-    // per-request info
-    struct THttpInfoRequest {
-        TActorId Origin; // who asked for status
-        int SubRequestId; // origin subrequest id
-        THashMap<TActorId, TActorInfo> ActorMap; // per-actor status
-        ui32 HttpInfoResPending; // number of requests pending
-        TString ErrorMessage;
     };
 
     struct TFinishedTestInfo {
@@ -50,13 +40,11 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
 
     // currently running load actors
     TMap<ui64, TRunningActorInfo> LoadActors;
-    ui64 LastTag = 0; // tags start from 1
 
-    // next HTTP request identifier
-    ui32 NextRequestId;
+    ui64 LastTag = 0; // tags start from TagStep
 
-    // HTTP info requests being currently executed
-    THashMap<ui32, THttpInfoRequest> InfoRequests;
+    THashMap<TActorId, ui64> HttpInfoWaiters;
+    TActorId HttpInfoCollector;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -65,13 +53,12 @@ public:
         return NKikimrServices::TActivity::DS_LOAD_ACTOR;
     }
 
-    TLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-        : NextRequestId(1)
-        , Counters(counters)
+    TLoadManager(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        : Counters(counters)
     {}
 
     void Bootstrap(const TActorContext& /*ctx*/) {
-        Become(&TLoadActor::StateFunc);
+        Become(&TLoadManager::StateFunc);
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
@@ -81,7 +68,7 @@ public:
         ui64 tag = 0;
         try {
             tag = ProcessCmd(ev, ctx);
-        } catch (const TLoadActorException& ex) {
+        } catch (const TLoadManagerException& ex) {
             LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "Exception while creating load actor, what# "
                     << ex.what());
             status = NMsgBusProxy::MSTATUS_ERROR;
@@ -106,7 +93,7 @@ public:
 
         // just sanity check
         if (LoadActors.contains(tag)) {
-            ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+            ythrow TLoadManagerException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
         }
 
         return tag;
@@ -199,12 +186,12 @@ public:
                 LoadActors.clear();
             } else {
                 if (!cmd.HasTag()) {
-                    ythrow TLoadActorException() << "Either RemoveAllTags or Tag must present";
+                    ythrow TLoadManagerException() << "Either RemoveAllTags or Tag must present";
                 }
                 const ui64 tag = cmd.GetTag();
                 auto it = LoadActors.find(tag);
                 if (it == LoadActors.end()) {
-                    ythrow TLoadActorException()
+                    ythrow TLoadManagerException()
                         << Sprintf("load actor with Tag# %" PRIu64 " not found", tag);
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Delete running load actor# " << tag);
@@ -218,8 +205,8 @@ public:
         default: {
             TString protoTxt;
             google::protobuf::TextFormat::PrintToString(record, &protoTxt);
-            ythrow TLoadActorException() << (TStringBuilder()
-                    << "TLoadActor::Handle(TEvDataShardLoad::TEvTestLoadRequest): unexpected command case: "
+            ythrow TLoadManagerException() << (TStringBuilder()
+                    << "TLoadManager::Handle(TEvDataShardLoad::TEvTestLoadRequest): unexpected command case: "
                     << ui32(record.Command_case())
                     << " protoTxt# " << protoTxt.Quote());
         }
@@ -245,141 +232,80 @@ public:
         LoadActors.erase(it);
 
         FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->Report});
-
-        auto infoIt = InfoRequests.begin();
-        while (infoIt != InfoRequests.end()) {
-            auto next = std::next(infoIt);
-
-            THttpInfoRequest& info = infoIt->second;
-            auto actorIt = info.ActorMap.find(ev->Sender);
-            if (actorIt != info.ActorMap.end()) {
-                const bool empty = !actorIt->second.Data;
-                info.ActorMap.erase(actorIt);
-                if (empty && !--info.HttpInfoResPending) {
-                    GenerateHttpInfoRes(ctx, infoIt->first);
-                }
-            }
-
-            infoIt = next;
-        }
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        // calculate ID of this request
-        ui32 id = NextRequestId++;
+        HttpInfoWaiters[ev->Sender] = ev->Get()->SubRequestId;
+        if (HttpInfoCollector) {
+            return;
+        }
 
-        // get reference to request information
-        THttpInfoRequest& info = InfoRequests[id];
-
-        // fill in sender parameters
-        info.Origin = ev->Sender;
-        info.SubRequestId = ev->Get()->SubRequestId;
-
-        info.ErrorMessage.clear();
+        TVector<TActorId> actors;
+        actors.reserve(LoadActors.size());
 
         // send messages to subactors
         for (const auto& kv : LoadActors) {
-            ctx.Send(kv.second.ActorId, new NMon::TEvHttpInfo(ev->Get()->Request, id));
-            info.ActorMap[kv.second.ActorId].Tag = kv.first;
+            actors.push_back(kv.second.ActorId);
         }
 
-        // record number of responses pending
-        info.HttpInfoResPending = LoadActors.size();
-
-        if (!info.HttpInfoResPending) {
-            GenerateHttpInfoRes(ctx, id);
-        }
+        HttpInfoCollector = ctx.Register(CreateInfoCollector(SelfId(), std::move(actors)));
     }
 
-    void Handle(NMon::TEvHttpInfoRes::TPtr& ev, const TActorContext& ctx) {
-        const auto& msg = ev->Get();
-        ui32 id = static_cast<NMon::TEvHttpInfoRes *>(msg)->SubRequestId;
-
-        auto it = InfoRequests.find(id);
-        Y_VERIFY(it != InfoRequests.end());
-        THttpInfoRequest& info = it->second;
-
-        auto actorIt = info.ActorMap.find(ev->Sender);
-        Y_VERIFY(actorIt != info.ActorMap.end());
-        TActorInfo& perActorInfo = actorIt->second;
-
-        TStringStream stream;
-        msg->Output(stream);
-        Y_VERIFY(!perActorInfo.Data);
-        perActorInfo.Data = stream.Str();
-
-        if (!--info.HttpInfoResPending) {
-            GenerateHttpInfoRes(ctx, id);
-        }
-    }
-
-    void GenerateHttpInfoRes(const TActorContext& ctx, ui32 id, bool nodata = false) {
-        auto it = InfoRequests.find(id);
-        Y_VERIFY(it != InfoRequests.end());
-        THttpInfoRequest& info = it->second;
-
-#define PROFILE(NAME) \
-                        str << "<option value=\"" << ui32(NKikimrDataShardLoad::TEvTestLoadRequest::NAME) << "\">" << #NAME << "</option>";
-
-#define PUT_HANDLE_CLASS(NAME) \
-                        str << "<option value=\"" << ui32(NKikimrTxDataShard::NAME) << "\">" << #NAME << "</option>";
+    void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
 
         TStringStream str;
         HTML(str) {
-            if (info.ErrorMessage) {
-                DIV() {
-                    str << "<h1>" << info.ErrorMessage << "</h1>";
+            for (const auto& info: record.GetInfos()) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << "Tag# " << info.GetTag();
+                    }
+                    DIV_CLASS("panel-body") {
+                        str << info.GetData();
+                    }
                 }
             }
 
-            if (!nodata) {
-                for (const auto& pair : info.ActorMap) {
-                    const TActorInfo& perActorInfo = pair.second;
+            COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
+                for (const auto& req : FinishedTests) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
-                            str << "Tag# " << perActorInfo.Tag;
+                            str << "Tag# " << req.Tag;
                         }
                         DIV_CLASS("panel-body") {
-                            str << perActorInfo.Data;
-                        }
-                    }
-                }
-
-                COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
-                    for (const auto& req : FinishedTests) {
-                        DIV_CLASS("panel panel-info") {
-                            DIV_CLASS("panel-heading") {
-                                str << "Tag# " << req.Tag;
-                            }
-                            DIV_CLASS("panel-body") {
-                                str << "<p>";
-                                if (req.Report)
-                                    str << "Report# " << req.Report->ToString() << "<br/>";
-                                str << "Finish reason# " << req.ErrorReason << "<br/>";
-                                str << "Finish time# " << req.FinishTime << "<br/>";
-                                str << "</p>";
-                            }
+                            str << "<p>";
+                            if (req.Report)
+                                str << "Report# " << req.Report->ToString() << "<br/>";
+                            str << "Finish reason# " << req.ErrorReason << "<br/>";
+                            str << "Finish time# " << req.FinishTime << "<br/>";
+                            str << "</p>";
                         }
                     }
                 }
             }
         }
 
-        ctx.Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId));
+        for (const auto& it: HttpInfoWaiters) {
+            ctx.Send(it.first, new NMon::TEvHttpInfoRes(str.Str(), it.second));
+        }
 
-        InfoRequests.erase(it);
+        HttpInfoWaiters.clear();
+        HttpInfoCollector = {};
     }
 
     STRICT_STFUNC(StateFunc,
         HFunc(TEvDataShardLoad::TEvTestLoadRequest, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle)
+        HFunc(TEvDataShardLoad::TEvTestLoadInfoResponse, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
-        HFunc(NMon::TEvHttpInfoRes, Handle)
     )
 };
 
-NActors::IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    return new TLoadActor(counters);
+} // anonymous
+
+IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
+    return new TLoadManager(counters);
 }
 
 } // NKikimr::NDataShardLoad

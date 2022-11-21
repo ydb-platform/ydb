@@ -209,7 +209,7 @@ private:
         Die(ctx);
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
             str << "KqpUpsertActor# " << Tag << " started on " << StartTs
@@ -220,12 +220,13 @@ private:
             str << " in " << delta << " (" << throughput << " op/s)"
                 << " errors=" << Errors;
         }
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
     }
 
     STRICT_STFUNC(StateFunc,
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
-        HFunc(NMon::TEvHttpInfo, Handle)
+        HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
         HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle)
     )
@@ -366,17 +367,18 @@ private:
         }
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
             str << "TKqpUpsertActorMultiSession# " << Tag << " started on " << StartTs;
         }
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
     }
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
             << " tablet recieved PoisonPill, going to die");
+        // TODO: stop subactors?
         Die(ctx);
     }
 
@@ -398,15 +400,15 @@ private:
 
     STRICT_STFUNC(StateFunc,
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
-        HFunc(NMon::TEvHttpInfo, Handle)
+        HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle);
     )
 };
 
 } // anonymous
 
-NActors::IActor *CreateKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+IActor *CreateKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     return new TKqpUpsertActorMultiSession(cmd, parent, std::move(counters), tag);
 }

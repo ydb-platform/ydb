@@ -15,6 +15,9 @@ struct TEvDataShardLoad {
         EvTestLoadResponse,
 
         EvTestLoadFinished,
+
+        EvTestLoadInfoRequest,
+        EvTestLoadInfoResponse,
     };
 
     struct TEvTestLoadRequest
@@ -77,11 +80,33 @@ struct TEvDataShardLoad {
             , ErrorReason(error)
         {}
     };
+
+    struct TEvTestLoadInfoRequest
+        : public TEventPB<TEvTestLoadInfoRequest,
+                          NKikimrDataShardLoad::TEvTestLoadInfoRequest,
+                          EvTestLoadInfoRequest>
+    {
+        TEvTestLoadInfoRequest() = default;
+    };
+
+    struct TEvTestLoadInfoResponse
+        : public TEventPB<TEvTestLoadInfoResponse,
+                          NKikimrDataShardLoad::TEvTestLoadInfoResponse,
+                          EvTestLoadInfoResponse>
+    {
+        TEvTestLoadInfoResponse() = default;
+
+        TEvTestLoadInfoResponse(ui64 tag, const TString& data) {
+            auto* info = Record.AddInfos();
+            info->SetTag(tag);
+            info->SetData(std::move(data));
+        }
+    };
 };
 
 namespace NDataShardLoad {
 
-NActors::IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
 } // NDataShardLoad
 } // NKikimr

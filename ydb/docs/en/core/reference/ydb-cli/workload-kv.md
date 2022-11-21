@@ -40,7 +40,7 @@ View a description of the command to initialize the table:
 The following command is used to create a table:
 
 ```yql
-CREATE TABLE `DbPath/kv_test`(
+CREATE TABLE `kv_test`(
     c0 Uint64,
     c1 String,
     c2 String,
@@ -74,7 +74,7 @@ When the work is complete, you can delete the table:
 The following YQL command is executed:
 
 ```sql
-DROP TABLE `DbPath/kv_test`
+DROP TABLE `kv_test`
 ```
 
 ### Examples of using clean {#clean-kv-examples}

@@ -40,7 +40,7 @@
 Для создания таблицы используется следующая команда:
 
 ```yql
-CREATE TABLE `DbPath/kv_test`(
+CREATE TABLE `kv_test`(
     c0 Uint64,
     c1 String,
     c2 String,
@@ -74,7 +74,7 @@ CREATE TABLE `DbPath/kv_test`(
 Исполняется следующая YQL команда:
 
 ```sql
-DROP TABLE `DbPath/kv_test`
+DROP TABLE `kv_test`
 ```
 
 ### Примеры использования clean {#clean-kv-examples}

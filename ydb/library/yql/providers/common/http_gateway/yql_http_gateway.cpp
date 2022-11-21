@@ -287,7 +287,7 @@ private:
 
     void Done(CURLcode result, long httpResponseCode) final {
         if (CURLE_OK != result)
-            return Fail(TIssue( TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
+            return Fail(TIssue( TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
 
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {

@@ -1024,6 +1024,54 @@ public:
         return End;
     }
 
+    char& operator[](size_t pos) {
+        return UnsafeGetDataMut()[pos];
+    }
+
+    const char& operator[](size_t pos) const {
+        return GetData()[pos];
+    }
+
+    void reserve(size_t size) {
+        ReserveTailroom(size);
+    }
+
+    void ReserveHeadroom(size_t size) {
+        if (Headroom() >= size) {
+            return;
+        }
+        auto newData = TContiguousData::Uninitialized(GetSize(), size, UnsafeTailroom());
+        if (auto data = GetData(); data) {
+            std::memcpy(newData.UnsafeGetDataMut(), GetData(), GetSize());
+        }
+        *this = std::move(newData);
+    }
+
+    void ReserveTailroom(size_t size) {
+        if (Tailroom() >= size) {
+            return;
+        }
+        auto newData = TContiguousData::Uninitialized(GetSize(), UnsafeHeadroom(), size);
+        if (auto data = GetData(); data) {
+            std::memcpy(newData.UnsafeGetDataMut(), GetData(), GetSize());
+        }
+        *this = std::move(newData);
+    }
+
+    void ReserveBidi(size_t headroom, size_t tailroom) {
+        if (Headroom() >= headroom && Tailroom() >= tailroom) {
+            return;
+        }
+        auto newData = TContiguousData::Uninitialized(
+                GetSize(),
+                std::max(UnsafeHeadroom(), headroom),
+                std::max(UnsafeTailroom(), tailroom));
+        if (auto data = GetData(); data) {
+            std::memcpy(newData.UnsafeGetDataMut(), GetData(), GetSize());
+        }
+        *this = std::move(newData);
+    }
+
     EResizeResult GrowFront(size_t size, EResizeStrategy strategy = EResizeStrategy::KeepRooms) {
         if (Headroom() >= size && Backend.UpdateCookiesBegin(Begin, Begin - size)) {
             Begin -= size;

@@ -183,4 +183,35 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         UNIT_ASSERT_EQUAL(data2.data(), extracted.data());
         UNIT_ASSERT_EQUAL(data2.size(), extracted.size());
     }
+
+    Y_UNIT_TEST(Reserve) {
+        TContiguousData data = TContiguousData::Copy("test", 4, 5, 6);
+        TContiguousData data2 = data;
+        data.reserve(1);
+        data.ReserveTailroom(6);
+        UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
+        UNIT_ASSERT_EQUAL(data.GetSize(), data2.GetSize());
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 6);
+        data.ReserveHeadroom(5);
+        UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
+        UNIT_ASSERT_EQUAL(data.GetSize(), data2.GetSize());
+        UNIT_ASSERT_EQUAL(data.Headroom(), 5);
+        data.ReserveBidi(5, 6);
+        UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
+        UNIT_ASSERT_EQUAL(data.GetSize(), data2.GetSize());
+        UNIT_ASSERT_EQUAL(data.Headroom(), 5);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 6);
+        data.ReserveHeadroom(6);
+        UNIT_ASSERT_EQUAL(data.Headroom(), 6);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 6);
+        UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+        data.ReserveTailroom(7);
+        UNIT_ASSERT_EQUAL(data.Headroom(), 6);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 7);
+        UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+        data.ReserveBidi(7, 8);
+        UNIT_ASSERT_EQUAL(data.Headroom(), 7);
+        UNIT_ASSERT_EQUAL(data.Tailroom(), 8);
+        UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+    }
 }

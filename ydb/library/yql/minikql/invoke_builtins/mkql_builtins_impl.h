@@ -1194,9 +1194,9 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false> : TBinaryKern
         const auto& arr1 = *arg1.array();
         auto& resArr = *res->array();
         if (arg2.scalar()->is_valid) {
-            const auto val2 = GetPrimitiveScalarValue<TInput1>(*arg2.scalar());
+            const auto val2 = GetPrimitiveScalarValue<TInput2>(*arg2.scalar());
             auto length = arr1.length;
-            const auto values1 = arr1.GetValues<TInput2>(1);
+            const auto values1 = arr1.GetValues<TInput1>(1);
             const auto valid1 = arr1.GetValues<uint8_t>(0);
             const auto nullCount1 = arr1.GetNullCount();
             auto resValues = resArr.GetMutableValues<TOutput>(1);

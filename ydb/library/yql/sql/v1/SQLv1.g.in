@@ -398,7 +398,7 @@ hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr R
 
 result_column:
     opt_id_prefix ASTERISK
-  | expr ((AS an_id_or_type) | an_id_pure)?
+  | expr ((AS an_id_or_type) | an_id_as_compat)?
 ;
 
 join_source: ANY? flatten_source (join_op ANY? flatten_source join_constraint?)*;
@@ -412,7 +412,7 @@ flatten_by_arg:
 
 flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS))?;
 
-named_single_source: single_source (((AS an_id) | an_id_pure) pure_column_list?)? (sample_clause | tablesample_clause)?;
+named_single_source: single_source (((AS an_id) | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
 
 single_source:
     table_ref
@@ -785,6 +785,9 @@ id_hint:
 //  | keyword_hint_uncompat
 ;
 
+id_as_compat: identifier | keyword_as_compat;
+keyword_as_compat: TYPE;
+
 // ANSI-aware versions of various identifiers with support double-quoted identifiers when PRAGMA AnsiQuotedIdentifiers; is present
 an_id: id | STRING_VALUE;
 an_id_or_type: id_or_type | STRING_VALUE;
@@ -796,6 +799,7 @@ an_id_table: id_table | STRING_VALUE;
 an_id_without: id_without | STRING_VALUE;
 an_id_hint: id_hint | STRING_VALUE;
 an_id_pure: identifier | STRING_VALUE;
+an_id_as_compat: id_as_compat | STRING_VALUE;
 
 opt_id_prefix: (an_id DOT)?;
 cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);

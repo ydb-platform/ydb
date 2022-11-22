@@ -649,6 +649,16 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
     }
 
+    Y_UNIT_TEST(Select1Type) {
+        NYql::TAstParseResult res = SqlToYql("SELECT 1 type;");
+        UNIT_ASSERT(res.Root);
+    }
+
+    Y_UNIT_TEST(SelectTableType) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; SELECT * from T type;");
+        UNIT_ASSERT(res.Root);
+    }
+
     Y_UNIT_TEST(CreateObjectNoFeatures) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE OBJECT secretId (TYPE SECRET);");
         UNIT_ASSERT(res.Root);

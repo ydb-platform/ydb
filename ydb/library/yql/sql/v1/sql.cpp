@@ -135,6 +135,28 @@ static TString Id(const TRule_id_or_type& node, TTranslation& ctx) {
     }
 }
 
+static TString Id(const TRule_id_as_compat& node, TTranslation& ctx) {
+    switch (node.Alt_case()) {
+        case TRule_id_as_compat::kAltIdAsCompat1:
+            return Id(node.GetAlt_id_as_compat1().GetRule_identifier1(), ctx);
+        case TRule_id_as_compat::kAltIdAsCompat2:
+            return ctx.Token(node.GetAlt_id_as_compat2().GetRule_keyword_as_compat1().GetToken1());
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+}
+
+static TString Id(const TRule_an_id_as_compat& node, TTranslation& ctx) {
+    switch (node.Alt_case()) {
+        case TRule_an_id_as_compat::kAltAnIdAsCompat1:
+            return Id(node.GetAlt_an_id_as_compat1().GetRule_id_as_compat1(), ctx);
+        case TRule_an_id_as_compat::kAltAnIdAsCompat2:
+            return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_as_compat2().GetToken1()));
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+}
+
 static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
     //id_schema:
     //    identifier
@@ -6055,7 +6077,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                         label = Id(alt.GetBlock2().GetAlt1().GetBlock1().GetRule_an_id_or_type2(), *this);
                         break;
                     case TRule_result_column_TAlt2_TBlock2::kAlt2:
-                        label = Id(alt.GetBlock2().GetAlt2().GetRule_an_id_pure1(), *this);
+                        label = Id(alt.GetBlock2().GetAlt2().GetRule_an_id_as_compat1(), *this);
                         if (!Ctx.AnsiOptionalAs) {
                             // AS is mandatory
                             Ctx.Error() << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";
@@ -6198,7 +6220,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 label = Id(node.GetBlock2().GetBlock1().GetAlt1().GetBlock1().GetRule_an_id2(), *this);
                 break;
             case TRule_named_single_source_TBlock2_TBlock1::kAlt2:
-                label = Id(node.GetBlock2().GetBlock1().GetAlt2().GetRule_an_id_pure1(), *this);
+                label = Id(node.GetBlock2().GetBlock1().GetAlt2().GetRule_an_id_as_compat1(), *this);
                 if (!Ctx.AnsiOptionalAs) {
                     // AS is mandatory
                     Ctx.Error() << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";

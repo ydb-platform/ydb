@@ -47,6 +47,7 @@ target_link_libraries(contrib-libs-grpc PUBLIC
   abseil-cpp-tstring-y_absl-container
   abseil-cpp-tstring-y_absl-functional
   abseil-cpp-tstring-y_absl-hash
+  abseil-cpp-tstring-y_absl-memory
   abseil-cpp-tstring-y_absl-meta
   abseil-cpp-tstring-y_absl-random
   abseil-cpp-tstring-y_absl-status

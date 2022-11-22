@@ -7,7 +7,7 @@ items:
 
 # Main
 - { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
-- { name: Step-by-step instructions,              include: { mode: link, path: operations/toc_p.yaml } }
+- { name: Practical guidelines     ,              include: { mode: link, path: operations/toc_p.yaml } }
 
 - { name: Recommendations,                        include: { mode: link, path: best_practices/toc_p.yaml } }
 # - { name: Diagnostics,                          include: { mode: link, path: troubleshooting/toc_p.yaml } } moved into maintenance!

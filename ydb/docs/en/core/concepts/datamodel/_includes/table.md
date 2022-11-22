@@ -155,3 +155,17 @@ Attributes for a column group are set when creating a table (for example, they c
 The data stored in the fields of the default column group is accessed faster: this requires less resources than accessing the fields from additional column groups of the same table row. When you search by the primary key, the default column group is always used. When accessing fields from other column groups, besides searching by the primary key, you need additional search operations to determine specific storage positions for these fields.
 
 This way, by creating a separate column group for certain table columns, you can accelerate read operations for the most important frequently used columns of the default column group by slightly slowing down access to other columns. Furthermore, at the column group level, you can control the data storage parameters: for example, you can select the storage device type and data compression mode.
+
+## Custom attributes {#users-attr}
+
+By using custom attributes, you can add any data to your table metadata. This data isn't interpreted by the server, but it can be used by a DB client (a human or, most frequently, a program).
+
+The attributes are key-value pairs. As the attribute keys and values, you can only use strings or other data types that can be cast into strings (for example, using BASE64 encoding).
+
+The following restrictions apply to keys and values of custom attributes:
+
+* Key length: 1–100 bytes.
+* Value length: 1–4096 bytes.
+* The maximum total attribute size (a total length of all keys and values): 10,240 bytes.
+
+To learn how to add, edit, or get the current values of attributes or drop attributes, see [{#T}](../../../operations/manage-users-attr.md).

@@ -2,3 +2,5 @@ items:
 - name: Reading and writing data
   href: crud.md
   hidden: true
+- name: Custom attributes in tables
+  href: manage-users-attr.md

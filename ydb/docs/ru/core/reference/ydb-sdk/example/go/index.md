@@ -164,7 +164,7 @@ err := db.Table().Do(ctx,
         // в ScanNamed передаем имена колонок из строки сканирования,
         // адреса (и типы данных), куда следует присвоить результаты запроса
         err = res.ScanNamed(
-          named.Required("series_id", id),
+          named.Optional("series_id", &id),
           named.Optional("title", &title),
           named.Optional("release_date", &date),
         )

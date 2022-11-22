@@ -164,7 +164,7 @@ err := db.Table().Do(ctx,
         // use ScanNamed to pass column names from the scan string,
         // addresses (and data types) to be assigned the query results
         err = res.ScanNamed(
-          named.Required("series_id", id),
+          named.Optional("series_id", &id),
           named.Optional("title", &title),
           named.Optional("release_date", &date),
         )

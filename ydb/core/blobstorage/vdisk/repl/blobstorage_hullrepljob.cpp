@@ -286,18 +286,16 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_REPL, BSVR01, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished replication job"),
                 (LastKey, LastKey), (Eof, Eof));
 
-            if (!Phantoms.empty()) {
-                // remove all determined phantom blobs from the UnreplicatedBlobsPtr queue
-                std::sort(Phantoms.begin(), Phantoms.end());
-                auto pred = [this](const auto& id) { return std::binary_search(Phantoms.begin(), Phantoms.end(), id); };
-                UnreplicatedBlobsPtr->erase(std::remove_if(UnreplicatedBlobsPtr->begin(), UnreplicatedBlobsPtr->end(),
-                    pred), UnreplicatedBlobsPtr->end());
-
+            if (Phantoms.empty()) {
+                HandleDetectedPhantomBlobCommitted();
+            } else {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR06, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "sending phantoms"),
                     (NumPhantoms, Phantoms.size()));
                 Send(ReplCtx->SkeletonId, new TEvDetectedPhantomBlob(std::exchange(Phantoms, {})));
             }
+        }
 
+        void HandleDetectedPhantomBlobCommitted() {
             bool dropDonor = true;
             for (const auto& proxy : DiskProxySet) {
                 dropDonor = dropDonor && proxy && proxy->NoTransientErrors();
@@ -839,6 +837,7 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvGetResult, Handle)
             hFunc(TEvAddBulkSstResult, Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
+            cFunc(TEvBlobStorage::EvDetectedPhantomBlobCommitted, HandleDetectedPhantomBlobCommitted)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
 
@@ -883,8 +882,8 @@ namespace NKikimr {
             , HugeBlobsInFlight(0)
             , HugeBlobsInFlightMax(3)
             , QueueActorMapPtr(std::move(queueActorMapPtr))
-            , BlobsToReplicatePtr(blobsToReplicatePtr)
-            , UnreplicatedBlobsPtr(unreplicatedBlobsPtr)
+            , BlobsToReplicatePtr(std::move(blobsToReplicatePtr))
+            , UnreplicatedBlobsPtr(std::move(unreplicatedBlobsPtr))
             , Donor(donor)
         {
             if (Donor) {

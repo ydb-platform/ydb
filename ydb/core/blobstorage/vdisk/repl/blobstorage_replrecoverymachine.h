@@ -157,21 +157,19 @@ namespace NKikimr {
                 Y_VERIFY_DEBUG((partSet.PartSet.PartsMask >> groupType.TotalPartCount()) == 0);
                 const ui32 presentParts = PopCount(partSet.PartSet.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
-
-                if (lost.PossiblePhantom && needToRestore && !canRestore) {
-                    UnreplicatedBlobsPtr->push_back(id); // treat this blob as non-phantom by default, sort it out later
-                    LostVec.pop_front();
-                    return false;
-                }
+                bool nonPhantom = true;
 
                 // first of all, count present parts and recover only if there are enough of these parts
                 if (!canRestore && needToRestore && !hasExactParts) {
-                    STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
-                        (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
-                        (PartSet, partSet.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
-                        ReplCtx->VCtx->ShortSelfVDisk, id)));
-                    ++ReplInfo->ItemsNotRecovered;
-                    UnreplicatedBlobsPtr->push_back(id);
+                    if (lost.PossiblePhantom) {
+                        nonPhantom = false;
+                    } else {
+                        STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
+                            (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
+                            (PartSet, partSet.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
+                            ReplCtx->VCtx->ShortSelfVDisk, id)));
+                        BlobDone(id, false, &TEvReplFinished::TInfo::ItemsNotRecovered);
+                    }
                 } else {
                     // recover
                     try {
@@ -221,26 +219,25 @@ namespace NKikimr {
                         ReplInfo->BytesRecovered += partsSize;
 
                         if (!numMissingParts) {
-                            ++ReplInfo->ItemsRecovered;
-                            BlobDone(id);
+                            BlobDone(id, true, &TEvReplFinished::TInfo::ItemsRecovered);
+                            if (lost.PossiblePhantom) {
+                                ++ReplCtx->MonGroup.ReplPhantomLikeRecovered();
+                            }
+                        } else if (lost.PossiblePhantom) {
+                            nonPhantom = false; // run phantom check for this blob
                         } else {
-                            ++ReplInfo->ItemsPartiallyRecovered;
-                            UnreplicatedBlobsPtr->push_back(id);
-                        }
-                        if (lost.PossiblePhantom) {
-                            ++ReplCtx->MonGroup.ReplPhantomLikeRecovered();
+                            BlobDone(id, false, &TEvReplFinished::TInfo::ItemsPartiallyRecovered);
                         }
                     } catch (const std::exception& ex) {
                         ++ReplCtx->MonGroup.ReplRecoveryGroupTypeErrors();
                         STLOG(PRI_ERROR, BS_REPL, BSVR29, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "recovery exception"),
                             (BlobId, id), (Error, TString(ex.what())));
-                        ++ReplInfo->ItemsException;
-                        UnreplicatedBlobsPtr->push_back(id);
+                        BlobDone(id, false, &TEvReplFinished::TInfo::ItemsException);
                     }
                 }
 
                 LostVec.pop_front();
-                return true;
+                return nonPhantom;
             }
 
             void ProcessPhantomBlob(const TLogoBlobID& id, NMatrix::TVectorType parts, bool isPhantom) {
@@ -251,20 +248,26 @@ namespace NKikimr {
                     ? ReplCtx->MonGroup.ReplPhantomLikeDropped()
                     : ReplCtx->MonGroup.ReplPhantomLikeUnrecovered());
 
-                if (isPhantom) { // treat this blob like replicated one
-                    ++ReplInfo->ItemsPhantom;
-                    BlobDone(id);
-                } else {
-                    ++ReplInfo->ItemsNonPhantom;
-                }
+                BlobDone(id, isPhantom, isPhantom
+                    ? &TEvReplFinished::TInfo::ItemsPhantom
+                    : &TEvReplFinished::TInfo::ItemsNonPhantom);
             }
 
-            void BlobDone(TLogoBlobID id) {
-                ReplInfo->WorkUnitsPerformed += id.BlobSize();
-                ReplCtx->MonGroup.ReplWorkUnitsDone() += id.BlobSize();
-                ReplCtx->MonGroup.ReplWorkUnitsRemaining() -= id.BlobSize();
-                ++ReplCtx->MonGroup.ReplItemsDone();
-                --ReplCtx->MonGroup.ReplItemsRemaining();
+            void BlobDone(TLogoBlobID id, bool success, ui64 TEvReplFinished::TInfo::*counter) {
+                STLOG(PRI_DEBUG, BS_REPL, BSVR35, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "BlobDone"), (BlobId, id),
+                    (Success, success));
+
+                if (success) {
+                    ReplInfo->WorkUnitsPerformed += id.BlobSize();
+                    ReplCtx->MonGroup.ReplWorkUnitsDone() += id.BlobSize();
+                    ReplCtx->MonGroup.ReplWorkUnitsRemaining() -= id.BlobSize();
+                    ++ReplCtx->MonGroup.ReplItemsDone();
+                    --ReplCtx->MonGroup.ReplItemsRemaining();
+                } else {
+                    UnreplicatedBlobsPtr->push_back(id);
+                }
+
+                ++((*ReplInfo).*counter);
             }
 
             // finish work
@@ -274,6 +277,9 @@ namespace NKikimr {
                     SkipItem(item);
                 }
                 LostVec.clear();
+                
+                // sort unreplicated blobs vector as it may contain records in incorrect order due to phantom checking
+                std::sort(UnreplicatedBlobsPtr->begin(), UnreplicatedBlobsPtr->end());
             }
 
             // add next task during preparation phase

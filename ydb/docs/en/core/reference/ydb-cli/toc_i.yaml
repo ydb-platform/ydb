@@ -19,12 +19,16 @@ items:
       href: commands/dir.md
     - name: Secondary indexes
       href: commands/secondary_index.md
+    - name: Copying tables
+      href: tools-copy.md
     - name: Renaming tables
       href: commands/tools/rename.md
     - name: Setting TTL parameters
       href: table-ttl-set.md
     - name: Deleting TTL parameters
       href: table-ttl-drop.md
+    - name: Deleting a table
+      href: table-drop.md
   - name: Operations with data
     items:
     - name: Getting a query execution plan and AST

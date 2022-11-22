@@ -53,7 +53,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [scripting yql](../scripting-yql.md) | Executing a YQL script |
 | table attribute add | Adding a table attribute |
 | table attribute drop | Deleting a table attribute |
-| table drop | Deleting a table |
+| [table drop](../table-drop.md) | Deleting a table |
 | [table index add global-async](../commands/secondary_index.md#add) | Adding an asynchronous index |
 | [table index add global-sync](../commands/secondary_index.md#add) | Adding a synchronous index |
 | [table index drop](../commands/secondary_index.md#drop) | Deleting an index |
@@ -62,7 +62,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table readtable](../commands/readtable.md) | Streaming table reads |
 | [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
 | [table ttl drop](../table-ttl-drop.md) | Deleting TTL parameters |
-| tools copy | Copying tables |
+| [tools copy](../tools-copy.md) | Copying tables |
 | [tools dump](../export_import/tools_dump.md) | Dumping a directory or table to the file system |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
 | [tools restore](../export_import/tools_restore.md) | Restoring data from the file system |

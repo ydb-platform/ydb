@@ -295,13 +295,13 @@ private:
         TVector<TRequestsVector> perActorRequests;
         perActorRequests.reserve(actorsCount);
 
-        size_t rowCount = 0;
+        size_t currentKey = Config.GetKeyFrom();
         for (size_t i = 0; i < actorsCount; ++i) {
             TRequestsVector requests;
 
             requests.reserve(requestsPerActor);
             for (size_t i = 0; i < requestsPerActor; ++i) {
-                auto queryInfo = GenerateUpsert(rowCount++, Target.GetTableName());
+                auto queryInfo = GenerateUpsert(currentKey++, Target.GetTableName());
 
                 auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
                 request->Record.MutableRequest()->SetKeepSession(true);

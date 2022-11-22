@@ -91,18 +91,23 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TSt
     return TUploadRequest(request.release());
 }
 
-TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType, const TString& table) {
+TRequestsVector GenerateRequests(
+    ui64 tableId,
+    ui64 keyFrom,
+    ui64 n,
+    ERequestType requestType,
+    const TString& table)
+{
     TRequestsVector requests;
     requests.reserve(n);
 
-    for (size_t i = 0; i < n; ++i) {
-        auto keyNum = RandomNumber(Max<ui64>());
+    for (size_t i = keyFrom; i < keyFrom + n; ++i) {
         switch (requestType) {
         case ERequestType::UpsertBulk:
-            requests.emplace_back(GenerateBulkRowRequest(tableId, keyNum));
+            requests.emplace_back(GenerateBulkRowRequest(tableId, i));
             break;
         case ERequestType::UpsertLocalMkql:
-            requests.emplace_back(GenerateMkqlRowRequest(tableId, keyNum, table));
+            requests.emplace_back(GenerateMkqlRowRequest(tableId, i, table));
             break;
         default:
             // should not happen, just for compiler
@@ -159,7 +164,12 @@ public:
 
         // note that we generate all requests at once to send at max speed, i.e.
         // do not mess with protobufs, strings, etc when send data
-        Requests = GenerateRequests(Target.GetTableId(), Config.GetRowCount(), RequestType, Target.GetTableName());
+        Requests = GenerateRequests(
+            Target.GetTableId(),
+            Config.GetKeyFrom(),
+            Config.GetRowCount(),
+            RequestType,
+            Target.GetTableName());
 
         Become(&TUpsertActor::StateFunc);
         Connect(ctx);

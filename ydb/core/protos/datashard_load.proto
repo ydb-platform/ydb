@@ -21,6 +21,9 @@ message TEvTestLoadRequest {
     message TUpdateStart {
         optional uint64 RowCount = 1;
         optional uint32 Inflight = 2;
+
+        // Key is a string like sprintf("user%.19lu", keyNum)
+        optional uint64 KeyFrom = 3 [default = 0];
     }
 
     message TReadStart {

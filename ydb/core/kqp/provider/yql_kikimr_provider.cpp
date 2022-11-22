@@ -47,6 +47,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
         DataSinkNames.insert(TKiDropUser::CallableName());
+        DataSinkNames.insert(TKiCreateObject::CallableName());
+        DataSinkNames.insert(TKiAlterObject::CallableName());
+        DataSinkNames.insert(TKiDropObject::CallableName());
         DataSinkNames.insert(TKiCreateGroup::CallableName());
         DataSinkNames.insert(TKiAlterGroup::CallableName());
         DataSinkNames.insert(TKiDropGroup::CallableName());
@@ -338,12 +341,16 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if (tagName == "role") {
         KeyType = Type::Role;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "objectId") {
+        KeyType = Type::Object;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
+        ObjectType = key.Child(1)->Child(1)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
     }
 
-    if (key.ChildrenSize() > 1) {
+    if (key.ChildrenSize() > 1 && KeyType != Type::Object) {
         for (ui32 i = 1; i < key.ChildrenSize(); ++i) {
             auto tag = key.Child(i)->Child(0);
             if (tag->Content() == TStringBuf("view")) {

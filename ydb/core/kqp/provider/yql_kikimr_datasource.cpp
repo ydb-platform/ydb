@@ -70,6 +70,9 @@ private:
 
             case TKikimrKey::Type::Role:
                 return TStatus::Ok;
+
+            case TKikimrKey::Type::Object:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;

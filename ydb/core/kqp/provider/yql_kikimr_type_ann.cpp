@@ -195,6 +195,11 @@ private:
             {
                 return TStatus::Ok;
             }
+
+            case TKikimrKey::Type::Object:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -1120,6 +1125,21 @@ private:
             }
         }
 
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& /*ctx*/) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& /*ctx*/) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& /*ctx*/) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

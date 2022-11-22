@@ -95,6 +95,24 @@ private:
         return TStatus::Error;
     }
 
+    TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "CreateObject is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
+    TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "AlterObject is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
+    TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "DropObject is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "CreateGroup is not yet implemented for intent determination transformer"));
@@ -220,6 +238,8 @@ private:
                 break;
 
             case TKikimrKey::Type::Role:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Object:
                 return TStatus::Ok;
         }
 
@@ -390,7 +410,11 @@ public:
             || node.IsCallable(TKiDropUser::CallableName())
             || node.IsCallable(TKiCreateGroup::CallableName())
             || node.IsCallable(TKiAlterGroup::CallableName())
-            || node.IsCallable(TKiDropGroup::CallableName())) {
+            || node.IsCallable(TKiDropGroup::CallableName())
+            || node.IsCallable(TKiCreateObject::CallableName())
+            || node.IsCallable(TKiAlterObject::CallableName())
+            || node.IsCallable(TKiDropObject::CallableName()))
+{
             return true;
         }
 
@@ -527,6 +551,44 @@ public:
 
             case TKikimrKey::Type::TableList:
                 break;
+            case TKikimrKey::Type::Object:
+            {
+                NCommon::TWriteObjectSettings settings = NCommon::ParseWriteObjectSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "createObject") {
+                    return Build<TKiCreateObject>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .ObjectId().Build(key.GetObjectId())
+                        .TypeId().Build(key.GetObjectType())
+                        .Features(settings.Features)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alterObject") {
+                    return Build<TKiAlterObject>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .ObjectId().Build(key.GetObjectId())
+                        .TypeId().Build(key.GetObjectType())
+                        .Features(settings.Features)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "dropObject") {
+                    return Build<TKiDropObject>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .ObjectId().Build(key.GetObjectId())
+                        .TypeId().Build(key.GetObjectType())
+                        .Features(settings.Features)
+                        .Done()
+                        .Ptr();
+                } else {
+                    YQL_ENSURE(false, "unknown Object operation mode \"" << TString(mode) << "\"");
+                }
+                break;
+            }
 
             case TKikimrKey::Type::Role: {
                 NCommon::TWriteRoleSettings settings = NCommon::ParseWriteRoleSettings(TExprList(node->Child(4)), ctx);
@@ -661,6 +723,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropTable>(input)) {
         return HandleDropTable(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiCreateObject>(input)) {
+        return HandleCreateObject(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterObject>(input)) {
+        return HandleAlterObject(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropObject>(input)) {
+        return HandleDropObject(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiCreateUser>(input)) {

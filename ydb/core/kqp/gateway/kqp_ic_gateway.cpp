@@ -21,6 +21,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -1374,6 +1375,114 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+    }
+
+    template <class TSettings>
+    class IObjectModifier {
+    private:
+        TKikimrIcGateway& Owner;
+    protected:
+        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
+            NMetadata::IOperationsManager::TPtr manager, const TSettings& settings,
+            const NMetadata::IOperationsManager::TModificationContext& context) = 0;
+        ui32 GetNodeId() const {
+            return Owner.NodeId;
+        }
+        TMaybe<NACLib::TUserToken> GetUserToken() const {
+            if (Owner.UserToken) {
+                return Owner.UserToken->Data;
+            } else {
+                return {};
+            }
+        }
+    public:
+        IObjectModifier(TKikimrIcGateway& owner)
+            : Owner(owner)
+        {
+
+        }
+        TFuture<TGenericResult> Execute(const TString& cluster, const TSettings& settings) {
+            try {
+                if (!Owner.CheckCluster(cluster)) {
+                    return InvalidCluster<TGenericResult>(cluster);
+                }
+                TString database;
+                if (!Owner.GetDatabaseForLoginOperation(database)) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+                }
+                NMetadata::IOperationsManager::TPtr manager(NMetadata::IOperationsManager::TFactory::Construct(settings.GetTypeId()));
+                if (!manager) {
+                    return MakeFuture(ResultFromError<TGenericResult>("incorrect object type"));
+                }
+                NMetadata::IOperationsManager::TModificationContext context;
+                context.SetUserToken(GetUserToken());
+                return DoExecute(manager, settings, context).Apply([](const NThreading::TFuture<NMetadata::TObjectOperatorResult>& f) {
+                    if (f.HasValue() && !f.HasException() && f.GetValue().IsSuccess()) {
+                        TGenericResult result;
+                        result.SetSuccess();
+                        return NThreading::MakeFuture<TGenericResult>(result);
+                    } else {
+                        TGenericResult result;
+                        result.AddIssue(NYql::TIssue(f.GetValue().GetErrorMessage()));
+                        return NThreading::MakeFuture<TGenericResult>(result);
+                    }
+                    });
+            } catch (yexception& e) {
+                return MakeFuture(ResultFromException<TGenericResult>(e));
+            }
+        }
+    };
+
+    class TObjectCreate: public IObjectModifier<NYql::TCreateObjectSettings> {
+    private:
+        using TBase = IObjectModifier<NYql::TCreateObjectSettings>;
+    protected:
+        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
+            NMetadata::IOperationsManager::TPtr manager, const NYql::TCreateObjectSettings& settings,
+            const NMetadata::IOperationsManager::TModificationContext& context) override
+        {
+            return manager->CreateObject(settings, TBase::GetNodeId(), manager, context);
+        }
+    public:
+        using TBase::TBase;
+    };
+
+    class TObjectAlter: public IObjectModifier<NYql::TAlterObjectSettings> {
+    private:
+        using TBase = IObjectModifier<NYql::TAlterObjectSettings>;
+    protected:
+        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
+            NMetadata::IOperationsManager::TPtr manager, const NYql::TAlterObjectSettings& settings,
+            const NMetadata::IOperationsManager::TModificationContext& context) override {
+            return manager->AlterObject(settings, TBase::GetNodeId(), manager, context);
+        }
+    public:
+        using TBase::TBase;
+    };
+
+    class TObjectDrop: public IObjectModifier<NYql::TDropObjectSettings> {
+    private:
+        using TBase = IObjectModifier<NYql::TDropObjectSettings>;
+    protected:
+        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
+            NMetadata::IOperationsManager::TPtr manager, const NYql::TDropObjectSettings& settings,
+            const NMetadata::IOperationsManager::TModificationContext& context) override {
+            return manager->DropObject(settings, TBase::GetNodeId(), manager, context);
+        }
+    public:
+        using TBase::TBase;
+    };
+
+    TFuture<TGenericResult> CreateObject(const TString& cluster, const NYql::TCreateObjectSettings& settings) override {
+        return TObjectCreate(*this).Execute(cluster, settings);
+    }
+
+    TFuture<TGenericResult> AlterObject(const TString& cluster, const NYql::TAlterObjectSettings& settings) override {
+        return TObjectAlter(*this).Execute(cluster, settings);
+    }
+
+    TFuture<TGenericResult> DropObject(const TString& cluster, const NYql::TDropObjectSettings& settings) override {
+        return TObjectDrop(*this).Execute(cluster, settings);
     }
 
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const NYql::TCreateGroupSettings& settings) override {

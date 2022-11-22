@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -618,6 +619,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterObject(const TString& cluster, const TAlterObjectSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 

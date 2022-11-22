@@ -389,6 +389,86 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
+template <class TKiObject, class TSettings>
+class TObjectModifierTransformer {
+private:
+    TIntrusivePtr<IKikimrGateway> Gateway;
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TString ActionInfo;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSettings& settings) = 0;
+    TIntrusivePtr<IKikimrGateway> GetGateway() const {
+        return Gateway;
+    }
+public:
+    TObjectModifierTransformer(const TString& actionInfo, TIntrusivePtr<IKikimrGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        : Gateway(gateway)
+        , SessionCtx(sessionCtx)
+        , ActionInfo(actionInfo)
+    {
+
+    }
+
+    std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureNotPrepare(ActionInfo, input->Pos(), SessionCtx->Query(), ctx)) {
+            return SyncError();
+        }
+
+        auto requireStatus = RequireChild(*input, 0);
+        if (requireStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return SyncStatus(requireStatus);
+        }
+
+        auto cluster = TString(kiObject.DataSink().Cluster());
+        TSettings settings;
+        if (!settings.DeserializeFromKi(kiObject)) {
+            return SyncError();
+        }
+        bool prepareOnly = SessionCtx->Query().PrepareOnly;
+        auto future = prepareOnly ? CreateDummySuccess() : DoExecute(cluster, settings);
+
+        return WrapFuture(future,
+            [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing " + ActionInfo);
+    }
+};
+
+class TCreateObjectTransformer: public TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings> {
+private:
+    using TBase = TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TCreateObjectSettings& settings) override {
+        return GetGateway()->CreateObject(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TAlterObjectTransformer: public TObjectModifierTransformer<TKiAlterObject, TAlterObjectSettings> {
+private:
+    using TBase = TObjectModifierTransformer<TKiAlterObject, TAlterObjectSettings>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TAlterObjectSettings& settings) override {
+        return GetGateway()->AlterObject(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TDropObjectTransformer: public TObjectModifierTransformer<TKiDropObject, TDropObjectSettings> {
+private:
+    using TBase = TObjectModifierTransformer<TKiDropObject, TDropObjectSettings>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
+        return GetGateway()->DropObject(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
 class TKiSinkCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSinkCallableExecutionTransformer> {
 public:
     TKiSinkCallableExecutionTransformer(
@@ -1034,6 +1114,18 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing DROP USER");
+        }
+
+        if (auto kiObject = TMaybeNode<TKiCreateObject>(input)) {
+            return TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+        }
+
+        if (auto kiObject = TMaybeNode<TKiAlterObject>(input)) {
+            return TAlterObjectTransformer("ALTER OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+        }
+
+        if (auto kiObject = TMaybeNode<TKiDropObject>(input)) {
+            return TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {

@@ -179,6 +179,42 @@
             ]
         },
         {
+            "Name": "TKiCreateObject",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCreateObject!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiAlterObject",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterObject!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiDropObject",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiDropObject!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKiCreateGroup",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiCreateGroup!"},

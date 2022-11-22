@@ -61,6 +61,16 @@ struct TWriteRoleSettings {
         : Other(other) {}
 };
 
+struct TWriteObjectSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TCoNameValueTupleList Features;
+    TWriteObjectSettings(NNodes::TMaybeNode<NNodes::TCoAtom>&& mode, NNodes::TCoNameValueTupleList&& kvFeatures)
+        : Mode(std::move(mode))
+        , Features(std::move(kvFeatures)) {
+
+    }
+};
+
 struct TCommitSettings
 {
     TPositionHandle Pos;
@@ -89,6 +99,7 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
+TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 

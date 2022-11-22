@@ -362,6 +362,31 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybe<NNodes::TCoNameValueTupleList> kvFeatures;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "features") {
+                auto maybeFeatures = tuple.Value().Maybe<NNodes::TCoNameValueTupleList>();
+                Y_VERIFY(maybeFeatures);
+                kvFeatures = maybeFeatures.Cast();
+            }
+        }
+    }
+    if (!kvFeatures) {
+        kvFeatures = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
+    }
+    TWriteObjectSettings ret(std::move(mode), std::move(*kvFeatures));
+    return ret;
+}
+
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
     if (!node.Settings()) {
         return TCommitSettings(Build<TCoNameValueTupleList>(ctx, node.Pos()).Done());

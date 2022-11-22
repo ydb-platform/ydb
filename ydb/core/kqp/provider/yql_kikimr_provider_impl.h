@@ -36,6 +36,9 @@ private:
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
+    virtual TStatus HandleCreateObject(NNodes::TKiCreateObject node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterObject(NNodes::TKiAlterObject node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropObject(NNodes::TKiDropObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0;
@@ -54,7 +57,8 @@ public:
         Table,
         TableList,
         TableScheme,
-        Role
+        Role,
+        Object
     };
 
 public:
@@ -84,8 +88,21 @@ public:
         return Target;
     }
 
+    TString GetObjectId() const {
+        Y_VERIFY_DEBUG(KeyType.Defined());
+        Y_VERIFY_DEBUG(KeyType == Type::Object);
+        return Target;
+    }
+
     const TMaybe<TString>& GetView() const {
         return View;
+    }
+
+    const TString& GetObjectType() const {
+        Y_VERIFY_DEBUG(KeyType.Defined());
+        Y_VERIFY_DEBUG(ObjectType.Defined());
+        Y_VERIFY_DEBUG(KeyType == Type::Object);
+        return *ObjectType;
     }
 
     bool Extract(const TExprNode& key);
@@ -94,6 +111,7 @@ private:
     TExprContext& Ctx;
     TMaybe<Type> KeyType;
     TString Target;
+    TMaybe<TString> ObjectType;
     TMaybe<TString> View;
 };
 

@@ -19,4 +19,5 @@ target_link_libraries(services-metadata-abstract PUBLIC
 )
 target_sources(services-metadata-abstract PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.cpp
 )

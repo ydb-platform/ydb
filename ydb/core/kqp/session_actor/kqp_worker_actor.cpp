@@ -783,7 +783,7 @@ private:
         auto& record = responseEv->Record.GetRef();
         auto status = record.GetYdbStatus();
 
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
         auto queryDuration = now - QueryState->StartTime;
 
         if (status == Ydb::StatusIds::SUCCESS) {

@@ -1,13 +1,13 @@
 #include "cert_gen.h"
 
-#include <contrib/libs/openssl/include/openssl/bio.h>
-#include <contrib/libs/openssl/include/openssl/err.h>
-#include <contrib/libs/openssl/include/openssl/evp.h>
-#include <contrib/libs/openssl/include/openssl/pem.h>
-#include <contrib/libs/openssl/include/openssl/rsa.h>
-#include <contrib/libs/openssl/include/openssl/x509.h>
-#include <contrib/libs/openssl/include/openssl/x509v3.h>
-#include <contrib/libs/openssl/include/openssl/x509_vfy.h>
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rsa.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+#include <openssl/x509_vfy.h>
 
 
 #include <array>

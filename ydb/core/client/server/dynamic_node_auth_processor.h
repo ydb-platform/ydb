@@ -1,5 +1,5 @@
 #pragma once
-#include <contrib/libs/openssl/include/openssl/x509.h>
+#include <openssl/x509.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

@@ -1,10 +1,10 @@
 #include "dynamic_node_auth_processor.h"
 
-#include <contrib/libs/openssl/include/openssl/x509.h>
-#include <contrib/libs/openssl/include/openssl/pem.h>
-#include <contrib/libs/openssl/include/openssl/bio.h>
-#include <contrib/libs/openssl/include/openssl/objects.h>
-#include <contrib/libs/openssl/include/openssl/obj_mac.h>
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
+#include <openssl/objects.h>
+#include <openssl/obj_mac.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/map.h>

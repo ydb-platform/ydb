@@ -405,6 +405,7 @@ enum class EState {
 
 class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadScenario> {
     const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     const ui64 Tag;
@@ -448,9 +449,13 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
     ui64 ReadCount = 0;
 
 public:
-    TReadIteratorLoadScenario(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd, const TActorId& parent,
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+    TReadIteratorLoadScenario(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
+                              const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+                              const TActorId& parent,
+                              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                              ui64 tag)
         : Config(cmd)
+        , Target(target)
         , Parent(parent)
         , Counters(std::move(counters))
         , Tag(tag)
@@ -510,8 +515,9 @@ private:
     }
 
     void DescribePath(const TActorContext& ctx) {
+        TString path = Target.GetWorkingDir() + "/" + Target.GetTableName();
         auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
-        request->Record.MutableDescribePath()->SetPath(Config.GetPath());
+        request->Record.MutableDescribePath()->SetPath(path);
         ctx.Send(MakeTxProxyID(), request.release());
     }
 
@@ -543,7 +549,8 @@ private:
 
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
             << " will work with tablet# " << TabletId << " with ownerId# " << OwnerId
-            << " with tableId# " << TableId << " resolved for path# " << Config.GetPath()
+            << " with tableId# " << TableId << " resolved for path# "
+            << Target.GetWorkingDir() << "/" << Target.GetTableName()
             << " with columnsCount# " << AllColumnIds.size() << ", keyColumnCount# " << KeyColumnIds.size());
 
         State = EState::Upsert;
@@ -553,11 +560,19 @@ private:
     void UpsertData(const TActorContext& ctx) {
         NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart upsertConfig;
         upsertConfig.SetRowCount(Config.GetRowCount());
-        upsertConfig.SetTabletId(TabletId);
-        upsertConfig.SetTableId(TableId);
         upsertConfig.SetInflight(100); // some good value to upsert fast
 
-        auto* upsertActor = CreateUpsertBulkActor(upsertConfig, SelfId(), Counters, /* meaningless tag */ 1000000);
+        NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard target;
+        target.SetTabletId(TabletId);
+        target.SetTableId(TableId);
+
+        auto* upsertActor = CreateUpsertBulkActor(
+            upsertConfig,
+            target,
+            SelfId(),
+            Counters,
+            /* meaningless tag */ 1000000);
+
         StartedActors.emplace_back(ctx.Register(upsertActor));
 
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
@@ -823,10 +838,13 @@ private:
 
 } // anonymous
 
-IActor *CreateReadIteratorActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+IActor *CreateReadIteratorActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag)
 {
-    return new TReadIteratorLoadScenario(cmd, parent, std::move(counters), tag);
+    return new TReadIteratorLoadScenario(cmd, target, parent, std::move(counters), tag);
 }
 
 } // NKikimr::NDataShardLoad

@@ -11,40 +11,50 @@ message TEvTestLoadRequest {
         optional bool RemoveAllTags = 2;
     }
 
+    message TTargetShard {
+        optional uint64 TabletId = 1;
+        optional uint64 TableId = 2;
+        optional string WorkingDir = 3;
+        optional string TableName = 4;
+    }
+
     message TUpdateStart {
-        // specified by user
         optional uint64 RowCount = 1;
-        optional uint32 Inflight = 4;
-
-        // enriched by load actor starter
-        optional uint64 TabletId = 2;
-        optional uint64 TableId = 3;
-
-        // in some cases we need full DB path with table
-        optional string Path = 6;
+        optional uint32 Inflight = 2;
     }
 
     message TReadStart {
-        optional string Path = 1;
-
         // defines dataset size, normally must be withing 2 GiB
         // also used for full scan
-        optional uint64 RowCount = 2;
+        optional uint64 RowCount = 1;
 
         // number of random rows to be read (point reads)
-        optional uint64 ReadCount = 3;
+        optional uint64 ReadCount = 2;
 
-        repeated uint32 Inflights = 4;
-        repeated uint32 Chunks = 5;
+        repeated uint32 Inflights = 3;
+        repeated uint32 Chunks = 4;
 
         // Specifies the format for result data in TEvReadResult
-        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 6;
+        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 5;
+    }
+
+    message TTableSetup {
+        // if DropTable specified - then drop and create
+        optional bool DropTable = 1;
+
+        optional bool CreateTable = 2;
+
+        optional string WorkingDir = 3; // i.e. /Root/db1
+        optional string TableName = 4;
     }
 
     optional uint64 Cookie = 1;
 
     // normally should be used by ut only
     optional bool NotifyWhenFinished = 2;
+
+    optional TTableSetup TableSetup = 3;
+    optional TTargetShard TargetShard = 4;
 
     oneof Command {
         TLoadStop LoadStop = 20;

@@ -77,13 +77,14 @@ TQueryInfo GenerateUpsert(size_t n) {
 // it seems better to have copy-paste rather if/else for different loads
 class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
     const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const ui64 Tag;
-    const TString Path;
+    const TString Database;
 
     TString ConfingString;
 
-    TString Session = "wrong sessionId";
+    TString Session;
     TRequestsVector Requests;
     size_t CurrentRequest = 0;
     size_t Inflight = 0;
@@ -94,12 +95,17 @@ class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag, TRequestsVector requests)
+    TKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+                    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+                    const TActorId& parent,
+                    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                    ui64 tag,
+                    TRequestsVector requests)
         : Config(cmd)
+        , Target(target)
         , Parent(parent)
         , Tag(tag)
-        , Path(cmd.GetPath())
+        , Database(Target.GetWorkingDir())
         , Requests(std::move(requests))
     {
         Y_UNUSED(counters);
@@ -117,17 +123,20 @@ public:
 private:
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
             << " sends event for session creation to proxy: " << kqpProxy.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-        ev->Record.MutableRequest()->SetDatabase(Path);
+        ev->Record.MutableRequest()->SetDatabase(Database);
         Send(kqpProxy, ev.Release());
     }
 
     void CloseSession(const TActorContext& ctx) {
+        if (!Session)
+            return;
+
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
             << " sends session close query to proxy: " << kqpProxy);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -141,7 +150,7 @@ private:
             request->Record.MutableRequest()->SetSessionId(Session);
 
             auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
                 << " send request# " << CurrentRequest
                 << " to proxy# " << kqpProxy << ": " << request->ToString());
 
@@ -165,14 +174,14 @@ private:
             response->Report->OperationsError = Errors;
             ctx.Send(Parent, response.release());
 
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
                 << " finished in " << delta << ", errors=" << Errors);
             Die(ctx);
         }
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag << " tablet recieved PoisonPill, going to die");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag << " tablet recieved PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -182,7 +191,7 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag << " session: " << Session);
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag << " session: " << Session);
             SendRows(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -190,7 +199,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "KqpUpsertActor# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
             << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
         --Inflight;
@@ -212,7 +221,7 @@ private:
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "KqpUpsertActor# " << Tag << " started on " << StartTs
+            str << "TKqpUpsertActor# " << Tag << " started on " << StartTs
                 << " sent " << CurrentRequest << " out of " << Requests.size();
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
@@ -235,10 +244,11 @@ private:
 // creates multiple TKqpUpsertActor for inflight > 1 and waits completion
 class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMultiSession> {
     const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const ui64 Tag;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    const TString Path;
+    const TString Database;
 
     TString ConfingString;
 
@@ -253,13 +263,17 @@ class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMul
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActorMultiSession(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+    TKqpUpsertActorMultiSession(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+                                const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+                                const TActorId& parent,
+                                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                ui64 tag)
         : Config(cmd)
+        , Target(target)
         , Parent(parent)
         , Tag(tag)
         , Counters(counters)
-        , Path(cmd.GetPath())
+        , Database(target.GetWorkingDir())
     {
         Y_UNUSED(counters);
         google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
@@ -291,7 +305,7 @@ private:
 
                 auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
                 request->Record.MutableRequest()->SetKeepSession(true);
-                request->Record.MutableRequest()->SetDatabase(Path);
+                request->Record.MutableRequest()->SetDatabase(Database);
 
                 request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
                 request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -321,6 +335,7 @@ private:
 
             auto* kqpActor = new TKqpUpsertActor(
                 configCopy,
+                Target,
                 SelfId(),
                 Counters,
                 pseudoTag,
@@ -407,10 +422,14 @@ private:
 
 } // anonymous
 
-IActor *CreateKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+IActor *CreateKqpUpsertActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag)
 {
-    return new TKqpUpsertActorMultiSession(cmd, parent, std::move(counters), tag);
+    return new TKqpUpsertActorMultiSession(cmd, target, parent, std::move(counters), tag);
 }
 
 } // NKikimr::NDataShardLoad

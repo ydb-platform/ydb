@@ -7,20 +7,40 @@
 
 namespace NKikimr::NDataShardLoad {
 
-IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
+IActor *CreateUpsertBulkActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag);
 
-IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
+IActor *CreateLocalMkqlUpsertActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag);
 
-IActor *CreateKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
+IActor *CreateKqpUpsertActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag);
 
-IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
+IActor *CreateProposeUpsertActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag);
 
-IActor *CreateReadIteratorActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
+IActor *CreateReadIteratorActor(
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const TActorId& parent,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+    ui64 tag);
 
 class TLoadManagerException : public yexception {
 };

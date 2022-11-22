@@ -115,6 +115,7 @@ TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType)
 
 class TUpsertActor : public TActorBootstrapped<TUpsertActor> {
     const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const ui64 Tag;
     const ERequestType RequestType;
@@ -136,9 +137,14 @@ public:
         return NKikimrServices::TActivity::DS_LOAD_ACTOR;
     }
 
-    TUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd, const TActorId& parent,
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag, ERequestType requestType)
+    TUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+                 const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+                 const TActorId& parent,
+                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                 ui64 tag,
+                 ERequestType requestType)
         : Config(cmd)
+        , Target(target)
         , Parent(parent)
         , Tag(tag)
         , RequestType(requestType)
@@ -153,7 +159,7 @@ public:
 
         // note that we generate all requests at once to send at max speed, i.e.
         // do not mess with protobufs, strings, etc when send data
-        Requests = GenerateRequests(Config.GetTableId(), Config.GetRowCount(), RequestType);
+        Requests = GenerateRequests(Target.GetTableId(), Config.GetRowCount(), RequestType);
 
         Become(&TUpsertActor::StateFunc);
         Connect(ctx);
@@ -162,7 +168,7 @@ public:
 private:
     void Connect(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag << " TUpsertActor Connect called");
-        Pipe = Register(NTabletPipe::CreateClient(SelfId(), Config.GetTabletId()));
+        Pipe = Register(NTabletPipe::CreateClient(SelfId(), Target.GetTabletId()));
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
@@ -173,7 +179,7 @@ private:
 
         if (msg->Status != NKikimrProto::OK) {
             TStringStream ss;
-            ss << "Failed to connect to " << Config.GetTabletId() << ", status: " << msg->Status;
+            ss << "Failed to connect to " << Target.GetTabletId() << ", status: " << msg->Status;
             StopWithError(ctx, ss.Str());
             return;
         }
@@ -294,21 +300,25 @@ private:
 } // anonymous
 
 IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+        const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
         const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
-    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::UpsertBulk);
+    return new TUpsertActor(cmd, target, parent, std::move(counters), tag, ERequestType::UpsertBulk);
 }
 
 IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+        const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
         const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
-    return new TUpsertActor(cmd, parent, std::move(counters), tag, ERequestType::UpsertLocalMkql);
+    return new TUpsertActor(cmd, target, parent, std::move(counters), tag, ERequestType::UpsertLocalMkql);
 }
 
 IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
+        const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
         const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     Y_UNUSED(cmd);
+    Y_UNUSED(target);
     Y_UNUSED(parent);
     Y_UNUSED(counters);
     Y_UNUSED(tag);

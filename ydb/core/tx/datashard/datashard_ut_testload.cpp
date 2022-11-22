@@ -77,7 +77,9 @@ struct TTableInfo {
 };
 
 struct TTestHelper {
-    TTestHelper() {
+    TTestHelper(bool createTable = true)
+        : WithCreateTable(createTable)
+    {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -91,23 +93,28 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         Sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::DS_LOAD_TEST, NLog::PRI_INFO);
+        runtime.SetLogPriority(NKikimrServices::DS_LOAD_TEST, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
 
         InitRoot(Server, Sender);
 
         Table.Name = TableName;
-        {
-            CreateTable(Server, Sender, "/Root");
+        if (!WithCreateTable)
+            return;
 
-            auto shards = GetTableShards(Server, Sender, "/Root/" + TableName);
-            Table.TabletId = shards.at(0);
+        CreateTable(Server, Sender, "/Root");
+        ResolveTable();
+    }
 
-            auto [tables, ownerId] = GetTables(Server, Table.TabletId);
-            Table.OwnerId = ownerId;
-            Table.UserTable = tables[TableName];
-        }
+    void ResolveTable() {
+        auto shards = GetTableShards(Server, Sender, "/Root/" + TableName);
+        Table.TabletId = shards.at(0);
 
+        auto [tables, ownerId] = GetTables(Server, Table.TabletId);
+        Table.OwnerId = ownerId;
+        Table.UserTable = tables[TableName];
+
+        auto &runtime = *Server->GetRuntime();
         Table.ClientId = runtime.ConnectToPipe(Table.TabletId, Sender, 0, GetPipeConfigWithRetries());
     }
 
@@ -209,12 +216,19 @@ struct TTestHelper {
         }
     }
 
-    void RunUpsertTestLoad(std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> loadRequest, size_t expectedRowCount) {
+    void RunUpsertTestLoad(
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> loadRequest,
+        size_t expectedRowCount,
+        bool forceResolve = false)
+    {
         RunTestLoad(std::move(loadRequest));
+        if (!WithCreateTable || forceResolve)
+            ResolveTable();
         CheckKeysCount(expectedRowCount);
     }
 
 public:
+    const bool WithCreateTable;
     Tests::TServer::TPtr Server;
     TActorId Sender;
     TTableInfo Table;
@@ -235,9 +249,11 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         auto& command = *record.MutableUpsertBulkStart();
 
         command.SetRowCount(expectedRowCount);
-        command.SetTabletId(helper.Table.TabletId);
-        command.SetTableId(helper.Table.UserTable.GetPathId());
         command.SetInflight(3);
+
+        auto& target = *record.MutableTargetShard();
+        target.SetTabletId(helper.Table.TabletId);
+        target.SetTableId(helper.Table.UserTable.GetPathId());
 
         helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
     }
@@ -252,9 +268,11 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         auto& command = *record.MutableUpsertLocalMkqlStart();
 
         command.SetRowCount(expectedRowCount);
-        command.SetTabletId(helper.Table.TabletId);
-        command.SetTableId(helper.Table.UserTable.GetPathId());
         command.SetInflight(3);
+
+        auto& target = *record.MutableTargetShard();
+        target.SetTabletId(helper.Table.TabletId);
+        target.SetTableId(helper.Table.UserTable.GetPathId());
 
         helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
     }
@@ -269,12 +287,75 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         auto& command = *record.MutableUpsertKqpStart();
 
         command.SetRowCount(expectedRowCount);
-        command.SetTabletId(helper.Table.TabletId);
-        command.SetTableId(helper.Table.UserTable.GetPathId());
         command.SetInflight(5);
-        command.SetPath("/Root");
+
+        auto& target = *record.MutableTargetShard();
+        target.SetTabletId(helper.Table.TabletId);
+        target.SetTableId(helper.Table.UserTable.GetPathId());
+        target.SetWorkingDir("/Root");
+        target.SetTableName("usertable");
 
         helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
+    }
+
+    Y_UNIT_TEST(ShouldCreateTable) {
+        TTestHelper helper(false);
+
+        const ui64 expectedRowCount = 10;
+
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        auto& record = request->Record;
+        auto& command = *record.MutableUpsertBulkStart();
+
+        command.SetRowCount(expectedRowCount);
+        command.SetInflight(3);
+
+        auto& setupTable = *record.MutableTableSetup();
+        setupTable.SetCreateTable(true);
+        setupTable.SetWorkingDir("/Root");
+        setupTable.SetTableName("usertable");
+
+        helper.RunUpsertTestLoad(std::move(request), expectedRowCount);
+    }
+
+    Y_UNIT_TEST(ShouldDropCreateTable) {
+        TTestHelper helper(true);
+
+        {
+            // write some data, which should not be seen after drop
+            std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+            auto& record = request->Record;
+            auto& command = *record.MutableUpsertBulkStart();
+
+            command.SetRowCount(100);
+            command.SetInflight(3);
+
+            auto& target = *record.MutableTargetShard();
+            target.SetTabletId(helper.Table.TabletId);
+            target.SetTableId(helper.Table.UserTable.GetPathId());
+
+            helper.RunUpsertTestLoad(std::move(request), 100);
+        }
+
+        // because of drop we should see only these rows
+        const ui64 expectedRowCount = 10;
+
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        auto& record = request->Record;
+        auto& command = *record.MutableUpsertBulkStart();
+
+        command.SetRowCount(expectedRowCount);
+        command.SetInflight(3);
+
+        auto& setupTable = *record.MutableTableSetup();
+        setupTable.SetDropTable(true);
+        setupTable.SetWorkingDir("/Root");
+        setupTable.SetTableName("usertable");
+
+        helper.RunUpsertTestLoad(std::move(request), expectedRowCount, true);
+    }
+
+    Y_UNIT_TEST(ShouldWriteKqpUpsertNonDefaultTableName) {
     }
 
 } // Y_UNIT_TEST_SUITE(UpsertLoad)
@@ -294,9 +375,11 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
         command.AddChunks(10);
 
         command.AddInflights(1);
-
         command.SetRowCount(expectedRowCount);
-        command.SetPath("/Root/usertable");
+
+        auto& setupTable = *record.MutableTableSetup();
+        setupTable.SetWorkingDir("/Root");
+        setupTable.SetTableName("usertable");
 
         auto result = helper.RunTestLoad(std::move(request));
         UNIT_ASSERT(result->Report);

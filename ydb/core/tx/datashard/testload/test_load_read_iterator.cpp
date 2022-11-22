@@ -18,7 +18,7 @@
 #include <random>
 
 // * Scheme is hardcoded and it is like default YCSB setup:
-// table name is "usertable", 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
+// 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
 namespace NKikimr::NDataShardLoad {

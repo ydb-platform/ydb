@@ -11,7 +11,7 @@
 #include <google/protobuf/text_format.h>
 
 // * Scheme is hardcoded and it is like default YCSB setup:
-// table name is "usertable", 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
+// 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
 namespace NKikimr::NDataShardLoad {
@@ -59,7 +59,7 @@ TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyNum) {
     return TUploadRequest(request.release());
 }
 
-TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum) {
+TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TString& table) {
     static TString programWithoutKey;
 
     if (!programWithoutKey) {
@@ -71,12 +71,12 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum) {
 
         programWithoutKey = rowUpd;
 
-        programWithoutKey += R"(
+        programWithoutKey += Sprintf(R"(
             (let ret_ (AsList
-                (UpdateRow '__user__usertable row1_ upd_
+                (UpdateRow '__user__%s row1_ upd_
             )))
             (return ret_)
-        ))";
+        ))", table.c_str());
     }
 
     TString key = GetKey(keyNum);
@@ -91,7 +91,7 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum) {
     return TUploadRequest(request.release());
 }
 
-TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType) {
+TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType, const TString& table) {
     TRequestsVector requests;
     requests.reserve(n);
 
@@ -102,7 +102,7 @@ TRequestsVector GenerateRequests(ui64 tableId, ui64 n, ERequestType requestType)
             requests.emplace_back(GenerateBulkRowRequest(tableId, keyNum));
             break;
         case ERequestType::UpsertLocalMkql:
-            requests.emplace_back(GenerateMkqlRowRequest(tableId, keyNum));
+            requests.emplace_back(GenerateMkqlRowRequest(tableId, keyNum, table));
             break;
         default:
             // should not happen, just for compiler
@@ -159,7 +159,7 @@ public:
 
         // note that we generate all requests at once to send at max speed, i.e.
         // do not mess with protobufs, strings, etc when send data
-        Requests = GenerateRequests(Target.GetTableId(), Config.GetRowCount(), RequestType);
+        Requests = GenerateRequests(Target.GetTableId(), Config.GetRowCount(), RequestType, Target.GetTableName());
 
         Become(&TUpsertActor::StateFunc);
         Connect(ctx);

@@ -14,7 +14,7 @@
 #include <google/protobuf/text_format.h>
 
 // * Scheme is hardcoded and it is like default YCSB setup:
-// table name is "usertable", 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
+// 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
 namespace NKikimr::NDataShardLoad {
@@ -36,12 +36,12 @@ struct TQueryInfo {
     NYdb::TParams Params;
 };
 
-TQueryInfo GenerateUpsert(size_t n) {
+TQueryInfo GenerateUpsert(size_t n, const TString& table) {
     TStringStream str;
 
     NYdb::TParamsBuilder paramsBuilder;
 
-    str << R"__(
+    str << Sprintf(R"__(
         --!syntax_v1
 
         DECLARE $key AS Utf8;
@@ -56,9 +56,9 @@ TQueryInfo GenerateUpsert(size_t n) {
         DECLARE $field8 AS Utf8;
         DECLARE $field9 AS Utf8;
 
-        UPSERT INTO `usertable` ( key, field0, field1, field2, field3, field4, field5, field6, field7, field8, field9 )
+        UPSERT INTO `%s` ( key, field0, field1, field2, field3, field4, field5, field6, field7, field8, field9 )
             VALUES ( $key, $field0, $field1, $field2, $field3, $field4, $field5, $field6, $field7, $field8, $field9 );
-    )__";
+    )__", table.c_str());
 
     paramsBuilder.AddParam("$key").Utf8(GetKey(n)).Build();
 
@@ -301,7 +301,7 @@ private:
 
             requests.reserve(requestsPerActor);
             for (size_t i = 0; i < requestsPerActor; ++i) {
-                auto queryInfo = GenerateUpsert(rowCount++);
+                auto queryInfo = GenerateUpsert(rowCount++, Target.GetTableName());
 
                 auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
                 request->Record.MutableRequest()->SetKeepSession(true);

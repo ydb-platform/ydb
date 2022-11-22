@@ -662,7 +662,11 @@ namespace NKikimr {
             while (!PhantomChecksPending.empty() && PhantomChecksInFlight.size() < 32) {
                 const ui64 cookie = ++LastPhantomCheckId;
 
-                size_t numItems = Min<size_t>(PhantomChecksPending.size(), 32);
+                size_t numItems = 0;
+                const ui64 tabletId = std::get<0>(PhantomChecksPending.front()).TabletID();
+                for (auto it = PhantomChecksPending.begin(); it != PhantomChecksPending.end() && numItems < 32 &&
+                    std::get<0>(*it).TabletID() == tabletId; ++it, ++numItems) {}
+
                 TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[numItems]);
                 for (size_t i = 0; i < numItems; ++i) {
                     auto& pending = PhantomChecksPending.front();

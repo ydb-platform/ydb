@@ -516,6 +516,42 @@ private:
         }
     }
 
+    void PQTabletError(const NKikimrPQ::TEvProposeTransactionResult& result) {
+        NYql::TIssuesIds::EIssueCode issueCode;
+        Ydb::StatusIds::StatusCode statusCode;
+
+        switch (result.GetStatus()) {
+        default: {
+            issueCode = TIssuesIds::DEFAULT_ERROR;
+            statusCode = Ydb::StatusIds::GENERIC_ERROR;
+            break;
+        }
+        case NKikimrPQ::TEvProposeTransactionResult::ABORTED: {
+            issueCode = TIssuesIds::KIKIMR_OPERATION_ABORTED;
+            statusCode = Ydb::StatusIds::ABORTED;
+            break;
+        }
+        case NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST: {
+            issueCode = TIssuesIds::KIKIMR_BAD_REQUEST;
+            statusCode = Ydb::StatusIds::BAD_REQUEST;
+            break;
+        }
+        case NKikimrPQ::TEvProposeTransactionResult::CANCELLED: {
+            issueCode = TIssuesIds::KIKIMR_OPERATION_CANCELLED;
+            statusCode = Ydb::StatusIds::CANCELLED;
+            break;
+        }
+        case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED: {
+            issueCode = TIssuesIds::KIKIMR_OVERLOADED;
+            statusCode = Ydb::StatusIds::OVERLOADED;
+            break;
+        }
+        }
+
+        auto issue = YqlIssue({}, issueCode);
+        ReplyErrorAndDie(statusCode, issue);
+    }
+
     void CheckPrepareCompleted() {
         for (auto& [_, state] : ShardStates) {
             if (state.State != TShardState::EState::Prepared) {
@@ -648,10 +684,23 @@ private:
         TShardState *state = TopicTabletStates.FindPtr(event.GetOrigin());
         YQL_ENSURE(state);
 
-        YQL_ENSURE(event.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::ERROR);
+        switch (event.GetStatus()) {
+            case NKikimrPQ::TEvProposeTransactionResult::COMPLETE: {
+                YQL_ENSURE(state->State == TShardState::EState::Executing);
 
-        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_ABORTED);
-        ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issue);
+                state->State = TShardState::EState::Finished;
+                CheckExecutionComplete();
+
+                return;
+            }
+            case NKikimrPQ::TEvProposeTransactionResult::PREPARED: {
+                YQL_ENSURE(false);
+            }
+            default: {
+                PQTabletError(event);
+                return;
+            }
+        }
     }
 
     void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {

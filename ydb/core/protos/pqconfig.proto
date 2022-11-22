@@ -789,6 +789,7 @@ message TEvProposeTransactionResult {
         LOCKS_BROKEN = 5;
         CANCELLED = 6;
         BAD_REQUEST = 7;
+        OVERLOADED = 8;
     };
 
     required uint64 Origin = 1; // Tablet Id

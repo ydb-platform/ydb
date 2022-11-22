@@ -45,6 +45,7 @@ private:
     struct THasDataDeadline;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
+    void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
@@ -89,6 +90,7 @@ private:
     void Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
@@ -173,6 +175,14 @@ private:
 
     ui64 GetUsedStorage(const TActorContext& ctx);
 
+    void ProcessTxsAndUserActs(const TActorContext& ctx);
+
+    void AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> event);
+    void RemoveImmediateTx();
+    void ProcessImmediateTxs(const TActorContext& ctx);
+    void ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
+                            const TActorContext& ctx);
+
     void AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act);
     void RemoveUserAct();
     size_t GetUserActCount(const TString& consumer) const;
@@ -191,6 +201,8 @@ private:
     void ScheduleReplyError(const ui64 dst,
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
+    void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                      const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
@@ -210,6 +222,8 @@ private:
     THolder<TEvPQ::TEvError> MakeReplyError(const ui64 dst,
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error);
+    THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+                                                                        NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -314,6 +328,7 @@ private:
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
+            HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
@@ -362,6 +377,7 @@ private:
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
+            HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
@@ -430,12 +446,13 @@ private:
     TUsersInfoStorage UsersInfoStorage;
 
     //
-    // queue of user actions
+    // user actions and transactions
     //
     std::deque<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>> UserActs;
+    std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfo> PendingUsersInfo;
-    TVector<std::unique_ptr<IEventBase>> Replies;
+    TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
     bool UsersInfoWriteInProgress = false;
     //

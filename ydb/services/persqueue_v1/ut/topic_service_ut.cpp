@@ -366,11 +366,29 @@ Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture)
     });
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
+    response = CallAddOffsetsToTransaction({
+        TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
+            TPartition{.Id=1, .Offsets={
+                TOffsetRange{.Begin=4, .End=6}
+            }}
+        }}
+    });
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+    response = CallAddOffsetsToTransaction({
+        TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
+            TPartition{.Id=1, .Offsets={
+                TOffsetRange{.Begin=2, .End=4}
+            }}
+        }}
+    });
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
     Cerr << "<<< CommitTx <<<" << Endl;
     auto result = tx->Commit().ExtractValueSync();
     Cerr << ">>> CommitTx >>>" << Endl;
     UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
 }
 
 Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture) {

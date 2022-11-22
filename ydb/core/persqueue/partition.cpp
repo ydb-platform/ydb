@@ -35,6 +35,7 @@ static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100)
 static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
 static const ui32 MAX_USERS = 1000;
 static const ui64 SET_OFFSET_COOKIE = 1;
+static const ui32 MAX_TXS = 1000;
 
 struct TPartition::THasDataReq {
     ui64 Num;
@@ -272,6 +273,14 @@ void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue
         dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicConverter->GetClientsideName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true
     );
+}
+
+void TPartition::ReplyPropose(const TActorContext& ctx,
+                              const NKikimrPQ::TEvProposeTransaction& event,
+                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
+{
+    ctx.Send(ActorIdFromProto(event.GetSource()),
+             MakeReplyPropose(event, statusCode).Release());
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
@@ -1730,7 +1739,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     FillReadFromTimestamps(Config, ctx);
 
-    ProcessUserActs(ctx);
+    ProcessTxsAndUserActs(ctx);
 
     ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
     if (!NewPartition) {
@@ -1871,7 +1880,7 @@ void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorC
         InitUserInfoForImportantClients(ctx);
         FillReadFromTimestamps(Config, ctx);
 
-        ProcessUserActs(ctx);
+        ProcessTxsAndUserActs(ctx);
     }
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
@@ -2214,6 +2223,29 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
     ReplyOk(ctx, ev->Get()->Cookie);
 }
 
+void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
+{
+    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
+    const NKikimrPQ::TKqpTransaction& txBody = event.GetTxBody();
+
+    if (!txBody.GetImmediate()) {
+        ReplyPropose(ctx,
+                     event,
+                     NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+        return;
+    }
+
+    if (ImmediateTxs.size() > MAX_TXS) {
+        ReplyPropose(ctx,
+                     event,
+                     NKikimrPQ::TEvProposeTransactionResult::OVERLOADED);
+        return;
+    }
+
+    AddImmediateTx(ev->Release());
+
+    ProcessTxsAndUserActs(ctx);
+}
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
@@ -2228,7 +2260,7 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
 
     AddUserAct(ev->Release());
 
-    ProcessUserActs(ctx);
+    ProcessTxsAndUserActs(ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
@@ -3541,8 +3573,8 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
         }
     }
 
-    for (auto& reply : Replies) {
-        ctx.Send(Tablet, reply.release());
+    for (auto& [actor, reply] : Replies) {
+        ctx.Send(actor, reply.release());
     }
 
     PendingUsersInfo.clear();
@@ -3550,13 +3582,25 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
     AffectedUsers.clear();
 
     UsersInfoWriteInProgress = false;
-    ProcessUserActs(ctx);
+    ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
+{
+    ImmediateTxs.push_back(std::move(tx));
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
 {
     UserActs.push_back(std::move(act));
     ++UserActCount[UserActs.back()->ClientId];
+}
+
+void TPartition::RemoveImmediateTx()
+{
+    Y_VERIFY(!ImmediateTxs.empty());
+
+    ImmediateTxs.pop_front();
 }
 
 void TPartition::RemoveUserAct()
@@ -3583,9 +3627,9 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
     }    
 }
 
-void TPartition::ProcessUserActs(const TActorContext& ctx)
+void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
-    if (UsersInfoWriteInProgress || UserActs.empty()) {
+    if (UsersInfoWriteInProgress || (ImmediateTxs.empty() && UserActs.empty())) {
         return;
     }
 
@@ -3593,11 +3637,8 @@ void TPartition::ProcessUserActs(const TActorContext& ctx)
     Y_VERIFY(Replies.empty());
     Y_VERIFY(AffectedUsers.empty());
 
-    while (!UserActs.empty() && (AffectedUsers.size() < MAX_USERS)) {
-        ProcessUserAct(*UserActs.front(), ctx);
-
-        RemoveUserAct();
-    }
+    ProcessUserActs(ctx);
+    ProcessImmediateTxs(ctx);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
@@ -3623,6 +3664,73 @@ void TPartition::ProcessUserActs(const TActorContext& ctx)
 
     ctx.Send(Tablet, request.Release());
     UsersInfoWriteInProgress = true;
+}
+
+void TPartition::ProcessImmediateTxs(const TActorContext& ctx)
+{
+    Y_VERIFY(!UsersInfoWriteInProgress);
+
+    while (!ImmediateTxs.empty() && (AffectedUsers.size() < MAX_USERS)) {
+        ProcessImmediateTx(ImmediateTxs.front()->Record, ctx);
+
+        RemoveImmediateTx();
+    }
+}
+
+void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
+                                    const TActorContext& ctx)
+{
+    for (auto& operation : tx.GetTxBody().GetOperations()) {
+        Y_VERIFY(operation.HasBegin() && operation.HasEnd() && operation.HasConsumer());
+
+        Y_VERIFY(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
+        Y_VERIFY(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+
+        const TString& user = operation.GetConsumer();
+
+        if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+            return;
+        }
+
+        TUserInfo& userInfo = GetOrCreatePendingUser(user, ctx); 
+
+        if (operation.GetBegin() > operation.GetEnd()) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST);
+            return;
+        }
+
+        if (userInfo.Offset != (i64)operation.GetBegin()) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+            return;
+        }
+
+        if (operation.GetEnd() > EndOffset) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST);
+            return;
+        }
+
+        userInfo.Offset = operation.GetEnd();
+        userInfo.Session = "";
+    }
+
+    ScheduleReplyPropose(tx,
+                         NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+}
+
+void TPartition::ProcessUserActs(const TActorContext& ctx)
+{
+    Y_VERIFY(!UsersInfoWriteInProgress);
+
+    while (!UserActs.empty() && (AffectedUsers.size() < MAX_USERS)) {
+        ProcessUserAct(*UserActs.front(), ctx);
+
+        RemoveUserAct();
+    }
 }
 
 void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
@@ -3810,14 +3918,16 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
 void TPartition::ScheduleReplyOk(const ui64 dst)
 {
-    Replies.emplace_back(MakeReplyOk(dst).Release());
+    Replies.emplace_back(Tablet,
+                         MakeReplyOk(dst).Release());
 }
 
 void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                                 const i64 offset,
                                                 const TInstant writeTimestamp, const TInstant createTimestamp)
 {
-    Replies.emplace_back(MakeReplyGetClientOffsetOk(dst,
+    Replies.emplace_back(Tablet,
+                         MakeReplyGetClientOffsetOk(dst,
                                                     offset,
                                                     writeTimestamp, createTimestamp).Release());
 
@@ -3827,9 +3937,18 @@ void TPartition::ScheduleReplyError(const ui64 dst,
                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                     const TString& error)
 {
-    Replies.emplace_back(MakeReplyError(dst,
+    Replies.emplace_back(Tablet,
+                         MakeReplyError(dst,
                                         errorCode,
                                         error).Release());
+}
+
+void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+                                      NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
+{
+    Replies.emplace_back(ActorIdFromProto(event.GetSource()),
+                         MakeReplyPropose(event,
+                                          statusCode).Release());
 }
 
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
@@ -3970,6 +4089,18 @@ THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
     // FIXME(abcdef): в ReplyPersQueueError есть дополнительные действия
     //
     return MakeHolder<TEvPQ::TEvError>(errorCode, error, dst);
+}
+
+THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+                                                                                NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
+{
+    auto response = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
+
+    response->Record.SetOrigin(TabletID);
+    response->Record.SetStatus(statusCode);
+    response->Record.SetTxId(event.GetTxId());
+
+    return response;
 }
 
 void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {

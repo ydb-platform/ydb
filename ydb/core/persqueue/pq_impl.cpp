@@ -2200,16 +2200,38 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
                     ", is_write=" << isWriteOperation);
     }
 
-    auto result = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+    //
+    // TODO(abcdef): сохранить пока инициализиремся. TEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
+    //
 
-    result->Record.SetOrigin(TabletID());
-    result->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ERROR);
-    result->Record.SetTxId(event.GetTxId());
-    //result->Record.SetMinStep();
-    //result->Record.SetMaxStep();
-    //result->Record.SetStep();
+    //
+    // TODO(abcdef): если установлен флаг ImmediateTx, то отправлять в партицию
+    //
+    if (txBody.GetImmediate()) {
+        //
+        // FIXME(abcdef): вместо Y_VERIFY отправлять TEvProposeTransactionResult с кодом ошибки
+        //
+        Y_VERIFY(txBody.OperationsSize() > 0);
 
-    ctx.Send(ActorIdFromProto(event.GetSource()), result.release());
+        auto i = Partitions.find(txBody.GetOperations(0).GetPartitionId());
+        Y_VERIFY(i != Partitions.end());
+
+        //
+        // FIXME(abcdef): последовательность вызовов Release
+        //
+        ctx.Send(i->second.Actor, ev.Release()->Release().Release());
+    } else {
+        auto result = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
+
+        result->Record.SetOrigin(TabletID());
+        result->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ERROR);
+        result->Record.SetTxId(event.GetTxId());
+        //result->Record.SetMinStep();
+        //result->Record.SetMaxStep();
+        //result->Record.SetStep();
+
+        ctx.Send(ActorIdFromProto(event.GetSource()), result.release());
+    }
 }
 
 bool TPersQueue::HandleHook(STFUNC_SIG)

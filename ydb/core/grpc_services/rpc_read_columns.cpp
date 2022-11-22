@@ -9,7 +9,7 @@
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/kqp/kqp_compute.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>

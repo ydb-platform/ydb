@@ -1,6 +1,6 @@
 #include "scan.h"
 
-#include <ydb/core/kqp/kqp_compute.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>

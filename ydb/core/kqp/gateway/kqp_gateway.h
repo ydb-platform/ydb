@@ -5,7 +5,7 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
-#include <ydb/core/kqp/common/kqp_topic.h>
+#include <ydb/core/kqp/topics/kqp_topics.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>

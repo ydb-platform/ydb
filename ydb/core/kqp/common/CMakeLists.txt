@@ -28,14 +28,13 @@ target_link_libraries(core-kqp-common PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_ru_calc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_topic.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp.cpp
 )
 generate_enum_serilization(core-kqp-common
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx_info.h

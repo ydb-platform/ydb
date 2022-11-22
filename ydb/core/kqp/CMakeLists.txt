@@ -22,13 +22,11 @@ add_subdirectory(query_compiler)
 add_subdirectory(rm_service)
 add_subdirectory(runtime)
 add_subdirectory(session_actor)
+add_subdirectory(topics)
 add_subdirectory(ut)
 
-add_library(ydb-core-kqp)
-target_compile_options(ydb-core-kqp PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-kqp PUBLIC
+add_library(ydb-core-kqp INTERFACE)
+target_link_libraries(ydb-core-kqp INTERFACE
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
@@ -72,10 +70,6 @@ target_link_libraries(ydb-core-kqp PUBLIC
   public-lib-base
   public-lib-operation_id
   library-cpp-resource
-)
-target_sources(ydb-core-kqp PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_compute.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_shutdown_controller.cpp
 )
 
 add_global_library_for(ydb-core-kqp.global ydb-core-kqp)

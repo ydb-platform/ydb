@@ -23,6 +23,7 @@ target_link_libraries(core-kqp-executer_actor PUBLIC
   core-kqp-common
   core-kqp-query_compiler
   core-kqp-rm_service
+  core-kqp-topics
   ydb-core-protos
   tx-long_tx_service-public
   ydb-core-ydb_convert

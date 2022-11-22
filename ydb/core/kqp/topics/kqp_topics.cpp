@@ -1,4 +1,5 @@
-#include "kqp_topic.h"
+#include "kqp_topics.h"
+
 #include <ydb/core/base/path.h>
 
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/lwtrace/shuttle.h>
-#include <ydb/core/kqp/common/kqp_common.h>
+#include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>

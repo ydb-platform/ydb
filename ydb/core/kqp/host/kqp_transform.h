@@ -4,7 +4,7 @@
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_tx_info.h>
-#include <ydb/core/kqp/common/kqp_topic.h>
+#include <ydb/core/kqp/topics/kqp_topics.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>

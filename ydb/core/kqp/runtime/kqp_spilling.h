@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_common.h>
+#include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <util/generic/buffer.h>

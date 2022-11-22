@@ -1,5 +1,5 @@
 #include "columnshard_ut_common.h"
-#include <ydb/core/kqp/kqp_compute.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/base/blobstorage.h>
 #include <util/string/printf.h>
 #include <arrow/api.h>

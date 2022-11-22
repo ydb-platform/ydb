@@ -1,7 +1,8 @@
 #pragma once
 
+#include "kqp_event_ids.h"
+
 #include <library/cpp/lwtrace/shuttle.h>
-#include <ydb/core/kqp/common/kqp_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 

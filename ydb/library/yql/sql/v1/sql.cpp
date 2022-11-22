@@ -8675,10 +8675,17 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (rule.HasBlock9() && isTablestore) {
-                Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1()))
-                    << "PARTITION BY is not supported for TABLESTORE";
-                return false;
+            if (rule.HasBlock9()) {
+                if (isTablestore) {
+                    Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1()))
+                        << "PARTITION BY is not supported for TABLESTORE";
+                    return false;
+                }
+                const auto list = rule.GetBlock9().GetRule_table_partition_by1().GetRule_pure_column_list4();
+                params.PartitionByColumns.push_back(IdEx(list.GetRule_an_id2(), *this));
+                for (auto& node : list.GetBlock3()) {
+                    params.PartitionByColumns.push_back(IdEx(node.GetRule_an_id2(), *this));
+                }
             }
 
             if (rule.HasBlock10()) {

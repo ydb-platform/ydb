@@ -2463,15 +2463,17 @@ private:
             tableDesc.SetSchemaPresetName("default");
         }
 
-        // TODO: not first PK column
-        if (metadata->KeyColumnNames.empty()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "No sharding columns to partition by";
-            return false;
-        }
-
         auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
-        hashSharding.AddColumns(metadata->KeyColumnNames[0]);
+
+        for (const TString& column : metadata->TableSettings.PartitionBy) {
+            if (!metadata->Columns.count(column)) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown column '" << column << "' in partition by key";
+                return false;
+            }
+
+            hashSharding.AddColumns(column);
+        }
 
         if (metadata->TableSettings.PartitionByHashFunction) {
             if (to_lower(metadata->TableSettings.PartitionByHashFunction.GetRef()) == "cloud_logs") {

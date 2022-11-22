@@ -57,6 +57,17 @@ private:
                 selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(pathDescription.GetSelf().GetPathType()));
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
 
+                if (pathDescription.HasColumnTableDescription()) {
+                    const auto& tableDescription = pathDescription.GetColumnTableDescription();
+                    FillColumnDescription(describeTableResult, tableDescription);
+
+                    if (GetProtoRequest()->include_table_stats()) {
+                        FillColumnTableStats(describeTableResult, pathDescription);
+                    }
+
+                    return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
+                }
+
                 const auto& tableDescription = pathDescription.GetTable();
                 NKikimrMiniKQL::TType splitKeyType;
 

@@ -408,6 +408,50 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, 3, NLs::PathStringEqual(""));
+
+        // PARTITION BY ()
+
+        TString otherSchema = R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 4
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" }
+                Columns { Name: "some" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "some"
+                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+            }
+            Sharding {
+                HashSharding {
+                    Columns: ["some", "data"]
+                }
+            }
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", otherSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/MyDir/ColumnTable");
+
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 4);
+            UNIT_ASSERT(sharding.HasHashSharding());
+            auto& hashSharding = sharding.GetHashSharding();
+            UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
+            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
+                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+            UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
+            UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
+        };
+
+        TestLsPathId(runtime, 4, checkFn);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
     }
 
     Y_UNIT_TEST(CreateTableTtl) {

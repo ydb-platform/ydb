@@ -375,9 +375,7 @@ message TOlapColumnDescription {
     optional string Type = 3;
     optional uint32 TypeId = 4; // TypeId cannot be set explicitly, use Type
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
-
-    // TODO: Intermediate codecs such as Delta, DubleDelta, dictionary encoding, etc.
-    //TCompressionOptions Compression = 5;
+    optional bool NotNull = 7;
 }
 
 message TAlterOlapColumn {

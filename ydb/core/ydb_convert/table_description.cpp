@@ -33,6 +33,61 @@ static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStorag
     std::invoke(func, out)->set_media(in.GetPreferredPoolKind());
 }
 
+template <typename TColumn>
+static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& column) {
+    NYql::NProto::TypeIds protoType;
+    if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+        throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+            << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
+    }
+
+    newColumn->set_name(column.GetName());
+
+    Ydb::Type* columnType = nullptr;
+    if (column.GetNotNull()) {
+        columnType = newColumn->mutable_type();
+    } else {
+        columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
+    }
+
+    Y_ENSURE(columnType);
+    if (protoType == NYql::NProto::TypeIds::Decimal) {
+        auto typeParams = columnType->mutable_decimal_type();
+        // TODO: Change TEvDescribeSchemeResult to return decimal params
+        typeParams->set_precision(22);
+        typeParams->set_scale(9);
+    } else {
+        NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
+    }
+    return columnType;
+}
+
+template <typename TYdbProto, typename TTtl>
+static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
+    switch (inTTL.GetColumnUnit()) {
+    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
+        auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
+        outTTL.set_column_name(inTTL.GetColumnName());
+        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
+        break;
+    }
+
+    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
+        auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
+        outTTL.set_column_name(inTTL.GetColumnName());
+        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
+        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -47,31 +102,8 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     for (const auto& column : in.GetColumns()) {
-        NYql::NProto::TypeIds protoType;
-        if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
-            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
-                << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
-        }
-
         auto newColumn = out.add_columns();
-        newColumn->set_name(column.GetName());
-
-        Ydb::Type* columnType = nullptr;
-        if (column.GetNotNull()) {
-            columnType = newColumn->mutable_type();
-        } else {
-            columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
-        }
-
-        Y_ENSURE(columnType);
-        if (protoType == NYql::NProto::TypeIds::Decimal) {
-            auto typeParams = columnType->mutable_decimal_type();
-            // TODO: Change TEvDescribeSchemeResult to return decimal params
-            typeParams->set_precision(22);
-            typeParams->set_scale(9);
-        } else {
-            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
-        }
+        Ydb::Type* columnType = AddColumn(newColumn, column);
 
         if (columnIdToKeyPos.count(column.GetId())) {
             size_t keyPos = columnIdToKeyPos[column.GetId()];
@@ -86,30 +118,7 @@ void FillColumnDescriptionImpl(TYdbProto& out,
     }
 
     if (in.HasTTLSettings() && in.GetTTLSettings().HasEnabled()) {
-        const auto& inTTL = in.GetTTLSettings().GetEnabled();
-
-        switch (inTTL.GetColumnUnit()) {
-        case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-            auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
-            outTTL.set_column_name(inTTL.GetColumnName());
-            outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-            break;
-        }
-
-        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-            auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-            outTTL.set_column_name(inTTL.GetColumnName());
-            outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-            outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-            break;
-        }
-
-        default:
-            break;
-        }
+        AddTtl(out, in.GetTTLSettings().GetEnabled());
     }
 }
 
@@ -121,6 +130,30 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
     FillColumnDescriptionImpl(out, splitKeyType, in);
+}
+
+void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    auto& schema = in.GetSchema();
+
+    for (const auto& column : schema.GetColumns()) {
+        auto newColumn = out.add_columns();
+        AddColumn(newColumn, column);
+    }
+
+    for (auto& name : schema.GetKeyColumnNames()) {
+        out.add_primary_key(name);
+    }
+
+    if (in.HasSharding() && in.GetSharding().HasHashSharding()) {
+        auto * partitioning = out.mutable_partitioning_settings();
+        for (auto& column : in.GetSharding().GetHashSharding().GetColumns()) {
+            partitioning->add_partition_by(column);
+        }
+    }
+
+    if (in.HasTtlSettings() && in.GetTtlSettings().HasEnabled()) {
+        AddTtl(out, in.GetTtlSettings().GetEnabled());
+    }
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) {
@@ -465,6 +498,11 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
         auto creationTime = MillisecToProtoTimeStamp(creationTimeMs);
         stats->mutable_creation_time()->CopyFrom(creationTime);
     }
+}
+
+void FillColumnTableStats(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TPathDescription& in) {
+    auto stats = out.mutable_table_stats();
+    stats->set_partitions(in.GetColumnTableDescription().GetColumnShardCount());
 }
 
 static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) {

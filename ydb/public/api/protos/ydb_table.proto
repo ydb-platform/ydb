@@ -405,8 +405,8 @@ message ColumnFamily {
 }
 
 message PartitioningSettings {
-    // List of columns (primary key prefix) to partition by
-    reserved 1; // partition_by
+    // List of columns to partition by
+    repeated string partition_by = 1;
     // Enable auto partitioning on reaching upper or lower partition size bound
     Ydb.FeatureFlag.Status partitioning_by_size = 2;
     // Preferred partition size for auto partitioning by size, Mb

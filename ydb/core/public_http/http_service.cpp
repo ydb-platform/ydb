@@ -86,7 +86,7 @@ namespace {
                 return;
             }
 
-            if (AsciiEqualsIgnoreCase(httpRequest->URL, "/resources/openapi.yaml")) {
+            if (AsciiEqualsIgnoreCase(httpRequest->URL, "/resources/v1/openapi.yaml")) {
                 requestContext.ResponseOKUtf8Text(GetOpenApiSpec());
                 return;
             }

@@ -6,6 +6,8 @@
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <arrow/array/array_primitive.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -53,10 +55,21 @@ public:
                     continue;
                 }
 
+                std::optional<ui64> filtered;
+                if (FilterColumn_) {
+                    arrow::BooleanArray arr(TArrowBlock::From(s.Values_[*FilterColumn_]).GetDatum().array());
+                    ui64 popCount = (ui64)arr.true_count();
+                    if (popCount == 0) {
+                        continue;
+                    }
+
+                    filtered = popCount;
+                }
+
                 s.HasValues_ = true;
                 for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (output[i]) {
-                        s.Aggs_[i]->AddMany(s.Values_.data(), batchLength);
+                        s.Aggs_[i]->AddMany(s.Values_.data(), batchLength, filtered);
                     }
                 }
             } else {
@@ -142,7 +155,6 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
         filterColumn = AS_VALUE(TDataLiteral, filterColumnVal->GetItem())->AsValue().Get<ui32>();
     }
 
-    MKQL_ENSURE(!filterColumn, "Filter column is not supported yet");
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TAggParams> aggsParams;
     for (ui32 i = 0; i < aggsVal->GetValuesCount(); ++i) {

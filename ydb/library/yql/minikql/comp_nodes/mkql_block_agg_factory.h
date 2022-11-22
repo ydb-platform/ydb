@@ -10,7 +10,7 @@ class IBlockAggregator {
 public:
     virtual ~IBlockAggregator() = default;
 
-    virtual void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) = 0;
+    virtual void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) = 0;
 
     virtual NUdf::TUnboxedValue Finish() = 0;
 };

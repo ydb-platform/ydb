@@ -19,7 +19,8 @@ public:
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        Y_ENSURE(!filtered);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
@@ -78,7 +79,8 @@ public:
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        Y_ENSURE(!filtered);
         Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         MKQL_ENSURE(datum.is_array(), "Expected array");
@@ -115,7 +117,8 @@ public:
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength) final {
+    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        Y_ENSURE(!filtered);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {

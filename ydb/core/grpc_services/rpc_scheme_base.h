@@ -96,6 +96,9 @@ protected:
                     case NKikimrScheme::EStatus::StatusMultipleModifications: {
                         return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
                     }
+                    case NKikimrScheme::EStatus::StatusInvalidParameter: {
+                        return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx);
+                    }
                     case NKikimrScheme::EStatus::StatusSchemeError:
                     case NKikimrScheme::EStatus::StatusNameConflict:
                     case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
@@ -105,7 +108,7 @@ protected:
                         // FIXME: clients may start aggressive retries when receiving 'overloaded'
                         return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
                     }
-                   case NKikimrScheme::EStatus::StatusResourceExhausted:
+                    case NKikimrScheme::EStatus::StatusResourceExhausted:
                     case NKikimrScheme::EStatus::StatusPreconditionFailed: {
                         return this->ReplyWithResult(Ydb::StatusIds::PRECONDITION_FAILED, issueMessage, ctx);
                     }

@@ -1497,17 +1497,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             EStatus::GENERIC_ERROR, "Interval value cannot be negative");
 
         AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON CreatedAt)"}}, compat,
-            EStatus::GENERIC_ERROR, "Cannot enable TTL on unknown column");
+            EStatus::BAD_REQUEST, "Cannot enable TTL on unknown column");
 
         AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON StringValue)"}}, compat,
-            EStatus::GENERIC_ERROR, "Unsupported column type");
+            EStatus::BAD_REQUEST, "Unsupported column type");
 
         AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Uint32Value)"}}, compat,
-            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+            EStatus::BAD_REQUEST, "'ValueSinceUnixEpochModeSettings' should be specified");
         AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Uint64Value)"}}, compat,
-            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+            EStatus::BAD_REQUEST, "'ValueSinceUnixEpochModeSettings' should be specified");
         AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON DyNumberValue)"}}, compat,
-            EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+            EStatus::BAD_REQUEST, "'ValueSinceUnixEpochModeSettings' should be specified");
 
         AlterTableSetttings(session, tableName, {{"TTL", R"(Interval("P0D") ON Ts)"}}, compat);
         {
@@ -1526,7 +1526,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TABLE `)" << tableName << R"(` DROP COLUMN Ts;)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop TTL column");
         }
 

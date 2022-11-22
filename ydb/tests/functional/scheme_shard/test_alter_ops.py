@@ -69,7 +69,7 @@ class TestSchemeShardAlterTest(object):
         assert_that(
             callee,
             raises(
-                ydb.GenericError,
+                ydb.BadRequest,
                 "Cannot alter type for column"
             )
         )
@@ -157,7 +157,7 @@ class TestSchemeShardAlterTest(object):
         assert_that(
             callee,
             raises(
-                ydb.GenericError,
+                ydb.BadRequest,
                 "drop key column:"
             )
         )
@@ -208,7 +208,7 @@ class TestSchemeShardAlterTest(object):
         assert_that(
             callee,
             raises(
-                ydb.GenericError,
+                ydb.BadRequest,
                 "drop key column:"
             )
         )

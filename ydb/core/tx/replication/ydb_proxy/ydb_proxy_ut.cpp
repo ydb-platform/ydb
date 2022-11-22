@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
                 new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
         }
     }
 

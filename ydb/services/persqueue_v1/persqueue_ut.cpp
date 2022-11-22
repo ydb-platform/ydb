@@ -3932,7 +3932,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         request.mutable_set_retention_period()->set_seconds(TDuration::Days(2).Seconds());
         request.mutable_alter_partitioning_settings()->set_set_min_active_partitions(1);
         alter(request, Ydb::StatusIds::SCHEME_ERROR, true);
-        alter(request, Ydb::StatusIds::GENERIC_ERROR, false);
+        alter(request, Ydb::StatusIds::BAD_REQUEST, false);
         request.mutable_alter_partitioning_settings()->set_set_min_active_partitions(3);
         request.set_set_retention_storage_mb(-2);
         alter(request, Ydb::StatusIds::BAD_REQUEST, false);

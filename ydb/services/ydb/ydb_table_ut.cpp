@@ -3163,7 +3163,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                                      , {"/Root/Table-1", "/Root/Table-10"}}
                                      ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetStatus());
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetStatus());
         }
 
         {

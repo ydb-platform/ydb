@@ -247,6 +247,9 @@ message TResponse {
     // TWhoAmI
     optional string UserName = 1100;
     repeated string Groups = 1101;
+
+    // Login
+    optional string UserToken = 1102;
 }
 
 message TFakeConfigDummy {
@@ -791,3 +794,10 @@ message TTestShardControlRequest {
 
 message TTestShardControlResponse {
 }
+
+message TLoginRequest {
+    optional string Database = 1;
+    optional string User = 2;
+    optional string Password = 3;
+};
+

@@ -69,19 +69,26 @@ int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBus
 }
 
 int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler) {
-    auto visitor = [&](const auto& conf) {
-        NClient::TKikimr kikimr(conf);
-        if (!config.SecurityToken.empty()) {
-            kikimr.SetSecurityToken(config.SecurityToken);
-        }
-        return handler(kikimr);
-    };
-    if (const auto& conf = CommandConfig.ClientConfig) {
-        return std::visit(std::move(visitor), *conf);
-    } else {
-        Cerr << "Client configuration is not provided" << Endl;
-        return 1;
+    NClient::TKikimr kikimr(CommandConfig.ClientConfig);
+    if (!config.SecurityToken.empty()) {
+        kikimr.SetSecurityToken(config.SecurityToken);
     }
+
+    if (config.UseStaticCredentials) {
+        TAutoPtr<NMsgBusProxy::TBusLoginRequest> request = new NMsgBusProxy::TBusLoginRequest();
+        request.Get()->Record.SetUser(config.StaticCredentials.User);
+        request.Get()->Record.SetPassword(config.StaticCredentials.Password);
+        NClient::TResult result = kikimr.ExecuteRequest(request.Release()).GetValueSync();
+        if (result.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
+            kikimr.SetSecurityToken(result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken());
+            config.SecurityToken = result.GetResponse<NMsgBusProxy::TBusResponse>().Record.GetUserToken();
+        } else {
+            Cerr << result.GetError().GetMessage() << Endl;
+            return 1;
+        }
+    }
+
+    return handler(kikimr);
 }
 
 }

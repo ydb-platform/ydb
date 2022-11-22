@@ -818,17 +818,12 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        if (CommandConfig.ClientConfig.Defined()) {
-            auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
-            if (p) {
-                ClientConfig.Locator = p->Locator;
-                ClientConfig.Timeout = p->Timeout;
-                ClientConfig.MaxMessageSize = p->MaxMessageSize;
-                ClientConfig.MaxInFlight = p->MaxInFlight;
-                ClientConfig.EnableSsl = p->EnableSsl;
-                ClientConfig.SslCredentials.pem_root_certs = p->SslCredentials.pem_root_certs;
-            }
-        }
+        ClientConfig.Locator = CommandConfig.ClientConfig.Locator;
+        ClientConfig.Timeout = CommandConfig.ClientConfig.Timeout;
+        ClientConfig.MaxMessageSize = CommandConfig.ClientConfig.MaxMessageSize;
+        ClientConfig.MaxInFlight = CommandConfig.ClientConfig.MaxInFlight;
+        ClientConfig.EnableSsl = CommandConfig.ClientConfig.EnableSsl;
+        ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
     }
 
     template<typename T>
@@ -944,16 +939,7 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        if (!CommandConfig.ClientConfig.Defined()) {
-            return;
-        }
-
-        auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
-        if (!p) {
-            return;
-        }
-
-        ClientConfig = *p;
+        ClientConfig = CommandConfig.ClientConfig;
     }
 
     virtual int Run(TConfig& config) override {

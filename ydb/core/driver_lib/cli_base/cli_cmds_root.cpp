@@ -119,9 +119,8 @@ public:
         }
         CommandConfig.ClientConfig = NGrpc::TGRpcClientConfig(hostname + ':' + ToString(port));
         if (config.EnableSsl) {
-            auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
-            p->EnableSsl = config.EnableSsl;
-            p->SslCredentials.pem_root_certs = config.CaCerts;
+            CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
+            CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
         }
     }
 

@@ -43,6 +43,7 @@ target_link_libraries(core-client-server PUBLIC
   core-ymq-actor
   ydb-library-aclib
   library-persqueue-topic_parser
+  api-protos
   api-grpc
   api-grpc-draft
   public-lib-base
@@ -78,6 +79,7 @@ target_sources(core-client-server PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_enumerate_tablets.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_minikql.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_scheme_tx.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_login_request.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_node_registration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_request.cpp

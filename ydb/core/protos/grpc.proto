@@ -27,6 +27,8 @@ service TGRpcServer {
     rpc SchemeDescribe(TSchemeDescribe) returns (TResponse);
     // whoami
     rpc WhoAmI(TWhoAmI) returns (TResponse);
+    // login
+    rpc LoginRequest(TLoginRequest) returns (TResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // CHOOSE PROXY INTERFACE

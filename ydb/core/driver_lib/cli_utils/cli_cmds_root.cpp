@@ -60,19 +60,12 @@ public:
         case TCommandConfig::EServerType::GRpc:
             CommandConfig.ClientConfig = NGrpc::TGRpcClientConfig(endpoint.Address);
             if (config.EnableSsl) {
-                auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
-                p->EnableSsl = config.EnableSsl;
-                p->SslCredentials.pem_root_certs = config.CaCerts;
+                CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
+                CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
             }
             break;
         case TCommandConfig::EServerType::MessageBus:
-            if (!endpoint.Address.empty()) {
-                NMsgBusProxy::TMsgBusClientConfig::CrackAddress(
-                    endpoint.Address,
-                    MsgBusClientConfig.Ip,
-                    MsgBusClientConfig.Port);
-            }
-            CommandConfig.ClientConfig = std::move(MsgBusClientConfig);
+            Y_FAIL("MessageBus is no longer supported");
             break;
         }
     }

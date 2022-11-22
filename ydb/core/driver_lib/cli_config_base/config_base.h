@@ -34,7 +34,7 @@ TDuration ParseDuration(const TStringBuf& str);
 const TString ArgFormatDescription();
 
 struct TCommandConfig {
-    TMaybe<std::variant<NMsgBusProxy::TMsgBusClientConfig, NGRpcProxy::TGRpcClientConfig>> ClientConfig;
+    NGRpcProxy::TGRpcClientConfig ClientConfig;
 
     enum class EServerType {
         MessageBus,

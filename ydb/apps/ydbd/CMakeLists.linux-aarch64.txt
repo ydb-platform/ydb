@@ -32,7 +32,6 @@ target_link_libraries(ydbd PUBLIC
   digest_udf
   histogram_udf
   hyperloglog_udf
-  hyperscan_udf
   ip_udf
   json_udf
   json2_udf

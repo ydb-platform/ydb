@@ -17,6 +17,7 @@ target_link_libraries(ydbd PUBLIC
   cpp-malloc-tcmalloc
   contrib-libs-tcmalloc
   library-cpp-cpuid_check
+  hyperscan_udf
   run
   ydb-core-protos
   ydb-core-security
@@ -33,7 +34,6 @@ target_link_libraries(ydbd PUBLIC
   digest_udf
   histogram_udf
   hyperloglog_udf
-  hyperscan_udf
   ip_udf
   json_udf
   json2_udf

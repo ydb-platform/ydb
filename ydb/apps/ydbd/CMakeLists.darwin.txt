@@ -16,6 +16,7 @@ target_link_libraries(ydbd PUBLIC
   yutil
   cpp-lfalloc-yt
   library-cpp-cpuid_check
+  udfs-common-hyperscan
   run
   ydb-core-protos
   ydb-core-security
@@ -32,7 +33,6 @@ target_link_libraries(ydbd PUBLIC
   digest_udf
   histogram_udf
   hyperloglog_udf
-  udfs-common-hyperscan
   ip_udf
   json_udf
   json2_udf

@@ -357,7 +357,7 @@ void TIsUnknownPredicateNode::Accept(IAstNodeVisitor& visitor) const {
     return visitor.VisitIsUnknownPredicate(*this);
 }
 
-TLikeRegexPredicateNode::TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NHyperscan::TDatabase&& regex)
+TLikeRegexPredicateNode::TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NReWrapper::IRePtr&& regex)
     : TAstNode(pos)
     , Input(input)
     , Regex(std::move(regex))
@@ -368,7 +368,7 @@ const TAstNodePtr TLikeRegexPredicateNode::GetInput() const {
     return Input;
 }
 
-const NHyperscan::TDatabase& TLikeRegexPredicateNode::GetRegex() const {
+const NReWrapper::IRePtr& TLikeRegexPredicateNode::GetRegex() const {
     return Regex;
 }
 

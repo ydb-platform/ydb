@@ -36,8 +36,8 @@ TStartsWithPrefixOffset TJsonPathItem::GetStartsWithPrefixOffset() const {
     return std::get<TStartsWithPrefixOffset>(Data);
 }
 
-const THyperscanRegex& TJsonPathItem::GetRegex() const {
-    return std::get<THyperscanRegex>(Data);
+const NReWrapper::IRePtr& TJsonPathItem::GetRegex() const {
+    return std::get<NReWrapper::IRePtr>(Data);
 }
 
 TJsonPathReader::TJsonPathReader(const TJsonPathPtr path)
@@ -161,9 +161,8 @@ const TJsonPathItem& TJsonPathReader::ReadFromPos(TUint pos) {
 
         case EJsonPathItemType::LikeRegexPredicate: {
             const auto serializedRegex = ReadString(pos);
-            THyperscanRegex regex;
-            regex.Regex = NHyperscan::Deserialize(serializedRegex);
-            regex.Scratch = NHyperscan::MakeScratch(regex.Regex);
+
+            auto regex = NReWrapper::NDispatcher::Deserialize(serializedRegex);
             result.Data = std::move(regex);
             result.InputItemOffset = ReadUint(pos);
             break;
@@ -478,7 +477,7 @@ void TJsonPathBuilder::VisitLikeRegexPredicate(const TLikeRegexPredicateNode& no
     WriteType(EJsonPathItemType::LikeRegexPredicate);
     WritePos(node);
 
-    const TString serializedRegex = NHyperscan::Serialize(node.GetRegex());
+    const TString serializedRegex = node.GetRegex()->Serialize();
     WriteString(serializedRegex);
 
     WriteNextPosition();

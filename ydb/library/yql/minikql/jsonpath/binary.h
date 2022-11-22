@@ -2,7 +2,7 @@
 
 #include "ast_nodes.h"
 
-#include <library/cpp/regex/hyperscan/hyperscan.h>
+#include <ydb/library/rewrapper/re.h>
 
 #include <util/system/unaligned_mem.h>
 #include <util/generic/buffer.h>
@@ -84,11 +84,6 @@ struct TStartsWithPrefixOffset {
     TUint Offset = 0;
 };
 
-struct THyperscanRegex {
-    NHyperscan::TDatabase Regex;
-    NHyperscan::TScratch Scratch;
-};
-
 struct TJsonPathItem {
     // Position in the source jsonpath
     TPosition Pos;
@@ -109,7 +104,7 @@ struct TJsonPathItem {
         TBinaryOpArgumentsOffset,
         TFilterPredicateOffset,
         TStartsWithPrefixOffset,
-        THyperscanRegex,
+        NReWrapper::IRePtr,
         double,
         bool
     > Data;
@@ -117,7 +112,7 @@ struct TJsonPathItem {
     const TStringBuf GetString() const;
     const TVector<TArraySubscriptOffsets>& GetSubscripts() const;
     const TBinaryOpArgumentsOffset& GetBinaryOpArguments() const;
-    const THyperscanRegex& GetRegex() const;
+    const NReWrapper::IRePtr& GetRegex() const;
     double GetNumber() const;
     bool GetBoolean() const;
     TFilterPredicateOffset GetFilterPredicateOffset() const;

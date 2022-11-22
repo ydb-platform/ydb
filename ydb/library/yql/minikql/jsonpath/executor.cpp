@@ -4,8 +4,6 @@
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/minikql/dom/node.h>
 
-#include <library/cpp/regex/hyperscan/hyperscan.h>
-
 #include <util/generic/scope.h>
 #include <util/generic/maybe.h>
 #include <util/system/compiler.h>
@@ -17,7 +15,6 @@ namespace NYql::NJsonPath {
 using namespace NJson;
 using namespace NUdf;
 using namespace NDom;
-using namespace NHyperscan;
 
 namespace {
 
@@ -1008,7 +1005,7 @@ TResult TExecutor::LikeRegexPredicate(const TJsonPathItem& item) {
     bool found = false;
     for (const auto& node : OptionalUnwrapArrays(input.GetNodes())) {
         if (node.IsString()) {
-            found |= Matches(regex.Regex, regex.Scratch, node.GetString());
+            found |= regex->Matches(node.GetString());
         } else {
             error = true;
         }

@@ -3,7 +3,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/regex/hyperscan/hyperscan.h>
+#include <ydb/library/rewrapper/re.h>
 
 namespace NYql::NJsonPath {
 
@@ -383,11 +383,11 @@ private:
 
 class TLikeRegexPredicateNode : public TAstNode {
 public:
-    TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NHyperscan::TDatabase&& regex);
+    TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NReWrapper::IRePtr&& regex);
 
     const TAstNodePtr GetInput() const;
 
-    const NHyperscan::TDatabase& GetRegex() const;
+    const NReWrapper::IRePtr& GetRegex() const;
 
     EReturnType GetReturnType() const override;
 
@@ -395,7 +395,7 @@ public:
 
 private:
     TAstNodePtr Input;
-    NHyperscan::TDatabase Regex;
+    NReWrapper::IRePtr Regex;
 };
 
 }

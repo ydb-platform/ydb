@@ -3,8 +3,7 @@
 #include "parse_double.h"
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-
-#include <library/cpp/regex/hyperscan/hyperscan.h>
+#include <ydb/library/rewrapper/proto/serialization.pb.h>
 
 #include <util/generic/singleton.h>
 #include <util/system/compiler.h>
@@ -18,9 +17,11 @@
 using namespace NYql;
 using namespace NYql::NJsonPath;
 using namespace NJsonPathGenerated;
-using namespace NHyperscan;
+using namespace NReWrapper;
 
 namespace {
+
+constexpr ui32 RegexpLibId = NReWrapper::TSerialization::YDB_REWRAPPER_LIB_ID;
 
 TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
@@ -267,7 +268,7 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
         for (char flag : flags) {
             switch (flag) {
                 case 'i':
-                    parsedFlags |= HS_FLAG_CASELESS;
+                    parsedFlags |= FLAGS_CASELESS;
                     break;
                 default:
                     Error(GetPos(flagsToken), TStringBuilder() << "Unsupported regex flag '" << flag << "'");
@@ -275,17 +276,11 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
             }
         }
     }
-    if (UTF8Detect(regex)) {
-        parsedFlags |= HS_FLAG_UTF8;
-    }
-    if (NX86::HaveAVX2()) {
-        parsedFlags |= HS_CPU_FEATURES_AVX2;
-    }
 
-    TDatabase compiledRegex;
+    IRePtr compiledRegex;
     try {
-        compiledRegex = Compile(regex, parsedFlags);
-    } catch (const TCompileException& e) {
+        compiledRegex = NDispatcher::Compile(regex, parsedFlags, RegexpLibId);
+    } catch (const NReWrapper::TCompileException& e) {
         Error(GetPos(regexToken), e.AsStrBuf());
         return nullptr;
     }
@@ -479,4 +474,12 @@ TAstNodePtr TAstBuilder::BuildJsonPath(const TRule_jsonpath& node) {
 
 TAstNodePtr TAstBuilder::Build(const TJsonPathParserAST& ast) {
     return BuildJsonPath(ast.GetRule_jsonpath());
+}
+
+namespace NYql::NJsonPath {
+
+ui32 GetReLibId() {
+    return RegexpLibId;
+}
+
 }

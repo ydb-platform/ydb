@@ -62,13 +62,17 @@ TString GenerateRandomJson() {
 
 const size_t MAX_PARSE_ERRORS = 100;
 
+#define PREPARE() \
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry())); \
+    TScopedAlloc Alloc(__LOCATION__); \
+    TTypeEnvironment Env(Alloc); \
+    TMemoryUsageInfo MemInfo("Memory"); \
+    THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get()); \
+    TDefaultValueBuilder ValueBuilder(HolderFactory); \
+
+
 Y_CPU_BENCHMARK(JsonPath, iface) {
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()));
-    TScopedAlloc Alloc(__LOCATION__);
-    TTypeEnvironment Env(Alloc);
-    TMemoryUsageInfo MemInfo("Memory");
-    THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get());
-    TDefaultValueBuilder ValueBuilder(HolderFactory);
+    PREPARE()
 
     const TString json = GenerateRandomJson();
     const TUnboxedValue dom = TryParseJsonDom(json, &ValueBuilder);
@@ -76,6 +80,34 @@ Y_CPU_BENCHMARK(JsonPath, iface) {
     for (size_t i = 0; i < iface.Iterations(); i++) {
         TIssues issues;
         const auto jsonPath = ParseJsonPath("$.'_id'.issueId", issues, MAX_PARSE_ERRORS);
+        const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
+        Y_VERIFY(!result.IsError());
+    }
+}
+
+Y_CPU_BENCHMARK(JsonPathLikeRegexWithCompile, iface) {
+    PREPARE()
+
+    const TString json = GenerateRandomJson();
+    const TUnboxedValue dom = TryParseJsonDom(json, &ValueBuilder);
+
+    for (size_t i = 0; i < iface.Iterations(); i++) {
+        TIssues issues;
+        const auto jsonPath = ParseJsonPath("$[*] like_regex \"[0-9]+\"", issues, MAX_PARSE_ERRORS);
+        const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
+        Y_VERIFY(!result.IsError());
+    }
+}
+
+Y_CPU_BENCHMARK(JsonPathLikeRegex, iface) {
+    PREPARE()
+
+    const TString json = GenerateRandomJson();
+    const TUnboxedValue dom = TryParseJsonDom(json, &ValueBuilder);
+
+    TIssues issues;
+    const auto jsonPath = ParseJsonPath("$[*] like_regex \"[0-9]+\"", issues, MAX_PARSE_ERRORS);
+    for (size_t i = 0; i < iface.Iterations(); i++) {
         const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
         Y_VERIFY(!result.IsError());
     }

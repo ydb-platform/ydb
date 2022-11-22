@@ -105,6 +105,11 @@ public:
 
         GrpcRequestBaseCtx_->SetCounters(Counters_);
 
+        if (!CheckedDatabaseName_.empty()) {
+            GrpcRequestBaseCtx_->UseDatabase(CheckedDatabaseName_);
+            Counters_->UseDatabase(CheckedDatabaseName_);
+        }
+
         {
             auto [error, issue] = CheckConnectRight();
             if (error) {
@@ -181,7 +186,7 @@ public:
 
         if (!RlConfig) {
             // No rate limit config for this request
-            return SetTokenAndDie(CheckedDatabaseName_);
+            return SetTokenAndDie();
         } else {
             THashMap<TString, TString> attributes;
             for (const auto& [attrName, attrValue] : Attributes_) {
@@ -191,11 +196,9 @@ public:
         }
     }
 
-    void SetTokenAndDie(const TString& database = {}) {
+    void SetTokenAndDie() {
         GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
         GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
-        GrpcRequestBaseCtx_->UseDatabase(database);
-        Counters_->UseDatabase(database);
         ReplyBackAndDie();
     }
 
@@ -229,7 +232,7 @@ private:
                 case Ydb::StatusIds::SUCCESS:
                     Counters_->ReportThrottleDelay(delay);
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Request delayed for " << delay << " by ratelimiter");
-                    SetTokenAndDie(CheckedDatabaseName_);
+                    SetTokenAndDie();
                     break;
                 case Ydb::StatusIds::TIMEOUT:
                     Counters_->IncDatabaseRateLimitedCounter();
@@ -296,7 +299,7 @@ private:
         // Match rate limit config and database attributes
         auto rlPath = NRpcService::Match(*RlConfig, attributes);
         if (!rlPath) {
-            return SetTokenAndDie(CheckedDatabaseName_);
+            return SetTokenAndDie();
         } else {
             auto actions = NRpcService::MakeRequests(*RlConfig, rlPath.GetRef());
             GrpcRequestBaseCtx_->SetRlPath(std::move(rlPath));
@@ -318,7 +321,7 @@ private:
             if (hasOnReqAction) {
                 return ProcessOnRequest(std::move(req), ctx);
             } else {
-                return SetTokenAndDie(CheckedDatabaseName_);
+                return SetTokenAndDie();
             }
         }
     }

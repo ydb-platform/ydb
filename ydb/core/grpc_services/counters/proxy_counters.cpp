@@ -12,6 +12,8 @@ namespace NGRpcService {
 
 class TGRpcProxyCounters : public IGRpcProxyCounters {
 protected:
+    ::NMonitoring::TDynamicCounterPtr Root_;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseAccessDenyCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseSchemeErrorCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseUnavailableCounter_;
@@ -22,12 +24,14 @@ protected:
 public:
     using TPtr = TIntrusivePtr<TGRpcProxyCounters>;
 
-    TGRpcProxyCounters(::NMonitoring::TDynamicCounterPtr counters, bool forDatabase) {
+    TGRpcProxyCounters(::NMonitoring::TDynamicCounterPtr root, bool forDatabase)
+        : Root_(root)
+    {
         ::NMonitoring::TDynamicCounterPtr group;
         if (forDatabase) {
-            group = counters;
+            group = Root_;
         } else {
-            group = GetServiceCounters(counters, "grpc");
+            group = GetServiceCounters(Root_, "grpc");
         }
 
         DatabaseAccessDenyCounter_ = group->GetCounter("databaseAccessDeny", true);
@@ -126,6 +130,10 @@ class TGRpcProxyDbCounters : public TGRpcProxyCounters, public NSysView::IDbCoun
 public:
     using TPtr = TIntrusivePtr<TGRpcProxyDbCounters>;
 
+    TGRpcProxyDbCounters()
+        : TGRpcProxyCounters(new ::NMonitoring::TDynamicCounters, true)
+    {}
+
     explicit TGRpcProxyDbCounters(::NMonitoring::TDynamicCounterPtr counters)
         : TGRpcProxyCounters(counters, true)
     {}
@@ -183,7 +191,6 @@ public:
 
 
 class TGRpcProxyDbCountersRegistry {
-    ::NMonitoring::TDynamicCounterPtr Root;
     TConcurrentRWHashMap<TString, TGRpcProxyDbCounters::TPtr, 256> DbCounters;
     TActorSystem* ActorSystem = {};
     TActorId DbWatcherActorId;
@@ -196,10 +203,6 @@ class TGRpcProxyDbCountersRegistry {
     };
 
 public:
-    TGRpcProxyDbCountersRegistry()
-        : Root(new ::NMonitoring::TDynamicCounters)
-    {}
-
     void Initialize(TActorSystem* actorSystem) {
         if (Y_LIKELY(ActorSystem)) {
             return;
@@ -217,7 +220,7 @@ public:
         }
 
         dbCounters = DbCounters.InsertIfAbsentWithInit(database, [&database, this] {
-            auto counters = MakeIntrusive<TGRpcProxyDbCounters>(Root);
+            auto counters = MakeIntrusive<TGRpcProxyDbCounters>();
 
             if (ActorSystem) {
                 auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
@@ -245,14 +248,12 @@ public:
 
 class TGRpcProxyCountersWrapper : public IGRpcProxyCounters {
     IGRpcProxyCounters::TPtr Common;
-    ::NMonitoring::TDynamicCounterPtr Root;
     TGRpcProxyDbCounters::TPtr Db;
 
 public:
     explicit TGRpcProxyCountersWrapper(IGRpcProxyCounters::TPtr common)
         : Common(common)
-        , Root(new ::NMonitoring::TDynamicCounters)
-        , Db(new TGRpcProxyDbCounters(Root))
+        , Db(new TGRpcProxyDbCounters())
     {}
 
     void IncDatabaseAccessDenyCounter() override {

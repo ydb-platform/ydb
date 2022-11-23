@@ -259,12 +259,13 @@ TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx
         !TCoParameter::Match(ranges) &&
         !TCoRangeFinalize::Match(ranges) &&
         !TDqPhyPrecompute::Match(ranges) &&
-        !TKqpTxResultBinding::Match(ranges))
+        !TKqpTxResultBinding::Match(ranges) &&
+        !TKqlKeyRange::Match(ranges))
     {
         ctx.AddError(TIssue(
             ctx.GetPosition(ranges->Pos()),
             TStringBuilder()
-                << "Expected Void, Parameter, Argument or RangeFinalize in ranges, but got: "
+                << "Expected KeyRange, Void, Parameter, Argument or RangeFinalize in ranges, but got: "
                 << ranges->Content()
         ));
         return TStatus::Error;

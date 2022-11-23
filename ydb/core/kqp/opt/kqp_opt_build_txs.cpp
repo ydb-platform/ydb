@@ -274,10 +274,17 @@ private:
 
             bindingsMap.emplace(std::move(paramName), std::move(paramBinding));
 
+            YQL_ENSURE(!TDqConnection::Match(node.Get()));
             return true;
         };
 
         VisitExpr(stage.Program().Body().Ptr(), bindingsBuilder);
+        for (ui32 i = 0; i < stage.Inputs().Size(); ++i) {
+            auto input = stage.Inputs().Item(i);
+            if (input.Maybe<TDqSource>()) {
+                VisitExpr(input.Ptr(), bindingsBuilder);
+            }
+        }
 
         TVector<TExprBase> newInputs;
         TVector<TCoArgument> newArgs;

@@ -59,6 +59,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         return node;
     }
     const TKqlReadTable& read = node.Cast<TKqlReadTable>();
+    bool useSource = kqpCtx.Config->FeatureFlags.GetEnableKqpScanQuerySourceRead() && kqpCtx.IsScanQuery();
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -125,19 +126,46 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                 .Build()
             .Done();
 
-        TCoArgument arg{ctx.NewArgument(read.Pos(), TStringBuilder() << "_kqp_pc_arg_0")};
-        programArgs.push_back(arg);
-        inputs.push_back(precompute);
+        if (useSource) {
+            for (size_t i = 0; i < values.size(); ++i) {
+                auto replace = Build<TCoNth>(ctx, read.Pos())
+                    .Tuple(precompute)
+                    .Index().Build(ToString(i))
+                    .Done()
+                    .Ptr();
 
-        for (size_t i = 0; i < values.size(); ++i) {
-            auto replace = Build<TCoNth>(ctx, read.Pos())
-                .Tuple(arg)
-                .Index().Build(ToString(i))
-                .Done()
-                .Ptr();
+                rangeReplaces[values[i].Raw()] = replace;
+            }
+        } else {
+            TCoArgument arg{ctx.NewArgument(read.Pos(), TStringBuilder() << "_kqp_pc_arg_0")};
+            programArgs.push_back(arg);
 
-            rangeReplaces[values[i].Raw()] = replace;
+            for (size_t i = 0; i < values.size(); ++i) {
+                auto replace = Build<TCoNth>(ctx, read.Pos())
+                    .Tuple(arg)
+                    .Index().Build(ToString(i))
+                    .Done()
+                    .Ptr();
+
+                rangeReplaces[values[i].Raw()] = replace;
+            }
+            inputs.push_back(precompute);
         }
+    }
+
+    if (useSource) {
+        inputs.push_back(
+            Build<TDqSource>(ctx, read.Pos())
+                .Settings<TKqpReadRangesSourceSettings>()
+                    .Table(read.Table())
+                    .Columns(read.Columns())
+                    .Settings(read.Settings())
+                    .RangesExpr(ctx.ReplaceNodes(read.Range().Ptr(), rangeReplaces))
+                .Build()
+                .DataSource<TCoDataSource>()
+                    .Category<TCoAtom>().Value(KqpReadRangesSourceName).Build()
+                .Build()
+            .Done());
     }
 
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
@@ -145,6 +173,13 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
     TMaybeNode<TExprBase> phyRead;
     switch (tableDesc.Metadata->Kind) {
         case EKikimrTableKind::Datashard:
+            if (useSource) {
+                TCoArgument arg{ctx.NewArgument(read.Pos(), TStringBuilder() << "_kqp_source_arg")};
+                programArgs.push_back(arg);
+
+                phyRead = arg;
+                break;
+            }
         case EKikimrTableKind::SysView:
             phyRead = Build<TKqpReadTable>(ctx, read.Pos())
                 .Table(read.Table())

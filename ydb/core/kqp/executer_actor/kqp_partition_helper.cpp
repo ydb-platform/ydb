@@ -602,8 +602,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
             keyColumnTypes, source.GetRanges(), stageInfo, holderFactory, typeEnv
         );
     } else if (source.HasKeyRange()) {
-        //TODO: support KeyRange
-        Y_ENSURE(false);
+        ranges.push_back(MakeKeyRange(keyColumnTypes, source.GetKeyRange(), stageInfo, holderFactory, typeEnv));
     } else {
         ranges = BuildFullRange(keyColumnTypes);
     }

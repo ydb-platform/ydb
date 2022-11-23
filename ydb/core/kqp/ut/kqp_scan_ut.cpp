@@ -1980,6 +1980,38 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
+    Y_UNIT_TEST(DqSourceLiteralRange) {
+        TKikimrSettings settings;
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForDataQueries(true);
+        flags.SetEnableKqpScanQuerySourceRead(true);
+        settings.SetFeatureFlags(flags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        CreateSampleTables(kikimr);
+
+        {
+            auto result = db.StreamExecuteScanQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard` WHERE Key = 101 ORDER BY Key;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]]])", StreamResultToYson(result));
+        }
+
+        {
+            auto params = TParamsBuilder().AddParam("$param").Uint64(101).Build().Build();
+
+            auto result = db.StreamExecuteScanQuery(R"(
+                DECLARE $param as Uint64;
+                SELECT Key, Data FROM `/Root/EightShard` WHERE Key = $param ORDER BY Key;
+            )",
+            params).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]]])", StreamResultToYson(result));
+        }
+    }
+
     Y_UNIT_TEST(StreamLookup) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

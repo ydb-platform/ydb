@@ -406,6 +406,33 @@ public:
         return true;
     }
 
+    const TStructExprType* CollectParameters(const TDqPhyStage& stage, TExprContext& ctx) {
+        TVector<const TItemExprType*> inputsParams;
+        for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+            auto input = stage.Inputs().Item(i);
+            if (input.Maybe<TDqSource>()) {
+                VisitExpr(input.Ptr(), [&] (const TExprNode::TPtr& node) {
+                  if (auto maybeParam = TMaybeNode<TCoParameter>(node)) {
+                      auto param = maybeParam.Cast();
+
+                      inputsParams.push_back(ctx.MakeType<TItemExprType>(param.Name(), param.Ref().GetTypeAnn()));
+                  }
+
+                  return true;
+                });
+            }
+        }
+        auto programParams = NDq::CollectParameters(stage.Program(), ctx);
+        if (inputsParams.empty()) {
+            return programParams;
+        } else {
+            for (auto member : programParams->GetItems()) {
+                inputsParams.push_back(member);
+            }
+            return ctx.MakeType<TStructExprType>(inputsParams);
+        }
+    }
+
 private:
     NKikimr::NMiniKQL::TType* CompileType(TProgramBuilder& pgmBuilder, const TTypeAnnotationNode& inputType) {
         TStringStream errorStream;
@@ -534,7 +561,7 @@ private:
 
         stageProto.SetOutputsCount(outputsCount);
 
-        auto paramsType = NDq::CollectParameters(stage.Program(), ctx);
+        auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
             ctx, {});
 
@@ -668,11 +695,13 @@ private:
             if (ranges.IsValid()) {
                 auto& rangesParam = *readProto.MutableRanges();
                 rangesParam.SetParamName(ranges.Cast().Name().StringValue());
-            } else {
+            } else if (!TCoVoid::Match(settings.RangesExpr().Raw())) {
                 YQL_ENSURE(
-                    TCoVoid::Match(settings.RangesExpr().Raw()),
-                    "Read ranges should be parameter or void, got: " << settings.RangesExpr().Cast().Ptr()->Content()
+                    TKqlKeyRange::Match(settings.RangesExpr().Raw()),
+                    "Read ranges should be parameter or KqlKeyRange, got: " << settings.RangesExpr().Cast().Ptr()->Content()
                 );
+
+                FillKeyRange(settings.RangesExpr().Cast<TKqlKeyRange>(), *readProto.MutableKeyRange());
             }
 
             if (readSettings.ItemsLimit) {

@@ -42,8 +42,6 @@ public:
         TKikimrQueryDeadlines Deadlines;
         TKikimrQueryLimits Limits;
         bool RawResults = false; // TODO: deprecate
-        TMaybe<TString> IsolationLevel; // TODO: deprecate
-        TMaybe<bool> StrictDml; // TODO: deprecate
         TMaybe<bool> UseScanQuery;
         EKikimrStatsMode StatsMode = EKikimrStatsMode::None;
         TMaybe<bool> DocumentApiRestricted;
@@ -274,7 +272,7 @@ const TYdbOperations& KikimrModifyOps();
 const TYdbOperations& KikimrReadOps();
 const TYdbOperations& KikimrRequireUnmodifiedOps();
 
-bool AddDmlIssue(const TIssue& issue, bool strictDml, TExprContext& ctx);
+bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
@@ -318,7 +316,7 @@ public:
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>
     bool ApplyTableOperations(const IterableKqpTableOps& operations,
-        const IterableKqpTableInfos& tableInfos, NKikimrKqp::EIsolationLevel isolationLevel, bool strictDml,
+        const IterableKqpTableInfos& tableInfos, NKikimrKqp::EIsolationLevel isolationLevel,
         bool enableImmediateEffects, EKikimrQueryType queryType, TExprContext& ctx)
     {
         if (IsClosed()) {
@@ -408,7 +406,7 @@ public:
                 if (KikimrReadOps() & newOp) {
                     TString message = TStringBuilder() << "Data modifications previously made to table '" << table
                         << "' in current transaction won't be seen by operation: '" << newOp << "'";
-                    if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message), strictDml, ctx)) {
+                    if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message), ctx)) {
                         return false;
                     }
                 }
@@ -433,7 +431,7 @@ public:
             if (currentDelete && newUpdate && !enableImmediateEffects) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' may lead to unexpected results when applied to table with deleted rows: " << table;
-                if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_UPDATE_TABLE_WITH_DELETES, message), strictDml, ctx)) {
+                if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_UPDATE_TABLE_WITH_DELETES, message), ctx)) {
                     return false;
                 }
             }

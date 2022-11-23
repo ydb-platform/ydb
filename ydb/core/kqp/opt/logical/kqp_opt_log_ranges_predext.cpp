@@ -23,6 +23,8 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
     const TKqpMatchReadResult& readMatch, const TKikimrTableDescription& tableDesc, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
+    Y_UNUSED(kqpCtx);
+
     switch (tableDesc.Metadata->Kind) {
         case EKikimrTableKind::Datashard:
         case EKikimrTableKind::SysView:
@@ -35,8 +37,7 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
     auto row = flatmap.Lambda().Args().Arg(0);
     auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
     TTableLookup lookup = ExtractTableLookup(row, predicate, tableDesc.Metadata->KeyColumnNames,
-        &KqpTableLookupGetValue, &KqpTableLookupCanCompare, &KqpTableLookupCompare, ctx,
-        kqpCtx.Config->HasAllowNullCompareInIndex());
+        &KqpTableLookupGetValue, &KqpTableLookupCanCompare, &KqpTableLookupCompare, ctx, false);
 
     if (lookup.IsFullScan()) {
         return {};

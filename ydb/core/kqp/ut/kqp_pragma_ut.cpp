@@ -9,34 +9,6 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpPragma) {
-    Y_UNIT_TEST(Static) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(R"(
-            PRAGMA ydb.UnwrapReadTableValues = "true";
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST(Runtime) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            PRAGMA kikimr.IsolationLevel = "ReadCommitted";
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED));
-    }
-
     Y_UNIT_TEST(Auth) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -57,17 +29,18 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UnwrapReadTableValues = "true";
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+            PRAGMA kikimr.EnableSystemColumns = "true";
+
+            SELECT COUNT(_yql_partition_id) FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session.ExecuteDataQuery(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+            SELECT COUNT(_yql_partition_id) FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
     }
 
     Y_UNIT_TEST(OrderedColumns) {

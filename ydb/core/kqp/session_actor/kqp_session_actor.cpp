@@ -772,11 +772,10 @@ public:
 
     std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
         auto isolationLevel = *txCtx->EffectiveIsolationLevel;
-        bool strictDml = Config->StrictDml.Get(Settings.Cluster).GetOrElse(false);
         bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
 
         TExprContext ctx;
-        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel, strictDml,
+        bool success = txCtx->ApplyTableOperations(query.GetTableOps(), query.GetTableInfos(), isolationLevel,
             enableImmediateEffects, EKikimrQueryType::Dml, ctx);
         return {success, ctx.IssueManager.GetIssues()};
     }

@@ -27,11 +27,9 @@ static inline bool GetFlagValue(const TMaybe<bool>& flag) {
 
 TKikimrConfiguration::TKikimrConfiguration() {
     /* KQP */
-    REGISTER_SETTING(*this, _KqpQueryTimeoutSec);
     REGISTER_SETTING(*this, _KqpSessionIdleTimeoutSec);
     REGISTER_SETTING(*this, _KqpMaxActiveTxPerSession);
     REGISTER_SETTING(*this, _KqpTxIdleTimeoutSec);
-    REGISTER_SETTING(*this, _KqpRollbackInvalidatedTx);
     REGISTER_SETTING(*this, _KqpExprNodesAllocationLimit);
     REGISTER_SETTING(*this, _KqpExprStringsAllocationLimit);
     REGISTER_SETTING(*this, _KqpTablePathPrefix);
@@ -48,13 +46,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
-    REGISTER_SETTING(*this, _CommitReadsLimit);
     REGISTER_SETTING(*this, _DefaultCluster);
     REGISTER_SETTING(*this, _ResultRowsLimit);
-    REGISTER_SETTING(*this, _AllowReverseRange);
-    REGISTER_SETTING(*this, CommitSafety).Enum({"Full", "Safe", "Moderate"});
-    REGISTER_SETTING(*this, UnwrapReadTableValues);
-    REGISTER_SETTING(*this, AllowNullCompareInIndex);
     REGISTER_SETTING(*this, EnableSystemColumns);
     REGISTER_SETTING(*this, EnableLlvm);
 
@@ -68,28 +61,11 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
 
     /* Runtime */
-    REGISTER_SETTING(*this, _RestrictModifyPermissions);
-    REGISTER_SETTING(*this, _UseLocalProvider);
-    REGISTER_SETTING(*this, IsolationLevel).Enum({"ReadStale", "ReadUncommitted", "ReadCommitted", "Serializable"});
-    REGISTER_SETTING(*this, Profile);
-    REGISTER_SETTING(*this, StrictDml);
     REGISTER_SETTING(*this, ScanQuery);
-}
-
-bool TKikimrSettings::HasAllowNullCompareInIndex() const {
-    return GetFlagValue(AllowNullCompareInIndex.Get());
-}
-
-bool TKikimrSettings::HasUnwrapReadTableValues() const {
-    return GetFlagValue(UnwrapReadTableValues.Get());
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
     return GetFlagValue(_KqpAllowUnsafeCommit.Get());
-}
-
-bool TKikimrSettings::AllowReverseRange() const {
-    return GetFlagValue(_AllowReverseRange.Get());
 }
 
 bool TKikimrSettings::HasDefaultCluster() const {

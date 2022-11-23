@@ -1183,7 +1183,7 @@ message TTableServiceConfig {
     optional uint32 CompileRequestQueueSize = 8 [default = 1000];
     optional bool UseSchemeCacheMetadata = 9 [default = true];
     optional bool UseSessionBusyStatus = 10 [default = true];
-    optional bool AllowUnsafeCommit = 11 [default = true];
+    reserved 11; // (deprecated) AllowUnsafeCommit
     optional uint32 CompileTimeoutMs = 12 [default = 60000];
     optional TResourceManager ResourceManager = 13;
     optional TQueryLimits QueryLimits = 14;

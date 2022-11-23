@@ -482,22 +482,6 @@ public:
 
         if (auto maybeRead = TMaybeNode<TKiReadTable>(newRead)) {
             auto read = maybeRead.Cast();
-
-            if (SessionCtx->Config().HasUnwrapReadTableValues()) {
-                newRead = Build<TKiReadTable>(ctx, read.Pos())
-                    .World(read.World())
-                    .DataSource(read.DataSource())
-                    .TableKey(read.TableKey())
-                    .Select(read.Select())
-                    .Settings()
-                        .Add(read.Settings())
-                        .Add()
-                            .Name().Build("unwrap_values")
-                            .Build()
-                        .Build()
-                    .Done()
-                    .Ptr();
-            }
         }
 
         auto retChildren = node->ChildrenList();

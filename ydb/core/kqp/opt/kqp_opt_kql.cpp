@@ -11,45 +11,6 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TExprBase UnwrapReadTableValues(TExprBase input, const TKikimrTableDescription& tableDesc,
-    const TCoAtomList columns, TExprContext& ctx)
-{
-    TCoArgument itemArg = Build<TCoArgument>(ctx, input.Pos())
-        .Name("item")
-        .Done();
-
-    TVector<TExprBase> structItems;
-    for (auto atom : columns) {
-        auto columnType = tableDesc.GetColumnType(TString(atom.Value()));
-        YQL_ENSURE(columnType);
-
-        auto item = Build<TCoNameValueTuple>(ctx, input.Pos())
-            .Name(atom)
-            .Value<TCoCoalesce>()
-                .Predicate<TCoMember>()
-                    .Struct(itemArg)
-                    .Name(atom)
-                    .Build()
-                .Value<TCoDefault>()
-                    .Type(ExpandType(atom.Pos(), *columnType->Cast<TOptionalExprType>()->GetItemType(), ctx))
-                    .Build()
-                .Build()
-            .Done();
-
-        structItems.push_back(item);
-    }
-
-    return Build<TCoMap>(ctx, input.Pos())
-        .Input(input)
-        .Lambda()
-            .Args({itemArg})
-            .Body<TCoAsStruct>()
-                .Add(structItems)
-                .Build()
-            .Build()
-        .Done();
-}
-
 // Replace absent input columns to NULL to perform REPLACE via UPSERT
 std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
     const TCoAtomList& inputColumns, const TKikimrTableDescription& tableDesc,
@@ -190,22 +151,16 @@ TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const 
 TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
-    bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
-
     const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);
 
     auto readNode = BuildReadTable(columns, read.Pos(), tableData, ctx, kqpCtx);
 
-    return unwrapValues
-        ? UnwrapReadTableValues(readNode, tableData, columns, ctx)
-        : readNode;
+    return readNode;
 }
 
 TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescription& tableData,
     const TString& indexName, bool withSystemColumns, TExprContext& ctx)
 {
-    bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
-
     auto kqlReadTable = Build<TKqlReadTableIndex>(ctx, read.Pos())
         .Table(BuildTableMeta(tableData, read.Pos(), ctx))
         .Range()
@@ -220,9 +175,7 @@ TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescri
         .Index().Build(indexName)
         .Done();
 
-    return unwrapValues
-        ? UnwrapReadTableValues(kqlReadTable, tableData, kqlReadTable.Columns(), ctx)
-        : kqlReadTable;
+    return kqlReadTable;
 }
 
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,

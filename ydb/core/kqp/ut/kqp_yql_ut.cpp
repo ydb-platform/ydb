@@ -268,22 +268,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_READ_MODIFIED_TABLE));
     }
 
-    Y_UNIT_TEST(UnwrapReadTableValues) {
-        auto kikimr = DefaultKikimrRunner();
-        TScriptingClient client(kikimr.GetDriver());
-
-        auto result = client.ExecuteYqlScript(R"(
-            --!syntax_v1
-            PRAGMA kikimr.UnwrapReadTableValues = "true";
-            SELECT LENGTH(Name) == 4 AND Amount > 1000 FROM `/Root/Test`;
-        )").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            [%true];[%false];[%true]
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
     Y_UNIT_TEST(CreateUseTable) {
         auto kikimr = DefaultKikimrRunner();
         TScriptingClient client(kikimr.GetDriver());

@@ -209,9 +209,6 @@ NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPosi
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
 
-NKikimrKqp::EIsolationLevel GetIsolationLevel(const TMaybe<TString>& isolationLevel);
-TMaybe<TString> GetIsolationLevel(const NKikimrKqp::EIsolationLevel& isolationLevel);
-
 TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations,
     TExprContext& ctx);

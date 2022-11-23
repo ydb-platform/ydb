@@ -310,7 +310,6 @@ private:
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
-    kqpConfig._KqpAllowUnsafeCommit = serviceConfig.GetAllowUnsafeCommit();
     if (serviceConfig.HasSqlVersion()) {
         kqpConfig._KqpYqlSyntaxVersion = serviceConfig.GetSqlVersion();
     }

@@ -207,8 +207,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
     auto row = flatmap.Lambda().Args().Arg(0);
     auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
     TTableLookup lookup = ExtractTableLookup(row, predicate, tableDesc.Metadata->KeyColumnNames,
-        &KqpTableLookupGetValue, &KqpTableLookupCanCompare, &KqpTableLookupCompare, ctx,
-        kqpCtx.Config->HasAllowNullCompareInIndex());
+        &KqpTableLookupGetValue, &KqpTableLookupCanCompare, &KqpTableLookupCompare, ctx, false);
 
     if (lookup.IsFullScan()) {
         return node;

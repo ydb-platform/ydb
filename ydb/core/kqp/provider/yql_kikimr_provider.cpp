@@ -560,23 +560,16 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
     return true;
 }
 
-bool AddDmlIssue(const TIssue& issue, bool strictDml, TExprContext& ctx) {
-    if (strictDml) {
-        TIssue newIssue;
-        newIssue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-        newIssue.SetMessage("Detected violation of logical DML constraints. YDB transactions don't see their own"
-            " changes, make sure you perform all table reads before any modifications.");
+bool AddDmlIssue(const TIssue& issue, TExprContext& ctx) {
+    TIssue newIssue;
+    newIssue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+    newIssue.SetMessage("Detected violation of logical DML constraints. YDB transactions don't see their own"
+        " changes, make sure you perform all table reads before any modifications.");
 
-        newIssue.AddSubIssue(new TIssue(issue));
+    newIssue.AddSubIssue(new TIssue(issue));
 
-        ctx.AddError(newIssue);
-        return false;
-    } else {
-        if (!ctx.AddWarning(issue)) {
-            return false;
-        }
-        return true;
-    }
+    ctx.AddError(newIssue);
+    return false;
 }
 
 TKiDataQueryBlockSettings TKiDataQueryBlockSettings::Parse(const NNodes::TKiDataQueryBlock& node) {

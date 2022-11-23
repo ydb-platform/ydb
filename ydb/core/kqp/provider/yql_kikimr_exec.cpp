@@ -1227,8 +1227,6 @@ private:
         } else {
             auto config = SessionCtx->Config().Snapshot();
 
-            auto isolationLevel = config->IsolationLevel.Get(cluster);
-
             IKikimrQueryExecutor::TExecuteSettings settings;
             settings.CommitTx = true;
             if (mode) {
@@ -1242,20 +1240,12 @@ private:
                 }
             }
 
-            settings.IsolationLevel = isolationLevel;
-            settings.StrictDml = config->StrictDml.Get(cluster).GetRef();
-
             const auto& scanQuery = config->ScanQuery.Get(cluster);
             if (scanQuery) {
                 settings.UseScanQuery = scanQuery.GetRef();
             }
 
             settings.StatsMode = SessionCtx->Query().StatsMode;
-            auto profile = config->Profile.Get(cluster);
-            if (profile && *profile) {
-                // Do not disable profiling if it was enabled at request level
-                settings.StatsMode = EKikimrStatsMode::Full;
-            }
 
             asyncResult = runFunc(settings);
 
@@ -1327,7 +1317,6 @@ private:
     bool ApplyTableOperations(const TString& cluster, const TVector<NKqpProto::TKqpTableOp>& tableOps,
         NKikimrKqp::EIsolationLevel isolationLevel, TExprContext& ctx)
     {
-        bool strictDml = SessionCtx->Config().StrictDml.Get(cluster).GetRef();
         bool enableImmediateEffects = SessionCtx->Config().FeatureFlags.GetEnableKqpImmediateEffects();
         auto queryType = SessionCtx->Query().Type;
         TVector<NKqpProto::TKqpTableInfo> tableInfo;
@@ -1342,11 +1331,11 @@ private:
 
         if (!SessionCtx->HasTx()) {
             TKikimrTransactionContextBase emptyCtx;
-            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, enableImmediateEffects,
+            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, enableImmediateEffects,
                 queryType, ctx);
         }
 
-        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml,
+        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel,
             enableImmediateEffects, queryType, ctx);
     }
 
@@ -1373,34 +1362,6 @@ private:
 };
 
 } // namespace
-
-NKikimrKqp::EIsolationLevel GetIsolationLevel(const TMaybe<TString>& isolationLevel) {
-    YQL_ENSURE(isolationLevel);
-    auto levelStr = *isolationLevel;
-
-    if (levelStr == "ReadStale") {
-        return NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
-    } else if (levelStr == "ReadUncommitted") {
-        return NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED;
-    } else if (levelStr == "ReadCommitted") {
-        return NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
-    } else if (levelStr == "Serializable") {
-        return NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-    }
-
-    YQL_ENSURE(false, "Unsupported isolation level: " << levelStr);
-}
-
-TMaybe<TString> GetIsolationLevel(const NKikimrKqp::EIsolationLevel& isolationLevel) {
-    switch (isolationLevel) {
-        case NKikimrKqp::ISOLATION_LEVEL_READ_STALE: return "ReadStale";
-        case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED: return "ReadUncommitted";
-        case NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED: return "ReadCommitted";
-        case NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE: return "Serializable";
-        default:
-            return TMaybe<TString>();
-    }
-}
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,

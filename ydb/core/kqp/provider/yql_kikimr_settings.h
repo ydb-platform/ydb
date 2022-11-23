@@ -16,11 +16,9 @@ struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
 
     /* KQP */
-    NCommon::TConfSetting<ui32, false> _KqpQueryTimeoutSec;
     NCommon::TConfSetting<ui32, false> _KqpSessionIdleTimeoutSec;
     NCommon::TConfSetting<ui32, false> _KqpMaxActiveTxPerSession;
     NCommon::TConfSetting<ui32, false> _KqpTxIdleTimeoutSec;
-    NCommon::TConfSetting<bool, false> _KqpRollbackInvalidatedTx;
     NCommon::TConfSetting<ui64, false> _KqpExprNodesAllocationLimit;
     NCommon::TConfSetting<ui64, false> _KqpExprStringsAllocationLimit;
     NCommon::TConfSetting<TString, false> _KqpTablePathPrefix;
@@ -39,14 +37,9 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
 
     /* Compile time */
-    NCommon::TConfSetting<bool, false> _AllowReverseRange;
     NCommon::TConfSetting<ui64, false> _CommitPerShardKeysSizeLimitBytes;
-    NCommon::TConfSetting<ui32, false> _CommitReadsLimit;
     NCommon::TConfSetting<TString, false> _DefaultCluster;
     NCommon::TConfSetting<ui32, false> _ResultRowsLimit;
-    NCommon::TConfSetting<TString, false> CommitSafety;
-    NCommon::TConfSetting<bool, false> UnwrapReadTableValues;
-    NCommon::TConfSetting<bool, false> AllowNullCompareInIndex;
     NCommon::TConfSetting<bool, false> EnableSystemColumns;
     NCommon::TConfSetting<bool, false> EnableLlvm;
 
@@ -61,17 +54,9 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
 
     /* Runtime */
-    NCommon::TConfSetting<bool, true> _UseLocalProvider;
-    NCommon::TConfSetting<bool, true> _RestrictModifyPermissions;
-    NCommon::TConfSetting<TString, true> IsolationLevel;
-    NCommon::TConfSetting<bool, true> Profile;
-    NCommon::TConfSetting<bool, true> StrictDml;
     NCommon::TConfSetting<bool, true> ScanQuery;
 
     /* Accessors */
-    bool HasAllowNullCompareInIndex() const;
-    bool HasUnwrapReadTableValues() const;
-    bool AllowReverseRange() const;
     bool HasDefaultCluster() const;
     bool HasAllowKqpUnsafeCommit() const;
     bool SystemColumnsEnabled() const;

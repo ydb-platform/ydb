@@ -391,7 +391,6 @@ public:
             YQL_ENSURE(QueryCtx->PrepareOnly);
             YQL_ENSURE(!ExecuteCtx->Settings.CommitTx);
             YQL_ENSURE(!ExecuteCtx->Settings.RollbackTx);
-            YQL_ENSURE(!ExecuteCtx->Settings.IsolationLevel);
 
             if (QueryCtx->Type == EKikimrQueryType::Scan) {
                 AsyncResult = KqpRunner->PrepareScanQuery(Cluster, input.Get(), ctx, ExecuteCtx->Settings);

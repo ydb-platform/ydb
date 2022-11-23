@@ -14,16 +14,6 @@ DefaultSettings {
 }
 
 DefaultSettings {
-    Name: "_KqpQueryTimeoutSec"
-    Value: "600"
-}
-
-DefaultSettings {
-    Name: "_KqpRollbackInvalidatedTx"
-    Value: "true"
-}
-
-DefaultSettings {
     Name: "_KqpSessionIdleTimeoutSec"
     Value: "600"
 }
@@ -60,7 +50,7 @@ DefaultSettings {
 
 DefaultSettings {
     Name: "_KqpAllowUnsafeCommit"
-    Value: "true"
+    Value: "false"
 }
 
 DefaultSettings {
@@ -69,48 +59,8 @@ DefaultSettings {
 }
 
 DefaultSettings {
-    Name: "_CommitReadsLimit"
-    Value: "10"
-}
-
-DefaultSettings {
-    Name: "_RestrictModifyPermissions"
-    Value: "false"
-}
-
-DefaultSettings {
     Name: "_ResultRowsLimit"
     Value: "1000"
-}
-
-DefaultSettings {
-    Name: "_AllowReverseRange"
-    Value: "true"
-}
-
-DefaultSettings {
-    Name: "CommitSafety"
-    Value: "Safe"
-}
-
-DefaultSettings {
-    Name: "IsolationLevel"
-    Value: "Serializable"
-}
-
-DefaultSettings {
-    Name: "Profile"
-    Value: "false"
-}
-
-DefaultSettings {
-    Name: "UnwrapReadTableValues"
-    Value: "false"
-}
-
-DefaultSettings {
-    Name: "StrictDml"
-    Value: "true"
 }
 
 DefaultSettings {

@@ -142,19 +142,6 @@ private:
                     return TStatus::Error;
                 }
 
-                if (HasSetting(readTable.Settings().Ref(), "unwrap_values")) {
-                    TVector<const TItemExprType*> unwrappedItems;
-                    for (auto* item : selectType->Cast<TStructExprType>()->GetItems()) {
-                        auto unwrappedType = item->GetItemType()->Cast<TOptionalExprType>()->GetItemType();
-                        auto newItemType = ctx.MakeType<TItemExprType>(item->GetName(), unwrappedType);
-                        YQL_ENSURE(newItemType->Validate(node.Pos(), ctx));
-                        unwrappedItems.push_back(newItemType);
-                    }
-                    auto newStructType = ctx.MakeType<TStructExprType>(unwrappedItems);
-                    YQL_ENSURE(newStructType->Validate(node.Pos(), ctx));
-                    selectType = newStructType;
-                }
-
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
                 TTypeAnnotationNode::TListType children;
@@ -422,10 +409,6 @@ private:
             return status;
         }
 
-        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
-            return TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -506,10 +489,6 @@ private:
             return status;
         }
 
-        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
-            return TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -536,10 +515,6 @@ private:
 
         if (!EnsureSpecificDataType(*filterLambda, EDataSlot::Bool, ctx)) {
             return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
-            return TStatus::Error;
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
@@ -843,9 +818,6 @@ private:
             return TStatus::Error;
         }
 
-        if (!EnsureModifyPermissions(cluster, table, create.Pos(), ctx)) {
-            return TStatus::Error;
-        }
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, table);
         if (meta->TableType == ETableType::Table && tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
             ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
@@ -869,10 +841,6 @@ private:
         }
 
         if (table->GetTableType() == ETableType::Table) {
-            if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
-                return TStatus::Error;
-            }
-
             if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
                 return TStatus::Error;
             }
@@ -889,10 +857,6 @@ private:
         }
 
         if (!table->Metadata) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureModifyPermissions(table->Metadata->Cluster, table->Metadata->Name, node.Pos(), ctx)) {
             return TStatus::Error;
         }
 
@@ -1312,25 +1276,6 @@ private:
             << "Unknown Kql callable in type annotation: " << node.CallableName()));
 
         return TStatus::Error;
-    }
-
-    bool EnsureModifyPermissions(const TString& cluster, const TString& table, TPositionHandle pos, TExprContext& ctx) {
-        bool restrictPermissions = SessionCtx->Config()._RestrictModifyPermissions.Get(cluster).GetRef();
-        if (!restrictPermissions) {
-            return true;
-        }
-
-        TString tmpDir = "/Root/Tmp/";
-        TString homeDir = "/Root/Home/" + SessionCtx->GetUserName() + "/";
-
-        auto tablePath = Gateway->CanonizePath(table);
-        if (!tablePath.StartsWith(tmpDir) && !tablePath.StartsWith(homeDir)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                << "User " << SessionCtx->GetUserName() << " doesn't have permissions to modify table: " << table));
-            return false;
-        }
-
-        return true;
     }
 
     bool CheckDocApiModifiation(const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) {

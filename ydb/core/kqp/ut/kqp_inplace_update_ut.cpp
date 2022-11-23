@@ -36,8 +36,13 @@ void PrepareTable(TSession& session) {
 void Test(bool enableInplaceUpdate, const TString& query, TParams&& params, const TString& expectedResult,
     std::function<void(const Ydb::TableStats::QueryStats&)>&& check)
 {
-    TKikimrRunner kikimr;
-    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    auto setting = NKikimrKqp::TKqpSetting();
+    setting.SetName("_KqpAllowUnsafeCommit");
+    setting.SetValue("true");
+
+    TKikimrRunner kikimr({setting});
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
 
     PrepareTable(session);
 
@@ -353,7 +358,11 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
     keysLimitSetting.SetName("_CommitPerShardKeysSizeLimitBytes");
     keysLimitSetting.SetValue("100");
 
-    TKikimrRunner kikimr({keysLimitSetting});
+    auto unsafeCommitSetting = NKikimrKqp::TKqpSetting();
+    unsafeCommitSetting.SetName("_KqpAllowUnsafeCommit");
+    unsafeCommitSetting.SetValue("true");
+
+    TKikimrRunner kikimr({keysLimitSetting, unsafeCommitSetting});
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

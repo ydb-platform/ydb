@@ -402,7 +402,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto planRes = CollectStreamResult(res);
         auto ast = planRes.QueryStats->Getquery_ast();
+        Cerr << "JSON Plan:" << Endl;
         Cerr << planRes.PlanJson.GetOrElse("NO_PLAN") << Endl;
+        Cerr << "AST:" << Endl;
         Cerr << ast << Endl;
         for (auto planNode : planNodes) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,

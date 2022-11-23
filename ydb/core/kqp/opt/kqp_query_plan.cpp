@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/protos/ssa.pb.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <ydb/library/yql/ast/yql_ast_escaping.h>
@@ -12,6 +13,7 @@
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/queue.h>
 #include <util/string/strip.h>
@@ -107,9 +109,47 @@ TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
     return "expr";
 }
 
+const NKqpProto::TKqpPhyStage* FindStageProtoByGuid(const NKqpProto::TKqpPhyTx& txProto, const std::string& stageGuid) {
+    for (auto& stage : txProto.GetStages()) {
+        if (stage.GetStageGuid() == stageGuid) {
+            return &stage;
+        }
+    }
+    return nullptr;
+}
+
+const NKqpProto::TKqpPhyTableOperation* GetTableOpByTable(const TString& tablePath, const NKqpProto::TKqpPhyStage* stageProto) {
+    for (auto& op : stageProto->GetTableOps()) {
+        if (op.GetTable().GetPath() == tablePath) {
+            return &op;
+        }
+    }
+    return nullptr;
+}
+
+NJson::TJsonValue GetSsaProgramInJsonByTable(const TString& tablePath, const NKqpProto::TKqpPhyStage* stageProto) {
+    const auto op = GetTableOpByTable(tablePath, stageProto);
+    YQL_ENSURE(op, "Could not find table `" << tablePath << "` in stage with id " << stageProto->GetStageGuid());
+    if (op->GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+        NKikimrSSA::TProgram program;
+        if (!program.ParseFromString(op->GetReadOlapRange().GetOlapProgram())) {
+            return NJson::TJsonValue();
+        }
+        NJson::TJsonValue jsonData;
+        NProtobufJson::Proto2Json(program, jsonData);
+        return jsonData;
+    }
+    return NJson::TJsonValue();
+}
+
 class TxPlanSerializer {
 public:
-    TxPlanSerializer(TSerializerCtx& serializerCtx, ui32 txId, const TKqpPhysicalTx& tx) : SerializerCtx(serializerCtx), TxId(txId), Tx(tx) {}
+    TxPlanSerializer(TSerializerCtx& serializerCtx, ui32 txId, const TKqpPhysicalTx& tx, const NKqpProto::TKqpPhyTx& txProto)
+        : SerializerCtx(serializerCtx)
+        , TxId(txId)
+        , Tx(tx)
+        , TxProto(txProto)
+    {}
 
     void Serialize() {
         auto& phaseNode = QueryPlanNodes[++SerializerCtx.PlanNodeId];
@@ -198,6 +238,7 @@ private:
         TMap<TString, NJson::TJsonValue> NodeInfo;
         TVector<TOperator> Operators;
         THashSet<ui32> Plans;
+        const NKqpProto::TKqpPhyStage* StageProto;
     };
 
     void WritePlanNodeToJson(const TQueryPlanNode& planNode, NJsonWriter::TBuf& writer) const {
@@ -809,6 +850,8 @@ private:
 
             auto& stagePlanNode = AddPlanNode(planNode);
             stagePlanNode.Guid = stageGuid;
+            stagePlanNode.StageProto = FindStageProtoByGuid(TxProto, stageGuid);
+            YQL_ENSURE(stagePlanNode.StageProto, "Could not find a stage with id " << stageGuid);
             SerializerCtx.StageGuidToId[stageGuid] = SerializerCtx.PlanNodeId;
             VisitedStages.insert(expr.Raw());
             auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
@@ -1217,6 +1260,10 @@ private:
             op.Properties["PredicatePushdown"] = SerializerCtx.Config.Get()->PushOlapProcess();
         }
 
+        if (read.Maybe<TKqpReadOlapTableRangesBase>()) {
+            op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(table, planNode.StageProto);
+        }
+
         ui32 operatorId;
         if (readInfo.Type == EPlanTableReadType::FullScan) {
             op.Properties["Name"] = "TableFullScan";
@@ -1373,6 +1420,7 @@ private:
     TSerializerCtx& SerializerCtx;
     const ui32 TxId;
     const TKqpPhysicalTx& Tx;
+    const NKqpProto::TKqpPhyTx& TxProto;
 
     TMap<ui32, TQueryPlanNode> QueryPlanNodes;
     TNodeSet VisitedStages;
@@ -1546,7 +1594,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
         NJsonWriter::TBuf txWriter;
         txWriter.SetIndentSpaces(2);
-        TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx);
+        TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx, txProto);
         if (serializerCtx.PureTxResults.at(txId).empty()) {
             txPlanSerializer.Serialize();
             txPlanSerializer.WriteToJson(txWriter);

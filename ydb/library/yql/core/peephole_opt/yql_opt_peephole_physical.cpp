@@ -3527,7 +3527,7 @@ TExprNode::TPtr AutoMapGetElementhOfOptionalArray(const TExprNode::TPtr& node, T
             return JustIf(!itemType->IsOptionalOrNull(), std::move(ret), ctx);
         }
 
-/*TODO: constexpr auto typeName = TupleOrStruct ? "tuple" : "struct";
+        constexpr auto typeName = TupleOrStruct ? "tuple" : "struct";
         YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional " << typeName << '.';
         return itemType->IsOptionalOrNull() ?
             ctx.Builder(node->Pos())
@@ -3561,7 +3561,7 @@ TExprNode::TPtr AutoMapGetElementhOfOptionalArray(const TExprNode::TPtr& node, T
                         .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
                     .Seal()
                 .Seal()
-            .Build();*/
+            .Build();
     }
 
     return node;
@@ -4374,7 +4374,7 @@ struct TBlockRules {
         {"-", { "Sub" } },
         {"*", { "Mul" } },
         {"/", { "Div" } },
-        {"%", { "Mod" } }, 
+        {"%", { "Mod" } },
 
         // logical operators
         {"Not", { "invert" }},

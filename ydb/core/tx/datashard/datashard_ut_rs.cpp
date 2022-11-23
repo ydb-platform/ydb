@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "datashard_ut_common.h"
+#include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -10,6 +11,7 @@
 
 namespace NKikimr {
 
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -323,6 +325,124 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         SendSQL(server, sender, "DROP TABLE `/Root/table-2`", false);
         runtime.Register(CreateTabletKiller(shard1));
         WaitTabletBecomesOffline(server, shard2);
+    }
+
+    Y_UNIT_TEST(TestGenericReadSetDecisionCommit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardGenericReadSets(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table-1`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+
+        size_t readSets = 0;
+        auto observeReadSets = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    NKikimrTx::TReadSetData genericData;
+                    Y_VERIFY(genericData.ParseFromString(msg->Record.GetReadSet()));
+                    Cerr << "... generic readset: " << genericData.DebugString() << Endl;
+                    UNIT_ASSERT(genericData.HasDecision());
+                    UNIT_ASSERT(genericData.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
+                    UNIT_ASSERT(!genericData.HasData());
+                    UNIT_ASSERT(genericData.unknown_fields().empty());
+                    ++readSets;
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserver = runtime.SetObserverFunc(observeReadSets);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)
+            )"),
+            "<empty>");
+        UNIT_ASSERT(readSets > 0);
+    }
+
+    Y_UNIT_TEST(TestGenericReadSetDecisionAbort) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardGenericReadSets(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)");
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table-1`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)");
+
+        size_t readSets = 0;
+        auto observeReadSets = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    NKikimrTx::TReadSetData genericData;
+                    Y_VERIFY(genericData.ParseFromString(msg->Record.GetReadSet()));
+                    Cerr << "... generic readset: " << genericData.DebugString() << Endl;
+                    UNIT_ASSERT(genericData.HasDecision());
+                    UNIT_ASSERT(genericData.GetDecision() == NKikimrTx::TReadSetData::DECISION_ABORT);
+                    UNIT_ASSERT(!genericData.HasData());
+                    UNIT_ASSERT(genericData.unknown_fields().empty());
+                    ++readSets;
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserver = runtime.SetObserverFunc(observeReadSets);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table-2` (key, value) VALUES (3, 3)
+            )"),
+            "ERROR: ABORTED");
+        UNIT_ASSERT(readSets > 0);
     }
 }
 

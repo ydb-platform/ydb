@@ -42,6 +42,7 @@ public:
     FEATURE_FLAG_SETTER(EnableGrpcAudit)
     FEATURE_FLAG_SETTER(EnableChangefeedInitialScan)
     FEATURE_FLAG_SETTER(EnableKqpImmediateEffects)
+    FEATURE_FLAG_SETTER(EnableDataShardGenericReadSets)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

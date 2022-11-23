@@ -741,7 +741,12 @@ private:
             case NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN: {
                 LOG_D("Broken locks: " << res->Record.DebugString());
 
+                YQL_ENSURE(shardState->State == TShardState::EState::Executing);
+                shardState->State = TShardState::EState::Finished;
+
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
+
+                LocksBroken = true;
 
                 TMaybe<TString> tableName;
                 if (!res->Record.GetTxLocks().empty()) {
@@ -753,13 +758,18 @@ private:
                     }
                 }
 
-                auto message = TStringBuilder() << "Transaction locks invalidated.";
+                // Reply as soon as we know which table had locks invalidated
                 if (tableName) {
-                    message << " Table: " << *tableName;
+                    auto message = TStringBuilder()
+                        << "Transaction locks invalidated. Table: " << *tableName;
+
+                    return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
+                        YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
                 }
 
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                    YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+                // Receive more replies from other shards
+                CheckExecutionComplete();
+                return;
             }
             case NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED: {
                 YQL_ENSURE(false);
@@ -1754,6 +1764,8 @@ private:
 
         Request.TopicOperations.BuildTopicTxs(topicTxs);
 
+        const bool useGenericReadSets = AppData()->FeatureFlags.GetEnableDataShardGenericReadSets() || !topicTxs.empty();
+
         if (auto locksMap = ExtractLocks(Request.Locks); !locksMap.empty() || Request.TopicOperations.HasReadOperations()) {
             YQL_ENSURE(Request.ValidateLocks || Request.EraseLocks);
 
@@ -1783,7 +1795,7 @@ private:
                     tx.MutableLocks()->MutableLocks()->Add()->Swap(&lock);
                 }
 
-                if ((!locksList.empty() || Request.TopicOperations.HasReadOperations()) && Request.ValidateLocks) {
+                if (!locksList.empty() && Request.ValidateLocks) {
                     locksSendingShards.insert(shardId);
                 }
             }
@@ -1818,6 +1830,13 @@ private:
                     tx.MutableSendingShards()->CopyFrom(sendingShards);
                     tx.MutableReceivingShards()->CopyFrom(receivingShards);
                 }
+            }
+        }
+
+        if (useGenericReadSets) {
+            // Make sure datashards use generic readsets
+            for (auto& pr : datashardTxs) {
+                pr.second.SetUseGenericReadSets(true);
             }
         }
 
@@ -1962,6 +1981,13 @@ private:
     }
 
     void Finalize() {
+        if (LocksBroken) {
+            TString message = "Transaction locks invalidated.";
+
+            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
+                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
+        }
+
         auto& response = *ResponseEv->Record.MutableResponse();
 
         response.SetStatus(Ydb::StatusIds::SUCCESS);
@@ -2151,6 +2177,7 @@ private:
     bool ImmediateTx = false;
     bool UseFollowers = false;
     bool TxPlanned = false;
+    bool LocksBroken = false;
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;

@@ -236,6 +236,9 @@ message TKqpTransaction {
     reserved 5;
 
     optional NKikimrKqp.TKqpSnapshot Snapshot = 6;
+
+    // When true datashard will exchange a generic TReadSetData with other shards
+    optional bool UseGenericReadSets = 7 [default = false];
 }
 
 message TKqpReadRangesSourceSettings {

@@ -204,7 +204,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
         auto result = KqpCompleteTransaction(ctx, tabletId, op->GetTxId(),
-            op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), dataTx->GetKqpTasks(), tasksRunner, computeCtx);
+            op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), kqpTx, tasksRunner, computeCtx);
 
         if (!result && computeCtx.HadInconsistentReads()) {
             LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId

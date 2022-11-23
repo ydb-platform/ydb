@@ -748,6 +748,7 @@ message TFeatureFlags {
     optional bool EnableKqpScanQuerySourceRead = 78 [default = false];
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
     optional bool EnableKqpImmediateEffects = 80 [default = false];
+    optional bool EnableDataShardGenericReadSets = 81 [default = false];
 }
 
 

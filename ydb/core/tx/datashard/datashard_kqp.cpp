@@ -87,11 +87,11 @@ NUdf::EFetchStatus FetchAllOutput(NDq::IDqOutputChannel* channel, NDqProto::TDat
 }
 
 NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
-    const TInputOpData::TInReadSets* inReadSets, const google::protobuf::RepeatedPtrField<NDqProto::TDqTask>& tasks,
+    const TInputOpData::TInReadSets* inReadSets, const NKikimrTxDataShard::TKqpTransaction& kqpTx,
     NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
 {
     THashMap<ui64, std::pair<ui64, ui32>> inputChannelsMap; // channelId -> (taskId, input index)
-    for (auto& task : tasks) {
+    for (auto& task : kqpTx.GetTasks()) {
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& input = task.GetInputs(i);
             for (auto& channel : input.GetChannels()) {
@@ -114,7 +114,20 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
 
             for (auto& data : dataList) {
                 NKikimrTxDataShard::TKqpReadset kqpReadset;
-                Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
+                if (kqpTx.GetUseGenericReadSets()) {
+                    NKikimrTx::TReadSetData genericData;
+                    bool ok = genericData.ParseFromString(data.Body);
+                    Y_VERIFY(ok, "Failed to parse generic readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                        source, target, data.Origin);
+
+                    if (genericData.HasData()) {
+                        ok = genericData.GetData().UnpackTo(&kqpReadset);
+                        Y_VERIFY(ok, "Failed to parse kqp readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                            source, target, data.Origin);
+                    }
+                } else {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
+                }
 
                 for (int outputId = 0; outputId < kqpReadset.GetOutputs().size(); ++outputId) {
                     auto* channelData = kqpReadset.MutableOutputs()->Mutable(outputId);
@@ -151,7 +164,7 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
         MKQL_ENSURE_S(runStatus == NDq::ERunStatus::PendingInput);
 
         hasInputChanges = false;
-        for (auto& task : tasks) {
+        for (auto& task : kqpTx.GetTasks()) {
             for (ui32 i = 0; i < task.OutputsSize(); ++i) {
                 for (auto& channel : task.GetOutputs(i).GetChannels()) {
                     if (auto* inputInfo = inputChannelsMap.FindPtr(channel.GetId())) {
@@ -476,17 +489,17 @@ void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLoc
 }
 
 NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks, NKqp::TKqpTasksRunner& tasksRunner)
+    const NKikimrTxDataShard::TKqpTransaction& kqpTx, NKqp::TKqpTasksRunner& tasksRunner)
 {
-    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, tasks, tasksRunner, /* applyEffects */ false);
+    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, kqpTx, tasksRunner, /* applyEffects */ false);
 }
 
 THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx,
     ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets,
-    const google::protobuf::RepeatedPtrField<NDqProto::TDqTask>& tasks, NKqp::TKqpTasksRunner& tasksRunner,
+    const NKikimrTxDataShard::TKqpTransaction& kqpTx, NKqp::TKqpTasksRunner& tasksRunner,
     const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
 {
-    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, tasks, tasksRunner, /* applyEffects */ true);
+    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, kqpTx, tasksRunner, /* applyEffects */ true);
 
     if (computeCtx.HadInconsistentReads()) {
         return nullptr;
@@ -501,7 +514,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
     auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA,
         origin, txId, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
 
-    for (auto& task : tasks) {
+    for (auto& task : kqpTx.GetTasks()) {
         auto& taskRunner = tasksRunner.GetTaskRunner(task.GetId());
 
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
@@ -576,6 +589,9 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
         }
     }
 
+    NKikimrTx::TReadSetData::EDecision decision = NKikimrTx::TReadSetData::DECISION_COMMIT;
+    TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
+
     if (kqpTx.HasLocks() && NeedValidateLocks(kqpTx.GetLocks().GetOp())) {
         bool sendLocks = SendLocks(kqpTx.GetLocks(), tabletId);
         YQL_ENSURE(sendLocks == !kqpTx.GetLocks().GetLocks().empty());
@@ -589,7 +605,11 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
             for (auto& lock : brokenLocks) {
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Found broken lock: " << lock.ShortDebugString());
-                validateLocksResult.AddBrokenLocks()->Swap(&lock);
+                if (kqpTx.GetUseGenericReadSets()) {
+                    decision = NKikimrTx::TReadSetData::DECISION_ABORT;
+                } else {
+                    validateLocksResult.AddBrokenLocks()->Swap(&lock);
+                }
             }
 
             for (auto& dstTabletId : kqpTx.GetLocks().GetReceivingShards()) {
@@ -601,16 +621,39 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
                     << tabletId << " to " << dstTabletId << ", locks: " << validateLocksResult.ShortDebugString());
 
                 auto key = std::make_pair(tabletId, dstTabletId);
-                readsetData[key].MutableValidateLocksResult()->CopyFrom(validateLocksResult);
+                if (kqpTx.GetUseGenericReadSets()) {
+                    genericData[key].SetDecision(decision);
+                } else {
+                    readsetData[key].MutableValidateLocksResult()->CopyFrom(validateLocksResult);
+                }
             }
         }
     }
 
-    for (auto& [key, data] : readsetData) {
-        TString bodyStr;
-        Y_PROTOBUF_SUPPRESS_NODISCARD data.SerializeToString(&bodyStr);
+    if (kqpTx.GetUseGenericReadSets()) {
+        for (const auto& [key, data] : readsetData) {
+            bool ok = genericData[key].MutableData()->PackFrom(data);
+            Y_VERIFY(ok, "Failed to pack readset data from %" PRIu64 " to %" PRIu64, key.first, key.second);
+        }
 
-        outReadSets[key] = bodyStr;
+        for (auto& [key, data] : genericData) {
+            if (!data.HasDecision()) {
+                data.SetDecision(decision);
+            }
+
+            TString bodyStr;
+            bool ok = data.SerializeToString(&bodyStr);
+            Y_VERIFY(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
+
+            outReadSets[key] = std::move(bodyStr);
+        }
+    } else {
+        for (auto& [key, data] : readsetData) {
+            TString bodyStr;
+            Y_PROTOBUF_SUPPRESS_NODISCARD data.SerializeToString(&bodyStr);
+
+            outReadSets[key] = bodyStr;
+        }
     }
 }
 
@@ -645,21 +688,40 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
 
     for (auto& readSet : tx->InReadSets()) {
         for (auto& data : readSet.second) {
-            NKikimrTxDataShard::TKqpReadset kqpReadset;
-            Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
+            if (kqpTx.GetUseGenericReadSets()) {
+                NKikimrTx::TReadSetData genericData;
+                bool ok = genericData.ParseFromString(data.Body);
+                Y_VERIFY(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                    readSet.first.first, readSet.first.second, data.Origin);
 
-            if (kqpReadset.HasValidateLocksResult()) {
-                auto& validateResult = kqpReadset.GetValidateLocksResult();
-                if (!validateResult.GetSuccess()) {
+                if (genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                     tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
                         NKikimrTxDataShard::TX_KIND_DATA,
                         origin,
                         tx->GetTxId(),
                         NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
 
-                    tx->Result()->Record.MutableTxLocks()->CopyFrom(validateResult.GetBrokenLocks());
+                    // Note: we don't know details on what failed at that shard
 
                     return false;
+                }
+            } else {
+                NKikimrTxDataShard::TKqpReadset kqpReadset;
+                Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
+
+                if (kqpReadset.HasValidateLocksResult()) {
+                    auto& validateResult = kqpReadset.GetValidateLocksResult();
+                    if (!validateResult.GetSuccess()) {
+                        tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+                            NKikimrTxDataShard::TX_KIND_DATA,
+                            origin,
+                            tx->GetTxId(),
+                            NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+
+                        tx->Result()->Record.MutableTxLocks()->CopyFrom(validateResult.GetBrokenLocks());
+
+                        return false;
+                    }
                 }
             }
         }

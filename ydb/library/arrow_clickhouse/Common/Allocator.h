@@ -24,7 +24,7 @@
 
 
 #include <common/mremap.h>
-#include <common/getPageSize.h>
+//#include <common/getPageSize.h>
 
 #include <Common/Allocator_fwd.h>
 
@@ -35,6 +35,9 @@
 
 namespace CH
 {
+
+/// Get memory page size
+int64_t getPageSize();
 
 /**
   * Many modern allocators (for example, tcmalloc) do not do a mremap for
@@ -175,7 +178,7 @@ private:
     void * allocNoTrack(size_t size, size_t alignment)
     {
         void * buf;
-        size_t mmap_min_alignment = ::getPageSize();
+        size_t mmap_min_alignment = getPageSize();
 
         if (size >= MMAP_THRESHOLD)
         {

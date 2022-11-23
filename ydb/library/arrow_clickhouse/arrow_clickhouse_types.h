@@ -20,10 +20,6 @@
 namespace CH
 {
 
-using NDB::StringRef;
-using NDB::StringRefHash;
-using NDB::StringRefs;
-
 /// What to do if the limit is exceeded.
 enum class OverflowMode
 {

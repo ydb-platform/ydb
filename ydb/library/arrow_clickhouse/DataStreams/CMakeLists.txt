@@ -9,7 +9,7 @@
 
 add_library(library-arrow_clickhouse-DataStreams)
 target_include_directories(library-arrow_clickhouse-DataStreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/base
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
 target_link_libraries(library-arrow_clickhouse-DataStreams PUBLIC

@@ -3,9 +3,15 @@
 // See: https://github.com/ClickHouse/ClickHouse/
 
 #include <Common/Allocator.h>
+#include <unistd.h>
 
 namespace CH
 {
+
+int64_t getPageSize()
+{
+    return sysconf(_SC_PAGESIZE);
+}
 
 /** Keep definition of this constant in cpp file; otherwise its value
   * is inlined into allocator code making it impossible to override it

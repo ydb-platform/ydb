@@ -10,20 +10,21 @@
 
 namespace NKikimr::NMetadataInitializer {
 
-enum EInitializerEvents {
+enum EEvents {
     EvInitializerPreparationStart = EventSpaceBegin(TKikimrEvents::ES_METADATA_INITIALIZER),
     EvInitializerPreparationFinished,
     EvInitializerPreparationProblem,
+    EvInitializationFinished,
     EvEnd
 };
 
-static_assert(EInitializerEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_INITIALIZER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_INITIALIZER)");
+static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_INITIALIZER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_INITIALIZER)");
 
-class TEvInitializerPreparationStart: public TEventLocal<TEvInitializerPreparationStart, EInitializerEvents::EvInitializerPreparationStart> {
+class TEvInitializerPreparationStart: public TEventLocal<TEvInitializerPreparationStart, EEvents::EvInitializerPreparationStart> {
 public:
 };
 
-class TEvInitializerPreparationFinished: public TEventLocal<TEvInitializerPreparationFinished, EInitializerEvents::EvInitializerPreparationFinished> {
+class TEvInitializerPreparationFinished: public TEventLocal<TEvInitializerPreparationFinished, EEvents::EvInitializerPreparationFinished> {
 private:
     YDB_READONLY_DEF(TVector<ITableModifier::TPtr>, Modifiers);
 public:
@@ -33,12 +34,22 @@ public:
     }
 };
 
-class TEvInitializerPreparationProblem: public TEventLocal<TEvInitializerPreparationProblem, EInitializerEvents::EvInitializerPreparationProblem> {
+class TEvInitializerPreparationProblem: public TEventLocal<TEvInitializerPreparationProblem, EEvents::EvInitializerPreparationProblem> {
 private:
     YDB_READONLY_DEF(TString, ErrorMessage);
 public:
     TEvInitializerPreparationProblem(const TString& errorMessage)
         : ErrorMessage(errorMessage) {
+
+    }
+};
+
+class TEvInitializationFinished: public TEventLocal<TEvInitializationFinished, EEvents::EvInitializationFinished> {
+private:
+    YDB_READONLY_DEF(TString, InitializationId);
+public:
+    TEvInitializationFinished(const TString& initializationId)
+        : InitializationId(initializationId) {
 
     }
 };

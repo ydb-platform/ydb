@@ -845,7 +845,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     if (regularTtls.empty()) {
         regularTtls = Ttl.MakeIndexTtlMap(TInstant::Now(), force);
     }
-    const bool tiersUsage = regularTtls.empty() && Tiers && Tiers->IsActive();
+    const bool tiersUsage = regularTtls.empty() && Tiers;
     if (tiersUsage) {
         regularTtls = Tiers->GetTiering();
     }
@@ -1045,7 +1045,7 @@ void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev)
 
 NOlap::TIndexInfo TColumnShard::GetActualIndexInfo(const bool tiersUsage) const {
     auto indexInfo = PrimaryIndex->GetIndexInfo();
-    if (tiersUsage && Tiers && Tiers->IsActive()) {
+    if (tiersUsage && Tiers) {
         for (auto&& i : *Tiers) {
             indexInfo.AddStorageTier(i.second.BuildTierStorage());
         }
@@ -1055,7 +1055,7 @@ NOlap::TIndexInfo TColumnShard::GetActualIndexInfo(const bool tiersUsage) const 
 
 void TColumnShard::ActivateTiering(const ui64 pathId, const bool enableTiering) {
     if (OwnerPath && !Tiers) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(), OwnerPath);
+        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId());
         Tiers->Start(Tiers);
     }
     if (!!Tiers) {

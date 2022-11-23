@@ -44,7 +44,7 @@ public:
 
 namespace NTiers {
 
-TManager& TManager::Restart(const TTierConfig& config, const bool activity) {
+TManager& TManager::Restart(const TTierConfig& config) {
     if (Config.IsSame(config)) {
         return *this;
     }
@@ -52,9 +52,7 @@ TManager& TManager::Restart(const TTierConfig& config, const bool activity) {
         Stop();
     }
     Config = config;
-    if (activity) {
-        Start();
-    }
+    Start();
     return *this;
 }
 
@@ -138,7 +136,7 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
             itSelf->second.Stop();
             itSelf = Managers.erase(itSelf);
         } else {
-            itSelf->second.Restart(it->second, IsActive());
+            itSelf->second.Restart(it->second);
             ++itSelf;
         }
     }
@@ -148,9 +146,7 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
         }
         NTiers::TManager localManager(TabletId, TabletActorId, i.second);
         auto& manager = Managers.emplace(i.second.GetGlobalTierId(), std::move(localManager)).first->second;
-        if (IsActive()) {
-            manager.Start();
-        }
+        manager.Start();
     }
 }
 
@@ -169,10 +165,7 @@ TActorId TTiersManager::GetStorageActorId(const NTiers::TGlobalTierId& tierId) {
 }
 
 TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
-    if (ActiveFlag) {
-        return *this;
-    }
-    ActiveFlag = true;
+    ALS_ERROR(NKikimrServices::TX_TIERING) << "AAAAAAAAAAAAAA ";
     Y_VERIFY(!Actor);
     Actor = new TTiersManager::TActor(ownerPtr);
     TActivationContext::AsActorContext().RegisterWithSameMailbox(Actor);
@@ -183,11 +176,9 @@ TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
 }
 
 TTiersManager& TTiersManager::Stop() {
-    if (!ActiveFlag) {
+    if (!Actor) {
         return *this;
     }
-    ActiveFlag = false;
-    Y_VERIFY(!!Actor);
     if (TlsActivationContext) {
         TActivationContext::AsActorContext().Send(Actor->SelfId(), new NActors::TEvents::TEvPoison);
     }
@@ -206,7 +197,7 @@ const NTiers::TManager& TTiersManager::GetManagerVerified(const NTiers::TGlobalT
 
 NMetadataProvider::ISnapshotParser::TPtr TTiersManager::GetExternalDataManipulation() const {
     if (!ExternalDataManipulation) {
-        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>(OwnerPath);
+        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
     }
     return ExternalDataManipulation;
 }

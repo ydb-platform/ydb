@@ -1,9 +1,9 @@
 #pragma once
-#include "rule.h"
-#include "tier_config.h"
-
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/tiering/rule/object.h>
+
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/json/writer/json_value.h>

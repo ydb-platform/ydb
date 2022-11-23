@@ -10,7 +10,7 @@ class TConfig {
 private:
     YDB_READONLY_DEF(NInternal::NRequest::TConfig, RequestConfig);
     YDB_READONLY(TDuration, RefreshPeriod, TDuration::Seconds(10));
-    YDB_READONLY_FLAG(Enabled, true);
+    YDB_READONLY_FLAG(Enabled, false);
 public:
     TConfig() = default;
 

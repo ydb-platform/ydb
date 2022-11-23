@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(rule)
+add_subdirectory(tier)
 add_subdirectory(ut)
 
 add_library(core-tx-tiering)
@@ -16,6 +19,9 @@ target_link_libraries(core-tx-tiering PUBLIC
   cpp-json-writer
   ydb-core-blobstorage
   ydb-core-protos
+  tx-tiering-rule
+  tx-tiering-tier
+  tx-tiering-common
   core-tablet_flat-protos
   ydb-core-wrappers
   api-protos
@@ -27,11 +33,6 @@ target_sources(core-tx-tiering PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier_cleaner.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/path_cleaner.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/decoder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/external_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/owner_enrich.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/snapshot_enrich.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/snapshot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/s3_actor.cpp
@@ -45,6 +46,9 @@ target_link_libraries(core-tx-tiering.global PUBLIC
   cpp-json-writer
   ydb-core-blobstorage
   ydb-core-protos
+  tx-tiering-rule
+  tx-tiering-tier
+  tx-tiering-common
   core-tablet_flat-protos
   ydb-core-wrappers
   api-protos
@@ -53,4 +57,5 @@ target_link_libraries(core-tx-tiering.global PUBLIC
 )
 target_sources(core-tx-tiering.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/cleaner_task.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/external_data.cpp
 )

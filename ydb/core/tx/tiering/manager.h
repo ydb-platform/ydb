@@ -1,6 +1,5 @@
 #pragma once
 #include "external_data.h"
-#include "tier_config.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
@@ -21,7 +20,7 @@ public:
     static NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
     NOlap::TStorageTier BuildTierStorage() const;
 
-    TManager& Restart(const TTierConfig& config, const bool activity);
+    TManager& Restart(const TTierConfig& config);
     bool NeedExport() const {
         return Config.NeedExport();
     }
@@ -36,20 +35,17 @@ private:
     using TManagers = TMap<NTiers::TGlobalTierId, NTiers::TManager>;
     ui64 TabletId = 0;
     const TActorId TabletActorId;
-    TString OwnerPath;
     TActor* Actor = nullptr;
     std::unordered_set<ui64> EnabledPathId;
     YDB_READONLY_DEF(TManagers, Managers);
-    YDB_READONLY_FLAG(Active, false);
 
     NMetadataProvider::ISnapshot::TPtr Snapshot;
     mutable NMetadataProvider::ISnapshotParser::TPtr ExternalDataManipulation;
 
 public:
-    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId, const TString& ownerPath)
+    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId)
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
-        , OwnerPath(ownerPath)
     {
     }
     TActorId GetActorId() const;

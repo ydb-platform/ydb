@@ -5,8 +5,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/tx/tiering/decoder.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/abstract/decoder.h>
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/object_factory/object_factory.h>

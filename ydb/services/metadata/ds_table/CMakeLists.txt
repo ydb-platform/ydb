@@ -17,6 +17,7 @@ target_link_libraries(services-metadata-ds_table PUBLIC
   core-grpc_services-base
   ydb-core-grpc_services
   services-metadata-initializer
+  services-metadata-secret
 )
 target_sources(services-metadata-ds_table PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_refresh.cpp

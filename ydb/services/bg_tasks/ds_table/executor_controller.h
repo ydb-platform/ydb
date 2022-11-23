@@ -1,6 +1,8 @@
 #pragma once
 #include "config.h"
 
+#include <ydb/services/metadata/initializer/common.h>
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actorid.h>
 
@@ -8,7 +10,7 @@ namespace NKikimr::NBackgroundTasks {
 
 class TTask;
 
-class TExecutorController {
+class TExecutorController: public NMetadataInitializer::IInitializerOutput {
 private:
     const NActors::TActorIdentity ExecutorActorId;
     YDB_READONLY_DEF(TConfig, Config);
@@ -29,6 +31,7 @@ public:
         return Config.GetRequestConfig();
     }
 
+    virtual void InitializationFinished(const TString& id) const override;
     void LockPingerFinished() const;
     void TaskFetched(const TTask& task) const;
     void TaskFinished(const TString& taskId) const;

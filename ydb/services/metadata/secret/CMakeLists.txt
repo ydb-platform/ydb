@@ -1,0 +1,42 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(services-metadata-secret)
+target_link_libraries(services-metadata-secret PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  ydb-core-base
+  core-grpc_services-local_rpc
+  core-grpc_services-base
+  ydb-core-grpc_services
+  services-metadata-request
+)
+target_sources(services-metadata-secret PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/secret.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/access.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/snapshot.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/initializer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/fetcher.cpp
+)
+
+add_global_library_for(services-metadata-secret.global services-metadata-secret)
+target_link_libraries(services-metadata-secret.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  ydb-core-base
+  core-grpc_services-local_rpc
+  core-grpc_services-base
+  ydb-core-grpc_services
+  services-metadata-request
+)
+target_sources(services-metadata-secret.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/manager.cpp
+)

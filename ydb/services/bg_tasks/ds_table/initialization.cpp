@@ -1,0 +1,68 @@
+#include "initialization.h"
+
+namespace NKikimr::NBackgroundTasks {
+
+void TBGTasksInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr controller) const {
+    const TString tableName = Config.GetTablePath();
+    TVector<NMetadataInitializer::ITableModifier::TPtr> result;
+    {
+        Ydb::Table::CreateTableRequest request;
+        request.set_session_id("");
+        request.set_path(tableName);
+        request.add_primary_key("id");
+        {
+            auto& column = *request.add_columns();
+            column.set_name("id");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("enabled");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::BOOL);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("class");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("executorId");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("lastPing");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("startInstant");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("constructInstant");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("activity");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("scheduler");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("state");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
+    }
+    controller->PreparationFinished(result);
+}
+
+}

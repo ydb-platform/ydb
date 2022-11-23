@@ -20,7 +20,7 @@ void TPathCleaner::Handle(TEvTierCleared::TPtr& ev) {
 
 NMetadataProvider::ISnapshotParser::TPtr TPathCleaner::GetTieringSnapshotParser() const {
     if (!ExternalDataManipulation) {
-        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>(OwnerPath);
+        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
     }
     return ExternalDataManipulation;
 }

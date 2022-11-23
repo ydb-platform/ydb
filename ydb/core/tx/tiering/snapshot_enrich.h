@@ -1,6 +1,4 @@
 #pragma once
-#include "rule.h"
-#include "tier_config.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

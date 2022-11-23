@@ -23,6 +23,10 @@ void TExecutorController::TaskFinished(const TString& taskId) const {
     ExecutorActorId.Send(ExecutorActorId, new TEvTaskExecutorFinished(taskId));
 }
 
+void TExecutorController::InitializationFinished(const TString& id) const {
+    ExecutorActorId.Send(ExecutorActorId, new NMetadataInitializer::TEvInitializationFinished(id));
+}
+
 void TExecutorController::LockPingerFinished() const {
     ExecutorActorId.Send(ExecutorActorId, new TEvLockPingerFinished());
 }

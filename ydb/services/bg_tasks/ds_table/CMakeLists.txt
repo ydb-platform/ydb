@@ -32,4 +32,5 @@ target_sources(services-bg_tasks-ds_table PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/add_tasks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/task_enabled.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/lock_pinger.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ds_table/initialization.cpp
 )

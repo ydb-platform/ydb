@@ -8,6 +8,10 @@
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/services/metadata/manager/alter.h>
+#include <ydb/services/metadata/manager/common.h>
+#include <ydb/services/metadata/manager/table_record.h>
+#include <ydb/services/metadata/manager/ydb_value_operator.h>
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/actors/core/av_bootstrapped.h>
@@ -69,7 +73,8 @@ public:
                     Function: %s
                     Columns: %s
                 }
-            })", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
+            }
+        )", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
     }
 };
 
@@ -114,10 +119,16 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         TActorId ProviderId;
         TInstant Start;
         YDB_READONLY_FLAG(Found, false);
-        YDB_ACCESSOR(ui32, TieringsCount, 1);
+        YDB_ACCESSOR(ui32, ExpectedTieringsCount, 1);
+        YDB_ACCESSOR(ui32, ExpectedTiersCount, 1);
         using TKeyCheckers = TMap<NTiers::TGlobalTierId, TJsonChecker>;
         YDB_ACCESSOR_DEF(TKeyCheckers, Checkers);
     public:
+        void ResetConditions() {
+            FoundFlag = false;
+            Checkers.clear();
+        }
+
         STATEFN(StateInit) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
@@ -152,12 +163,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             auto snapshot = event->GetSnapshotAs<NTiers::TConfigsSnapshot>();
             Y_VERIFY(!!snapshot);
             auto* tInfo = snapshot->GetTableTiering("/Root/olapStore/olapTable");
-            if (TieringsCount) {
+            if (ExpectedTieringsCount) {
                 if (!tInfo) {
                     Cerr << "tiering not found: " << snapshot->SerializeToString() << Endl;
                     return ;
                 }
-                if (tInfo->GetRules().size() != TieringsCount) {
+                if (tInfo->GetRules().size() != ExpectedTieringsCount) {
                     Cerr << "TieringsCount incorrect: " << snapshot->SerializeToString() << Endl;
                     return;
                 }
@@ -175,6 +186,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 } else {
                     Cerr << "PathId: " << tiering.GetTablePathId() << Endl;
                 }
+            }
+            if (ExpectedTiersCount != snapshot->GetTierConfigs().size()) {
+                Cerr << "TieringsCount incorrect: " << snapshot->SerializeToString() << Endl;
+                return;
             }
             for (auto&& i : Checkers) {
                 auto value = snapshot->GetValue(i.first);
@@ -195,10 +210,23 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         void Bootstrap() {
             ProviderId = NMetadataProvider::MakeServiceId(1);
-            ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>("/Root/olapStore");
+            ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
             Become(&TThis::StateInit);
             Sender<NMetadataProvider::TEvSubscribeExternal>(ExternalDataManipulation).SendTo(ProviderId);
             Start = Now();
+        }
+    };
+
+    class TEmulatorAlterController: public NMetadataManager::IAlterController {
+    private:
+        YDB_READONLY_FLAG(Finished, false);
+    public:
+        virtual void AlterProblem(const TString& errorMessage) override {
+            Cerr << errorMessage << Endl;
+            Y_VERIFY(false);
+        }
+        virtual void AlterFinished() override {
+            FinishedFlag = true;
         }
     };
 
@@ -236,15 +264,55 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/tiers` (ownerPath, tierName, tierConfig) "
-                "VALUES ('/Root/olapStore', 'tier1', '" + ConfigProtoStr + "')");
-            lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/rules` (ownerPath, tierName, tablePath, column, durationForEvict) "
-                "VALUES ('/Root/olapStore', 'tier1', '/Root/olapStore/olapTable', 'timestamp', '10d')");
-            const TInstant start = Now();
-            while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
-                runtime.SimulateSleep(TDuration::Seconds(1));
+            lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
+                "TYPE TIER) WITH (tierConfig = `" + ConfigProtoStr + "`, ownerPath = `/Root/olapStore`)");
+            lHelper.StartSchemaRequest("CREATE OBJECT tier1 ("
+                "TYPE TIERING_RULE) WITH (tierName = tier1, tablePath = `/Root/olapStore/olapTable`, "
+                "ownerPath = `/Root/olapStore`, column = timestamp, durationForEvict = `10d` )");
+            {
+                const TInstant start = Now();
+                while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
+                    runtime.SimulateSleep(TDuration::Seconds(1));
+                }
+                Y_VERIFY(emulator->IsFound());
             }
-            Y_VERIFY(emulator->IsFound());
+            {
+                lHelper.StartSchemaRequest("ALTER OBJECT tier1 ( "
+                    "TYPE TIER) SET tierConfig = `" + ConfigProtoStr1 + "`");
+
+                emulator->ResetConditions();
+                emulator->MutableCheckers().emplace(NTiers::TGlobalTierId("/Root/olapStore", "tier1"), TJsonChecker("Name", "abc1"));
+                {
+                    const TInstant start = Now();
+                    while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
+                        runtime.SimulateSleep(TDuration::Seconds(1));
+                    }
+                    Y_VERIFY(emulator->IsFound());
+                }
+            }
+            {
+                std::vector<NMetadataManager::TTableRecord> patches;
+                {
+                    NMetadataManager::TTableRecord patch;
+                    patch.SetColumn("ownerPath", NMetadataManager::TYDBValue::Bytes("/Root/olapStore"));
+                    patch.SetColumn("tierName", NMetadataManager::TYDBValue::Bytes("tier1"));
+                    patches.emplace_back(std::move(patch));
+                }
+
+                lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIER)");
+                lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIERING_RULE)");
+
+                emulator->ResetConditions();
+                emulator->SetExpectedTieringsCount(0);
+                emulator->SetExpectedTiersCount(0);
+                {
+                    const TInstant start = Now();
+                    while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
+                        runtime.SimulateSleep(TDuration::Seconds(1));
+                    }
+                    Y_VERIFY(emulator->IsFound());
+                }
+            }
         }
     }
 
@@ -280,34 +348,47 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(10));
         Cerr << "Initialization finished" << Endl;
 
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/tiers` (ownerPath, tierName, tierConfig) "
-            "VALUES ('/Root/olapStore', 'tier1', '" + ConfigProtoStr1 + "')");
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/rules` (ownerPath, tierName, tablePath, column, durationForEvict) "
-            "VALUES ('/Root/olapStore', 'tier1', '/Root/olapStore/olapTable', 'timestamp', '10d')");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
+            "TYPE TIER) WITH (tierConfig = `" + ConfigProtoStr1 + "`, ownerPath = `/Root/olapStore`)");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier1 ("
+            "TYPE TIERING_RULE) "
+            "WITH (ownerPath = `/Root/olapStore`, tierName = tier1, tablePath = `/Root/olapStore/olapTable`, column = timestamp, durationForEvict = `10d` "
+            ")");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace(NTiers::TGlobalTierId("/Root/olapStore", "tier1"), TJsonChecker("Name", "abc1"));
-            emulator.SetTieringsCount(1);
+            emulator.SetExpectedTieringsCount(1);
+            emulator.SetExpectedTiersCount(1);
             emulator.CheckRuntime(runtime);
         }
 
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/tiers` (ownerPath, tierName, tierConfig) "
-            "VALUES ('/Root/olapStore', 'tier2', '" + ConfigProtoStr2 + "')");
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/rules` (ownerPath, tierName, tablePath, column, durationForEvict) "
-            "VALUES ('/Root/olapStore', 'tier2', '/Root/olapStore/olapTable', 'timestamp', '20d')");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier2 ( "
+            "TYPE TIER) WITH (ownerPath = `/Root/olapStore`, tierConfig = `" + ConfigProtoStr2 + "`)");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier2 ("
+            "TYPE TIERING_RULE) WITH (tierName = tier2, tablePath = `/Root/olapStore/olapTable`, ownerPath = `/Root/olapStore`, column = timestamp, durationForEvict = `20d` )");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace(NTiers::TGlobalTierId("/Root/olapStore", "tier1"), TJsonChecker("Name", "abc1"));
             emulator.MutableCheckers().emplace(NTiers::TGlobalTierId("/Root/olapStore", "tier2"), TJsonChecker("Name", "abc2"));
-            emulator.SetTieringsCount(2);
+            emulator.SetExpectedTieringsCount(2);
+            emulator.SetExpectedTiersCount(2);
             emulator.CheckRuntime(runtime);
         }
 
-        lHelper.StartDataRequest("DELETE FROM `/Root/.configs/tiering/tiers`");
-        lHelper.StartDataRequest("DELETE FROM `/Root/.configs/tiering/rules`");
+        lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)");
+        lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIERING_RULE)");
         {
             TTestCSEmulator emulator;
-            emulator.SetTieringsCount(0);
+            emulator.SetExpectedTieringsCount(1);
+            emulator.SetExpectedTiersCount(1);
+            emulator.CheckRuntime(runtime);
+        }
+        lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIER)");
+        lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIERING_RULE)");
+        {
+            TTestCSEmulator emulator;
+            emulator.SetExpectedTieringsCount(0);
+            emulator.SetExpectedTiersCount(0);
             emulator.CheckRuntime(runtime);
         }
 
@@ -381,19 +462,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization finished" << Endl;
 
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/tiers` (ownerPath, tierName, tierConfig) "
-            "VALUES ('/Root/olapStore', 'fakeTier1', '" + TierConfigProtoStr + "')");
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/tiers` (ownerPath, tierName, tierConfig) "
-            "VALUES ('/Root/olapStore', 'fakeTier2', '" + TierConfigProtoStr + "')");
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/rules` (ownerPath, tierName, tablePath, column, durationForEvict) "
-            "VALUES ('/Root/olapStore', 'fakeTier1', '/Root/olapStore/olapTable', 'timestamp', '10d')");
-        lHelper.StartDataRequest("INSERT INTO `/Root/.configs/tiering/rules` (ownerPath, tierName, tablePath, column, durationForEvict) "
-            "VALUES ('/Root/olapStore', 'fakeTier2', '/Root/olapStore/olapTable', 'timestamp', '20d')");
+        lHelper.StartSchemaRequest("CREATE OBJECT fakeTier1 ( "
+            "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`, ownerPath = `/Root/olapStore`)");
+        lHelper.StartSchemaRequest("CREATE OBJECT fakeTier1 ("
+            "TYPE TIERING_RULE) WITH (tierName = fakeTier1, ownerPath = `/Root/olapStore`, tablePath = `/Root/olapStore/olapTable`, column = timestamp, durationForEvict = `10d` )");
+
+        lHelper.StartSchemaRequest("CREATE OBJECT fakeTier2 ( "
+            "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`, ownerPath = `/Root/olapStore`)");
+        lHelper.StartSchemaRequest("CREATE OBJECT fakeTier2 ("
+            "TYPE TIERING_RULE) WITH (tierName = fakeTier2, ownerPath = `/Root/olapStore`, tablePath = `/Root/olapStore/olapTable`, column = timestamp, durationForEvict = `20d` )");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace(NTiers::TGlobalTierId("/Root/olapStore", "fakeTier1"), TJsonChecker("Name", "fakeTier"));
             emulator.MutableCheckers().emplace(NTiers::TGlobalTierId("/Root/olapStore", "fakeTier2"), TJsonChecker("ObjectStorage.Endpoint", TierEndpoint));
-            emulator.SetTieringsCount(2);
+            emulator.SetExpectedTieringsCount(2);
+            emulator.SetExpectedTiersCount(2);
             emulator.CheckRuntime(runtime);
         }
         Cerr << "Insert..." << Endl;

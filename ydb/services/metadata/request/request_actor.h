@@ -89,7 +89,7 @@ private:
     TRequest ProtoRequest;
     const NActors::TActorId ActorFinishId;
     const NActors::TActorId ActorRestartId;
-    const TConfig& Config;
+    const TConfig Config;
     ui32 Retry = 0;
 protected:
     class TEvRequestInternalResult: public NActors::TEventLocal<TEvRequestInternalResult, TDialogPolicy::EvResultInternal> {
@@ -157,8 +157,14 @@ public:
         : ProtoRequest(request)
         , ActorFinishId(actorFinishId)
         , ActorRestartId(actorRestartId)
-        , Config(config)
-    {
+        , Config(config) {
+
+    }
+
+    TYDBRequest(const TRequest& request, const NActors::TActorId actorCallbackId)
+        : ProtoRequest(request)
+        , ActorFinishId(actorCallbackId)
+        , ActorRestartId(actorCallbackId) {
 
     }
 };
@@ -167,7 +173,6 @@ template <class TDialogPolicy>
 class TSessionedActorImpl: public NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>> {
 private:
     ui32 Retry = 0;
-    const TActorId FinishedActorId;
 
     static_assert(!std::is_same<TDialogPolicy, TDialogCreateSession>());
     using TBase = NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>>;
@@ -223,6 +228,40 @@ public:
     void Bootstrap() {
         TBase::Become(&TSessionedActorImpl::StateMain);
         TBase::template Sender<TEvRequestStart>().SendTo(TBase::SelfId());
+    }
+};
+
+class IQueryOutput {
+public:
+    using TPtr = std::shared_ptr<IQueryOutput>;
+    virtual ~IQueryOutput() = default;
+
+    virtual void OnReply(const TDialogYQLRequest::TResponse& response) = 0;
+};
+
+class TYQLQuerySessionedActor: public TSessionedActorImpl<TDialogYQLRequest> {
+private:
+    using TBase = TSessionedActorImpl<TDialogYQLRequest>;
+    const TString Query;
+    IQueryOutput::TPtr Output;
+protected:
+    virtual std::optional<TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override {
+        Ydb::Table::ExecuteDataQueryRequest request;
+        request.mutable_query()->set_yql_text(Query);
+        request.set_session_id(sessionId);
+        request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
+        return request;
+    }
+    virtual void OnResult(const TDialogYQLRequest::TResponse& response) override {
+        Output->OnReply(response);
+    }
+public:
+    TYQLQuerySessionedActor(const TString& query, const NInternal::NRequest::TConfig& config, IQueryOutput::TPtr output)
+        : TBase(config)
+        , Query(query)
+        , Output(output)
+    {
+
     }
 };
 

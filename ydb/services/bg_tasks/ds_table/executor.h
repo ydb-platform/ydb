@@ -51,22 +51,16 @@ public:
     }
 };
 
-class TExecutor: public NMetadataInitializer::TDSAccessorInitialized {
+class TExecutor: public NActors::TActorBootstrapped<TExecutor> {
 private:
-    using TBase = NMetadataInitializer::TDSAccessorInitialized;
+    using TBase = NActors::TActorBootstrapped<TExecutor>;
     TString TableName;
     const TString ExecutorId = TGUID::CreateTimebased().AsUuidString();
     const TConfig Config;
     std::set<TString> CurrentTaskIds;
-    TExecutorController::TPtr Controller;
+    TExecutorController::TPtr InternalController;
 protected:
-    virtual void RegisterState() override;
-    virtual void OnInitialized() override;
-    virtual void Prepare(NMetadataInitializer::IController::TPtr controller) override {
-        controller->PreparationFinished(BuildModifiers());
-    }
-    TVector<NMetadataInitializer::ITableModifier::TPtr> BuildModifiers() const;
-
+    void Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev);
     void Handle(TEvStartAssign::TPtr& ev);
     void Handle(TEvAssignFinished::TPtr& ev);
     void Handle(TEvFetchingFinished::TPtr& ev);
@@ -76,9 +70,11 @@ protected:
     void Handle(TEvUpdateTaskEnabled::TPtr& ev);
     void Handle(TEvLockPingerStart::TPtr& ev);
     void Handle(TEvLockPingerFinished::TPtr& ev);
+    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
 
-    STFUNC(StateMain) {
+    STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NMetadataInitializer::TEvInitializationFinished, Handle);
             hFunc(TEvStartAssign, Handle);
             hFunc(TEvAssignFinished, Handle);
             hFunc(TEvFetchingFinished, Handle);
@@ -87,15 +83,17 @@ protected:
             hFunc(TEvTaskExecutorFinished, Handle);
             hFunc(TEvLockPingerStart, Handle);
             hFunc(TEvLockPingerFinished, Handle);
+            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                break;
         }
     }
 
 public:
+    void Bootstrap();
+
     TExecutor(const TConfig& config)
-        : TBase(config.GetRequestConfig())
-        , Config(config)
+        : Config(config)
     {
         TServiceOperator::Register();
     }

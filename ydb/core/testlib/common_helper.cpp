@@ -19,12 +19,35 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
-void THelper::StartDataRequest(const TString& request) const {
+void THelper::StartDataRequest(const TString& request, const bool expectSuccess) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-    tClient.CreateSession().Subscribe([request](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
+    auto expectation = expectSuccess;
+    tClient.CreateSession().Subscribe([request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
         auto session = f.GetValueSync().GetSession();
         session.ExecuteDataQuery(request
-            , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx());
+            , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx())
+            .Subscribe([expectation](NYdb::NTable::TAsyncDataQueryResult f)
+                {
+                    TStringStream ss;
+                    f.GetValueSync().GetIssues().PrintTo(ss, false);
+                    Cerr << ss.Str() << Endl;
+                    Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
+                });
+        });
+}
+
+void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess) const {
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
+    auto expectation = expectSuccess;
+    tClient.CreateSession().Subscribe([request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
+        auto session = f.GetValueSync().GetSession();
+        session.ExecuteSchemeQuery(request).Subscribe([expectation](NYdb::TAsyncStatus f)
+            {
+                TStringStream ss;
+                f.GetValueSync().GetIssues().PrintTo(ss, false);
+                Cerr << ss.Str() << Endl;
+                Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
+            });
         });
 }
 

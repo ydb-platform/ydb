@@ -5,82 +5,24 @@
 #include "task_executor.h"
 #include "task_enabled.h"
 #include "fetch_tasks.h"
+#include "initialization.h"
+
+#include <ydb/services/metadata/initializer/fetcher.h>
+#include <ydb/services/metadata/initializer/manager.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NBackgroundTasks {
-
-TVector<NMetadataInitializer::ITableModifier::TPtr> TExecutor::BuildModifiers() const {
-    const TString tableName = Config.GetTablePath();
-    TVector<NMetadataInitializer::ITableModifier::TPtr> result;
-    {
-        Ydb::Table::CreateTableRequest request;
-        request.set_session_id("");
-        request.set_path(tableName);
-        request.add_primary_key("id");
-        {
-            auto& column = *request.add_columns();
-            column.set_name("id");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("enabled");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::BOOL);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("class");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("executorId");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("lastPing");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("startInstant");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("constructInstant");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("activity");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("scheduler");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("state");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request));
-    }
-    return result;
-}
 
 void TExecutor::Handle(TEvStartAssign::TPtr& /*ev*/) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "start assign";
     if (Config.GetMaxInFlight() > CurrentTaskIds.size()) {
-        Register(new TAssignTasksActor(Config.GetMaxInFlight() - CurrentTaskIds.size(), Controller, ExecutorId));
+        Register(new TAssignTasksActor(Config.GetMaxInFlight() - CurrentTaskIds.size(), InternalController, ExecutorId));
     }
 }
 
 void TExecutor::Handle(TEvAssignFinished::TPtr& /*ev*/) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "assign finished";
-    Register(new TFetchTasksActor(CurrentTaskIds, ExecutorId, Controller));
+    Register(new TFetchTasksActor(CurrentTaskIds, ExecutorId, InternalController));
 }
 
 void TExecutor::Handle(TEvFetchingFinished::TPtr& /*ev*/) {
@@ -96,7 +38,7 @@ void TExecutor::Handle(TEvLockPingerFinished::TPtr& /*ev*/) {
 void TExecutor::Handle(TEvLockPingerStart::TPtr& /*ev*/) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "pinger start";
     if (CurrentTaskIds.size()) {
-        Register(new TLockPingerActor(Controller, CurrentTaskIds));
+        Register(new TLockPingerActor(InternalController, CurrentTaskIds));
     } else {
         Schedule(Config.GetPingPeriod(), new TEvLockPingerStart);
     }
@@ -105,7 +47,7 @@ void TExecutor::Handle(TEvLockPingerStart::TPtr& /*ev*/) {
 void TExecutor::Handle(TEvTaskFetched::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "task fetched";
     if (CurrentTaskIds.emplace(ev->Get()->GetTask().GetId()).second) {
-        Register(new TTaskExecutor(ev->Get()->GetTask(), Controller));
+        Register(new TTaskExecutor(ev->Get()->GetTask(), InternalController));
     }
 }
 
@@ -118,22 +60,35 @@ void TExecutor::Handle(TEvTaskExecutorFinished::TPtr& ev) {
 
 void TExecutor::Handle(TEvAddTask::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "add task";
-    Register(new TAddTasksActor(Controller, ev->Get()->GetTask(), ev->Sender));
+    Register(new TAddTasksActor(InternalController, ev->Get()->GetTask(), ev->Sender));
 }
 
 void TExecutor::Handle(TEvUpdateTaskEnabled::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "start task";
-    Register(new TUpdateTaskEnabledActor(Controller, ev->Get()->GetTaskId(), ev->Get()->GetEnabled(), ev->Sender));
+    Register(new TUpdateTaskEnabledActor(InternalController, ev->Get()->GetTaskId(), ev->Get()->GetEnabled(), ev->Sender));
 }
 
-void TExecutor::RegisterState() {
-    Controller = std::make_shared<TExecutorController>(SelfId(), Config);
-    Become(&TExecutor::StateMain);
-}
-
-void TExecutor::OnInitialized() {
+void TExecutor::Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& /*ev*/) {
     Sender<TEvStartAssign>().SendTo(SelfId());
     Schedule(Config.GetPingPeriod(), new TEvLockPingerStart);
+}
+
+void TExecutor::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+    auto snapshot = ev->Get()->GetValidatedSnapshotAs<NMetadataInitializer::TSnapshot>();
+    auto b = std::make_shared<TBGTasksInitializer>(Config);
+    Register(new NMetadataInitializer::TDSAccessorInitialized(Config.GetRequestConfig(), "bg_tasks", b, InternalController, snapshot));
+}
+
+void TExecutor::Bootstrap() {
+    InternalController = std::make_shared<TExecutorController>(SelfId(), Config);
+    Become(&TExecutor::StateMain);
+    auto manager = std::make_shared<NMetadataInitializer::TFetcher>();
+    if (NMetadataProvider::TServiceOperator::IsEnabled()) {
+        Sender<NMetadataProvider::TEvSubscribeExternal>(manager).SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
+    } else {
+        auto b = std::make_shared<TBGTasksInitializer>(Config);
+        Register(new NMetadataInitializer::TDSAccessorInitialized(Config.GetRequestConfig(), "bg_tasks", b, InternalController, nullptr));
+    }
 }
 
 NActors::IActor* CreateService(const TConfig& config) {

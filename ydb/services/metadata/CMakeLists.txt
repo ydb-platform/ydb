@@ -9,7 +9,9 @@
 add_subdirectory(abstract)
 add_subdirectory(ds_table)
 add_subdirectory(initializer)
+add_subdirectory(manager)
 add_subdirectory(request)
+add_subdirectory(secret)
 
 add_library(ydb-services-metadata)
 target_link_libraries(ydb-services-metadata PUBLIC
@@ -17,6 +19,7 @@ target_link_libraries(ydb-services-metadata PUBLIC
   yutil
   cpp-actors-core
   services-metadata-abstract
+  services-metadata-manager
 )
 target_sources(ydb-services-metadata PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/service.cpp

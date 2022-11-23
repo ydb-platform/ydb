@@ -16,6 +16,7 @@ public:
 
     void DropTable(const TString& tablePath);
 
-    void StartDataRequest(const TString& request) const;
+    void StartDataRequest(const TString& request, const bool expectSuccess = true) const;
+    void StartSchemaRequest(const TString& request, const bool expectSuccess = true) const;
 };
 }

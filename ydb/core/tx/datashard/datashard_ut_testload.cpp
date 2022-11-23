@@ -487,7 +487,18 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         setupTable.SetWorkingDir("/Root");
         setupTable.SetTableName(settings.TableName);
 
+        setupTable.SetMinParts(11);
+        setupTable.SetMaxParts(13);
+        setupTable.SetMaxPartSizeMb(1234);
+
         helper.RunUpsertTestLoad(std::move(request), 0, expectedRowCount);
+
+        const auto& description = helper.Table.UserTable.GetDescription();
+        const auto& partitioning = description.GetPartitionConfig().GetPartitioningPolicy();
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMinPartitionsCount(), 11UL);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMaxPartitionsCount(), 13UL);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetSizeToSplit(), 1234UL << 20);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetSplitByLoadSettings().GetEnabled(), false);
     }
 
     Y_UNIT_TEST(ShouldDropCreateTable) {
@@ -526,6 +537,14 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         setupTable.SetTableName(settings.TableName);
 
         helper.RunUpsertTestLoad(std::move(request), 0, expectedRowCount, true);
+
+        // check default table params
+        const auto& description = helper.Table.UserTable.GetDescription();
+        const auto& partitioning = description.GetPartitionConfig().GetPartitioningPolicy();
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMinPartitionsCount(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMaxPartitionsCount(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetSizeToSplit(), 2000UL << 20);
+        UNIT_ASSERT_VALUES_EQUAL(partitioning.GetSplitByLoadSettings().GetEnabled(), false);
     }
 
 } // Y_UNIT_TEST_SUITE(UpsertLoad)

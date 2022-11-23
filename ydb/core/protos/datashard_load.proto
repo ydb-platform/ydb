@@ -24,6 +24,9 @@ message TEvTestLoadRequest {
 
         // Key is a string like sprintf("user%.19lu", keyNum)
         optional uint64 KeyFrom = 3 [default = 0];
+
+        // special mode: actor writes RowCount rows again and again
+        optional bool Infinite = 4;
     }
 
     message TReadStart {
@@ -42,13 +45,21 @@ message TEvTestLoadRequest {
     }
 
     message TTableSetup {
+        optional string WorkingDir = 1; // i.e. /Root/db1
+        optional string TableName = 2;
+
         // if DropTable specified - then drop and create
-        optional bool DropTable = 1;
+        optional bool DropTable = 3;
 
-        optional bool CreateTable = 2;
+        optional bool CreateTable = 4;
 
-        optional string WorkingDir = 3; // i.e. /Root/db1
-        optional string TableName = 4;
+        // makes sence only with DropTable or CreateTable
+        // implicitely: split by load is false, split by size is true
+        optional uint64 MinParts = 5 [default = 1];
+        optional uint64 MaxParts = 6 [default = 1];
+        optional uint64 MaxPartSizeMb = 7 [default = 2000];
+
+        optional bool SkipWarmup = 8;
     }
 
     optional uint64 Cookie = 1;

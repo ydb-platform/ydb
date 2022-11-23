@@ -45,6 +45,7 @@ public:
         DropTable,
         CreateTable,
         DescribePath,
+        Warmup,
         RunLoad,
     };
 
@@ -166,6 +167,8 @@ public:
             return CreateTable(ctx);
         case EState::DescribePath:
             return DescribePath(ctx);
+        case EState::Warmup:
+            return Warmup(ctx);
         case EState::RunLoad:
             return RunLoad(ctx);
         default:
@@ -215,13 +218,19 @@ public:
                 field8 Utf8,
                 field9 Utf8,
                 PRIMARY KEY(key)
-            );
-        )__";
+            ) WITH (AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_PARTITION_SIZE_MB = %)__" PRIu64 R"__(,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %)__" PRIu64 R"__(,
+                    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = %)__" PRIu64 ");";
 
         TString query = Sprintf(
             queryBase.c_str(),
             setup.GetWorkingDir().c_str(),
-            setup.GetTableName().c_str());
+            setup.GetTableName().c_str(),
+            setup.GetMaxPartSizeMb(),
+            setup.GetMinParts(),
+            setup.GetMaxParts());
 
         SendQuery(ctx, std::move(query));
     }
@@ -295,8 +304,55 @@ public:
         target.SetWorkingDir(setup.GetWorkingDir());
         target.SetTableName(setup.GetTableName());
 
-        State = EState::RunLoad;
+        State = EState::Warmup;
         PrepareTable(ctx);
+    }
+
+    void Warmup(const TActorContext& ctx) {
+        // load initial rows, so that later we write *same* rows to non-empty shard,
+        // i.e. shard which calculates stats, compacts, etc
+
+        if (!Request.HasTableSetup() || Request.GetTableSetup().GetSkipWarmup()) {
+            State = EState::RunLoad;
+            PrepareTable(ctx);
+            return;
+        }
+
+        NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart cmd;
+        switch (Request.Command_case()) {
+        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertBulkStart:
+            cmd = Request.GetUpsertBulkStart();
+            break;
+        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertLocalMkqlStart:
+            cmd = Request.GetUpsertLocalMkqlStart();
+            break;
+        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertKqpStart:
+            cmd = Request.GetUpsertKqpStart();
+            break;
+        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertProposeStart:
+            cmd = Request.GetUpsertProposeStart();
+            break;
+        default:
+            State = EState::RunLoad;
+            return PrepareTable(ctx);
+        }
+
+        const auto& target = Request.GetTargetShard();
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
+            << " warmups table# " << target.GetTableName()
+            << " in dir# " << target.GetWorkingDir()
+            << " with rows# " << cmd.GetRowCount());
+
+        // TODO: we need bulk upsert with normal batch size, not 1 row per request
+        cmd.SetInflight(100);
+
+        LoadActors.insert(ctx.Register(
+            CreateUpsertBulkActor(
+               cmd,
+               target,
+               ctx.SelfID,
+               GetServiceCounters(Counters, "load_actor"),
+               ++LastTag)));
     }
 
     void RunLoad(const TActorContext& ctx) {
@@ -363,6 +419,7 @@ public:
 
     void Handle(TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get();
+        LoadActors.erase(ev->Sender);
 
         if (msg->ErrorReason || !msg->Report) {
             TStringStream ss;
@@ -371,12 +428,16 @@ public:
             return;
         }
 
+        if (State == EState::Warmup) {
+            State = EState::RunLoad;
+            return PrepareTable(ctx);
+        }
+
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " received finished from actor# " << ev->Sender << " with tag# " << msg->Tag);
 
         FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->Report});
 
-        LoadActors.erase(ev->Sender);
         if (LoadActors.empty()) {
             Finish(ctx);
             return;
@@ -709,6 +770,9 @@ inline void Out<NKikimr::NDataShardLoad::TLoad::EState>(
         break;
     case NKikimr::NDataShardLoad::TLoad::EState::DescribePath:
         o << "describePath";
+        break;
+    case NKikimr::NDataShardLoad::TLoad::EState::Warmup:
+        o << "warmup";
         break;
     case NKikimr::NDataShardLoad::TLoad::EState::RunLoad:
         o << "runLoad";

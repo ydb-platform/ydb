@@ -35,8 +35,7 @@ namespace NKikimr::NBlobDepot {
         >;
 
         TLoadState LoadState;
-        std::unique_ptr<TTxLoad> SuccessorTx;
-        TTransactionContext *Txc;
+        bool SuccessorTx = false;
 
     public:
         TTxLoad(TBlobDepot *self, TLoadState loadState = TLoadDataBegin{})
@@ -52,8 +51,6 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxLoad::Execute", (Id, Self->GetLogId()));
 
-            Txc = &txc;
-
             NIceDb::TNiceDb db(txc.DB);
             bool progress = false;
             auto visitor = [&](auto& item) { return ExecuteLoad(db, item, progress); };
@@ -63,7 +60,7 @@ namespace NKikimr::NBlobDepot {
                 return true;
             } else if (progress) {
                 // something was read, but not all
-                SuccessorTx = std::make_unique<TTxLoad>(*this);
+                SuccessorTx = true;
                 return true;
             } else {
                 // didn't read anything this time
@@ -102,6 +99,7 @@ namespace NKikimr::NBlobDepot {
                 bool processRow = true;
                 if constexpr (!TItem::Initial) {
                     processRow = item.Key < key;
+                    Y_VERIFY_DEBUG(processRow || item.Key == key);
                 }
                 if (processRow) {
                     progress = true;
@@ -121,7 +119,7 @@ namespace NKikimr::NBlobDepot {
         void ProcessRow(T&& row, Schema::Data*) {
             auto key = TData::TKey::FromBinaryKey(row.template GetValue<Schema::Data::Key>(), Self->Config);
             Self->Data->AddDataOnLoad(key, row.template GetValue<Schema::Data::Value>(),
-                row.template GetValueOrDefault<Schema::Data::UncertainWrite>(), *Txc, this);
+                row.template GetValueOrDefault<Schema::Data::UncertainWrite>());
             Y_VERIFY(!Self->Data->LastLoadedKey || *Self->Data->LastLoadedKey < key);
             Self->Data->LastLoadedKey = std::move(key);
         }
@@ -143,12 +141,10 @@ namespace NKikimr::NBlobDepot {
 
         void Complete(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxLoad::Complete", (Id, Self->GetLogId()),
-                (SuccessorTx, bool(SuccessorTx)), (LoadState.index, LoadState.index()));
-
-            Self->Data->CommitTrash(this);
+                (SuccessorTx, SuccessorTx), (LoadState.index, LoadState.index()));
 
             if (SuccessorTx) {
-                Self->Execute(std::move(SuccessorTx));
+                Self->Execute(std::make_unique<TTxLoad>(*this));
             } else {
                 Self->Data->OnLoadComplete();
             }
@@ -161,7 +157,16 @@ namespace NKikimr::NBlobDepot {
 
     void TData::OnLoadComplete() {
         Loaded = true;
-        Self->BarrierServer->OnDataLoaded();
+        Self->OnDataLoadComplete();
+    }
+
+    void TBlobDepot::StartDataLoad() {
+        Data->StartLoad();
+    }
+
+    void TBlobDepot::OnDataLoadComplete() {
+        BarrierServer->OnDataLoaded();
+        StartGroupAssimilator();
     }
 
 } // NKikimr::NBlobDepot

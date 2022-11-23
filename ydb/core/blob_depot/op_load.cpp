@@ -99,7 +99,6 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 Self->OnLoadFinished();
-                Self->Data->StartLoad(); // we need at least Config to start correct loading of data
             }
         };
 

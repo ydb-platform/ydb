@@ -125,10 +125,13 @@ namespace NKikimr::NBlobDepot {
         void StartOperation() {
             InitChannelKinds();
             DoGroupMetricsExchange();
-            StartGroupAssimilator();
             ProcessRegisterAgentQ();
             KickSpaceMonitor();
+            StartDataLoad();
         }
+
+        void StartDataLoad();
+        void OnDataLoadComplete();
 
         void OnDetach(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT26, "OnDetach", (Id, GetLogId()));

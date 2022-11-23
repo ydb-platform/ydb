@@ -77,12 +77,10 @@ namespace NKikimr::NBlobDepot {
         if (auto *id = std::get_if<TLogoBlobID>(&var)) {
             Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
         }
-        if (underHard) {
-            if (const auto it = Data.find(key); it == Data.end()) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT59, "UpdateKey: key under hard barrier, will not be created",
-                    (Id, Self->GetLogId()), (Key, key), (Reason, reason));
-                return false; // no such key existed and will not be created as it hits the barrier
-            }
+        if (underHard && !Data.contains(key)) {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT59, "UpdateKey: key under hard barrier, will not be created",
+                (Id, Self->GetLogId()), (Key, key), (Reason, reason));
+            return false; // no such key existed and will not be created as it hits the barrier
         }
 
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::forward<TArgs>(args)...);
@@ -104,7 +102,6 @@ namespace NKikimr::NBlobDepot {
 
             EUpdateOutcome outcome = callback(value, inserted);
 
-            Y_VERIFY(!inserted || outcome != EUpdateOutcome::NO_CHANGE);
             if ((underSoft && value.KeepState != EKeepState::Keep) || underHard) {
                 outcome = EUpdateOutcome::DROP;
             }
@@ -271,28 +268,24 @@ namespace NKikimr::NBlobDepot {
         return it->second;
     }
 
-    void TData::AddDataOnLoad(TKey key, TString value, bool uncertainWrite, NTabletFlatExecutor::TTransactionContext& txc,
-            void *cookie) {
+    void TData::AddDataOnLoad(TKey key, TString value, bool uncertainWrite) {
         NKikimrBlobDepot::TValue proto;
         const bool success = proto.ParseFromString(value);
         Y_VERIFY(success);
 
-        UpdateKey(std::move(key), txc, cookie, "AddDataOnLoad", [&](TValue& value, bool inserted) {
-            if (!inserted) { // do some merge logic
-                value.KeepState = Max(value.KeepState, proto.GetKeepState());
-                if (value.ValueChain.empty() && proto.ValueChainSize()) {
-                    value.ValueChain.CopyFrom(proto.GetValueChain());
-                    value.OriginalBlobId.reset();
-                    value.UncertainWrite = uncertainWrite;
-                } else if (!value.ValueChain.empty() && value.UncertainWrite && !uncertainWrite) {
-                    Y_VERIFY(!value.OriginalBlobId);
-                    value.ValueChain.CopyFrom(proto.GetValueChain());
-                    value.UncertainWrite = false;
+        // we can only add key that is not loaded before; if key exists, it MUST have been loaded from the dataset
+        const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(proto), uncertainWrite);
+        if (inserted) {
+            EnumerateBlobsForValueChain(it->second.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
+                if (!RefCount[id]++) { // first mention of this id
+                    auto& record = GetRecordsPerChannelGroup(id);
+                    const auto [_, inserted] = record.Used.insert(id);
+                    Y_VERIFY(inserted);
+                    AccountBlob(id, 1);
+                    TotalStoredDataSize += id.BlobSize();
                 }
-            }
-
-            return EUpdateOutcome::CHANGE;
-        }, std::move(proto), uncertainWrite);
+            });
+        }
     }
 
     void TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,

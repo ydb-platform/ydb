@@ -19,6 +19,10 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                if (!LoadMissingKeys(txc)) {
+                    return false;
+                }
+
                 NIceDb::TNiceDb db(txc.DB);
 
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
@@ -86,6 +90,29 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 return true;
+            }
+
+            bool LoadMissingKeys(TTransactionContext& txc) {
+                NIceDb::TNiceDb db(txc.DB);
+                if (Self->Data->IsLoaded()) {
+                    return true;
+                }
+                bool success = true;
+                for (const auto& item : Request->Get()->Record.GetItems()) {
+                    auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
+                    if (Self->Data->IsKeyLoaded(key)) {
+                        continue;
+                    }
+                    using Table = Schema::Data;
+                    auto row = db.Table<Table>().Key(item.GetKey()).Select();
+                    if (!row.IsReady()) {
+                        success = false;
+                    } else if (row.IsValid()) {
+                        Self->Data->AddDataOnLoad(std::move(key), row.GetValue<Table::Value>(),
+                            row.GetValueOrDefault<Table::UncertainWrite>());
+                    }
+                }
+                return success;
             }
 
             void MarkGivenIdCommitted(TAgent& agent, const TBlobSeqId& blobSeqId) {

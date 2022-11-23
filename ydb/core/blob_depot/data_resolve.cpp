@@ -89,7 +89,7 @@ namespace NKikimr::NBlobDepot {
 
         // final state
         TResolveResultAccumulator Result;
-        std::unique_ptr<TTxResolve> SuccessorTx;
+        bool SuccessorTx = false;
         std::deque<TKey> Uncertainties;
 
     public:
@@ -216,7 +216,7 @@ namespace NKikimr::NBlobDepot {
                             LastScannedKey = key;
                             progress = true;
                             Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
-                                rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>(), txc, this);
+                                rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
 
                             const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
                             const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
@@ -251,7 +251,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (progress) {
                     // we have already done something, so let's finish this transaction and start a new one, continuing
                     // the job
-                    SuccessorTx = std::make_unique<TTxResolve>(*this);
+                    SuccessorTx = true;
                     return true;
                 } else {
                     return false; // we'll have to restart this transaction to fetch some data
@@ -264,13 +264,11 @@ namespace NKikimr::NBlobDepot {
 
         void Complete(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, bool(SuccessorTx)),
+                (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, SuccessorTx),
                 (Uncertainties.size, Uncertainties.size()));
 
-            Self->Data->CommitTrash(this);
-
             if (SuccessorTx) {
-                Self->Execute(std::move(SuccessorTx));
+                Self->Execute(std::make_unique<TTxResolve>(*this));
             } else if (Uncertainties.empty()) {
                 Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
             } else {

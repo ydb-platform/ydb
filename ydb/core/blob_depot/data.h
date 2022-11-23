@@ -441,7 +441,7 @@ namespace NKikimr::NBlobDepot {
 
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
 
-        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite);
         void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
@@ -483,6 +483,7 @@ namespace NKikimr::NBlobDepot {
         void StartLoad();
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
+        bool IsKeyLoaded(const TKey& key) const { return key <= LastLoadedKey || Data.contains(key); }
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);

@@ -215,7 +215,7 @@ public:
     };
 
 public:
-    TKqpReadActor(NKikimrTxDataShard::TKqpReadRangesSourceSettings settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments args)
+    TKqpReadActor(NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings, const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args)
         : Settings(std::move(settings))
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , ComputeActorId(args.ComputeActorId)
@@ -806,7 +806,7 @@ private:
     THashMap<ui64, TVector<ui32>> ReadIdByTabletId;
 
     THashMap<ui64, TShardState*> ResolveShards;
-    ui64 ResolveShardId;
+    ui64 ResolveShardId = 0;
 
     TShardQueue InFlightShards;
     TShardQueue PendingShards;
@@ -829,8 +829,8 @@ private:
     const TString LogPrefix;
     TTableId TableId;
 
-    TActorId ComputeActorId;
-    ui64 InputIndex;
+    const TActorId ComputeActorId;
+    const ui64 InputIndex;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
 };
@@ -839,7 +839,7 @@ private:
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory) {
     factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
-        [] (NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments args) {
+        [] (NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
             auto* actor = new TKqpReadActor(std::move(settings), args);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
         });

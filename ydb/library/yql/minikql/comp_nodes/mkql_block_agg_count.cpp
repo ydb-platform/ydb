@@ -36,15 +36,38 @@ public:
     }
 
     void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
-        Y_ENSURE(!filtered);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                State_ += batchLength;
+                State_ += filtered ? *filtered : batchLength;
             }
         } else {
             const auto& array = datum.array();
-            State_ += array->length - array->GetNullCount();
+            if (!filtered) {
+                State_ += array->length - array->GetNullCount();
+            } else if (array->GetNullCount() == array->length) {
+                // all nulls
+                return;
+            } else if (array->GetNullCount() == 0) {
+                // no nulls
+                State_ += *filtered;
+            } else {
+                const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
+                // intersect masks from nulls and filter column
+                const auto& filterArray = filterDatum.array();
+                MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
+                auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                auto filterBitmap = filterArray->GetValues<uint8_t>(1, 0);
+                auto state = State_;
+                for (ui32 i = 0; i < array->length; ++i) {
+                    ui64 fullIndex = i + array->offset;
+                    auto bit1 = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                    auto bit2 = ((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                    state += bit1 & bit2;
+                }
+
+                State_ = state;
+            }
         }
     }
 

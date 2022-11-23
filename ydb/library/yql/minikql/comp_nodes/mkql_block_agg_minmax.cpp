@@ -34,7 +34,7 @@ public:
     }
 
     void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
-        Y_ENSURE(!filtered);
+        Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
@@ -50,23 +50,56 @@ public:
                 return;
             }
 
-            IsValid_ = true;
-            TIn value = Value_;
-            if (array->GetNullCount() == 0) {
-                for (int64_t i = 0; i < len; ++i) {
-                    value = UpdateMinMax<IsMin>(value, ptr[i]);
+            if (!filtered) {
+                IsValid_ = true;
+                TIn value = Value_;
+                if (array->GetNullCount() == 0) {
+                    for (int64_t i = 0; i < len; ++i) {
+                        value = UpdateMinMax<IsMin>(value, ptr[i]);
+                    }
+                } else {
+                    auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
+                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
+                    }
                 }
-            } else {
-                auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
-                for (int64_t i = 0; i < len; ++i) {
-                    ui64 fullIndex = i + array->offset;
-                    // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                    TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                    value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
-                }
-            }
 
-            Value_ = value;
+                Value_ = value;
+            } else {
+                const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
+                const auto& filterArray = filterDatum.array();
+                MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
+                auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+
+                TIn value = Value_;
+                if (array->GetNullCount() == 0) {
+                    IsValid_ = true;
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
+                    }
+                } else {
+                    ui64 count = 0;
+                    auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
+                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        mask &= filterMask;
+                        value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
+                        count += mask & 1;
+                    }
+
+                    IsValid_ = IsValid_ || count > 0;
+                }
+
+                Value_ = value;
+            }
         }
     }
 
@@ -99,7 +132,6 @@ public:
     }
 
     void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
-        Y_ENSURE(!filtered);
         Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         MKQL_ENSURE(datum.is_array(), "Expected array");
@@ -108,12 +140,28 @@ public:
         auto len = array->length;
         MKQL_ENSURE(array->GetNullCount() == 0, "Expected no nulls");
         MKQL_ENSURE(len > 0, "Expected at least one value");
-        TIn value = Value_;
-        for (int64_t i = 0; i < len; ++i) {
-            value = UpdateMinMax<IsMin>(value, ptr[i]);
-        }
+        if (!filtered) {
+            TIn value = Value_;
+            for (int64_t i = 0; i < len; ++i) {
+                value = UpdateMinMax<IsMin>(value, ptr[i]);
+            }
 
-        Value_ = value;
+            Value_ = value;
+        } else {
+            const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
+            const auto& filterArray = filterDatum.array();
+            MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
+            auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+
+            TIn value = Value_;
+            for (int64_t i = 0; i < len; ++i) {
+                ui64 fullIndex = i + array->offset;
+                TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
+            }
+
+            Value_ = value;
+        }
     }
 
     NUdf::TUnboxedValue Finish() final {
@@ -140,7 +188,6 @@ public:
     }
 
     void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
-        Y_ENSURE(!filtered);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
@@ -156,26 +203,61 @@ public:
                 return;
             }
 
-            IsValid_ = true;
-            ui8 value = Value_;
-            if (array->GetNullCount() == 0) {
-                for (int64_t i = 0; i < len; ++i) {
-                    ui64 fullIndex = i + array->offset;
-                    ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                    value = UpdateMinMax<IsMin>(value, in);
+            if (!filtered) {
+                IsValid_ = true;
+                ui8 value = Value_;
+                if (array->GetNullCount() == 0) {
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                        value = UpdateMinMax<IsMin>(value, in);
+                    }
+                } else {
+                    auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
+                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                        ui8 mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
+                        value = UpdateMinMax<IsMin>(value, ui8((in & mask) | (value & ~mask)));
+                    }
                 }
-            } else {
-                auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
-                for (int64_t i = 0; i < len; ++i) {
-                    ui64 fullIndex = i + array->offset;
-                    // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                    ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                    ui8 mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
-                    value = UpdateMinMax<IsMin>(value, ui8((in & mask) | (value & ~mask)));
-                }
-            }
 
-            Value_ = value;
+                Value_ = value;
+            } else {
+                const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
+                const auto& filterArray = filterDatum.array();
+                MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
+                auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+
+                ui8 value = Value_;
+                if (array->GetNullCount() == 0) {
+                    IsValid_ = true;
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                        ui8 filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
+                        value = UpdateMinMax<IsMin>(value, ui8((in & filterMask) | (value & ~filterMask)));
+                    }
+                } else {
+                    ui64 count = 0;
+                    auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                    for (int64_t i = 0; i < len; ++i) {
+                        ui64 fullIndex = i + array->offset;
+                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
+                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                        ui8 mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
+                        ui8 filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
+                        mask &= filterMask;
+                        value = UpdateMinMax<IsMin>(value, ui8((in & mask) | (value & ~mask)));
+                        count += mask & 1;
+                    }
+
+                    IsValid_ = IsValid_ || count > 0;
+                }
+
+                Value_ = value;
+            }
         }
     }
 

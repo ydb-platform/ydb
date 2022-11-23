@@ -57,13 +57,22 @@ public:
 
                 std::optional<ui64> filtered;
                 if (FilterColumn_) {
-                    arrow::BooleanArray arr(TArrowBlock::From(s.Values_[*FilterColumn_]).GetDatum().array());
-                    ui64 popCount = (ui64)arr.true_count();
-                    if (popCount == 0) {
-                        continue;
-                    }
+                    auto filterDatum = TArrowBlock::From(s.Values_[*FilterColumn_]).GetDatum();
+                    if (filterDatum.is_scalar()) {
+                        if (!filterDatum.scalar_as<arrow::BooleanScalar>().value) {
+                            continue;
+                        }
+                    } else {
+                        arrow::BooleanArray arr(filterDatum.array());
+                        ui64 popCount = (ui64)arr.true_count();
+                        if (popCount == 0) {
+                            continue;
+                        }
 
-                    filtered = popCount;
+                        if (popCount < batchLength) {
+                            filtered = popCount;
+                        }
+                    }
                 }
 
                 s.HasValues_ = true;

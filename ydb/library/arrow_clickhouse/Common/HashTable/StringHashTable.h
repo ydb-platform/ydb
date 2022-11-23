@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <contrib/restricted/cityhash-1.0.2/city.h>
+
 #include <Common/HashTable/HashMap.h>
 #include <Common/HashTable/HashTable.h>
 

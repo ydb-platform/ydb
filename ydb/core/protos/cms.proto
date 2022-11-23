@@ -601,11 +601,20 @@ message TGetSentinelStateRequest {
         SUSPICIOUS = 2;
         ALL = 3;
     }
+
     optional EShow Show = 1;
     repeated TFilterRange Ranges = 2;
 }
 
 message TPDiskInfo {
+    enum EIgnoreReason {
+        NOT_IGNORED = 1;
+        MISSING_NODE = 2;
+        RATIO_BY_DATACENTER = 3;
+        RATIO_BY_ROOM = 4;
+        RATIO_BY_RACK = 5;
+    }
+
     optional uint32 State = 1; // EPDiskState
     optional uint32 PrevState = 2; // EPDiskState
     optional uint64 StateCounter = 3;
@@ -617,6 +626,7 @@ message TPDiskInfo {
     optional uint32 PrevDesiredStatus = 9;
     optional uint32 PrevStatusChangeAttempts = 10;
     optional string LastStatusChange = 11;
+    optional EIgnoreReason IgnoreReason = 12;
 }
 
 message TPDisk {

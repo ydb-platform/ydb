@@ -44,6 +44,7 @@ const PDiskHeaders = [
     "PrevDesiredStatus",
     "PrevStatusChangeAttempts",
     "LastStatusChange",
+    "IgnoreReason",
 ];
 
 class CmsSentinelState {
@@ -145,6 +146,7 @@ class CmsSentinelState {
             "PrevDesiredStatus": this.id.bind(this),
             "PrevStatusChangeAttempts": this.id.bind(this),
             "LastStatusChange": this.id.bind(this),
+            "IgnoreReason": this.id.bind(this),
         };
     }
 

@@ -51,6 +51,7 @@ target_sources(ydb-core-kqp-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_explain_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_flip_join_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_flowcontrol_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_immediate_effects.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_index_lookup_join_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_indexes_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_indexes_multishard_ut.cpp

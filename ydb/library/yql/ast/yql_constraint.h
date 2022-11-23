@@ -258,6 +258,7 @@ private:
 class TPartOfUniqueConstraintNode final: public TConstraintNode {
 public:
     using TPartType = NSorted::TSimpleMap<TPathType, TPathType>;
+    using TReversePartType = NSorted::TSimpleMap<TPathType, NSorted::TSimpleSet<TPathType>>;
     using TMapType = std::unordered_map<const TUniqueConstraintNode*, TPartType>;
 private:
     friend struct TExprContext;

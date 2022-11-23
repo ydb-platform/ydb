@@ -404,12 +404,14 @@ TUniqueConstraintNode::TSetType ColumnsListToSet(const std::vector<std::string_v
 }
 
 TUniqueConstraintNode::TFullSetType DedupSets(TUniqueConstraintNode::TFullSetType&& sets) {
-    if (sets.size() > 1U) {
-        for (const auto& set : sets) {
+    for (bool found = true; found && sets.size() > 1U;) {
+        found = false;
+        for (auto ot = sets.cbegin(); !found && sets.cend() != ot; ++ot) {
             for (auto it = sets.cbegin(); sets.cend() != it;) {
-                if (set.size() < it->size() && std::all_of(set.cbegin(), set.cend(), [it](const TConstraintNode::TPathType& path) { return it->cend() == it->find(path); }))
+                if (ot->size() < it->size() && std::all_of(ot->cbegin(), ot->cend(), [it](const TConstraintNode::TPathType& path) { return it->cend() != it->find(path); })) {
                     it = sets.erase(it);
-                else
+                    found = true;
+                } else
                     ++it;
             }
         }
@@ -532,13 +534,23 @@ const TUniqueConstraintNode* TUniqueConstraintNode::MakeCommon(const std::vector
 }
 
 bool TUniqueConstraintNode::HasEqualColumns(const std::vector<std::string_view>& columns) const {
-    // TODO: from combination of all set instead of any set.
-    return !columns.empty() && std::any_of(Sets_.cbegin(), Sets_.cend(), [&columns](const TSetType& set) {
-        return columns.size() == set.size() && std::all_of(columns.cbegin(), columns.cend(), [&set](const std::string_view& col) {
-            const auto it = set.lower_bound(TPathType(1U, col));
-            return set.cend() != it && !it->empty() && it->front() == col;
-        });
-    });
+    if (columns.empty())
+        return false;
+
+    const std::unordered_set<std::string_view> ordered(columns.cbegin(), columns.cend());
+    std::unordered_set<std::string_view> uniques(columns.size());
+    for (const auto& set : Sets_) {
+        if (std::all_of(set.cbegin(), set.cend(), [&ordered](const TPathType& path) { return !path.empty() && ordered.contains(path.front()); })) {
+            for (const auto& path : set) {
+                if (!path.empty()) {
+                    uniques.emplace(path.front());
+                }
+            }
+            if (uniques.size() == ordered.size())
+                return true;
+        }
+    }
+    return false;
 }
 
 const TUniqueConstraintNode* TUniqueConstraintNode::FilterFields(TExprContext& ctx, const std::function<bool(const TPathType& front)>& predicate) const {
@@ -834,20 +846,28 @@ TPartOfUniqueConstraintNode::ExtractField(const TMapType& mapping, const std::st
 const TUniqueConstraintNode* TPartOfUniqueConstraintNode::MakeComplete(TExprContext& ctx, const TMapType& mapping, const TUniqueConstraintNode* original) {
     if (const auto it = mapping.find(original); mapping.cend() != it) {
         TUniqueConstraintNode::TFullSetType newSets;
+        for (const auto& set : it->first->GetAllSets()) {
+            TReversePartType reverseMap;
+            reverseMap.reserve(it->second.size());
+            for (const auto& map : it->second)
+                reverseMap[map.second].insert_unique(map.first);
 
-        auto sets = it->first->GetAllSets();
-        for (auto s = sets.begin(); sets.end() != s;) {
-            TUniqueConstraintNode::TSetType newSet;
-            for (const auto& map : it->second) {
-                newSet.insert_unique(map.first);
-                s->erase(map.second);
+            if (std::all_of(set.cbegin(), set.cend(), [reverseMap] (const TPathType& path) { return reverseMap.cend() != reverseMap.find(path); })) {
+                TUniqueConstraintNode::TFullSetType addSets = {TUniqueConstraintNode::TSetType()};
+                for (const auto& old : set) {
+                    const auto& renamed = reverseMap[old];
+                    TUniqueConstraintNode::TFullSetType incSets;
+                    for (auto s = addSets.begin(); addSets.end() != s; s = addSets.erase(s)) {
+                        for (const auto& item : renamed) {
+                            auto newSet = std::move(*s);
+                            newSet.insert_unique(item);
+                            incSets.insert_unique(std::move(newSet));
+                        }
+                    }
+                    incSets.swap(addSets);
+                }
+                newSets.insert(addSets.cbegin(), addSets.cend());
             }
-
-            if (s->empty()) {
-                newSets.insert_unique(std::move(newSet));
-                s = sets.erase(s);
-            } else
-                ++s;
         }
 
         if (!newSets.empty())

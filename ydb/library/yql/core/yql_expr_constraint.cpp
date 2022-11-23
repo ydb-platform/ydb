@@ -1968,12 +1968,12 @@ private:
         }
 
         if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
-            if (const auto outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn())) {
-                std::vector<std::string_view> columns;
-                columns.reserve(outItemType->GetSize());
-                for (const auto& item: outItemType->GetItems())
-                    columns.emplace_back(item->GetName());
-                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+            if (const auto& fields = GetAllItemTypeFields(*input->GetTypeAnn(), ctx); !fields.empty()) {
+                TUniqueConstraintNode::TFullSetType sets;
+                sets.reserve(fields.size());
+                for (const auto& field: fields)
+                    sets.insert_unique(TUniqueConstraintNode::TSetType{TConstraintNode::TPathType(1U, field)});
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets)));
             }
         }
         else {
@@ -2056,10 +2056,13 @@ private:
         }
 
         if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
-            std::vector<std::string_view> fields(initLambda->Head().ChildrenSize());
-            ui32 i = 0U;
-            std::generate_n(fields.begin(), initLambda->Head().ChildrenSize(), [&i, &ctx](){ return ctx.GetIndexAsString(i++); });
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(fields));
+            if (const auto width = initLambda->Head().ChildrenSize()) {
+                TUniqueConstraintNode::TFullSetType sets;
+                sets.reserve(width);
+                for (ui32 i = 0U; i < width; ++i)
+                    sets.insert_unique(TUniqueConstraintNode::TSetType{TConstraintNode::TPathType(1U, ctx.GetIndexAsString(i))});
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets)));
+            }
         } else {
             TVector<TStringBuf> groupByKeys;
             if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) {
@@ -2433,6 +2436,30 @@ private:
             body = body->Child(0);
         }
         ExtractSimpleKeys(body, arg, columns);
+    }
+
+    static std::vector<std::string_view> GetAllItemTypeFields(const TTypeAnnotationNode& type, TExprContext& ctx) {
+        std::vector<std::string_view> fields;
+        if (const auto itemType = GetItemType(type)) {
+            switch (itemType->GetKind()) {
+                case ETypeAnnotationKind::Struct:
+                    if (const auto structType = itemType->Cast<TStructExprType>()) {
+                        fields.reserve(structType->GetSize());
+                        std::transform(structType->GetItems().cbegin(), structType->GetItems().cend(), std::back_inserter(fields), std::bind(&TItemExprType::GetName, std::placeholders::_1));
+                    }
+                    break;
+                case ETypeAnnotationKind::Tuple:
+                    if (const auto size = itemType->Cast<TTupleExprType>()->GetSize()) {
+                        fields.resize(size);
+                        ui32 i = 0U;
+                        std::generate(fields.begin(), fields.end(), [&]() { return ctx.GetIndexAsString(i++); });
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        return fields;
     }
 
     static const TStructExprType* GetNonEmptyStructItemType(const TTypeAnnotationNode& type) {

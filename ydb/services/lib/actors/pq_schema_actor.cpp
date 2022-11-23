@@ -638,11 +638,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         switch (settings.retention_case()) {
             case Ydb::PersQueue::V1::TopicSettings::kRetentionPeriodMs: {
-                if (settings.retention_period_ms() <= 0) {
-                    error = TStringBuilder() << "retention_period_ms must be positive, provided " <<
-                        settings.retention_period_ms();
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
                 partConfig->SetLifetimeSeconds(Max(settings.retention_period_ms() / 1000ll, 1ll));
             }
             break;
@@ -956,11 +951,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (request.has_retention_period()) {
-            if (request.retention_period().seconds() <= 0) {
-                error = TStringBuilder() << "retention_period must be not negative, provided " <<
-                        request.retention_period().DebugString();
-                return Ydb::StatusIds::BAD_REQUEST;
-            }
             partConfig->SetLifetimeSeconds(request.retention_period().seconds());
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
@@ -1060,16 +1050,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (request.has_set_retention_period()) {
             CHECK_CDC;
-            if (request.set_retention_period().seconds() < 0) {
-                error = TStringBuilder() << "retention_period must be not negative, provided " <<
-                        request.set_retention_period().DebugString();
-                return Ydb::StatusIds::BAD_REQUEST;
-            }
-            if (request.set_retention_period().seconds() > 0) {
-                partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
-            } else {
-                partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
-            }
+            partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
         }
 
 

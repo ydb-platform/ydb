@@ -88,6 +88,19 @@ public:
                 return nullptr;
             }
 
+            if (alterConfig.GetPartitionConfig().HasLifetimeSeconds()) {
+                const auto lifetimeSeconds = alterConfig.GetPartitionConfig().GetLifetimeSeconds();
+                if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
+                    errStr = TStringBuilder() << "Invalid retention period"
+                        << ": specified: " << lifetimeSeconds << "s"
+                        << ", min: " << 1 << "s"
+                        << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s";
+                    return nullptr;
+                }
+            } else {
+                alterConfig.MutablePartitionConfig()->SetLifetimeSeconds(tabletConfig->GetPartitionConfig().GetLifetimeSeconds());
+            }
+
             if (alterConfig.GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
                 // Validate explicit channel profiles alter attempt
                 const auto& ecps = alterConfig.GetPartitionConfig().GetExplicitChannelProfiles();
@@ -496,19 +509,13 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
-        if ((ui32)newTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
-            errStr = TStringBuilder()
-                    << "Invalid write speed per second in partition specified: " << newTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
-                    << " vs " << TSchemeShard::MaxPQWriteSpeedPerPartition;
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        }
 
-        if ((ui32)newTabletConfig.GetPartitionConfig().GetLifetimeSeconds() > TSchemeShard::MaxPQLifetimeSeconds) {
-            errStr = TStringBuilder()
-                    << "Invalid retention period specified: " << newTabletConfig.GetPartitionConfig().GetLifetimeSeconds()
-                    << " vs " << TSchemeShard::MaxPQLifetimeSeconds;
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+        const auto& partConfig = newTabletConfig.GetPartitionConfig();
+
+        if ((ui32)partConfig.GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Invalid write speed"
+                << ": specified: " << partConfig.GetWriteSpeedInBytesPerSecond() << "bps"
+                << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps");
             return result;
         }
 
@@ -562,7 +569,6 @@ public:
 
         // This channel bindings are for PersQueue shards. They either use
         // explicit channel profiles, or reuse channel profile above.
-        const auto& partConfig = newTabletConfig.GetPartitionConfig();
         TChannelsBindings pqChannelsBinding;
         if (partConfig.ExplicitChannelProfilesSize() > 0) {
             // N.B. no validation necessary at this step

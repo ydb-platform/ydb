@@ -266,6 +266,16 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         setup.Run(cases);
     }
 
+    Y_UNIT_TEST(TypeSelection) {
+        TCases cases = {
+            {"Select tYpe.* frOm Table tYpe",
+             "SELECT\n\ttYpe.*\nFROM Table\n\ttYpe;\n"}
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
     Y_UNIT_TEST(AlterTable) {
         TCases cases = {
             {"alter table user add user int32",

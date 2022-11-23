@@ -1722,6 +1722,7 @@ TStaticData::TStaticData()
         {TRule_identifier::GetDescriptor(), EScope::Identifier},
         {TRule_id_table_or_type::GetDescriptor(), EScope::Identifier},
         {TRule_bind_parameter::GetDescriptor(), EScope::Identifier},
+        {TRule_an_id_as_compat::GetDescriptor(), EScope::Identifier},
         })
     , VisitDispatch({
         {TToken::GetDescriptor(), MakeFunctor(&TVisitor::VisitToken)},

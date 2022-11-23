@@ -35,11 +35,6 @@ channel_profile_config:
       pdisk_category: 0
       storage_pool_kind: "hdd"
 domains_config:
-  state_storage:
-  - ssid: 1
-    ring:
-      nto_select: {ydb_state_storage_n_to_select}
-      node: {ydb_state_storage_nodes}
   domain:
   - name: "{ydb_domain_name}"
     domain_id: 1

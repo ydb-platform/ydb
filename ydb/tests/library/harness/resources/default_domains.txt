@@ -70,7 +70,10 @@
     SSId: 1
     Ring {
       NToSelect: 1
-      Node: 1
+      Ring {
+        Node: 1
+        UseRingSpecificNodeSelection: True
+      }
     }
   }
   HiveConfig {

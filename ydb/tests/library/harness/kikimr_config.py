@@ -6,6 +6,7 @@ import tempfile
 import socket
 import six
 import yaml
+import copy
 from pkg_resources import resource_string
 
 from google.protobuf.text_format import Parse
@@ -58,8 +59,7 @@ def get_grpc_host():
     return "[::]"
 
 
-def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, n_to_select, state_storage_nodes,
-                      log_configs):
+def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
     data = resource_string(__name__, "resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
@@ -71,8 +71,6 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,
         ydb_static_erasure=static_erasure,
-        ydb_state_storage_n_to_select=n_to_select,
-        ydb_state_storage_nodes=state_storage_nodes,
         ydb_grpc_host=get_grpc_host(),
         ydb_pq_topics_are_first_class_citizen=bool(os.getenv("YDB_PQ_TOPICS_ARE_FIRST_CLASS_CITIZEN", "true")),
         ydb_pq_cluster_table_path=str(os.getenv("YDB_PQ_CLUSTER_TABLE_PATH", "")),
@@ -120,6 +118,7 @@ class KikimrConfigGenerator(object):
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],
             dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
+            state_storage_rings=None,
             n_to_select=None,
             use_log_files=True,
             grpc_ssl_enable=False,
@@ -178,6 +177,9 @@ class KikimrConfigGenerator(object):
                 self.n_to_select = 9
             else:
                 self.n_to_select = min(5, nodes)
+        self.state_storage_rings = state_storage_rings
+        if self.state_storage_rings is None:
+            self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if erasure == Erasure.MIRROR_3_DC else 8])
         self.__use_in_memory_pdisks = use_in_memory_pdisks or os.getenv('YDB_USE_IN_MEMORY_PDISKS') == 'true'
         self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
@@ -205,8 +207,7 @@ class KikimrConfigGenerator(object):
 
         self.__bs_cache_file_path = bs_cache_file_path
 
-        self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select,
-                                             self.__node_ids, self.__additional_log_configs)
+        self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         self.yaml_config['pqconfig']['enabled'] = enable_pq
@@ -447,6 +448,13 @@ class KikimrConfigGenerator(object):
     def all_node_ids(self):
         return self.__node_ids
 
+    def _add_state_storage_config(self):
+        self.yaml_config["domains_config"]["state_storage"] = []
+        self.yaml_config["domains_config"]["state_storage"].append({"ssid" : 1, "ring" : {"nto_select" : self.n_to_select, "ring" : []}})
+
+        for ring in self.state_storage_rings:
+            self.yaml_config["domains_config"]["state_storage"][0]["ring"]["ring"].append({"node" : ring if isinstance(ring, list) else [ring], "use_ring_specific_node_selection" : True})
+
     def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
         domain_id = len(
             self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
@@ -476,11 +484,13 @@ class KikimrConfigGenerator(object):
         self.yaml_config["blob_storage_config"]["service_set"]["pdisks"] = []
         self.yaml_config["blob_storage_config"]["service_set"]["vdisks"] = []
         self.yaml_config["blob_storage_config"]["service_set"]["groups"] = [
-            {"group_id": 0, 'group_generation': 0, 'erasure_species': int(self.static_erasure)}]
+            {"group_id": 0, 'group_generation': 1, 'erasure_species': int(self.static_erasure)}]
         self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"] = []
 
         for dc in self._dcs:
             self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
+
+        self._add_state_storage_config()
 
         for node_id in self.__node_ids:
             datacenter_id = next(datacenter_id_generator)

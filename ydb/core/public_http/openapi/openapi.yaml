@@ -281,8 +281,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Issue'
-        status:
-          type: integer
     Position:
       title: Position
       x-stoplight:

@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -2568,6 +2569,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         pqConfig.SetEnabled(true);
         pqConfig.SetEnableProtoSourceIdInfo(true);
         pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
         pqConfig.AddClientServiceType()->SetName("data-streams");
         return pqConfig;
     }
@@ -2614,6 +2616,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     PRIMARY KEY (Key)
                 );
             )";
+
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -2680,6 +2683,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     PRIMARY KEY (Key)
                 );
             )";
+
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -2723,6 +2727,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     PRIMARY KEY (Key)
                 );
             )";
+
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -2788,6 +2793,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     PRIMARY KEY (Key)
                 );
             )";
+
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -2800,6 +2806,85 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedRetentionPeriod) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default (1d)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), TDuration::Days(1));
+        }
+
+        { // custom (1h)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed_2` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H")
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(1));
+        }
+
+        { // non-positive (invalid)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed_3` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT0H")
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        { // too much (32d)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed_3` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("P32D")
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
     }
 

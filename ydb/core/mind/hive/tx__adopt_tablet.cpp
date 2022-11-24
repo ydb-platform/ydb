@@ -49,7 +49,10 @@ public:
             if (itOwner != Self->OwnerToTablet.end()) {
                 const ui64 tabletId = itOwner->second;
                 if (tabletId != TabletId) {
-                    Explain = "there is another tablet assotiated with the (owner; ownerIdx)";
+                    Explain = TStringBuilder() << "there is another tablet assotiated with the"
+                                                  " prevOwner:prevOwnerIdx " << PrevOwner << ":" << PrevOwnerIdx <<
+                                                  " tabletId is " << tabletId <<
+                                                  " was TabletId is " << TabletId;
                     Status = NKikimrProto::EReplyStatus::RACE;
                     return true;
                 }
@@ -78,7 +81,10 @@ public:
 
         const ui64 tabletId = itOwner->second;
         if (tabletId != TabletId) {
-            Explain = "there is another tablet assotiated with the (prevOwner; prevOwnerIdx)";
+            Explain = TStringBuilder() << "there is another tablet assotiated with the"
+                                          " prevOwner:prevOwnerIdx " << PrevOwner << ":" << PrevOwnerIdx <<
+                                          " tabletId is " << tabletId <<
+                                          " was TabletId is " << TabletId;
             Status = NKikimrProto::EReplyStatus::ERROR;
             return true;
         }
@@ -86,6 +92,10 @@ public:
         TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
         if (tablet != nullptr && tablet->Type != TabletType) { // tablet is the same
             Explain = "there is the tablet with different type assotiated with the (preOwner; prevOwnerIdx)";
+            TStringBuilder() << "there is tablet with different assotiated with the"
+                                                      " prevOwner:prevOwnerIdx " << PrevOwner << ":" << PrevOwnerIdx <<
+                                                      " type is " << TabletType <<
+                                                      " was TabletId is " << tablet->Type;
             Status = NKikimrProto::EReplyStatus::ERROR;
             return true;
         }

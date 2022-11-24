@@ -174,7 +174,7 @@ TExprNode::TPtr AddConvertedKeys(TExprNode::TPtr list, TExprContext& ctx, TExprN
 }
 
 TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TExprContext& ctx) {
-    const auto origItemType = mapJoin.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List ? 
+    const auto origItemType = mapJoin.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List ?
         mapJoin.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>() :
         mapJoin.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
     TExprNode::TListType structMembers;
@@ -194,7 +194,7 @@ TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TEx
  *  - Explicitly convert right input to the dict
  *  - Use quite pretty trick: do `MapJoinCore` in `FlatMap`-lambda
  *    (rely on the fact that there will be only one element in the `FlatMap`-stream)
- *  - Align key types using `StrictCast`, use internal columns to store converted left keys   
+ *  - Align key types using `StrictCast`, use internal columns to store converted left keys
  */
 TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyMapJoin>()) {
@@ -673,14 +673,15 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
 
     auto dqPhyLength = node.Cast<TDqPhyLength>();
 
-    auto zero = Build<TCoUint64>(ctx, node.Pos())
-        .Literal().Build("0")
-        .Done();
-
     return Build<TCoCondense>(ctx, node.Pos())
         .Input(dqPhyLength.Input())
-        .State<TCoUint64>()
-            .Literal().Build("0")
+        .State<TCoAsStruct>()
+            .Add<TCoNameValueTuple>()
+                .Name(dqPhyLength.Name())
+                .Value<TCoUint64>()
+                    .Literal().Build("0")
+                    .Build()
+                .Build()
             .Build()
         .SwitchHandler()
             .Args({"item", "state"})
@@ -688,14 +689,22 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
             .Build()
         .UpdateHandler()
             .Args({"item", "state"})
-            .Body<TCoAggrAdd>()
-                .Left("state")
-                .Right<TCoUint64>()
-                    .Literal().Build("1")
+            .Body<TCoAsStruct>()
+                .Add<TCoNameValueTuple>()
+                    .Name(dqPhyLength.Name())
+                    .Value<TCoAggrAdd>()
+                        .Left<TCoMember>()
+                            .Struct("state")
+                            .Name(dqPhyLength.Name())
+                            .Build()
+                        .Right<TCoUint64>()
+                            .Literal().Build("1")
+                            .Build()
+                        .Build()
+                    .Build()
                 .Build()
             .Build()
-        .Build()
-    .Done();
+        .Done();
 }
 
 } // namespace NYql::NDq

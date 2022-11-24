@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,16 +10,17 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
                     ],
                     "columns": [
-                        "a"
+                        "a",
+                        "b"
                     ]
                 },
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "a",
@@ -34,7 +35,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "a"
@@ -42,5 +43,188 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 16,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 15,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 14,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.co"
+                                            },
+                                            {
+                                                "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.a)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 13,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 10,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 9,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 8,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "InnerJoin (MapJoin)-Filter",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "InnerJoin (MapJoin)"
+                                                                            },
+                                                                            {
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.a)"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 7,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "Broadcast",
+                                                                                "PlanNodeId": 4,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "Collect",
+                                                                                        "PlanNodeId": 3,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "UnionAll",
+                                                                                                "PlanNodeId": 2,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "TableFullScan",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Name": "TableFullScan",
+                                                                                                                "ReadColumns": [
+                                                                                                                    "a"
+                                                                                                                ],
+                                                                                                                "ReadRange": [
+                                                                                                                    "rowid (-\u221e, +\u221e)"
+                                                                                                                ],
+                                                                                                                "Table": "base_simple_q18_sql_plan/t3"
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "PlanNodeId": 1,
+                                                                                                        "Tables": [
+                                                                                                            "base_simple_q18_sql_plan/t3"
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ]
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            {
+                                                                                "Node Type": "Map",
+                                                                                "PlanNodeId": 6,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "TableFullScan",
+                                                                                        "Operators": [
+                                                                                            {
+                                                                                                "Name": "TableFullScan",
+                                                                                                "ReadColumns": [
+                                                                                                    "a",
+                                                                                                    "b"
+                                                                                                ],
+                                                                                                "ReadRange": [
+                                                                                                    "rowid (-\u221e, +\u221e)"
+                                                                                                ],
+                                                                                                "Table": "base_simple_q18_sql_plan/t1"
+                                                                                            }
+                                                                                        ],
+                                                                                        "PlanNodeId": 5,
+                                                                                        "Tables": [
+                                                                                            "base_simple_q18_sql_plan/t1"
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 12,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "a",
+                                                                    "b"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "rowid (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Table": "base_simple_q18_sql_plan/t1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 11,
+                                                        "Tables": [
+                                                            "base_simple_q18_sql_plan/t1"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "co (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

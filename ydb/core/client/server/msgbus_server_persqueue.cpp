@@ -1010,7 +1010,10 @@ public:
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
             }
 
-            NTabletPipe::TClientConfig clientConfig;
+            auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+            retryPolicy.RetryLimitCount = 5;
+            NTabletPipe::TClientConfig clientConfig(retryPolicy);
+
             PQClient.push_back(ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
             ActorIdToProto(PQClient.back(), RequestProto.MutablePartitionRequest()->MutablePipeClient());
 
@@ -1055,7 +1058,10 @@ public:
                 tabletInfo.IsBalancer = true;
                 tabletInfo.Topic = name;
 
-                NTabletPipe::TClientConfig clientConfig;
+                auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+                retryPolicy.RetryLimitCount = 5;
+                NTabletPipe::TClientConfig clientConfig(retryPolicy);
+
                 TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, it->second.BalancerTabletId, clientConfig));
                 tabletInfo.PipeClient = pipeClient;
                 PQClient.push_back(pipeClient);
@@ -1079,7 +1085,10 @@ public:
                     it->second.Tablets.push_back(tabletId);
                         // Tablet node resolution relies on opening a pipe
 
-                    NTabletPipe::TClientConfig clientConfig;
+                    auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+                    retryPolicy.RetryLimitCount = 5;
+                    NTabletPipe::TClientConfig clientConfig(retryPolicy);
+
                     TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
                     tabletInfo.PipeClient = pipeClient;
                     PQClient.push_back(pipeClient);

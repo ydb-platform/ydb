@@ -51,8 +51,7 @@ public:
             return;
         }
 
-        auto collector = CreateInfoCollector(SelfId(), TDuration::Seconds(15));
-        ctx.RegisterWithSameMailbox(collector);
+        ctx.Send(Cms, new TEvCms::TEvGetClusterInfoRequest);
 
         Become(&TThis::StateWork);
     }
@@ -62,8 +61,9 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvCms::TEvPermissionResponse, Handle);
-            HFunc(TCms::TEvPrivate::TEvClusterInfo, Handle);
+            HFunc(TEvCms::TEvGetClusterInfoResponse, Handle);
             CFunc(TEvCms::EvWalleTaskStored, Finish);
+            HFunc(TEvCms::TEvStoreWalleTaskFailed, Handle);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS,
                       "TWalleCreateTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
@@ -118,9 +118,9 @@ private:
     }
 
 
-    void Handle(TCms::TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx)
+    void Handle(TEvCms::TEvGetClusterInfoResponse::TPtr &ev, const TActorContext &ctx)
     {
-        if (!ev->Get()->Success) {
+        if (ev->Get()->Info->IsOutdated()) {
             ReplyWithErrorAndDie(TStatus::ERROR_TEMP, "Cannot collect cluster info", ctx);
             return;
         }

@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,18 +10,76 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Fk2 (\"103\")"
+                        "Fk2 (103)"
                     ],
                     "scan_by": [
-                        "Key1",
-                        "Key2"
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
                     ],
-                    "limit": "\"1001\"",
+                    "limit": "1001",
                     "columns": [
                         "Key1"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Key1"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRange": [
+                                                    "Fk2 (103)",
+                                                    "Key1 (-\u221e, +\u221e)",
+                                                    "Key2 (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_index_select_using_index_only_sql_plan/InputJoinIndex2/Index/indexImplTable"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_index_select_using_index_only_sql_plan/InputJoinIndex2/Index/indexImplTable"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

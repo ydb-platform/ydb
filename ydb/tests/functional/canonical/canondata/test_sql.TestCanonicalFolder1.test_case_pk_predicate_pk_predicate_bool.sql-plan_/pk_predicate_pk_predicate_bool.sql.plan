@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -9,13 +9,25 @@
             "reads": [
                 {
                     "type": "Lookup",
+                    "columns": [
+                        "Value"
+                    ]
+                },
+                {
+                    "type": "Lookup",
+                    "columns": [
+                        "Value"
+                    ]
+                },
+                {
+                    "type": "Lookup",
                     "lookup_by": [
-                        "Key1 (\"false\")"
+                        "Key1 (false)"
                     ],
                     "scan_by": [
-                        "Key2 (\"false\", +inf]"
+                        "Key2 (false, +\u221e)"
                     ],
-                    "limit": "\"1001\"",
+                    "limit": "1001",
                     "columns": [
                         "Value"
                     ]
@@ -23,37 +35,220 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Key1 (\"false\")",
-                        "Key2 (\"true\")"
-                    ],
-                    "columns": [
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"true\")"
+                        "Key1 (true)"
                     ],
                     "scan_by": [
-                        "Key2 [-inf, \"true\")"
+                        "Key2 (-\u221e, true)"
                     ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"true\")",
-                        "Key2 (\"false\")"
-                    ],
+                    "limit": "1001",
                     "columns": [
                         "Value"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_0",
+                "PlanNodeId": 16,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 15,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 14,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Value"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRange": [
+                                                    "Key1 (true)",
+                                                    "Key2 (-\u221e, true)"
+                                                ],
+                                                "Table": "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                            }
+                                        ],
+                                        "PlanNodeId": 13,
+                                        "Tables": [
+                                            "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_2",
+                "PlanNodeId": 8,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 7,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 6,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-Union",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "Union"
+                                            }
+                                        ],
+                                        "PlanNodeId": 5,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 4,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Value"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key1: \"false\",Key2: \"true\"}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 3,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Value"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key1: \"true\",Key2: \"false\"}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 12,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 10,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Value"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRange": [
+                                                    "Key1 (false)",
+                                                    "Key2 (false, +\u221e)"
+                                                ],
+                                                "Table": "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                            }
+                                        ],
+                                        "PlanNodeId": 9,
+                                        "Tables": [
+                                            "base_pk_predicate_pk_predicate_bool_sql_plan/Input4"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

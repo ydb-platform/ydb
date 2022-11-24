@@ -74,7 +74,7 @@ struct TCacheBlobL2 {
 };
 
 struct TCacheL2Request {
-    TString TopicName;
+    ui64 TabletId;
     ui64 Cookie;
     TVector<TCacheBlobL2> RequestedBlobs;
     TVector<TCacheBlobL2> StoredBlobs;
@@ -82,15 +82,15 @@ struct TCacheL2Request {
     TVector<TCacheBlobL2> ExpectedBlobs;
     TVector<TCacheBlobL2> MissedBlobs;
 
-    explicit TCacheL2Request(TString topicName)
-        : TopicName(topicName)
+    explicit TCacheL2Request(ui64 tabletId)
+        : TabletId(tabletId)
         , Cookie(0)
     {}
 };
 
 struct TCacheL2Response {
     ui64 Cookie = 0;
-    TString TopicName;
+    ui64 TabletId; // Deprecated
     bool Overload = false;
     TVector<TCacheBlobL2> Removed;
 };

@@ -29,6 +29,7 @@ function main() {
     initConfigsTab();
     initValidatorsTab();
     initCmsLogTab();
+    initCmsSentinelTab();
 }
 
 $(document).ready(main);

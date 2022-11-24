@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,10 +10,10 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "key",
-                        "subkey"
+                        "key (-\u221e, +\u221e)",
+                        "subkey (-\u221e, +\u221e)"
                     ],
-                    "limit": "\"2\"",
+                    "limit": "2",
                     "columns": [
                         "key",
                         "subkey",
@@ -28,10 +28,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"1\")"
+                        "Group (1)"
                     ],
                     "scan_by": [
-                        "Name"
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Amount",
@@ -41,5 +41,124 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_0",
+                "PlanNodeId": 8,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 7,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 6,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.Name"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Amount",
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "ReadRange": [
+                                                    "Group (1)",
+                                                    "Name (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_simple_multi_select_sql_plan/Input1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 5,
+                                        "Tables": [
+                                            "base_simple_multi_select_sql_plan/Input1"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "Name (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "2",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Limit": "2",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "key",
+                                                    "subkey",
+                                                    "value"
+                                                ],
+                                                "ReadLimit": "2",
+                                                "ReadRange": [
+                                                    "key (-\u221e, +\u221e)",
+                                                    "subkey (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_simple_multi_select_sql_plan/Input"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_simple_multi_select_sql_plan/Input"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "key (Asc)",
+                                    "subkey (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

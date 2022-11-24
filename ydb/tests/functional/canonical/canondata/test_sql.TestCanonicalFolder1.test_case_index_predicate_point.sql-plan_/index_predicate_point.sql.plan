@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -8,11 +8,7 @@
             "name": "/local/base_index_predicate_point_sql_plan/InputJoinIndex2",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Fk2",
                         "Key1",
@@ -28,13 +24,13 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Fk2 (\"105\")"
+                        "Fk2 (105)"
                     ],
                     "scan_by": [
-                        "Key1",
-                        "Key2"
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
                     ],
-                    "limit": "\"1001\"",
+                    "limit": "1001",
                     "columns": [
                         "Key1",
                         "Key2"
@@ -42,5 +38,110 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 9,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 8,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 7,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_1_0",
+                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Fk2",
+                                                    "Key1",
+                                                    "Key2",
+                                                    "Value"
+                                                ],
+                                                "Table": "base_index_predicate_point_sql_plan/InputJoinIndex2"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 6,
+                                        "Tables": [
+                                            "base_index_predicate_point_sql_plan/InputJoinIndex2"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Key1",
+                                                    "Key2"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRange": [
+                                                    "Fk2 (105)",
+                                                    "Key1 (-\u221e, +\u221e)",
+                                                    "Key2 (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_index_predicate_point_sql_plan/InputJoinIndex2/Index/indexImplTable"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_index_predicate_point_sql_plan/InputJoinIndex2/Index/indexImplTable"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            }
+        ]
+    }
 }

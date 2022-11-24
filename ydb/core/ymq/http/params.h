@@ -30,6 +30,9 @@ struct TParameters {
     TMaybe<TString> Version;
     TMaybe<ui64> VisibilityTimeout;
     TMaybe<ui64> WaitTimeSeconds;
+    TMaybe<ui64> CreateTimestampSeconds;
+    TMaybe<TString> CustomQueueName;
+    
 
     TMap<int, TString> AttributeNames;
     TMap<int, TAttribute> Attributes;

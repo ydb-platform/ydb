@@ -22,7 +22,7 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
 }
 
 TInsertTable::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard,
-                                             const THashSet<TWriteId>& writeIds) {
+                                             const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
     Y_VERIFY(!writeIds.empty());
     Y_UNUSED(metaShard);
 
@@ -40,14 +40,22 @@ TInsertTable::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep,
 
         dbTable.EraseInserted(*data);
 
-        data->Commit(planStep, txId);
-        dbTable.Commit(*data);
-
         ui32 dataSize = data->BlobSize();
-        if (CommittedByPathId[data->PathId].emplace(std::move(*data)).second) {
-            ++StatsCommitted.Rows;
-            StatsCommitted.Bytes += dataSize;
+
+        // There could be commit after drop: propose, drop, plan
+        if (pathExists(data->PathId)) {
+            data->Commit(planStep, txId);
+            dbTable.Commit(*data);
+
+            if (CommittedByPathId[data->PathId].emplace(std::move(*data)).second) {
+                ++StatsCommitted.Rows;
+                StatsCommitted.Bytes += dataSize;
+            }
+        } else {
+             dbTable.Abort(*data);
+             Aborted.emplace(writeId, std::move(*data));
         }
+
         if (Inserted.erase(writeId)) {
             StatsPrepared.Rows = Inserted.size();
             StatsPrepared.Bytes -= dataSize;
@@ -97,19 +105,6 @@ THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
 }
 
 THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
-    // Abort not committed
-
-    THashSet<TWriteId> toAbort;
-    for (auto& [writeId, data] : Inserted) {
-        if (data.PathId == pathId) {
-            toAbort.insert(writeId);
-        }
-    }
-
-    if (!toAbort.empty()) {
-        Abort(dbTable, 0, toAbort);
-    }
-
     // Committed -> Aborted (for future cleanup)
 
     TSet<TInsertedData> committed = std::move(CommittedByPathId[pathId]);
@@ -127,6 +122,15 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
 
         TWriteId writeId{copy.WriteTxId};
         Aborted.emplace(writeId, std::move(copy));
+    }
+
+    // Return not committed writes for abort. Tablet filter this list with proposed ones befor Abort().
+
+    THashSet<TWriteId> toAbort;
+    for (auto& [writeId, data] : Inserted) {
+        if (data.PathId == pathId) {
+            toAbort.insert(writeId);
+        }
     }
 
     return toAbort;

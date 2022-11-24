@@ -195,6 +195,20 @@ std::vector<TRawTypeValue> ToRawTypeValue(
     return result;
 }
 
+TSerializedCellVec ExtendWithNulls(
+    const TSerializedCellVec& cells,
+    size_t columnCount)
+{
+    TVector<TCell> extendedCells;
+    extendedCells.reserve(columnCount);
+    for (const auto& cell: cells.GetCells()) {
+        extendedCells.emplace_back(cell);
+    }
+
+    extendedCells.resize(columnCount, TCell());
+    return TSerializedCellVec(TSerializedCellVec::Serialize(extendedCells));
+}
+
 ui64 ResetRowStats(NTable::TIteratorStats& stats)
 {
     return std::exchange(stats.DeletedRowSkips, 0UL) +
@@ -251,7 +265,7 @@ public:
             keyFromCells = TSerializedCellVec(State.LastProcessedKey);
         } else {
             fromInclusive = range.FromInclusive;
-            keyFromCells = TSerializedCellVec(range.From);
+            keyFromCells = range.From;
         }
         const auto keyFrom = ToRawTypeValue(keyFromCells, TableInfo, fromInclusive);
 
@@ -270,10 +284,10 @@ public:
         EReadStatus result;
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion);
-            result = Iterate(iter.Get(), true, ctx);
+            result = IterateRange(iter.Get(), ctx);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion);
-            result = Iterate(iter.Get(), true, ctx);
+            result = IterateRange(iter.Get(), ctx);
         }
 
         if (result == EReadStatus::NeedData) {
@@ -290,11 +304,16 @@ public:
         return result;
     }
 
-    EReadStatus ReadKey(TTransactionContext& txc, const TActorContext& ctx, const TSerializedCellVec& keyCells) {
+    EReadStatus ReadKey(
+        TTransactionContext& txc,
+        const TActorContext& ctx,
+        const TSerializedCellVec& keyCells,
+        size_t keyIndex)
+    {
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
             TSerializedTableRange range;
-            range.From = keyCells;
+            range.From = State.Keys[keyIndex];
             range.To = keyCells;
             range.ToInclusive = true;
             range.FromInclusive = true;
@@ -349,6 +368,8 @@ public:
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
+                if (RowsRead)
+                    return true;
                 return false;
             }
         }
@@ -362,13 +383,15 @@ public:
                 return true;
 
             const auto& key = State.Request->Keys[FirstUnprocessedQuery];
-            auto status = ReadKey(txc, ctx, key);
+            auto status = ReadKey(txc, ctx, key, FirstUnprocessedQuery);
             switch (status) {
             case EReadStatus::Done:
                 continue;
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
+                if (RowsRead)
+                    return true;
                 return false;
             }
         }
@@ -512,14 +535,12 @@ private:
     }
 
     template <typename TIterator>
-    EReadStatus Iterate(TIterator* iter, bool isRange, const TActorContext& ctx) {
+    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             TDbTupleRef rowKey = iter->GetKey();
 
-            if (isRange) {
-                LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
-            }
+            LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
 
             TDbTupleRef rowValues = iter->GetValues();
 
@@ -539,12 +560,12 @@ private:
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
-        if (iter->Last() == NTable::EReady::Page && RowsRead == 0) {
+        if (iter->Last() == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
 
         // range fully read, no reason to keep LastProcessedKey
-        if (isRange && iter->Last() == NTable::EReady::Gone)
+        if (iter->Last() == NTable::EReady::Gone)
             LastProcessedKey.clear();
 
         return EReadStatus::Done;
@@ -951,6 +972,36 @@ private:
             // TODO: check that no lock requested
         }
 
+        // Make ranges in the new 'any' form compatible with the old '+inf' form
+        for (size_t i = 0; i < Request->Ranges.size(); ++i) {
+            auto& range = Request->Ranges[i];
+            auto& keyFrom = range.From;
+            auto& keyTo = Request->Ranges[i].To;
+
+            if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
+                keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
+            }
+
+            if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
+                keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
+            }
+        }
+
+        // Make prefixes in the new 'any' form compatible with the old '+inf' form
+        for (size_t i = 0; i < Request->Keys.size(); ++i) {
+            const auto& key = Request->Keys[i];
+            if (key.GetCells().size() == TableInfo.KeyColumnCount)
+                continue;
+
+            if (state.Keys.size() != Request->Keys.size()) {
+                state.Keys.resize(Request->Keys.size());
+            }
+
+            // we can safely use cells referencing original Request->Keys[x],
+            // because request will live until the end
+            state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
+        }
+
         state.Columns.reserve(record.ColumnsSize());
         for (auto col: record.GetColumns()) {
             auto it = TableInfo.Columns.find(col);
@@ -1261,8 +1312,6 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
         // out of order, ignore
         return;
     }
-
-    state.LastAckSeqNo = record.GetSeqNo();
 
     bool wasExhausted = state.IsExhausted();
     state.UpQuota(

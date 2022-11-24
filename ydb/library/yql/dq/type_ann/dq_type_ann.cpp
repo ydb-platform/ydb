@@ -853,7 +853,9 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureAtom(*aggName, ctx)) {
         return TStatus::Error;
     }
-    node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TDataExprType>(EDataSlot::Uint64), ctx));
+    TVector<const TItemExprType*> structItems;
+    structItems.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+    node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TStructExprType>(structItems), ctx));
     return TStatus::Ok;
 }
 

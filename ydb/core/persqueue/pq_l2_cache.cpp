@@ -26,17 +26,17 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx)
 {
     THolder<TCacheL2Request> request(ev->Get()->Data.Release());
-    TString topicName = request->TopicName;
+    ui64 tabletId = request->TabletId;
 
-    Y_VERIFY(topicName.size(), "PQ L2. Empty topic name in L2");
+    Y_VERIFY(tabletId != 0, "PQ L2. Empty tabletID in L2");
 
-    TouchBlobs(ctx, topicName, request->RequestedBlobs);
-    TouchBlobs(ctx, topicName, request->ExpectedBlobs, false);
-    RemoveBlobs(ctx, topicName, request->RemovedBlobs);
-    RegretBlobs(ctx, topicName, request->MissedBlobs);
+    TouchBlobs(ctx, tabletId, request->RequestedBlobs);
+    TouchBlobs(ctx, tabletId, request->ExpectedBlobs, false);
+    RemoveBlobs(ctx, tabletId, request->RemovedBlobs);
+    RegretBlobs(ctx, tabletId, request->MissedBlobs);
 
     THashMap<TKey, TCacheValue::TPtr> evicted;
-    AddBlobs(ctx, topicName, request->StoredBlobs, evicted);
+    AddBlobs(ctx, tabletId, request->StoredBlobs, evicted);
 
     SendResponses(ctx, evicted);
 }
@@ -53,10 +53,10 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
         THolder<TCacheL2Response>& resp = responses[evicted->GetOwner()];
         if (!resp) {
             resp = MakeHolder<TCacheL2Response>();
-            resp->TopicName = key.TopicName;
+            resp->TabletId = key.TabletId;
         }
 
-        Y_VERIFY(key.TopicName == resp->TopicName, "PQ L2. Multiple topics in one PQ tablet.");
+        Y_VERIFY(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
         resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted});
 
         RetentionTime = now - evicted->GetAccessTime();
@@ -73,17 +73,17 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
 }
 
 /// @return outRemoved - map of evicted items. L1 should be noticed about them
-void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs,
+void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                                  THashMap<TKey, TCacheValue::TPtr>& outEvicted)
 {
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
         Y_VERIFY(blob.Value->DataSize(), "Trying to place empty blob into L2 cache");
 
-        TKey key(topic, blob);
+        TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. Topic '" << topic
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. Tablet '" << tabletId
                 << "' partition " << key.Partition << " offset " << key.Offset << " size " << blob.Value->DataSize());
             continue;
         }
@@ -95,23 +95,23 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const 
         // manualy manage LRU size
         while (CurrentSize > MaxSize) {
             auto oldest = Cache.FindOldest();
-            Y_VERIFY(oldest != Cache.End(), "Topic '%s' count %" PRIu64 " size %" PRIu64
+            Y_VERIFY(oldest != Cache.End(), "Tablet %" PRIu64" count %" PRIu64 " size %" PRIu64
                 " maxSize %" PRIu64 " blobSize %" PRIu64 " blobs %" PRIu64 " evicted %" PRIu64,
-                topic.data(), Cache.Size(), CurrentSize, MaxSize, blob.Value->DataSize(), blobs.size(), outEvicted.size());
+                tabletId, Cache.Size(), CurrentSize, MaxSize, blob.Value->DataSize(), blobs.size(), outEvicted.size());
 
             TCacheValue::TPtr value = oldest.Value();
             outEvicted.insert({oldest.Key(), value});
             if (value->GetAccessCount() == 0)
                 ++numUnused;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. Topic '" << topic
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. Tablet '" << tabletId
                 << "' partition " << oldest.Key().Partition << " offset " << oldest.Key().Offset << " size " << value->DataSize());
 
             CurrentSize -= value->DataSize();
             Cache.Erase(oldest);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. Topic '" << topic
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. Tablet '" << tabletId
             << "' partition " << blob.Partition << " offset " << blob.Offset << " size " << blob.Value->DataSize());
 
         Cache.Insert(key, blob.Value);
@@ -126,12 +126,12 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const 
     }
 }
 
-void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs)
+void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs)
 {
     ui32 numEvicted = 0;
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
-        TKey key(topic, blob);
+        TKey key(tabletId, blob);
         auto it = Cache.FindWithoutPromote(key);
         if (it != Cache.End()) {
             CurrentSize -= (*it)->DataSize();
@@ -139,10 +139,10 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, TString topic, con
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
             Cache.Erase(it);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. Topic '" << topic
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. Tablet '" << tabletId
                 << "' partition " << blob.Partition << " offset " << blob.Offset);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. Topic '" << topic
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. Tablet '" << tabletId
                 << "' partition " << blob.Partition << " offset " << blob.Offset);
         }
     }
@@ -156,19 +156,19 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, TString topic, con
     }
 }
 
-void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs, bool isHit)
+void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit)
 {
     TInstant now = TAppData::TimeProvider->Now();
 
     for (const TCacheBlobL2& blob : blobs) {
-        TKey key(topic, blob);
+        TKey key(tabletId, blob);
         auto it = Cache.Find(key);
         if (it != Cache.End()) {
             (*it)->Touch(now);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Touched. Topic '" << topic
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Touched. Tablet '" << tabletId
                 << "' partition " << blob.Partition << " offset " << blob.Offset);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in touch. Topic '" << topic
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in touch. Tablet '" << tabletId
                 << "' partition " << blob.Partition << " offset " << blob.Offset);
         }
     }
@@ -184,10 +184,10 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, TString topic, cons
     }
 }
 
-void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs)
+void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs)
 {
     for (const TCacheBlobL2& blob : blobs) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. Topic '" << topic
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. tabletId '" << tabletId
             << "' partition " << blob.Partition << " offset " << blob.Offset);
     }
 

@@ -76,6 +76,7 @@ struct TKqpQueryState {
 
     ui64 CurrentTx = 0;
     TString TraceId;
+    bool IsDocumentApiRestricted = false;
 
     TInstant StartTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
@@ -91,6 +92,20 @@ struct TKqpQueryState {
     TString TxId_Human = "";
     bool Commit = false;
     bool Commited = false;
+    TDuration CpuTime;
+    std::optional<NCpuTime::TCpuTimer> CurrentTimer;
+
+    void ResetTimer() {
+        if (CurrentTimer) {
+            CpuTime += CurrentTimer->GetTime();
+            CurrentTimer.reset();
+        }
+    }
+
+    TDuration GetCpuTime() {
+        ResetTimer();
+        return CpuTime;
+    }
 };
 
 struct TKqpCleanupCtx {
@@ -132,6 +147,28 @@ TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
 }
 
 class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor> {
+
+class TTimerGuard {
+public:
+    TTimerGuard(TKqpSessionActor* this_)
+      : This(this_)
+    {
+        if (This->QueryState) {
+            YQL_ENSURE(!This->QueryState->CurrentTimer);
+            This->QueryState->CurrentTimer.emplace();
+        }
+    }
+
+    ~TTimerGuard() {
+        if (This->QueryState) {
+            This->QueryState->ResetTimer();
+        }
+    }
+
+private:
+    TKqpSessionActor* This;
+};
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
@@ -308,6 +345,22 @@ public:
         YQL_ENSURE(requestInfo.GetSessionId() == SessionId,
                 "Invalid session, expected: " << SessionId << ", got: " << requestInfo.GetSessionId());
 
+        if (event.HasYdbStatus()) {
+            if (event.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(event.GetQueryIssues(), issues);
+                TString errMsg = issues.ToString();
+
+                LOG_N(TKqpRequestInfo("", SessionId)
+                    << "Got invalid query request, reply with status: "
+                    << event.GetYdbStatus()
+                    << " msg: "
+                    << errMsg <<".");
+                ReplyProcessError(ev->Sender, proxyRequestId, event.GetYdbStatus(), errMsg);
+                return;
+            }
+        }
+
         if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
             // we reached the soft timeout, so at this point we don't allow to accept new queries for session.
             LOG_N(TKqpRequestInfo("", SessionId)
@@ -318,6 +371,7 @@ public:
         }
 
         MakeNewQueryState();
+        TTimerGuard timer(this);
         QueryState->Request.Swap(event.MutableRequest());
         auto& queryRequest = QueryState->Request;
 
@@ -343,6 +397,7 @@ public:
         QueryState->Sender = ev->Sender;
         QueryState->ProxyRequestId = proxyRequestId;
         QueryState->TraceId = requestInfo.GetTraceId();
+        QueryState->IsDocumentApiRestricted = IsDocumentApiRestricted(event.GetRequestType());
         QueryState->StartTime = TInstant::Now();
         QueryState->UserToken = event.GetUserToken();
         QueryState->QueryDeadlines = GetQueryDeadlines(queryRequest);
@@ -431,6 +486,10 @@ public:
                 YQL_ENSURE(false);
         }
 
+        if (query) {
+            query->Settings.DocumentApiRestricted = QueryState->IsDocumentApiRestricted;
+        }
+
         auto compileDeadline = QueryState->QueryDeadlines.TimeoutAt;
         if (QueryState->QueryDeadlines.CancelAt) {
             compileDeadline = Min(compileDeadline, QueryState->QueryDeadlines.CancelAt);
@@ -448,6 +507,7 @@ public:
 
     void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
         auto compileResult = ev->Get()->CompileResult;
+        TTimerGuard timer(this);
         QueryState->MaxReadType = compileResult->MaxReadType;
 
         YQL_ENSURE(compileResult);
@@ -492,7 +552,6 @@ public:
             AcquireMvccSnapshot();
             return;
         }
-
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
@@ -539,6 +598,7 @@ public:
     }
 
     void HandleExecute(TEvKqpSnapshot::TEvCreateSnapshotResponse::TPtr& ev) {
+        TTimerGuard timer(this);
         auto *response = ev->Get();
 
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
@@ -735,23 +795,7 @@ public:
         Cleanup(IsFatalError(record.GetYdbStatus()));
     }
 
-    IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
-        IKqpGateway::TExecPhysicalRequest request;
-        request.NeedTxId = false;
-        if (queryState) {
-            auto now = TAppData::TimeProvider->Now();
-            request.Timeout = queryState->QueryDeadlines.TimeoutAt - now;
-            if (auto cancelAt = queryState->QueryDeadlines.CancelAt) {
-                request.CancelAfter = cancelAt - now;
-            }
-
-            EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
-            request.StatsMode = GetStatsMode(statsMode);
-        }
-        return request;
-    }
-
-    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState) {
+    IKqpGateway::TExecPhysicalRequest PrepareRequest(TKqpQueryState *queryState) {
         IKqpGateway::TExecPhysicalRequest request;
 
         if (queryState) {
@@ -763,35 +807,43 @@ public:
 
             EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
             request.StatsMode = GetStatsMode(statsMode);
-
-            request.Snapshot = queryState->TxCtx->GetSnapshot();
-            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
-        } else {
-            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         }
 
         const auto& limits = GetQueryLimits(Settings);
         request.MaxAffectedShards = limits.PhaseLimits.AffectedShardsLimit;
         request.TotalReadSizeLimitBytes = limits.PhaseLimits.TotalReadSizeLimitBytes;
         request.MkqlMemoryLimit = limits.PhaseLimits.ComputeNodeMemoryLimitBytes;
+        return request;
+    }
+
+
+    IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
+        auto request = PrepareRequest(queryState);
+        request.NeedTxId = false;
+        return request;
+    }
+
+    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState) {
+        auto request = PrepareRequest(queryState);
+
+        if (queryState) {
+            request.Snapshot = queryState->TxCtx->GetSnapshot();
+            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+        } else {
+            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+        }
 
         return request;
     }
 
     IKqpGateway::TExecPhysicalRequest PrepareScanRequest(TKqpQueryState *queryState) {
-        IKqpGateway::TExecPhysicalRequest request;
+        auto request = PrepareRequest(queryState);
 
-        request.Timeout = queryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
-        if (!request.Timeout) {
-            // TODO: Just cancel request.
-            request.Timeout = TDuration::MilliSeconds(1);
-        }
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
-        EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
-        request.StatsMode = GetStatsMode(statsMode);
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = Config->GetEnableLlvm() != EOptionalFlag::Disabled;
-        request.Snapshot = QueryState->TxCtx->GetSnapshot();
+        YQL_ENSURE(queryState);
+        request.Snapshot = queryState->TxCtx->GetSnapshot();
 
         return request;
     }
@@ -1114,6 +1166,7 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        TTimerGuard timer(this);
         auto* response = ev->Get()->Record.MutableResponse();
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         LOG_D(SelfId() << " " << requestInfo << " TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
@@ -1292,7 +1345,7 @@ public:
         auto* stats = &QueryState->Stats;
 
         stats->SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
-        //stats->SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds());
+        stats->SetWorkerCpuTimeUs(QueryState->GetCpuTime().MicroSeconds());
         if (QueryState->CompileResult) {
             stats->MutableCompilation()->Swap(&QueryState->CompileStats);
         }

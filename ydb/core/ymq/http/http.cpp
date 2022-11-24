@@ -486,10 +486,24 @@ void THttpRequest::ParseRequest(THttpInput& input) {
         break;                                                                   \
     }
 
+bool HasPrivateActionParams(EAction action, const TParameters& params) {
+    if (action == EAction::CreateQueue) {
+        return params.CreateTimestampSeconds || params.CustomQueueName;
+    }
+    return false;
+}
+
 bool THttpRequest::SetupRequest() {
     auto requestHolder = MakeHolder<TSqsRequest>();
     requestHolder->SetRequestId(RequestId_);
 
+    if (HasPrivateActionParams(Action_, QueryParams_) && !IsPrivateRequest_) {
+        RLOG_SQS_BASE_ERROR(
+            *Parent_->ActorSystem_,
+            "Attempt to call private " << Action_ << " action format without private url path"
+        );
+        throw TSQSException(NErrors::INVALID_ACTION);
+    }
     // Validate batches
     if (IsBatchAction(Action_)) {
         if (QueryParams_.BatchEntries.empty()) {
@@ -607,6 +621,13 @@ void THttpRequest::SetupChangeMessageVisibilityBatch(TChangeMessageVisibilityBat
 void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
     req->SetQueueName(QueueName_);
     req->MutableAuth()->SetUserName(UserName_);
+
+    if (QueryParams_.CreateTimestampSeconds) {
+        req->SetCreatedTimestamp(QueryParams_.CreateTimestampSeconds.GetRef());
+    }
+    if (QueryParams_.CustomQueueName) {
+        req->SetCustomQueueName(QueryParams_.CustomQueueName.GetRef());
+    }
 
     for (const auto& attr : QueryParams_.Attributes) {
         req->AddAttributes()->CopyFrom(attr.second);

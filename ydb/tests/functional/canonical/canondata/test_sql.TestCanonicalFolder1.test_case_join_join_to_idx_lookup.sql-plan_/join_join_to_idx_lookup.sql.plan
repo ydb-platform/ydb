@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Key"
+                        "Key (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Fk21",
@@ -24,11 +24,7 @@
             "name": "/local/base_join_join_to_idx_lookup_sql_plan/InputJoin2",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Fk3",
                         "Key1",
@@ -41,10 +37,7 @@
             "name": "/local/base_join_join_to_idx_lookup_sql_plan/InputJoin3",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key (expr)"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Key",
                         "Value"
@@ -52,5 +45,307 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_4",
+                "PlanNodeId": 32,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 31,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 30,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "LeftJoin (MapJoin)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 29,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 28,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "tx_result_binding_4_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Iterator": "%kqp%tx_result_binding_2_0",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 27
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 26,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 25,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 24,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "CTE Name": "tx_result_binding_4_0",
+                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.Key)"
+                                                                            },
+                                                                            {
+                                                                                "Name": "TablePointLookup",
+                                                                                "ReadColumns": [
+                                                                                    "Key",
+                                                                                    "Value"
+                                                                                ],
+                                                                                "Table": "base_join_join_to_idx_lookup_sql_plan/InputJoin3"
+                                                                            },
+                                                                            {
+                                                                                "Iterator": "%kqp%tx_result_binding_3_0",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 23,
+                                                                        "Tables": [
+                                                                            "base_join_join_to_idx_lookup_sql_plan/InputJoin3"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_3",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 21,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Filter-Limit",
+                        "Operators": [
+                            {
+                                "Name": "Filter",
+                                "Predicate": "Exist(item.t2.Fk3)"
+                            },
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 20
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_3_0"
+            },
+            {
+                "Node Type": "Precompute_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 18,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 17,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 16,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Operators": [
+                                            {
+                                                "Name": "LeftJoin (MapJoin)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 15,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 14,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "tx_result_binding_2_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 13
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 12,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 11,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 10,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "CTE Name": "tx_result_binding_2_0",
+                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.Key1) And Exist(item.Key2)"
+                                                                            },
+                                                                            {
+                                                                                "Name": "TablePointLookup",
+                                                                                "ReadColumns": [
+                                                                                    "Fk3",
+                                                                                    "Key1",
+                                                                                    "Key2"
+                                                                                ],
+                                                                                "Table": "base_join_join_to_idx_lookup_sql_plan/InputJoin2"
+                                                                            },
+                                                                            {
+                                                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 9,
+                                                                        "Tables": [
+                                                                            "base_join_join_to_idx_lookup_sql_plan/InputJoin2"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_0"
+            },
+            {
+                "Node Type": "Precompute_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 7,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Filter-Limit",
+                        "Operators": [
+                            {
+                                "Name": "Filter",
+                                "Predicate": "Exist(item.Fk21) And Exist(item.Fk22)"
+                            },
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 6
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Filter-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "Filter",
+                                                "Predicate": "items2 == \"Value2\" Or items2 == \"Value3\""
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Fk21",
+                                                    "Fk22",
+                                                    "Value"
+                                                ],
+                                                "ReadRange": [
+                                                    "Key (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_sql_plan/InputJoin1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_sql_plan/InputJoin1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            }
+        ]
+    }
 }

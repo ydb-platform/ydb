@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,17 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
+                    ],
+                    "columns": [
+                        "a",
+                        "b"
+                    ]
+                },
+                {
+                    "type": "FullScan",
+                    "scan_by": [
+                        "rowid (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "a",
@@ -19,5 +29,133 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 10,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 8,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-Aggregate",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": ""
+                                            },
+                                            {
+                                                "Name": "Aggregate"
+                                            }
+                                        ],
+                                        "PlanNodeId": 7,
+                                        "Plans": [
+                                            {
+                                                "KeyColumns": [
+                                                    "a",
+                                                    "b"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Union",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Union"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 4,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "a",
+                                                                                    "b"
+                                                                                ],
+                                                                                "ReadRange": [
+                                                                                    "rowid (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Table": "base_simple_q11_sql_plan/t1"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 3,
+                                                                        "Tables": [
+                                                                            "base_simple_q11_sql_plan/t1"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 2,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "a",
+                                                                                    "b"
+                                                                                ],
+                                                                                "ReadRange": [
+                                                                                    "rowid (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Table": "base_simple_q11_sql_plan/t1"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 1,
+                                                                        "Tables": [
+                                                                            "base_simple_q11_sql_plan/t1"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "b (Asc)",
+                                    "a (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

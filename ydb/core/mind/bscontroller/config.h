@@ -64,10 +64,6 @@ namespace NKikimr {
             TCowHolder<Schema::State::NextStoragePoolId::Type> NextStoragePoolId;
 
             // helper classes
-            using TLocationMap = THashMap<TPDiskLocation, TPDiskId>;
-            TLocationMap PDiskLocationMap;
-            TLocationMap StaticPDiskLocationMap;
-
             THostRecordMap HostRecords;
 
             ui64 UniqueId = RandomNumber<ui64>();
@@ -134,7 +130,6 @@ namespace NKikimr {
                 , StoragePoolStat(*controller.StoragePoolStat)
             {
                 Y_VERIFY(HostRecords);
-                Init();
             }
 
             void Commit() {
@@ -208,17 +203,27 @@ namespace NKikimr {
 
             void ApplyConfigUpdates();
 
-        private:
-            void Init() {
-                PDisks.ForEach([this](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
-                    const TNodeId &nodeId = pdiskId.NodeId;
-                    TPDiskLocation location{nodeId, pdiskInfo.PathOrSerial()};
-                    PDiskLocationMap.emplace(location, pdiskId);
-                });
-                for (const auto& [pdiskId, pdisk] : StaticPDisks) {
-                    TPDiskLocation location{pdiskId.NodeId, pdisk.Path};
-                    StaticPDiskLocationMap.emplace(location, pdiskId);
+            std::optional<TPDiskId> FindStaticPDiskByLocation(ui32 nodeId, const TString& path) const {
+                for (auto it = StaticPDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != StaticPDisks.end() &&
+                        it->first.NodeId == nodeId; ++it) {
+                    if (it->second.Path == path) {
+                        return it->first;
+                    }
                 }
+                return std::nullopt;
+            }
+
+            std::optional<TPDiskId> FindPDiskByLocation(ui32 nodeId, const TString& path) const {
+                std::optional<TPDiskId> res;
+                auto callback = [&](const TPDiskId& id, const TPDiskInfo& info) {
+                    if (info.Path == path) {
+                        res = id;
+                        return false;
+                    }
+                    return true;
+                };
+                PDisks.ForEachInRange(TPDiskId::MinForNode(nodeId), TPDiskId::MaxForNode(nodeId), callback);
+                return res;
             }
 
         private:

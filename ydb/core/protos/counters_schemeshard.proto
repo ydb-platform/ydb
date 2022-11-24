@@ -167,6 +167,8 @@ enum ESimpleCounters {
 
     COUNTER_STATS_QUEUE_SIZE = 136                        [(CounterOpts) = {Name: "StatsQueueSize"}];
     COUNTER_IN_FLIGHT_OPS_TxUpdateMainTableOnIndexMove = 137 [(CounterOpts) = {Name: "InFlightOps/UpdateMainTableOnIndexMove"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxAllocatePQ   = 138            [(CounterOpts) = {Name: "InFlightOps/AllocatePQ"}];
 }
 
 enum ECumulativeCounters {
@@ -268,6 +270,8 @@ enum ECumulativeCounters {
 
     COUNTER_STATS_WRITTEN = 81                            [(CounterOpts) = {Name: "StatsWritten"}];
     COUNTER_FINISHED_OPS_TxUpdateMainTableOnIndexMove = 82 [(CounterOpts) = {Name: "FinishedOps/UpdateMainTableOnIndexMove"}];
+
+    COUNTER_FINISHED_OPS_TxAllocatePQ   = 83              [(CounterOpts) = {Name: "FinishedOps/AllocatePQ"}];
 }
 
 enum EPercentileCounters {

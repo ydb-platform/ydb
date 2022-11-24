@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -9,10 +9,6 @@
             "reads": [
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"4\")",
-                        "Name (expr)"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
@@ -27,14 +23,117 @@
             "reads": [
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"101\")"
-                    ],
                     "columns": [
                         "Value2"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_2",
+                "PlanNodeId": 10,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 8,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_2_0",
+                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(%kqp%tx_result_binding_0_0.Value2)"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Amount",
+                                                    "Comment",
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "Table": "base_pk_predicate_pk_predicate_dependent_sql_plan/Input1"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 7,
+                                        "Tables": [
+                                            "base_pk_predicate_pk_predicate_dependent_sql_plan/Input1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 5,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Stage",
+                        "PlanNodeId": 4
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 2,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate-TablePointLookup-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            },
+                            {
+                                "Name": "TablePointLookup",
+                                "ReadColumns": [
+                                    "Value2"
+                                ],
+                                "Table": "base_pk_predicate_pk_predicate_dependent_sql_plan/Input2"
+                            },
+                            {
+                                "Iterator": "[{Key: 101}]",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 1,
+                        "Tables": [
+                            "base_pk_predicate_pk_predicate_dependent_sql_plan/Input2"
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            }
+        ]
+    }
 }

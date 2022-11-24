@@ -27,6 +27,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 
 #include <util/system/env.h>
 
@@ -301,6 +302,13 @@ namespace NPDisk {
                 nodeIndex);
     }
 
+    void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(NSysView::MakeSysViewServiceID(runtime.GetNodeId(nodeIndex)),
+                TActorSetupCmd(NSysView::CreateSysViewServiceForTests().Release(), TMailboxType::Revolving, 0),
+                nodeIndex);
+    }
+
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
                             NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches)
     {
@@ -332,6 +340,7 @@ namespace NPDisk {
             SetupResourceBroker(runtime, nodeIndex);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);
+            SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
 
             if (factory)
@@ -342,12 +351,19 @@ namespace NPDisk {
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             // NodeWarden (and its actors) relies on timers to work correctly
-            auto actorId = runtime.GetLocalServiceId(
+            auto blobStorageActorId = runtime.GetLocalServiceId(
                 MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
                 nodeIndex);
-            Y_VERIFY(actorId, "Missing node warden on node %" PRIu32, nodeIndex);
-            runtime.EnableScheduleForActor(actorId);
+            Y_VERIFY(blobStorageActorId, "Missing node warden on node %" PRIu32, nodeIndex);
+            runtime.EnableScheduleForActor(blobStorageActorId);
+
+            // SysView Service uses Scheduler to send counters
+            auto sysViewServiceId = runtime.GetLocalServiceId(
+                NSysView::MakeSysViewServiceID(runtime.GetNodeId(nodeIndex)), nodeIndex);
+            Y_VERIFY(sysViewServiceId, "Missing SysView Service on node %" PRIu32, nodeIndex);
+            runtime.EnableScheduleForActor(sysViewServiceId);
         }
+
 
         if (!mock && !runtime.IsRealThreads()) {
             ui32 evNum = disk.DomainsNum * disk.DisksInDomain;

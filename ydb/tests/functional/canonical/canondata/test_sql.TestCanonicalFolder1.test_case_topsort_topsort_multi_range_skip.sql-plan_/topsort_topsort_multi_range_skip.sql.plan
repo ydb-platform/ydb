@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,8 +10,8 @@
                 {
                     "type": "Scan",
                     "scan_by": [
-                        "Group (\"10\", +inf]",
-                        "Name"
+                        "Group (10, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Amount",
@@ -23,10 +23,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"10\")"
+                        "Group (10)"
                     ],
                     "scan_by": [
-                        "Name (\"Name2\", +inf]"
+                        "Name (Name2, +\u221e)"
                     ],
                     "columns": [
                         "Amount",
@@ -37,5 +37,222 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 16,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit-Offset",
+                        "Operators": [
+                            {
+                                "Limit": "3",
+                                "Name": "Limit"
+                            },
+                            {
+                                "Name": "Offset",
+                                "Offset": "2"
+                            }
+                        ],
+                        "PlanNodeId": 15,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 14,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit",
+                                        "Operators": [
+                                            {
+                                                "Limit": "3 + 2",
+                                                "Name": "Limit"
+                                            }
+                                        ],
+                                        "PlanNodeId": 13,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 12,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Limit",
+                                                        "Operators": [
+                                                            {
+                                                                "Limit": "3 + 2",
+                                                                "Name": "Limit"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 11,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Merge",
+                                                                "PlanNodeId": 10,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "Sort-Union",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Sort",
+                                                                                "SortBy": ""
+                                                                            },
+                                                                            {
+                                                                                "Name": "Union"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 9,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "UnionAll",
+                                                                                "PlanNodeId": 4,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "Limit",
+                                                                                        "Operators": [
+                                                                                            {
+                                                                                                "Limit": "3 + 2",
+                                                                                                "Name": "Limit"
+                                                                                            }
+                                                                                        ],
+                                                                                        "PlanNodeId": 3,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "Merge",
+                                                                                                "PlanNodeId": 2,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "TopSort-Filter-TableRangeScan",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Limit": "3 + 2",
+                                                                                                                "Name": "TopSort",
+                                                                                                                "TopSortBy": ""
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Name": "Filter",
+                                                                                                                "Predicate": "items0 != 105"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Name": "TableRangeScan",
+                                                                                                                "ReadColumns": [
+                                                                                                                    "Amount",
+                                                                                                                    "Comment",
+                                                                                                                    "Group",
+                                                                                                                    "Name"
+                                                                                                                ],
+                                                                                                                "ReadRange": [
+                                                                                                                    "Group (10, +\u221e)",
+                                                                                                                    "Name (-\u221e, +\u221e)"
+                                                                                                                ],
+                                                                                                                "Table": "base_topsort_topsort_multi_range_skip_sql_plan/Input1"
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "PlanNodeId": 1,
+                                                                                                        "Tables": [
+                                                                                                            "base_topsort_topsort_multi_range_skip_sql_plan/Input1"
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ],
+                                                                                                "SortColumns": [
+                                                                                                    "Amount (Desc)",
+                                                                                                    "Comment (Asc)"
+                                                                                                ]
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            {
+                                                                                "Node Type": "UnionAll",
+                                                                                "PlanNodeId": 8,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "Limit",
+                                                                                        "Operators": [
+                                                                                            {
+                                                                                                "Limit": "3 + 2",
+                                                                                                "Name": "Limit"
+                                                                                            }
+                                                                                        ],
+                                                                                        "PlanNodeId": 7,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "Merge",
+                                                                                                "PlanNodeId": 6,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "TopSort-Filter-TablePointLookup",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Limit": "3 + 2",
+                                                                                                                "Name": "TopSort",
+                                                                                                                "TopSortBy": ""
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Name": "Filter",
+                                                                                                                "Predicate": "items0 != 105"
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Name": "TablePointLookup",
+                                                                                                                "ReadColumns": [
+                                                                                                                    "Amount",
+                                                                                                                    "Comment",
+                                                                                                                    "Group",
+                                                                                                                    "Name"
+                                                                                                                ],
+                                                                                                                "ReadRange": [
+                                                                                                                    "Group (10)",
+                                                                                                                    "Name (Name2, +\u221e)"
+                                                                                                                ],
+                                                                                                                "Table": "base_topsort_topsort_multi_range_skip_sql_plan/Input1"
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "PlanNodeId": 5,
+                                                                                                        "Tables": [
+                                                                                                            "base_topsort_topsort_multi_range_skip_sql_plan/Input1"
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ],
+                                                                                                "SortColumns": [
+                                                                                                    "Amount (Desc)",
+                                                                                                    "Comment (Asc)"
+                                                                                                ]
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ],
+                                                                "SortColumns": [
+                                                                    "Amount (Desc)",
+                                                                    "Comment (Asc)"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

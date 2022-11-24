@@ -266,6 +266,9 @@ struct TEvWhiteboard{
                 VDiskIDFromVDiskID(groupInfo->GetVDiskId(i), Record.AddVDiskIds());
             }
             Record.SetStoragePoolName(groupInfo->GetStoragePoolName());
+            if (groupInfo->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
+                Record.SetEncryption(true);
+            }
         }
     };
 

@@ -133,7 +133,7 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto read = maybeRead.Cast();
-    
+
     auto keySelectorBody = combineKey.KeySelectorLambda().Cast<TCoLambda>().Body();
     if (!ContainsSimpleColumnOnly(keySelectorBody, combineKey) && !ContainsConstOnly(keySelectorBody)) {
         return node;
@@ -198,7 +198,7 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
         .Aggregates(std::move(aggs.Done()))
         .KeyColumns(std::move(aggKeyCols.Done()))
         .Done();
-    
+
     auto olapAggLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"row"})
         .Body<TExprApplier>()
@@ -210,7 +210,7 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     auto newProcessLambda = ctx.FuseLambdas(olapAggLambda.Ref(), read.Process().Ref());
 
     YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(*newProcessLambda, ctx);
-    
+
     auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
         .Table(read.Table())
         .Ranges(read.Ranges())
@@ -257,7 +257,7 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             )
         )
         .Done();
-    
+
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"row"})
         .Body<TExprApplier>()
@@ -265,10 +265,10 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .With(read.Process().Args().Arg(0), "row")
             .Build()
         .Done();
-    
+
     YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
 
-    auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
+    return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
         .Table(read.Table())
         .Ranges(read.Ranges())
         .Columns(read.Columns())
@@ -276,19 +276,6 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .ExplainPrompt(read.ExplainPrompt())
         .Process(newProcessLambda)
         .Done();
-
-    auto member = Build<TCoMap>(ctx, node.Pos())
-        .Input(newRead)
-        .Lambda()
-            .Args({"row"})
-            .Body<TCoMember>()
-                .Struct("row")
-                .Name(dqPhyLength.Name())
-                .Build()
-            .Build()
-        .Done();
-
-    return member;
 }
 
 } // namespace NKikimr::NKqp::NOpt

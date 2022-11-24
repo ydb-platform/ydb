@@ -381,6 +381,12 @@ ISubOperationBase::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state)
 ISubOperationBase::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state);
 
+ISubOperationBase::TPtr CreateAllocatePQ(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateAllocatePQ(TOperationId id, TTxState::ETxState state);
+
+ISubOperationBase::TPtr CreateDeallocatePQ(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateDeallocatePQ(TOperationId id, TTxState::ETxState state);
+
 ISubOperationBase::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateSubDomain(TOperationId id, TTxState::ETxState state);
 

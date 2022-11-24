@@ -232,6 +232,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_PROXY_RANGE,
 //            NKikimrServices::BS_PROXY_GET,
 //            NKikimrServices::BS_PROXY_PUT,
+//            NKikimrServices::BS_PROXY_PATCH,
 //            NKikimrServices::BS_PROXY_INDEXRESTOREGET,
 //            NKikimrServices::BS_PROXY_STATUS,
             NActorsServices::TEST,

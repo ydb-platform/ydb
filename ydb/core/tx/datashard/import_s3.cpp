@@ -51,7 +51,7 @@ using namespace Aws;
 class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
     class IReadController {
     public:
-        enum EFeed {
+        enum EDataStatus {
             READY_DATA = 0,
             NOT_ENOUGH_DATA = 1,
             ERROR = 2,
@@ -59,11 +59,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
 
     public:
         virtual ~IReadController() = default;
-        // Returns status or error
-        virtual EFeed Feed(TString&& portion, TString& error) = 0;
-        // Returns view to internal buffer with ready data after successful Feed()
-        virtual TStringBuf GetReadyData() const = 0;
-        // Clear internal buffer & makes it ready for another Feed()
+        virtual void Feed(TString&& portion) = 0;
+        // Returns data (view to internal buffer) or error
+        virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
+        // Clear internal buffer & makes it ready for another Feed() and TryGetData()
         virtual void Confirm() = 0;
         virtual ui64 PendingBytes() const = 0;
         virtual ui64 ReadyBytes() const = 0;
@@ -75,6 +74,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             : RangeSize(rangeSize)
             , BufferSizeLimit(bufferSizeLimit)
         {
+            // able to contain at least one range
+            Buffer.Reserve(RangeSize);
         }
 
         std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const {
@@ -87,13 +88,17 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         }
 
     protected:
-        bool CheckBufferSize(size_t size, TString& reason) const {
-            if ((size + RangeSize) >= BufferSizeLimit) {
+        bool CanIncreaseBuffer(size_t size, size_t delta, TString& reason) const {
+            if ((size + delta) >= BufferSizeLimit) {
                 reason = "reached buffer size limit";
                 return false;
             }
 
             return true;
+        }
+
+        bool CanRequestNextRange(size_t size, TString& reason) const {
+            return CanIncreaseBuffer(size, RangeSize, reason);
         }
 
         TStringBuf AsStringBuf(size_t size) const {
@@ -113,26 +118,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
     public:
         using TReadController::TReadController;
 
-        EFeed Feed(TString&& portion, TString& error) override {
+        void Feed(TString&& portion) override {
+            Buffer.Append(portion.data(), portion.size());
+        }
+
+        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             Y_VERIFY(Pos == 0);
 
-            Buffer.Append(portion.data(), portion.size());
             const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
-
             if (TString::npos == pos) {
-                if (!CheckBufferSize(Buffer.Size(), error)) {
+                if (!CanRequestNextRange(Buffer.Size(), error)) {
                     return ERROR;
                 } else {
                     return NOT_ENOUGH_DATA;
                 }
             }
 
-            Pos = pos + 1; // for '\n'
-            return READY_DATA;
-        }
+            Pos = pos + 1 /* \n */;
+            data = AsStringBuf(Pos);
 
-        TStringBuf GetReadyData() const override {
-            return AsStringBuf(Pos);
+            return READY_DATA;
         }
 
         void Confirm() override {
@@ -164,13 +169,21 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             , Context(ZSTD_createDCtx())
         {
             Reset();
+            // able to contain at least one block
+            // take effect if RangeSize < BlockSize
+            Buffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
         }
 
-        EFeed Feed(TString&& portion, TString& error) override {
+        void Feed(TString&& portion) override {
+            Y_VERIFY(Portion.Empty());
+            Portion.Assign(portion.data(), portion.size());
+        }
+
+        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             Y_VERIFY(ReadyInputBytes == 0 && ReadyOutputPos == 0);
 
-            auto input = ZSTD_inBuffer{portion.data(), portion.size(), 0};
-            while (input.pos < input.size) {
+            auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
+            while (!ReadyOutputPos) {
                 PendingInputBytes -= input.pos; // dec before decompress
 
                 auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), Buffer.Size()};
@@ -181,18 +194,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
                     return ERROR;
                 }
 
-                if (output.pos == output.size) {
-                    if (!CheckBufferSize(Buffer.Capacity(), error)) {
-                        return ERROR;
-                    }
-
-                    Buffer.Reserve(Buffer.Capacity() + ZSTD_BLOCKSIZE_MAX);
-                }
-
                 PendingInputBytes += input.pos; // inc after decompress
                 Buffer.Proceed(output.pos);
 
                 if (res == 0) {
+                    // end of frame
                     if (AsStringBuf(Buffer.Size()).back() != '\n') {
                         error = "cannot find new line symbol";
                         return ERROR;
@@ -201,31 +207,49 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
                     ReadyInputBytes = PendingInputBytes;
                     ReadyOutputPos = Buffer.Size();
                     Reset();
+                } else {
+                    // try to find complete row
+                    const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
+                    if (TString::npos != pos) {
+                        ReadyOutputPos = pos + 1 /* \n */;
+                    }
+                }
+
+                if (input.pos >= input.size) {
+                    // end of input
+                    break;
+                }
+
+                if (!ReadyOutputPos && output.pos == output.size) {
+                    const auto blockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX);
+                    if (CanIncreaseBuffer(Buffer.Size(), blockSize, error)) {
+                        Buffer.Reserve(Buffer.Size() + blockSize);
+                    } else {
+                        return ERROR;
+                    }
                 }
             }
 
+            Portion.ChopHead(input.pos);
+
             if (!ReadyOutputPos) {
-                if (!CheckBufferSize(Buffer.Size(), error)) {
+                if (!CanRequestNextRange(Buffer.Size(), error)) {
                     return ERROR;
                 } else {
                     return NOT_ENOUGH_DATA;
                 }
             }
 
+            data = AsStringBuf(ReadyOutputPos);
             return READY_DATA;
-        }
-
-        TStringBuf GetReadyData() const override {
-            return AsStringBuf(ReadyOutputPos);
         }
 
         void Confirm() override {
             Buffer.ChopHead(ReadyOutputPos);
+            ReadyOutputPos = 0;
 
             PendingInputBytes -= ReadyInputBytes;
             ReadyInputBytes = 0;
-
-            ReadyOutputPos = 0;
         }
 
         ui64 PendingBytes() const override {
@@ -238,6 +262,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
 
     private:
         THolder<::ZSTD_DCtx, DestroyZCtx> Context;
+        TBuffer Portion;
         ui64 PendingInputBytes = 0;
         ui64 ReadyInputBytes = 0;
         ui64 ReadyOutputPos = 0;
@@ -419,8 +444,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             return Finish();
         }
 
-        GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
-            Reader->NextRange(ContentLength, ProcessedBytes));
+        Process();
     }
 
     void Handle(TEvS3Wrapper::TEvGetObjectResponse::TPtr& ev) {
@@ -443,8 +467,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             << ", content-length# " << ContentLength
             << ", body-size# " << msg.Body.size());
 
+        Reader->Feed(std::move(msg.Body));
+        Process();
+    }
+
+    void Process() {
+        TStringBuf data;
         TString error;
-        switch (Reader->Feed(std::move(msg.Body), error)) {
+
+        switch (Reader->TryGetData(data, error)) {
         case TReadController::READY_DATA:
             break;
 
@@ -462,17 +493,18 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
                 << ": " << error);
         }
 
-        if (auto data = Reader->GetReadyData()) {
-            ProcessedBytes += Reader->ReadyBytes();
-            RequestBuilder.New(TableInfo, Scheme);
+        RequestBuilder.New(TableInfo, Scheme);
+        TMemoryPool pool(256);
+        while (ProcessData(data, pool));
 
-            TMemoryPool pool(256);
-            while (ProcessData(data, pool));
-
-            Reader->Confirm();
-        } else {
-            Y_FAIL("unreachable");
+        if (const auto processed = Reader->ReadyBytes()) { // has progress
+            ProcessedBytes += processed;
+            WrittenBytes += std::exchange(PendingBytes, 0);
+            WrittenRows += std::exchange(PendingRows, 0);
         }
+
+        Reader->Confirm();
+        UploadRows();
     }
 
     bool ProcessData(TStringBuf& data, TMemoryPool& pool) {
@@ -486,10 +518,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
                 return true; // skip empty line
             }
 
-            const auto& record = RequestBuilder.GetRecord();
-            WrittenRows += record->RowsSize();
-
-            UploadRows();
             return false;
         }
 
@@ -504,7 +532,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         TVector<TCell> values;
         TString strError;
 
-        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, WrittenBytes)) {
+        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, PendingBytes)) {
             Finish(false, TStringBuilder() << strError << " on line: " << origLine);
             return false;
         }
@@ -516,6 +544,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         }
 
         RequestBuilder.AddRow(keys, values);
+        ++PendingRows;
+
         return true;
     }
 
@@ -755,6 +785,8 @@ private:
     ui64 ProcessedBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
+    ui64 PendingBytes = 0;
+    ui64 PendingRows = 0;
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;

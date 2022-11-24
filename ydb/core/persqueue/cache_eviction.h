@@ -230,8 +230,8 @@ namespace NPQ {
             }
         };
 
-        TIntabletCache(TString topicName, ui32 l1Size)
-            : TopicName(topicName)
+        TIntabletCache(ui64 tabletId, ui32 l1Size)
+            : TabletId(tabletId)
             , L1Strategy(nullptr)
         {
             Y_UNUSED(l1Size);
@@ -255,7 +255,7 @@ namespace NPQ {
         {
             ui32 fromCache = GetBlobs(ctx, kvReq);
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
+            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             for (const auto& blob : kvReq.Blobs) {
                 // Touching blobs in L2. We don't need data here
@@ -273,7 +273,7 @@ namespace NPQ {
 
         void SaveHeadBlobs(const TActorContext& ctx, const TKvRequest& kvReq)
         {
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
+            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             for (const TRequestedBlob& reqBlob : kvReq.Blobs) {
                 TBlobId blob(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
@@ -307,7 +307,7 @@ namespace NPQ {
         {
             Y_VERIFY(store.size() == kvReq.Blobs.size());
 
-            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
+            THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
 
             bool haveSome = false;
             for (ui32 i = 0; i < kvReq.Blobs.size(); ++i) {
@@ -371,7 +371,7 @@ namespace NPQ {
             RemoveEvicted();
 
             if (L1Strategy) {
-                THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
+                THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TabletId);
 
                 TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch();
                 PrepareTouch(ctx, reqData, needTouch);
@@ -456,7 +456,7 @@ namespace NPQ {
         }
 
     private:
-        TString TopicName;
+        ui64 TabletId;
         TMapType Cache;
         TCounters Counters;
         THolder<TCacheEvictionStrategy> L1Strategy;

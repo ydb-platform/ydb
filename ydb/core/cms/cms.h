@@ -54,6 +54,8 @@ struct TEvCms {
         EvResetMarkerRequest,
         EvGetLogTailRequest,
         EvGetLogTailResponse,
+        EvGetSentinelStateRequest,
+        EvGetSentinelStateResponse,
 
         EvWalleCreateTaskRequest = EvClusterStateRequest + 512,
         EvWalleCreateTaskResponse,
@@ -72,6 +74,8 @@ struct TEvCms {
         EvSetMarkerResponse,
         EvResetMarkerResponse,
         EvStoreWalleTaskFailed,
+        EvGetClusterInfoRequest,
+        EvGetClusterInfoResponse,
 
         EvEnd
     };
@@ -253,6 +257,20 @@ struct TEvCms {
             return Sprintf("%s { TaskId: %s }", ToStringHeader().data(), TaskId.data());
         }
     };
+    
+    struct TEvGetClusterInfoRequest : public TEventLocal<TEvGetClusterInfoRequest, EvGetClusterInfoRequest> {
+        TString ToString() const override {
+            return "Get Cluster Info Request";
+        }
+    };
+
+    struct TEvGetClusterInfoResponse : public TEventLocal<TEvGetClusterInfoResponse, EvGetClusterInfoResponse> {
+        TClusterInfoPtr Info; 
+
+        TString ToString() const override {
+            return "Get Cluster Info Response";
+        }
+    };
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,
                                                  NKikimrCms::TGetConfigRequest,
@@ -302,6 +320,16 @@ struct TEvCms {
     struct TEvGetLogTailResponse : public TEventPB<TEvGetLogTailResponse,
                                                    NKikimrCms::TGetLogTailResponse,
                                                    EvGetLogTailResponse> {
+    };
+
+    struct TEvGetSentinelStateRequest : public TEventPB<TEvGetSentinelStateRequest,
+                                                  NKikimrCms::TGetSentinelStateRequest,
+                                                  EvGetSentinelStateRequest> {
+    };
+
+    struct TEvGetSentinelStateResponse : public TEventPB<TEvGetSentinelStateResponse,
+                                                  NKikimrCms::TGetSentinelStateResponse,
+                                                  EvGetSentinelStateResponse> {
     };
 };
 

@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -9,9 +9,6 @@
             "reads": [
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"1\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -20,9 +17,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"3\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -31,9 +25,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"5\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -42,5 +33,151 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 10,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 8,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-Union",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "Union"
+                                            }
+                                        ],
+                                        "PlanNodeId": 7,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 4,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.Value1 > 10"
+                                                            },
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 3}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 3,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.Value1 > 10"
+                                                            },
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 5}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.Value1 > 10"
+                                                            },
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 1}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_rp_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

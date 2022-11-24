@@ -170,6 +170,12 @@ message TPQConfig {
     optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
 
     optional uint32 MaxStorageNodePort = 50 [default = 19001];
+
+    message TMoveTopicActorConfig {
+        repeated string AllowedUserSIDs = 1;
+    }
+
+    optional TMoveTopicActorConfig MoveTopicActorConfig = 51;
 }
 
 message TChannelProfile {

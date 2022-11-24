@@ -24,6 +24,19 @@ public:
 
     void AddState(EPDiskState state);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
+
+    EPDiskState GetState() const {
+        return State;
+    }
+
+    EPDiskState GetPrevState() const {
+        return PrevState;
+    }
+
+    ui64 GetStateCounter() const {
+        return StateCounter;
+    }
+
     void Reset();
 
 private:
@@ -36,7 +49,7 @@ private:
 
 }; // TPDiskStatusComputer
 
-class TPDiskStatus: private TPDiskStatusComputer {
+class TPDiskStatus: public TPDiskStatusComputer {
 public:
     explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
 
@@ -78,11 +91,13 @@ class TClusterMap {
 public:
     using TPDiskIDSet = THashSet<TPDiskID, TPDiskIDHash>;
     using TDistribution = THashMap<TString, TPDiskIDSet>;
+    using TNodeIDSet = THashSet<ui32>;
 
     TCmsStatePtr State;
     TDistribution ByDataCenter;
     TDistribution ByRoom;
     TDistribution ByRack;
+    THashMap<TString, TNodeIDSet> NodeByRack;
 
     TClusterMap(TCmsStatePtr state);
 

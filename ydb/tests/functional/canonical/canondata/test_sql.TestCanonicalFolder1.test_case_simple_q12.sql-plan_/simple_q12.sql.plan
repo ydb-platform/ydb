@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "a",
@@ -20,5 +20,66 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "10",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Limit": "10",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.a"
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "a",
+                                                    "b",
+                                                    "rowid"
+                                                ],
+                                                "ReadRange": [
+                                                    "rowid (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_simple_q12_sql_plan/t1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_simple_q12_sql_plan/t1"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "a (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

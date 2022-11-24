@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,14 +10,73 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
                     ],
-                    "limit": "\"1001\"",
+                    "limit": "1001",
                     "columns": [
                         "rowid"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "rowid"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRange": [
+                                                    "rowid (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_simple_q9_sql_plan/t1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_simple_q9_sql_plan/t1"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "rowid (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

@@ -67,7 +67,6 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskCreated(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
-                const TPDiskLocation location(pdiskId.NodeId, pdiskInfo.Path);
                 if (!State.StaticPDisks.count(pdiskId)) {
                     // don't create static PDisks as they are already created
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
@@ -77,8 +76,6 @@ namespace NKikimr::NBsController {
 
             void ApplyPDiskDeleted(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
                 DeletedPDiskIds.insert(pdiskId);
-                const TNodeId nodeId = pdiskId.NodeId;
-                const TPDiskLocation location(nodeId, pdiskInfo.Path);
                 if (!State.StaticPDisks.count(pdiskId)) {
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
                     pdisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);

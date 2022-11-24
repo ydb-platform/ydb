@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,10 +10,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"10\")"
+                        "Group (10)"
                     ],
                     "scan_by": [
-                        "Name [\"Name1\", \"Name3\")"
+                        "Name [Name1, Name3)"
                     ],
                     "columns": [
                         "Amount",
@@ -25,10 +25,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"10\")"
+                        "Group (10)"
                     ],
                     "scan_by": [
-                        "Name [\"Name3\", \"Name5\"]"
+                        "Name [Name3, Name5]"
                     ],
                     "columns": [
                         "Amount",
@@ -40,10 +40,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"2\")"
+                        "Group (2)"
                     ],
                     "scan_by": [
-                        "Name"
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Amount",
@@ -54,5 +54,142 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 10,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 8,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-Union",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "Union"
+                                            }
+                                        ],
+                                        "PlanNodeId": 7,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 4,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "Group (10)",
+                                                                    "Name [Name1, Name3)"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 3,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "Group (10)",
+                                                                    "Name [Name3, Name5]"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "Group (2)",
+                                                                    "Name (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

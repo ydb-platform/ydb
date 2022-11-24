@@ -40,6 +40,7 @@ public:
             EvCleanupWalle,
             EvLogAndSend,
             EvCleanupLog,
+            EvStartCollecting,
 
             EvEnd
         };
@@ -57,6 +58,8 @@ public:
         };
 
         struct TEvUpdateClusterInfo : public TEventLocal<TEvUpdateClusterInfo, EvUpdateClusterInfo> {};
+
+        struct TEvStartCollecting : public TEventLocal<TEvStartCollecting, EvStartCollecting> {};
 
         struct TEvCleanupExpired : public TEventLocal<TEvCleanupExpired, EvCleanupExpired> {};
 
@@ -217,6 +220,7 @@ private:
             CFunc(TEvPrivate::EvCleanupExpired, CleanupExpired);
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
+            CFunc(TEvPrivate::EvStartCollecting, StartCollecting); 
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
@@ -236,6 +240,8 @@ private:
             HFunc(TEvCms::TEvResetMarkerRequest, Handle);
             HFunc(TEvCms::TEvSetMarkerRequest, Handle);
             HFunc(TEvCms::TEvGetLogTailRequest, Handle);
+            HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
+            FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
@@ -329,6 +335,7 @@ private:
     void DoPermissionsCleanup(const TActorContext &ctx);
     void CleanupWalleTasks(const TActorContext &ctx);
     void RemoveEmptyWalleTasks(const TActorContext &ctx);
+    void StartCollecting(const TActorContext &ctx);
     bool CheckNotificationDeadline(const NKikimrCms::TAction &action, TInstant time,
                                    TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationRestartServices(const NKikimrCms::TAction &action, TInstant time,
@@ -392,6 +399,8 @@ private:
     void Handle(TEvCms::TEvResetMarkerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvSetMarkerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
@@ -405,7 +414,10 @@ private:
     TStack<TInstant> ScheduledCleanups;
     TString NotSupportedReason;
     TQueue<TAutoPtr<IEventHandle>> InitQueue;
+
     TQueue<TAutoPtr<IEventHandle>> Queue;
+    TQueue<TAutoPtr<IEventHandle>> NextQueue;
+
     TCmsStatePtr State;
     TLogger Logger;
     // Shortcut to State->ClusterInfo.

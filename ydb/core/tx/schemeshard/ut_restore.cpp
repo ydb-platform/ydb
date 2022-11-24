@@ -446,6 +446,101 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         ShouldSucceedOnMultipleFrames(1);
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnSmallBuffer) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().ZstdBlockSizeForTest = 16;
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(16);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        bool uploadResponseDropped = false;
+        runtime.SetObserverFunc([&uploadResponseDropped](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse) {
+                uploadResponseDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        THolder<TS3Mock> s3Mock;
+        const auto data = GenerateZstdTestData("a", 2);
+        const ui32 batchSize = 1;
+        RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data}, batchSize);
+
+        if (!uploadResponseDropped) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&uploadResponseDropped](IEventHandle&) -> bool {
+                return uploadResponseDropped;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        TMaybe<NKikimrTxDataShard::TShardOpResult> result;
+        runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
+                const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+                if (record.HasOpResult()) {
+                    result = record.GetOpResult();
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+
+        if (!result) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&result](IEventHandle&) -> bool {
+                return result.Defined();
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetBytesProcessed(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
+
+        env.TestWaitNotification(runtime, txId);
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST(ShouldNotDecompressEntirePortionAtOnce) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().ZstdBlockSizeForTest = 113; // one row
+
+        ui32 uploadRowsCount = 0;
+        runtime.SetObserverFunc([&uploadRowsCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto data = GenerateZstdTestData(TString(100, 'a'), 2); // 2 rows, 1 row = 113b
+        // ensure that one decompressed row is bigger than entire compressed file
+        UNIT_ASSERT(data.Data.size() < *runtime.GetAppData().ZstdBlockSizeForTest);
+
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data}, data.Data.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(uploadRowsCount, 2);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldExpandBuffer) {
         TTestBasicRuntime runtime;
 

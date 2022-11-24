@@ -193,4 +193,9 @@ namespace NKikimr {
         }
     }
 
+    void TAppPrepare::SetEnableDbCounters(bool value)
+    {
+        FeatureFlags.SetEnableDbCounters(value);
+    }
+
 }

@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,12 +10,12 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"10\")"
+                        "Group (10)"
                     ],
                     "scan_by": [
-                        "Name [\"Name2\", \"Name4\")"
+                        "Name [Name2, Name4)"
                     ],
-                    "limit": "\"1001\"",
+                    "limit": "1001",
                     "columns": [
                         "Amount",
                         "Comment",
@@ -25,5 +25,65 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Amount",
+                                                    "Comment",
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "ReadLimit": "1001",
+                                                "ReadRange": [
+                                                    "Group (10)",
+                                                    "Name [Name2, Name4)"
+                                                ],
+                                                "Table": "base_pk_predicate_pk_predicate_reverse_1_sql_plan/Input1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_pk_predicate_pk_predicate_reverse_1_sql_plan/Input1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

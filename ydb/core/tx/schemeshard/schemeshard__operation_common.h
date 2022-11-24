@@ -407,8 +407,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
+        if (path->StepCreated == InvalidStepId) {
+            path->StepCreated = step;
+            context.SS->PersistCreateStep(db, pathId, step);
+        }
 
         Y_VERIFY(context.SS->SubDomains.contains(pathId));
         auto subDomain = context.SS->SubDomains.at(pathId);
@@ -922,10 +924,14 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      DebugHint() << " HandleReply TEvUpdateConfigResponse"
                      << " at tablet" << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     DebugHint() << " HandleReply TEvUpdateConfigResponse"
+                     << " message: " << ev->Get()->Record.ShortUtf8DebugString()
+                     << " at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup);
+        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
 
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         NKikimrPQ::EStatus status = ev->Get()->Record.GetStatus();
@@ -979,7 +985,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup);
+        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
 
         txState->ClearShardsInProgress();
 
@@ -1045,7 +1051,7 @@ public:
                 event->Record.MutableTabletConfig()->SetYcFolderId(folderId);
                 event->Record.MutableTabletConfig()->SetYdbDatabasePath(databasePath);
 
-                event->Record.MutableTabletConfig()->SetVersion(pqGroup->AlterVersion + 1);
+                event->Record.MutableTabletConfig()->SetVersion(pqGroup->AlterData->AlterVersion);
 
                 for (const auto& pq : pqShard->PQInfos) {
                     event->Record.MutableTabletConfig()->AddPartitionIds(pq.PqId);
@@ -1062,6 +1068,13 @@ public:
                     const bool ok = ParseFromStringNoSizeLimit(*event->Record.MutableBootstrapConfig(), pqGroup->AlterData->BootstrapConfig);
                     Y_VERIFY(ok);
                 }
+
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Propose configure PersQueue"
+                                << ", opId: " << OperationId
+                                << ", tabletId: " << tabletId
+                                << ", message: " << event->Record.ShortUtf8DebugString()
+                                << ", at schemeshard: " << ssId);
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, event.Release());
             } else {
@@ -1101,7 +1114,7 @@ public:
                 event->Record.SetTotalGroupCount(pqGroup->AlterData ? pqGroup->AlterData->TotalGroupCount : pqGroup->TotalGroupCount);
                 event->Record.SetNextPartitionId(pqGroup->AlterData ? pqGroup->AlterData->NextPartitionId : pqGroup->NextPartitionId);
 
-                event->Record.SetVersion(pqGroup->AlterVersion + 1);
+                event->Record.SetVersion(pqGroup->AlterData->AlterVersion);
 
                 for (const auto& p : pqGroup->Shards) {
                     const auto& pqShard = p.second;
@@ -1117,6 +1130,13 @@ public:
                         info->SetGroup(pq.GroupId);
                     }
                 }
+
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Propose configure PersQueueReadBalancer"
+                                << ", opId: " << OperationId
+                                << ", tabletId: " << tabletId
+                                << ", message: " << event->Record.ShortUtf8DebugString()
+                                << ", at schemeshard: " << ssId);
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, event.Release());
             }
@@ -1158,17 +1178,19 @@ public:
         if(!txState) {
             return false;
         }
-        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup);
+        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
+        if (path->StepCreated == InvalidStepId) {
+            path->StepCreated = step;
+            context.SS->PersistCreateStep(db, pathId, step);
+        }
 
-        if (txState->TxType == TTxState::TxCreatePQGroup) {
+        if (txState->TxType == TTxState::TxCreatePQGroup  || txState->TxType == TTxState::TxAllocatePQ) {
             auto parentDir = context.SS->PathsById.at(path->ParentPathId);
            ++parentDir->DirAlterVersion;
            context.SS->PersistPathDirAlterVersion(db, parentDir);
@@ -1198,7 +1220,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup);
+        Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -1372,8 +1394,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
+        if (path->StepCreated == InvalidStepId) {
+            path->StepCreated = step;
+            context.SS->PersistCreateStep(db, pathId, step);
+        }
 
         TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(pathId);
 

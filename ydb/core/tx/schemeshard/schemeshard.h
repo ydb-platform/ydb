@@ -36,7 +36,7 @@ struct TEvSchemeShard {
         EvUpdateConfig,
         EvUpdateConfigResult,
         EvNotifyTxCompletion,
-        EvNotifyTxCompletionRegistered,
+        EvNotifyTxCompletionRegistered, // 271124997 (0x10290a05)
         EvNotifyTxCompletionResult,
         EvMeasureSelfResponseTime,
         EvWakeupToMeasureSelfResponseTime,

@@ -67,6 +67,35 @@ public:
         throw yexception() << "Unable to resolve address " << address;
     }
 
+    static int GuessAddressFamily(const TString& address) {
+        if (!address) {
+            return 0;
+        }
+        if (NHttp::IsIPv6(address)) {
+            return AF_INET6;
+        } else if (NHttp::IsIPv4(address)) {
+            return AF_INET;
+        }
+        struct addrinfo hints = {
+            .ai_flags = AI_PASSIVE,
+            .ai_family = 0,
+            .ai_socktype = SOCK_STREAM,
+        };
+        struct addrinfo* gai_res = nullptr;
+        int gai_ret = getaddrinfo(address.data(), nullptr, &hints, &gai_res);
+        if (gai_ret == 0 && gai_res->ai_addr) {
+            switch (gai_res->ai_addr->sa_family) {
+                case AF_INET:
+                case AF_INET6:
+                    return gai_res->ai_addr->sa_family;
+            }
+        }
+        if (gai_res) {
+            freeaddrinfo(gai_res);
+        }
+        return 0;
+    }
+
     static std::shared_ptr<ISockAddr> MakeAddress(const sockaddr_storage& storage) {
         std::shared_ptr<ISockAddr> addr;
         switch (storage.ss_family) {

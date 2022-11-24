@@ -10,60 +10,16 @@
                     "name": "/local/base_write_multi_usage_script_script/Input1",
                     "reads": [
                         {
-                            "lookup_by": [
-                                "Group (\"2\")"
-                            ],
-                            "columns": [
-                                "Amount"
-                            ],
-                            "scan_by": [
-                                "Name"
-                            ],
-                            "type": "Lookup"
-                        }
-                    ],
-                    "writes": [
-                        {
-                            "key": [
-                                "Group (\"1\")",
-                                "Name (expr)"
-                            ],
-                            "type": "Erase"
-                        }
-                    ]
-                },
-                {
-                    "name": "/local/base_write_multi_usage_script_script/Temp",
-                    "writes": [
-                        {
-                            "columns": [
-                                "Value"
-                            ],
-                            "key": [
-                                "Name (expr)"
-                            ],
-                            "type": "MultiUpsert"
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "tables": [
-                {
-                    "name": "/local/base_write_multi_usage_script_script/Input1",
-                    "reads": [
-                        {
                             "columns": [
                                 "Amount",
                                 "Comment",
                                 "Group",
                                 "Name"
                             ],
-                            "limit": "\"1001\"",
+                            "limit": "1001",
                             "scan_by": [
-                                "Group",
-                                "Name"
+                                "Group (-\u221e, +\u221e)",
+                                "Name (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"
                         }
@@ -77,15 +33,280 @@
                                 "Name",
                                 "Value"
                             ],
-                            "limit": "\"1001\"",
+                            "limit": "1001",
                             "scan_by": [
-                                "Name"
+                                "Name (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"
                         }
                     ]
                 }
-            ]
+            ],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 8,
+                        "Plans": [
+                            {
+                                "PlanNodeId": 7,
+                                "Plans": [
+                                    {
+                                        "PlanNodeId": 6,
+                                        "Plans": [
+                                            {
+                                                "Tables": [
+                                                    "base_write_multi_usage_script_script/Temp"
+                                                ],
+                                                "PlanNodeId": 5,
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Limit",
+                                                        "Limit": "1001"
+                                                    },
+                                                    {
+                                                        "ReadRange": [
+                                                            "Name (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadLimit": "1001",
+                                                        "ReadColumns": [
+                                                            "Name",
+                                                            "Value"
+                                                        ],
+                                                        "Name": "TableFullScan",
+                                                        "Table": "base_write_multi_usage_script_script/Temp"
+                                                    }
+                                                ],
+                                                "Node Type": "Limit-TableFullScan"
+                                            }
+                                        ],
+                                        "Node Type": "Merge",
+                                        "SortColumns": [
+                                            "Name (Asc)"
+                                        ],
+                                        "PlanNodeType": "Connection"
+                                    }
+                                ],
+                                "Operators": [
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1001"
+                                    }
+                                ],
+                                "Node Type": "Limit"
+                            }
+                        ],
+                        "Node Type": "ResultSet_0",
+                        "PlanNodeType": "ResultSet"
+                    },
+                    {
+                        "PlanNodeId": 4,
+                        "Plans": [
+                            {
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Tables": [
+                                                    "base_write_multi_usage_script_script/Input1"
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Operators": [
+                                                    {
+                                                        "Name": "Limit",
+                                                        "Limit": "1001"
+                                                    },
+                                                    {
+                                                        "ReadRange": [
+                                                            "Group (-\u221e, +\u221e)",
+                                                            "Name (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadLimit": "1001",
+                                                        "ReadColumns": [
+                                                            "Amount",
+                                                            "Comment",
+                                                            "Group",
+                                                            "Name"
+                                                        ],
+                                                        "Name": "TableFullScan",
+                                                        "Table": "base_write_multi_usage_script_script/Input1"
+                                                    }
+                                                ],
+                                                "Node Type": "Limit-TableFullScan"
+                                            }
+                                        ],
+                                        "Node Type": "Merge",
+                                        "SortColumns": [
+                                            "Group (Asc)",
+                                            "Name (Asc)"
+                                        ],
+                                        "PlanNodeType": "Connection"
+                                    }
+                                ],
+                                "Operators": [
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1001"
+                                    }
+                                ],
+                                "Node Type": "Limit"
+                            }
+                        ],
+                        "Node Type": "ResultSet_1",
+                        "PlanNodeType": "ResultSet"
+                    }
+                ],
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
+            }
+        },
+        {
+            "tables": [
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Input1",
+                    "reads": [
+                        {
+                            "lookup_by": [
+                                "Group (2)"
+                            ],
+                            "columns": [
+                                "Amount"
+                            ],
+                            "scan_by": [
+                                "Name (-\u221e, +\u221e)"
+                            ],
+                            "type": "Lookup"
+                        }
+                    ],
+                    "writes": [
+                        {
+                            "type": "MultiErase"
+                        }
+                    ]
+                },
+                {
+                    "name": "/local/base_write_multi_usage_script_script/Temp",
+                    "writes": [
+                        {
+                            "columns": [
+                                "Name",
+                                "Value"
+                            ],
+                            "type": "MultiUpsert"
+                        }
+                    ]
+                }
+            ],
+            "Plan": {
+                "Plans": [
+                    {
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Tables": [
+                                    "base_write_multi_usage_script_script/Temp"
+                                ],
+                                "PlanNodeId": 10,
+                                "Operators": [
+                                    {
+                                        "Name": "Upsert",
+                                        "Table": "base_write_multi_usage_script_script/Temp"
+                                    },
+                                    {
+                                        "Iterator": "%kqp%tx_result_binding_0_1",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "Upsert-ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_1"
+                            }
+                        ],
+                        "Node Type": "Effect"
+                    },
+                    {
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Tables": [
+                                    "base_write_multi_usage_script_script/Input1"
+                                ],
+                                "PlanNodeId": 8,
+                                "Operators": [
+                                    {
+                                        "Name": "Delete",
+                                        "Table": "base_write_multi_usage_script_script/Input1"
+                                    },
+                                    {
+                                        "Iterator": "%kqp%tx_result_binding_0_0",
+                                        "Name": "Iterator"
+                                    }
+                                ],
+                                "Node Type": "Delete-ConstantExpr",
+                                "CTE Name": "tx_result_binding_1_0"
+                            }
+                        ],
+                        "Node Type": "Effect"
+                    },
+                    {
+                        "PlanNodeId": 6,
+                        "Subplan Name": "CTE tx_result_binding_0_0",
+                        "Plans": [
+                            {
+                                "PlanNodeId": 5,
+                                "Node Type": "Stage"
+                            }
+                        ],
+                        "Node Type": "Precompute_0_0",
+                        "Parent Relationship": "InitPlan",
+                        "PlanNodeType": "Materialize"
+                    },
+                    {
+                        "PlanNodeId": 4,
+                        "Subplan Name": "CTE tx_result_binding_0_1",
+                        "Plans": [
+                            {
+                                "PlanNodeId": 3,
+                                "Plans": [
+                                    {
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Tables": [
+                                                    "base_write_multi_usage_script_script/Input1"
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Operators": [
+                                                    {
+                                                        "ReadRange": [
+                                                            "Group (2)",
+                                                            "Name (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadColumns": [
+                                                            "Amount"
+                                                        ],
+                                                        "Name": "TablePointLookup",
+                                                        "Table": "base_write_multi_usage_script_script/Input1"
+                                                    }
+                                                ],
+                                                "Node Type": "TablePointLookup"
+                                            }
+                                        ],
+                                        "Node Type": "UnionAll",
+                                        "PlanNodeType": "Connection"
+                                    }
+                                ],
+                                "Node Type": "Collect"
+                            }
+                        ],
+                        "Node Type": "Precompute_0_1",
+                        "Parent Relationship": "InitPlan",
+                        "PlanNodeType": "Materialize"
+                    }
+                ],
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
+            }
         }
     ]
 }

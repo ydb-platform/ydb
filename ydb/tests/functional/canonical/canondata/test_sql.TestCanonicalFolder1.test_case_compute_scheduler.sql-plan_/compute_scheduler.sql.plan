@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "entry_id"
+                        "entry_id (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "scheduler"
@@ -24,7 +24,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "id"
+                        "id (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "id"
@@ -32,5 +32,145 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 12,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 10,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-Aggregate",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.id"
+                                            },
+                                            {
+                                                "Name": "Aggregate"
+                                            }
+                                        ],
+                                        "PlanNodeId": 9,
+                                        "Plans": [
+                                            {
+                                                "KeyColumns": [
+                                                    "id"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 8,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Union",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Union"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 6,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "id"
+                                                                                ],
+                                                                                "ReadRange": [
+                                                                                    "id (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Table": "base_compute_scheduler_sql_plan/schedulers"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 5,
+                                                                        "Tables": [
+                                                                            "base_compute_scheduler_sql_plan/schedulers"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 4,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "Stage",
+                                                                        "PlanNodeId": 3,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "KeyColumns": [
+                                                                                    "scheduler"
+                                                                                ],
+                                                                                "Node Type": "HashShuffle",
+                                                                                "PlanNodeId": 2,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "TableFullScan",
+                                                                                        "Operators": [
+                                                                                            {
+                                                                                                "Name": "TableFullScan",
+                                                                                                "ReadColumns": [
+                                                                                                    "scheduler"
+                                                                                                ],
+                                                                                                "ReadRange": [
+                                                                                                    "entry_id (-\u221e, +\u221e)"
+                                                                                                ],
+                                                                                                "Table": "base_compute_scheduler_sql_plan/compute_nodes"
+                                                                                            }
+                                                                                        ],
+                                                                                        "PlanNodeId": 1,
+                                                                                        "Tables": [
+                                                                                            "base_compute_scheduler_sql_plan/compute_nodes"
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "id (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

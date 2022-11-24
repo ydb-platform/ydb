@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package yandex.cloud.logging.v1;
+
+import "google/rpc/status.proto";
+import "ydb/public/api/client/yc_public/logging/log_entry.proto";
+import "ydb/public/api/client/yc_public/logging/log_resource.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/logging/v1;logging";
+option java_package = "yandex.cloud.api.logging.v1";
+
+// A set of methods for writing to log groups. To make a request use `ingester.logging.yandexcloud.net`.
+service LogIngestionService {
+  // Write log entries to specified destination.
+  rpc Write (WriteRequest) returns (WriteResponse);
+}
+
+message WriteRequest {
+  // Log entries destination.
+  //
+  // See [Destination] for details.
+  Destination destination = 1 [(required) = true];
+
+  // Common resource (type, ID) specification for log entries.
+  LogEntryResource resource = 2;
+
+  // List of log entries.
+  repeated IncomingLogEntry entries = 3 [(size) = "1-100"];
+
+  // Log entries defaults.
+  //
+  // See [LogEntryDefaults] for details.
+  LogEntryDefaults defaults = 4;
+}
+
+message WriteResponse {
+  // Map<idx, status> of ingest failures.
+  //
+  // If entry with idx N is absent, it was ingested successfully.
+  map<int64, google.rpc.Status> errors = 1;
+}

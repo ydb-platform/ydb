@@ -287,7 +287,9 @@ struct TTestSchema {
 
     static TString CommitTxBody(ui64 metaShard, const TVector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
-        proto.SetTxInitiator(metaShard);
+        if (metaShard) {
+            proto.SetTxInitiator(metaShard);
+        }
         for (ui64 id : writeIds) {
             proto.AddWriteIds(id);
         }
@@ -333,9 +335,13 @@ bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
                const TString& data, std::shared_ptr<arrow::Schema> schema = {});
+std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
+                              ui64 tableId, const TString& dedupId, const TString& data,
+                              std::shared_ptr<arrow::Schema> schema = {});
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<ui64>& pathIds,
                     NOlap::TSnapshot snap, ui64 scanId = 0);
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const TVector<ui64>& writeIds);
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const TVector<ui64>& writeIds);
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);
 
 inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {

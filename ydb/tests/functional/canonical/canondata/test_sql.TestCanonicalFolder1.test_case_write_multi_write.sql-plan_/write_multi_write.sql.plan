@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -9,40 +9,130 @@
             "writes": [
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
                         "Amount",
-                        "Comment"
+                        "Comment",
+                        "Group",
+                        "Name"
                     ]
                 },
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
-                        "Comment"
+                        "Comment",
+                        "Group",
+                        "Name"
                     ]
                 },
                 {
-                    "type": "Erase",
-                    "key": [
-                        "Group (\"1\")",
-                        "Name (\"Name5\")"
-                    ]
+                    "type": "MultiErase"
                 },
                 {
-                    "type": "MultiErase",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ]
+                    "type": "MultiErase"
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 2,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_2",
+                        "Node Type": "Delete-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Delete",
+                                "Table": "base_write_multi_write_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_2",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 1,
+                        "Tables": [
+                            "base_write_multi_write_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 8,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_3",
+                        "Node Type": "Delete-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Delete",
+                                "Table": "base_write_multi_write_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_3",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 7,
+                        "Tables": [
+                            "base_write_multi_write_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 6,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_1",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_write_multi_write_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_1",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 5,
+                        "Tables": [
+                            "base_write_multi_write_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 4,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_0",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_write_multi_write_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Tables": [
+                            "base_write_multi_write_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

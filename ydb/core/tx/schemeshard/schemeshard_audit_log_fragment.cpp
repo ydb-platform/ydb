@@ -14,10 +14,14 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "CREATE TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         return "CREATE PERSISTENT QUEUE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
+        return "ALLOCATE PERSISTENT QUEUE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
         return "DROP TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         return "DROP PERSISTENT QUEUE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
+        return "DEALLOCATE PERSISTENT QUEUE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         return "ALTER TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
@@ -219,11 +223,17 @@ void TAuditLogFragment::FillPathes(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetCreatePersQueueGroup().GetName()});
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
+        Path = JoinPath({tx.GetWorkingDir(), tx.GetAllocatePersQueueGroup().GetName()});
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()});
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()});
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
+        Path = JoinPath({tx.GetWorkingDir(), tx.GetDeallocatePersQueueGroup().GetName()});
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()});

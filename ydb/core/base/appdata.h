@@ -163,7 +163,9 @@ struct TAppData {
 
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;
-    
+
+    TMaybe<ui32> ZstdBlockSizeForTest;
+
     // Used to disable checking nodes with sys tablets only in cms
     bool  DisableCheckingSysNodesCms = false;
 

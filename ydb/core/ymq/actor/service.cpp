@@ -1034,7 +1034,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
         folderCntrIter = user->FolderCounters_.insert(std::make_pair(folderId, user->Counters_->CreateFolderCounters(folderId, true))).first;
     }
     if (!insertCounters) {
-        Schedule(timeToInsertCounters - now, new TSqsEvents::TEvInsertQueueCounters(userName, queue, leaderTabletId));
+        Schedule(timeToInsertCounters - now, new TSqsEvents::TEvInsertQueueCounters(userName, queue, version));
     }
 
     auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
@@ -1245,9 +1245,9 @@ void TSqsService::HandleInsertQueueCounters(TSqsEvents::TEvInsertQueueCounters::
         return;
     }
     const auto& queue = queueIt->second;
-    if (queue->LeaderTabletId_ != ev->Get()->LeaderTabletId) {
-        LOG_SQS_WARN("Don't insert queue [" << ev->Get()->Queue << "] counters: leader tablet is not as expected. Expected: "
-                   << ev->Get()->LeaderTabletId << ". Real: " << queue->LeaderTabletId_);
+    if (queue->Version_ != ev->Get()->Version) {
+        LOG_SQS_WARN("Don't insert queue [" << ev->Get()->Queue << "] counters: queue version is not as expected. Expected: "
+                   << ev->Get()->Version << ". Real: " << queue->Version_);
         return;
     }
 

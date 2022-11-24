@@ -620,6 +620,12 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         targetName = tx.GetCreatePersQueueGroup().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
+        targetName = tx.GetAllocatePersQueueGroup().GetName();
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
+        targetName = tx.GetDeallocatePersQueueGroup().GetName();
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
         targetName = tx.GetSubDomain().GetName();
@@ -706,6 +712,12 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
             create.MutableCreatePersQueueGroup()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
+            create.MutableAllocatePersQueueGroup()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
+            create.MutableDeallocatePersQueueGroup()->SetName(name);
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
@@ -850,12 +862,16 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
             return CreateAlterColumnTable(NextPartId(), txState);
         case TTxState::ETxType::TxDropColumnTable:
             return CreateDropColumnTable(NextPartId(), txState);
+
         case TTxState::ETxType::TxCreatePQGroup:
             return CreateNewPQ(NextPartId(), txState);
         case TTxState::ETxType::TxAlterPQGroup:
             return CreateAlterPQ(NextPartId(), txState);
         case TTxState::ETxType::TxDropPQGroup:
             return CreateDropPQ(NextPartId(), txState);
+        case TTxState::ETxType::TxAllocatePQ:
+            return CreateAllocatePQ(NextPartId(), txState);
+
         case TTxState::ETxType::TxCreateSolomonVolume:
             return CreateNewSolomon(NextPartId(), txState);
         case TTxState::ETxType::TxDropSolomonVolume:
@@ -1024,6 +1040,11 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         return CreateAlterPQ(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         return CreateDropPQ(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAllocatePersQueueGroup:
+        return CreateAllocatePQ(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDeallocatePersQueueGroup:
+        return CreateDeallocatePQ(NextPartId(), tx);
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
         return CreateNewSolomon(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume:

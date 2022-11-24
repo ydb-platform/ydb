@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "rowid"
+                        "rowid (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "b"
@@ -18,5 +18,82 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 6,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 5,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 4,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Filter-Aggregate",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Filter",
+                                                "Predicate": "Size > 3"
+                                            },
+                                            {
+                                                "Name": "Aggregate"
+                                            }
+                                        ],
+                                        "PlanNodeId": 3,
+                                        "Plans": [
+                                            {
+                                                "KeyColumns": [
+                                                    "b"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "b"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "rowid (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Table": "base_simple_q3_sql_plan/t1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_simple_q3_sql_plan/t1"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

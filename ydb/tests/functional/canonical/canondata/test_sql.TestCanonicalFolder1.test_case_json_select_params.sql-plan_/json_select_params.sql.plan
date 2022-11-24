@@ -1,7 +1,34 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
-    "tables": []
+    "tables": [],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 2,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "ConstantExpr-Limit",
+                        "Operators": [
+                            {
+                                "Iterator": "Take",
+                                "Name": "Iterator"
+                            },
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 1
+                    }
+                ]
+            }
+        ]
+    }
 }

@@ -90,7 +90,13 @@ public:
                         Self->BatchCache.Commit(writeId);
                     }
 
-                    auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds);
+                    auto pathExists = [&](ui64 pathId) {
+                        auto it = Self->Tables.find(pathId);
+                        return it != Self->Tables.end() && !it->second.IsDropped();
+                    };
+
+                    auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds,
+                                                              pathExists);
                     Self->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
                     Self->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
                     Self->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);

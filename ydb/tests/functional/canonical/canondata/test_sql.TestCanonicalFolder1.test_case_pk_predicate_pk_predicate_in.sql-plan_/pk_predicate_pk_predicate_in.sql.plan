@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -9,9 +9,6 @@
             "reads": [
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"1\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -20,9 +17,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"11\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -31,9 +25,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"3\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -42,9 +33,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"7\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -53,9 +41,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"9\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
@@ -64,5 +49,197 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 14,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 13,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 12,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-Union",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "Union"
+                                            }
+                                        ],
+                                        "PlanNodeId": 11,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 11}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 8,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 3}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 7}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 4,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 9}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 3,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 10,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Key",
+                                                                    "Value1",
+                                                                    "Value2"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Key: 1}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 9,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_in_sql_plan/Input2"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

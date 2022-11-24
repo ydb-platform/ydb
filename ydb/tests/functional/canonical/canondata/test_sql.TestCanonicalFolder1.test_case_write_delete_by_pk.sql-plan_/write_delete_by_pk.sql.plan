@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -8,13 +8,39 @@
             "name": "/local/base_write_delete_by_pk_sql_plan/Input",
             "writes": [
                 {
-                    "type": "Erase",
-                    "key": [
-                        "key (\"3\")",
-                        "subkey (\"4\")"
-                    ]
+                    "type": "MultiErase"
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 2,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_0",
+                        "Node Type": "Delete-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Delete",
+                                "Table": "base_write_delete_by_pk_sql_plan/Input"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 1,
+                        "Tables": [
+                            "base_write_delete_by_pk_sql_plan/Input"
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

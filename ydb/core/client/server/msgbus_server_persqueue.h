@@ -229,6 +229,7 @@ protected:
         NTabletPipe::TClientConfig clientConfig;
         const TActorId pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         Y_VERIFY(Pipes.emplace(tabletId, pipe).second);
+
         return pipe;
     }
 
@@ -321,6 +322,9 @@ protected:
     void HandlePipeEvent(typename TPipeEvent::TPtr& ev, const TActorContext& ctx) {
         const ui64 tabletId = GetTabletId(ev->Get());
         Y_VERIFY(tabletId != 0);
+        if (PipeAnswers.find(tabletId) != PipeAnswers.end())
+            return;
+
         if (OnPipeEvent(tabletId, ev, ctx)) {
             return;
         }
@@ -335,6 +339,7 @@ protected:
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const ui64 tabletId = GetTabletId(msg);
         Y_VERIFY(tabletId != 0);
+
         if (msg->Status != NKikimrProto::OK) {
             // Create record for answer
             PipeAnswers[tabletId];
@@ -354,6 +359,7 @@ protected:
         // Create record for answer
         const ui64 tabletId = ev->Get()->TabletId;
         Y_VERIFY(tabletId != 0);
+
         PipeAnswers[tabletId];
         if (EventsAreReady()) {
             if (OnPipeEventsAreReady(ctx)) {

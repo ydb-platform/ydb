@@ -6,19 +6,14 @@ std::unordered_set<ui64> TPipeTrackerBase::EmptySet;
 std::unordered_set<std::pair<ui64, ui64>> TPipeTrackerBase::EmptyPairSet;
 
 void TPipeTrackerBase::AttachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
-    auto txIt = TxToTablet.find(txid);
-    if (txIt == TxToTablet.end()) {
-        txIt = TxToTablet.emplace(txid, std::unordered_set<std::pair<ui64, ui64>>()).first;
-    }
-
-    auto& tabletSet = txIt->second;
+    auto& tabletSet = TxToTablet[txid];
     auto tabIt = tabletSet.find(std::make_pair(cookie, tabletid));
     if (tabIt != tabletSet.end())
         return;
 
     tabletSet.insert(std::make_pair(cookie, tabletid));
     TabletToTx[tabletid].insert(txid);
-    TxTablets[txid].insert(tabletid);
+    TxTablets[txid][tabletid].insert(cookie);
 }
 
 bool TPipeTrackerBase::DetachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
@@ -32,21 +27,27 @@ bool TPipeTrackerBase::DetachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
         return false;
 
     tabletSet.erase(tabIt);
-    auto multiIt = TxTablets.find(txid);
-    Y_VERIFY(multiIt != TxTablets.end());
-    auto& tablets = multiIt->second;
-    auto currIt = tablets.find(tabletid);
-    Y_VERIFY(currIt != tablets.end());
-    auto nextIt = currIt;
-    ++nextIt;
-    tablets.erase(currIt);
-    if (nextIt == tablets.end() || *nextIt != tabletid) {
-        if (tabletSet.empty()) {
+
+    auto itTxTablets = TxTablets.find(txid);
+    Y_VERIFY(itTxTablets != TxTablets.end());
+    auto itCookies = itTxTablets->second.find(tabletid);
+    Y_VERIFY(itCookies != itTxTablets->second.end());
+    auto itCookie = itCookies->second.find(cookie);
+    Y_VERIFY(itCookie != itCookies->second.end());
+    itCookies->second.erase(itCookie);
+
+    // Cookies are empty when there are no more links between txid and tabletid
+    if (itCookies->second.empty()) {
+        itTxTablets->second.erase(itCookies);
+
+        // Check if txid has no more tablets
+        if (itTxTablets->second.empty()) {
+            Y_VERIFY(tabletSet.empty());
+            TxTablets.erase(itTxTablets);
             TxToTablet.erase(txIt);
-            Y_VERIFY(tablets.empty());
-            TxTablets.erase(multiIt);
         }
 
+        // Unlink txid from tabletid
         auto it = TabletToTx.find(tabletid);
         Y_VERIFY(it != TabletToTx.end());
         it->second.erase(txid);
@@ -78,6 +79,18 @@ const std::unordered_set<std::pair<ui64, ui64> > &TPipeTrackerBase::FindTablets(
         return EmptyPairSet;
 
     return it->second;
+}
+
+const std::unordered_set<ui64> &TPipeTrackerBase::FindCookies(ui64 txid, ui64 tabletid) const {
+    auto it = TxTablets.find(txid);
+    if (it == TxTablets.end())
+        return EmptySet;
+
+    auto itCookies = it->second.find(tabletid);
+    if (itCookies == it->second.end())
+        return EmptySet;
+
+    return itCookies->second;
 }
 
 TPipeTracker::TPipeTracker(NTabletPipe::IClientCache& clientCache)

@@ -764,16 +764,16 @@ struct TSqsEvents {
     };
 
     struct TEvInsertQueueCounters : public NActors::TEventLocal<TEvInsertQueueCounters, EvInsertQueueCounters> {
-        TEvInsertQueueCounters(const TString& user, const TString& queue, ui64 leaderTabletId)
+        TEvInsertQueueCounters(const TString& user, const TString& queue, ui64 version)
             : User(user)
             , Queue(queue)
-            , LeaderTabletId(leaderTabletId)
+            , Version(version)
         {
         }
 
         TString User;
         TString Queue;
-        ui64 LeaderTabletId;
+        ui64 Version;
     };
 
     struct TEvUserSettingsChanged : public NActors::TEventLocal<TEvUserSettingsChanged, EvUserSettingsChanged> {

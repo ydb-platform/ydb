@@ -3,7 +3,7 @@ Usage: ydb [global options...] scripting yql [options...]
 Description: Execute YQL script
 
 Global options:
-  {-e|--endpoint}, {-d|--database}, {-v|--verbose}, --ca-file, --token-file, --user, --password-file, --no-password, {-p|--profile}
+  {-e|--endpoint}, {-d|--database}, {-v|--verbose}, --ca-file, --iam-token-file, --yc-token-file, --use-metadata-credentials, --sa-key-file, --token-file, --user, --password-file, --no-password, --iam-endpoint, {-p|--profile}
   To get full description of these options run 'ydb --help'.
 
 Options:

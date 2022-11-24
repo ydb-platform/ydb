@@ -92,6 +92,11 @@ message TCreateQueueRequest {
     optional uint64 SizeToSplit = 9 [default = 1073741824]; // 1GB
     /// Enable internal tables' transactions out of order execution.
     optional bool EnableOutOfOrderTransactionsExecution = 6 [default = true];
+
+    /// Custom name of queue.
+    optional string CustomQueueName = 10;
+    /// Created time of queue
+    optional uint64 CreatedTimestamp = 11;
 }
 
 message TCreateQueueResponse {

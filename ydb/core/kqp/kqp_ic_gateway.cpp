@@ -1612,12 +1612,16 @@ public:
     TFuture<TMkqlResult> ExecuteMkql(const TString& cluster, const TString& program,
         TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
     {
+        // Restrict OldEngine
+        YQL_ENSURE(false, "Unexpected mkql execution in OldEngine mode.");
         return RunInternal(cluster, program, std::move(params), false, false, settings, snapshot);
     }
 
     TFuture<TMkqlResult> ExecuteMkqlPrepared(const TString& cluster, const TString& program,
         TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
     {
+        // Restrict OldEngine
+        YQL_ENSURE(false, "Unexpected prepared mkql execution in OldEngine mode.");
         return RunInternal(cluster, program, std::move(params), false, true, settings, snapshot);
     }
 

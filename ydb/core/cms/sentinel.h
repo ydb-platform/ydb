@@ -22,7 +22,7 @@ struct TEvSentinel {
 
         EvBSCPipeDisconnected,
 
-        EvEnd
+        EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
@@ -48,7 +48,6 @@ struct TEvSentinel {
     };
 
     struct TEvBSCPipeDisconnected: public TEventLocal<TEvBSCPipeDisconnected, EvBSCPipeDisconnected> {};
-
 }; // TEvSentinel
 
 IActor* CreateSentinel(TCmsStatePtr state);

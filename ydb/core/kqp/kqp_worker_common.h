@@ -113,4 +113,8 @@ inline ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) {
     return maxReadType;
 }
 
+inline bool IsDocumentApiRestricted(const TString& requestType) {
+    return requestType != "_document_api_request"sv;
+}
+
 }

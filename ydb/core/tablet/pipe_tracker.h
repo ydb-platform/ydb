@@ -17,11 +17,12 @@ public:
     bool IsTxAlive(ui64 txid) const;
     const std::unordered_set<ui64>& FindTx(ui64 tabletid) const;
     const std::unordered_set<std::pair<ui64, ui64>>& FindTablets(ui64 txid) const;
+    const std::unordered_set<ui64>& FindCookies(ui64 txid, ui64 tabletid) const;
 
 private:
     std::unordered_map<ui64, std::unordered_set<ui64>> TabletToTx; // tabletid -> txid
     std::unordered_map<ui64, std::unordered_set<std::pair<ui64, ui64>>> TxToTablet; // txid -> cookie:tabletid
-    std::unordered_map<ui64, std::unordered_multiset<ui64>> TxTablets; // txid -> tabletids
+    std::unordered_map<ui64, std::unordered_map<ui64, std::unordered_set<ui64>>> TxTablets; // txid -> tabletid -> cookie
     static std::unordered_set<ui64> EmptySet;
     static std::unordered_set<std::pair<ui64, ui64>> EmptyPairSet;
 };

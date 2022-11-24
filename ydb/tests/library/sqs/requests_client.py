@@ -198,7 +198,7 @@ class SqsHttpApi(object):
             extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'],
         )
 
-    def create_queue(self, queue_name, is_fifo=False, attributes=None):
+    def create_queue(self, queue_name, is_fifo=False, attributes=None, private_api=False, created_timestamp_sec=None, custom_name=None):
         # if is_fifo and not queue_name.endswith('.fifo'):
         #     return None
         if attributes is None:
@@ -207,12 +207,18 @@ class SqsHttpApi(object):
             attributes = dict(attributes)  # copy
             attributes['FifoQueue'] = 'true'
         params = {}
+        if created_timestamp_sec is not None:
+            params['CreatedTimestamp'] = created_timestamp_sec
+        if custom_name is not None:
+            params['CustomQueueName'] = custom_name
+
         for i, (k, v) in enumerate(attributes.items()):
             params['Attribute.{id}.Name'.format(id=i+1)] = k
             params['Attribute.{id}.Value'.format(id=i + 1)] = v
 
         return self.execute_request(
             action='CreateQueue',
+            private=private_api,
             extract_result_method=lambda x: x['CreateQueueResponse']['CreateQueueResult']['QueueUrl'],
             QueueName=queue_name,
             **params

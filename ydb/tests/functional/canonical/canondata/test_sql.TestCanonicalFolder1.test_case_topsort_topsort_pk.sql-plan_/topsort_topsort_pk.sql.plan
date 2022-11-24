@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,8 +10,8 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Group",
-                        "Name"
+                        "Group (-\u221e, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Amount",
@@ -22,5 +22,69 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "5",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Filter-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Limit": "5",
+                                                "Name": "Filter",
+                                                "Predicate": "items3 != \"Name3\""
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Amount",
+                                                    "Comment",
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "ReadRange": [
+                                                    "Group (-\u221e, +\u221e)",
+                                                    "Name (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_topsort_topsort_pk_sql_plan/Input1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_topsort_topsort_pk_sql_plan/Input1"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "Group (Asc)",
+                                    "Name (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

@@ -170,6 +170,9 @@ namespace NKikimr::NPrivate {
             Become(&TThis::StartState);
 
             TDuration liveDuration = Deadline - TActivationContext::Now();
+            if (!Deadline || liveDuration > CommonLiveTime) {
+                liveDuration = CommonLiveTime;
+            }
             Schedule(liveDuration, new TKikimrEvents::TEvWakeup);
         }
 
@@ -215,14 +218,14 @@ namespace NKikimr::NPrivate {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetRange,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchFoundParts(NKikimrProto::ERROR);
-                ConfirmDying(true);
+                NotifySkeletonAndDie();
                 return;
             }
             if (record.ResultSize() != 1) {
                 ErrorReason = TStringBuilder() << "Expected only one result, but given " << record.ResultSize()
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchFoundParts(NKikimrProto::ERROR);
-                ConfirmDying(true);
+                NotifySkeletonAndDie();
                 return;
             }
 
@@ -238,7 +241,7 @@ namespace NKikimr::NPrivate {
 
             SendVPatchFoundParts(NKikimrProto::OK);
             if (FoundOriginalParts.empty()) {
-                ConfirmDying(true);
+                NotifySkeletonAndDie();
             }
         }
 
@@ -264,14 +267,16 @@ namespace NKikimr::NPrivate {
                 ErrorReason = TStringBuilder() << "Recieve not OK status from VGetResult,"
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
             if (record.ResultSize() != 1) {
                 ErrorReason = TStringBuilder() << "Recieve not correct result count from VGetResult,"
                         << " expetced 1 but given " << record.ResultSize();
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -282,7 +287,8 @@ namespace NKikimr::NPrivate {
                         << " received status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
                         << " response status# " << NKikimrProto::EReplyStatus_Name(item.GetStatus());
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -430,7 +436,6 @@ namespace NKikimr::NPrivate {
             Sender = ev->Sender;
             Cookie = ev->Cookie;
             SendVPatchResult(NKikimrProto::ERROR);
-            PassAway();
         }
 
         void Handle(TEvBlobStorage::TEvVPatchDiff::TPtr &ev) {
@@ -474,7 +479,7 @@ namespace NKikimr::NPrivate {
 
             if (forceEnd) {
                 SendVPatchResult(NKikimrProto::OK);
-                PassAway();
+                NotifySkeletonAndDie();
                 return;
             }
 
@@ -490,7 +495,8 @@ namespace NKikimr::NPrivate {
 
             if (!CheckDiff(Diffs, "Diff from DSProxy")) {
                 SendVPatchResult(NKikimrProto::ERROR);
-                PassAway();
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -519,7 +525,7 @@ namespace NKikimr::NPrivate {
             ResultEvent->SetStatusFlagsAndFreeSpace(record.GetStatusFlags(), record.GetApproximateFreeSpaceShare());
 
             SendVPatchResult(status);
-            PassAway();
+            NotifySkeletonAndDie();
         }
 
         void HandleError(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
@@ -560,10 +566,9 @@ namespace NKikimr::NPrivate {
 
                 if (ResultEvent) {
                     SendVPatchResult(NKikimrProto::ERROR);
-                    PassAway();
-                } else {
-                    Become(&TThis::ErrorState);
+                    NotifySkeletonAboutDying();
                 }
+                Become(&TThis::ErrorState);
                 return;
             }
 
@@ -584,34 +589,42 @@ namespace NKikimr::NPrivate {
             }
         }
 
-        void ConfirmDying(bool forceDeath) {
+        void NotifySkeletonAndDie() {
+            NotifySkeletonAboutDying();
+            PassAway();
+        }
+
+        void NotifySkeletonAboutDying() {
             Send(LeaderId, new TEvVPatchDyingRequest(PatchedBlobId));
-            if (forceDeath) {
-                PassAway();
-            } else {
-                Schedule(CommonLiveTime, new TEvVPatchDyingConfirm);
-            }
         }
 
         void HandleInStartState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP11, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchFoundParts(NKikimrProto::ERROR);
-            ConfirmDying(true);
+            NotifySkeletonAndDie();
         }
 
         void HandleInWaitState(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, before receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP16, VDiskLogPrefix << " " << ErrorReason << ";");
-            ConfirmDying(false);
+            NotifySkeletonAboutDying();
             Become(&TThis::ErrorState);
         }
 
-        void HandleInDataOrParityStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
+        void HandleInDataStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
             ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
             STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP12, VDiskLogPrefix << " " << ErrorReason << ";");
             SendVPatchResult(NKikimrProto::ERROR);
-            PassAway();
+            NotifySkeletonAndDie();
+        }
+
+        void HandleInParityStates(TKikimrEvents::TEvWakeup::TPtr &/*ev*/) {
+            ErrorReason = "TEvVPatch: the vpatch actor died due to a deadline, after receiving diff";
+            STLOG(PRI_ERROR, BS_VDISK_PATCH, BSVSP12, VDiskLogPrefix << " " << ErrorReason << ";");
+            SendVPatchResult(NKikimrProto::ERROR);
+            NotifySkeletonAboutDying();
+            Become(&TThis::ErrorState);
         }
 
         STATEFN(StartState) {
@@ -628,7 +641,6 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVPatchDiff, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
                 hFunc(TKikimrEvents::TEvWakeup, HandleInWaitState)
-                sFunc(TEvVPatchDyingConfirm, PassAway)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
         }
@@ -648,8 +660,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVGetResult, HandleVGetResult)
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 IgnoreFunc(TEvBlobStorage::TEvVPatchXorDiffResult)
-                hFunc(TKikimrEvents::TEvWakeup, HandleInDataOrParityStates)
-                IgnoreFunc(TEvVPatchDyingConfirm)
+                hFunc(TKikimrEvents::TEvWakeup, HandleInDataStates)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
         }
@@ -659,8 +670,7 @@ namespace NKikimr::NPrivate {
                 hFunc(TEvBlobStorage::TEvVGetResult, HandleVGetResult)
                 hFunc(TEvBlobStorage::TEvVPutResult, Handle)
                 hFunc(TEvBlobStorage::TEvVPatchXorDiff, Handle)
-                hFunc(TKikimrEvents::TEvWakeup, HandleInDataOrParityStates)
-                IgnoreFunc(TEvVPatchDyingConfirm)
+                hFunc(TKikimrEvents::TEvWakeup, HandleInParityStates)
                 default: Y_FAIL_S(VDiskLogPrefix << " unexpected event " << ToString(ev->GetTypeRewrite()));
             }
         }

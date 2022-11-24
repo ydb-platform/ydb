@@ -144,6 +144,7 @@ public:
     TControlWrapper AllowConditionalEraseOperations;
     TControlWrapper AllowServerlessStorageBilling;
     TControlWrapper DisablePublicationsOfDropping;
+    TControlWrapper FillAllocatePQ;
 
     TSplitSettings SplitSettings;
 

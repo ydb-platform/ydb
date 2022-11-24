@@ -8,7 +8,6 @@
 namespace NKikimr::NBsController {
     struct TPDiskId;
     struct TVSlotId;
-    struct TPDiskLocation;
 }
 
 template<>
@@ -19,11 +18,6 @@ struct THash<NKikimr::NBsController::TPDiskId> {
 template<>
 struct THash<NKikimr::NBsController::TVSlotId> {
     size_t operator ()(NKikimr::NBsController::TVSlotId) const;
-};
-
-template<>
-struct THash<NKikimr::NBsController::TPDiskLocation> {
-    size_t operator ()(const NKikimr::NBsController::TPDiskLocation&) const;
 };
 
 namespace NKikimr {
@@ -410,24 +404,6 @@ namespace NKikimr {
             }
         };
 
-        struct TPDiskLocation {
-            TNodeId NodeId;
-            TString Path;
-
-            TPDiskLocation() = default;
-            TPDiskLocation(const TPDiskLocation&) = default;
-            TPDiskLocation(TPDiskLocation&&) = default;
-
-            TPDiskLocation(TNodeId nodeId, TString path)
-                : NodeId(nodeId)
-                , Path(std::move(path))
-            {}
-
-            friend bool operator ==(const TPDiskLocation& x, const TPDiskLocation& y) {
-                return x.NodeId == y.NodeId && x.Path == y.Path;
-            }
-        };
-
     } // NBsController
 } // NKikimr
 
@@ -441,12 +417,6 @@ inline size_t THash<NKikimr::NBsController::TVSlotId>::operator ()(NKikimr::NBsC
     auto key = x.GetKey();
     using T = decltype(key);
     return THash<T>()(key);
-}
-
-inline size_t THash<NKikimr::NBsController::TPDiskLocation>::operator ()(const NKikimr::NBsController::TPDiskLocation& x) const {
-    auto value = std::tie(x.NodeId, x.Path);
-    using T = decltype(value);
-    return THash<T>()(value);
 }
 
 template<>

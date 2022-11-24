@@ -408,7 +408,14 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
-        if (ev->Get()->Request->URL == "/" && RedirectRoot) {
+        bool redirect = false;
+        if (RedirectRoot && ev->Get()->Request->URL == "/") {
+            NHttp::THeaders headers(ev->Get()->Request->Headers);
+            if (!headers.Has("Referer")) {
+                redirect = true;
+            }
+        }
+        if (redirect) {
             TStringBuilder response;
             response << "HTTP/1.1 302 Found\r\nLocation: " << RedirectRoot << "\r\n\r\n";
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));

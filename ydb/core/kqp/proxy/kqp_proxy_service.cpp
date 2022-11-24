@@ -233,7 +233,6 @@ public:
         NodeResources.SetDataCenterNumId(DataCenterFromString(*SelfDataCenterId));
         NodeResources.SetDataCenterId(*SelfDataCenterId);
         PublishResourceUsage();
-        StartCollectPeerProxyData();
     }
 
     void StartCollectPeerProxyData() {
@@ -366,7 +365,6 @@ public:
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-        StartCollectPeerProxyData();
         PublishResourceUsage();
     }
 

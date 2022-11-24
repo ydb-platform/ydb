@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -8,23 +8,130 @@
             "name": "/local/base_dynumber_insert_literal_sql_plan/ResultLiteralDyNumber",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key (expr)"
-                    ]
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "Key (expr)"
-                    ],
                     "columns": [
+                        "Key",
                         "Value"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 12,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_3_0",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_dynumber_insert_literal_sql_plan/ResultLiteralDyNumber"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_2_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 11,
+                        "Tables": [
+                            "base_dynumber_insert_literal_sql_plan/ResultLiteralDyNumber"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 9,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 8,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 7,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Iterator": "If",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 6
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_0"
+            },
+            {
+                "Node Type": "Precompute_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_1_2",
+                                        "Node Type": "Limit-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": null,
+                                                "Table": "base_dynumber_insert_literal_sql_plan/ResultLiteralDyNumber"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_0_2",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_dynumber_insert_literal_sql_plan/ResultLiteralDyNumber"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            }
+        ]
+    }
 }

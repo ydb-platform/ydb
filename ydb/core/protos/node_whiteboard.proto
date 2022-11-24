@@ -228,6 +228,7 @@ message TBSGroupStateInfo {
     optional EFlag Latency = 8;
     optional uint32 Count = 13; // filled during group count
     optional string StoragePoolName = 14; // from BS_CONTROLLER
+    optional bool Encryption = 19;
 }
 
 message TEvBSGroupStateRequest {

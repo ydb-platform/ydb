@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,10 +10,10 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Group",
-                        "Name"
+                        "Group (-\u221e, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
                     ],
-                    "limit": "\"5\"",
+                    "limit": "5",
                     "columns": [
                         "Amount",
                         "Comment",
@@ -23,5 +23,69 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "5",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Limit": "5",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Amount",
+                                                    "Comment",
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "ReadLimit": "5",
+                                                "ReadRange": [
+                                                    "Group (-\u221e, +\u221e)",
+                                                    "Name (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_order_by_order_by_pk_composite_sql_plan/Input1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_order_by_order_by_pk_composite_sql_plan/Input1"
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "Group (Asc)",
+                                    "Name (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

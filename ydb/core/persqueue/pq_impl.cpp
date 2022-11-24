@@ -8,6 +8,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -636,9 +637,11 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         }
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
+        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, TabletID(),
+                                                    cacheSize));
     } else {
-        Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
+        //Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
+        TopicPath = Config.GetTopicPath();
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
 
@@ -651,8 +654,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
-                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter, IsLocalDC,
-                                            DCId, Config, *Counters, ctx, true)),
+                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
+                                            IsLocalDC, DCId, Config, *Counters, ctx, true)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -769,7 +772,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             cacheSize = Config.GetCacheSize();
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
+        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, TabletID(), cacheSize));
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
     } else {
@@ -779,8 +782,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
-            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter, IsLocalDC,
-                                        DCId, Config, *Counters, ctx, false)),
+            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
+                                        IsLocalDC, DCId, Config, *Counters, ctx, false)),
             GetPartitionKeyRange(partition),
             false,
             *Counters
@@ -1001,7 +1004,11 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
             CounterEventsInflight[group] = new TEvTabletCounters::TInFlightCookie;
         }
 
+        const TMaybe<TString> dbPath = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+            ? TMaybe<TString>(Config.GetYdbDatabasePath())
+            : Nothing();
         TAutoPtr<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
+        aggr->SetDatabasePath(dbPath);
         for (auto& p : Partitions) {
             auto it = p.second.LabeledCounters.find(group);
             if (it != p.second.LabeledCounters.end()) {
@@ -1015,11 +1022,12 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
         Y_VERIFY(aggr->HasCounters());
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(ctx.SelfID.NodeId());
-        ctx.Send(countersAggregator, new TEvTabletCounters::TEvTabletAddLabeledCounters(
-                                        CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr));
+
+        ctx.Send(countersAggregator,
+                 new TEvTabletCounters::TEvTabletAddLabeledCounters(
+                     CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr));
     }
 }
-
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext& ctx)
 {
@@ -1566,7 +1574,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
     for (ui32 i = 0; i < req.CmdWriteSize(); ++i) {
         const auto& cmd = req.GetCmdWrite(i);
 
-        if (AppData(ctx)->Counters) {
+        if (AppData(ctx)->Counters && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             auto counters = AppData(ctx)->Counters;
             TString clientDC = to_lower(cmd.HasClientDC() ? cmd.GetClientDC() : "unknown");
             clientDC.to_title();

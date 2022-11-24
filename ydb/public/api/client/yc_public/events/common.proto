@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package yandex.cloud.events;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/events/options.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/events;events";
+option java_package = "yandex.cloud.api.events";
+option java_outer_classname = "CommonEvents";
+
+message EventMetadata {
+  // Global unique identifier of current event.
+  // Should be treated as opaque string.
+  // Could be used for deduplication.
+  string event_id = 1 [(required) = true];
+
+  // Well-known event type in form of fully qualified protobuf
+  // message name (eg: yandex.cloud.events.compute.CreateInstance).
+  string event_type = 2 [(required) = true];
+
+  // Wall time of event as seen on producing system.
+  google.protobuf.Timestamp created_at = 3 [(required) = true];
+
+  // Additional information about trace tree.
+  TracingContext tracing_context = 4 [(hide) = true];
+
+  string cloud_id = 5 [(required) = true];
+
+  string folder_id = 6;
+}
+
+message TracingContext {
+  // The ID of the trace. Every span in a trace shares this ID.
+  string trace_id = 1;
+
+  // Indicates the position of the current operation in the trace tree.
+  string span_id = 2;
+
+  // Optional reference to the cause of current event.
+  // Absent value means that this is root cause of whole trace.
+  string parent_span_id = 3;
+}
+
+message Authentication {
+  enum SubjectType {
+    SUBJECT_TYPE_UNSPECIFIED = 0;
+    YANDEX_PASSPORT_USER_ACCOUNT = 1;
+    SERVICE_ACCOUNT = 2;
+    FEDERATED_USER_ACCOUNT = 3;
+  }
+
+  bool authenticated = 1;
+  SubjectType subject_type = 2;
+  string subject_id = 3;
+}
+
+message Authorization {
+  bool authorized = 1;
+
+  repeated RequestedPermissions permissions = 2 [(hide) = true];
+}
+
+message RequestedPermissions {
+  // <service>.<resource>.<action>
+  string permission = 1 [(required) = true];
+
+  // <service>.<resource>
+  string resource_type = 2 [(required) = true];
+
+  string resource_id = 3 [(required) = true];
+
+  // is request for permission authorized
+  bool authorized = 4;
+}
+
+message RequestMetadata {
+  string remote_address = 1 [(required) = true];
+  string user_agent = 2 [(required) = true];
+  string request_id = 3 [(required) = true];
+  string idempotency_id = 4 [(hide) = true];
+}
+
+enum EventStatus {
+  EVENT_STATUS_UNSPECIFIED = 0;
+  STARTED = 1;
+  ERROR = 2;
+  DONE = 3;
+  CANCELLED = 4;
+}
+
+message Response {
+  string operation_id = 1 [(required) = true];
+}

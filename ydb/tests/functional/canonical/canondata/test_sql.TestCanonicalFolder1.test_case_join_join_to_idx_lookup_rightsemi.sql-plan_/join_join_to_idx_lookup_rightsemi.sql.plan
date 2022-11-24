@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Key"
+                        "Key (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Fk21",
@@ -25,21 +25,15 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Key1",
-                        "Key2"
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Key1"
                     ]
                 },
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)"
-                    ],
-                    "scan_by": [
-                        "Key2"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Fk3",
                         "Key1",
@@ -48,11 +42,7 @@
                     ]
                 },
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Fk3",
                         "Key1",
@@ -68,8 +58,8 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Key1",
-                        "Key2"
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Key1",
@@ -82,11 +72,7 @@
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Fk2",
                         "Key1",
@@ -100,14 +86,7 @@
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2/Index/indexImplTable",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Fk2 (expr)"
-                    ],
-                    "scan_by": [
-                        "Key1",
-                        "Key2"
-                    ],
+                    "type": "Lookup",
                     "columns": [
                         "Key1",
                         "Key2"
@@ -115,5 +94,420 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet_3_2",
+                "PlanNodeId": 29,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 28,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 27,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_3_0",
+                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.Fk2)"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Fk2",
+                                                    "Key1",
+                                                    "Key2",
+                                                    "Value"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_2_0",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 26,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_3_1",
+                "PlanNodeId": 33,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 32,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 31,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_3_1",
+                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.Key1) And Exist(item.Key2)"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Fk3",
+                                                    "Key1",
+                                                    "Key2",
+                                                    "Value"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_1_1",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 30,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_3_0",
+                "PlanNodeId": 37,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 36,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 35,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_3_2",
+                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.Key1)"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Fk3",
+                                                    "Key1",
+                                                    "Key2",
+                                                    "Value"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_1_2",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 34,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 24,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 23,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 22,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_2_0",
+                                        "Node Type": "TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Key1",
+                                                    "Key2"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2/Index/indexImplTable"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 21,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2/Index/indexImplTable"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_0"
+            },
+            {
+                "Node Type": "Precompute_1_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 19,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Filter-Limit",
+                        "Operators": [
+                            {
+                                "Name": "Filter",
+                                "Predicate": "Exist(item.Key1)"
+                            },
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 18
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            },
+            {
+                "Node Type": "Precompute_1_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 17,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Filter-Limit",
+                        "Operators": [
+                            {
+                                "Name": "Filter",
+                                "Predicate": "Exist(item.Key1) And Exist(item.Key2)"
+                            },
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 16
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_1"
+            },
+            {
+                "Node Type": "Precompute_1_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 15,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Filter-Limit",
+                        "Operators": [
+                            {
+                                "Name": "Filter",
+                                "Predicate": "Exist(item.Fk21)"
+                            },
+                            {
+                                "Limit": "1",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 14
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_2"
+            },
+            {
+                "Node Type": "Precompute_0_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 12,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 10,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Key1"
+                                                ],
+                                                "ReadRange": [
+                                                    "Key1 (-\u221e, +\u221e)",
+                                                    "Key2 (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
+                                            }
+                                        ],
+                                        "PlanNodeId": 9,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            },
+            {
+                "Node Type": "Precompute_0_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Filter-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "Filter",
+                                                "Predicate": "items1 == \"Value1\""
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Fk21",
+                                                    "Value"
+                                                ],
+                                                "ReadRange": [
+                                                    "Key (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_2"
+            },
+            {
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 8,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 7,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 6,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Key1",
+                                                    "Key2"
+                                                ],
+                                                "ReadRange": [
+                                                    "Key1 (-\u221e, +\u221e)",
+                                                    "Key2 (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin4"
+                                            }
+                                        ],
+                                        "PlanNodeId": 5,
+                                        "Tables": [
+                                            "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin4"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_1"
+            }
+        ]
+    }
 }

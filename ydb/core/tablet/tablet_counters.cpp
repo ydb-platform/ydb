@@ -206,19 +206,19 @@ void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase&
         if (AggregateFunc[i] != rp.AggregateFunc[i]) //do not merge different versions of counters
             return;
         switch (AggregateFunc[i]) {
-            case EAF_MIN:
+            case static_cast<ui8>(EAggregateFunc::EAF_MIN):
                 if (Counters[i].Get() > rp.Counters[i].Get()) {
                     Counters[i].Set(rp.Counters[i].Get());
                     Ids[i].Set(rp.Ids[i].Get());
                 }
                 break;
-            case EAF_MAX:
+            case static_cast<ui8>(EAggregateFunc::EAF_MAX):
                 if (Counters[i].Get() < rp.Counters[i].Get()) {
                     Counters[i].Set(rp.Counters[i].Get());
                     Ids[i].Set(rp.Ids[i].Get());
                 }
                 break;
-            case EAF_SUM:
+            case static_cast<ui8>(EAggregateFunc::EAF_SUM):
                 Counters[i].Add(rp.GetCounters()[i].Get());
                 Ids[i].Set(0);
                 break;
@@ -231,13 +231,13 @@ void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase&
 
 IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func) {
     switch(func) {
-        case TTabletLabeledCountersBase::EAF_MIN:
+        case TTabletLabeledCountersBase::EAggregateFunc::EAF_MIN:
             out << "EAF_MIN";
             break;
-        case TTabletLabeledCountersBase::EAF_MAX:
+        case TTabletLabeledCountersBase::EAggregateFunc::EAF_MAX:
             out << "EAF_MAX";
             break;
-        case TTabletLabeledCountersBase::EAF_SUM:
+        case TTabletLabeledCountersBase::EAggregateFunc::EAF_SUM:
             out << "EAF_SUM";
             break;
         default:
@@ -245,7 +245,6 @@ IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase:
     }
     return out;
 }
-
 
 } // end of NKikimr namespace
 

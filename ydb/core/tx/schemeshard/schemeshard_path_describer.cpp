@@ -460,6 +460,34 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         Result->PreSerializedData += pqGroupInfo->PreSerializedPartitionsDescription;
     }
 
+    if (Self->FillAllocatePQ && pqGroupInfo->TotalGroupCount == pqGroupInfo->TotalPartitionCount) {
+        auto allocate = Result->Record.MutablePathDescription()->MutablePersQueueGroup()->MutableAllocate();
+
+        allocate->SetName(pathEl->Name);
+        allocate->SetTotalGroupCount(pqGroupInfo->TotalGroupCount);
+        allocate->SetNextPartitionId(pqGroupInfo->NextPartitionId);
+        allocate->SetPartitionPerTablet(pqGroupInfo->MaxPartsPerTablet);
+        Y_PROTOBUF_SUPPRESS_NODISCARD allocate->MutablePQTabletConfig()->ParseFromString(pqGroupInfo->TabletConfig);
+        allocate->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID));
+        allocate->SetBalancerOwnerId(pqGroupInfo->BalancerShardIdx.GetOwnerId());
+        allocate->SetBalancerShardId(ui64(pqGroupInfo->BalancerShardIdx.GetLocalId()));
+
+        for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
+            const auto& shardInfo = Self->ShardInfos.at(shardIdx);
+            for (const auto& pq : pqShard->PQInfos) {
+                if (pq.AlterVersion <= pqGroupInfo->AlterVersion) {
+                    auto partition = allocate->MutablePartitions()->Add();
+                    partition->SetPartitionId(pq.PqId);
+                    partition->SetGroupId(pq.GroupId);
+                    partition->SetTabletId(ui64(shardInfo.TabletID));
+                    partition->SetOwnerId(shardIdx.GetOwnerId());
+                    partition->SetShardId(ui64(shardIdx.GetLocalId()));
+                }
+            }
+        }
+        allocate->SetAlterVersion(pqGroupInfo->AlterVersion);
+    }
+
     Y_VERIFY_DEBUG(!Result->PreSerializedData.empty());
     if (!pathEl->IsCreateFinished()) {
         // Don't cache until create finishes (KIKIMR-4337)

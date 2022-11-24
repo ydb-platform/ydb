@@ -1,4 +1,5 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/proxy/kqp_proxy_service.h>
 #include <ydb/core/kqp/kqp.h>
@@ -95,6 +96,45 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         SendBadRequestToSession("ydb://session/1?id=ZjY5NWRlM2EtYWMyYjA5YWEtNzQ0MTVlYTMtM2Q4ZDgzOWQ=&node_id=1234&node_id=12345");
         SendBadRequestToSession("unknown://session/1?id=ZjY5NWRlM2EtYWMyYjA5YWEtNzQ0MTVlYTMtM2Q4ZDgzOWQ=&node_id=1234&node_id=12345");
         SendBadRequestToSession("ydb://session/1?id=ZjY5NWRlM2EtYWMyYjA5YWEtNzQ0MTVlYTMtM2Q4ZDgzOWQ=&node_id=eqweq");
+    }
+
+    Y_UNIT_TEST(PassErrroViaSessionActor) {
+        TPortManager tp;
+
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpSessionActor(true);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+
+        TActorId kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        //ev->Record.MutableRequest()->SetSessionId(sessionId);
+        ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "SomeUniqTextForUt");
+
+        NYql::TIssues issues;
+        issues.AddIssue(issue);
+        NYql::IssuesToMessage(issues, ev->Record.MutableQueryIssues());
+
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
+        ev->Record.MutableRequest()->SetQuery("SELECT 1; COMMIT;");
+        ev->Record.MutableRequest()->SetKeepSession(true);
+        ev->Record.MutableRequest()->SetTimeoutMs(10);
+
+        runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvProcessResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetError(), "<main>: Error: SomeUniqTextForUt\n");
     }
 
     Y_UNIT_TEST(LoadedMetadataAfterCompilationTimeout) {

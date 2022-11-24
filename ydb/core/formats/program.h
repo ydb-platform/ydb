@@ -204,7 +204,7 @@ public:
         , Operation(op)
         , Arguments({std::move(arg)})
     {
-        if (arg.empty() && op != EAggregate::Count) {
+        if (Arguments[0].empty() && op != EAggregate::Count) {
             // COUNT(*) doesn't have arguments
             op = EAggregate::Unspecified;
         }

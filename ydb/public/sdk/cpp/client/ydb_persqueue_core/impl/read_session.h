@@ -77,6 +77,8 @@ using TAReadSessionSettings = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TReadSessionSettings,
     NYdb::NTopic::TReadSessionSettings>;
 
+template <bool UseMigrationProtocol>
+using TDataReceivedEvent = typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent;
 
 template <bool UseMigrationProtocol>
 class TPartitionStreamImpl;
@@ -91,6 +93,12 @@ template <bool UseMigrationProtocol>
 class TReadSessionEventsQueue;
 
 class TReadSession;
+
+template <bool UseMigrationProtocol>
+class TDataDecompressionInfo;
+
+template <bool UseMigrationProtocol>
+using TDataDecompressionInfoPtr = typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr;
 
 
 template <bool UseMigrationProtocol>
@@ -114,6 +122,21 @@ struct IErrorHandler : public TThrRefBase {
     }
 };
 
+template <bool UseMigrationProtocol>
+class TUserRetrievedEventsInfoAccumulator {
+public:
+    void Add(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize);
+    void OnUserRetrievedEvent() const;
+
+private:
+    struct TCounter {
+        i64 DecompressedSize = 0;
+        size_t MessagesCount = 0;
+    };
+
+    TMap<TDataDecompressionInfoPtr<UseMigrationProtocol>, TCounter> Counters;
+};
+
 // Special class that stores actions to be done after lock will be released.
 template <bool UseMigrationProtocol>
 class TDeferredActions {
@@ -131,7 +154,8 @@ public:
     void DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TPlainStatus&& status);
     void DeferStartSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session);
     void DeferSignalWaiter(TWaiter&& waiter);
-
+    void DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos);
+    void DeferOnUserRetrievedEvent(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize);
 
 private:
     void DoActions();
@@ -142,6 +166,7 @@ private:
     void Reconnect();
     void SignalWaiters();
     void StartSessions();
+    void OnUserRetrievedEvents();
 
 private:
     // Read.
@@ -165,6 +190,13 @@ private:
 
     // Session to start
     std::vector<std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>>> Sessions;
+
+    std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> DecompressionInfos;
+
+    //
+    // OnUserRetrievedEvent
+    //
+    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> UserRetrievedEventsInfo;
 };
 
 template <bool UseMigrationProtocol>
@@ -180,20 +212,20 @@ public:
         bool doDecompress,
         i64 serverBytesSize = 0 // to increment read request bytes size
     );
+    ~TDataDecompressionInfo();
 
     i64 StartDecompressionTasks(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor,
                                 i64 availableMemory,
-                                double averageCompressionRatio,
-                                const TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>& partitionStream,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
+    void PlanDecompressionTasks(double averageCompressionRatio,
+                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
 
     bool IsReady() const {
         return SourceDataNotProcessed == 0;
     }
 
     bool AllDecompressionTasksStarted() const {
-        Y_VERIFY(ServerMessage.batches_size() > 0);
-        return CurrentDecompressingMessage.first >= static_cast<size_t>(ServerMessage.batches_size());
+        return Tasks.empty();
     }
 
     i64 GetCompressedDataSize() const {
@@ -235,12 +267,6 @@ public:
         return BatchesMeta[batchIndex];
     }
 
-    // Takes data. Returns true if event has more unpacked data.
-    bool TakeData(const TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>& partitionStream,
-                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>* messages,
-                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
-                  size_t* maxByteSize);
-
     bool HasMoreData() const {
         return CurrentReadingMessage.first < static_cast<size_t>(GetServerMessage().batches_size());
     }
@@ -249,6 +275,9 @@ public:
 
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
+
+    void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
+    void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
 
 private:
     // Special struct for marking (batch/message) as ready.
@@ -273,6 +302,10 @@ private:
             return Messages.size();
         }
 
+        i64 GetEstimatedDecompressedSize() const {
+            return EstimatedDecompressedSize;
+        }
+
     private:
         TDataDecompressionInfo::TPtr Parent;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
@@ -294,7 +327,6 @@ private:
     std::vector<typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr> BatchesMeta;
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     bool DoDecompress;
-    i64 CompressedDataSize = 0;
     i64 ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
@@ -306,12 +338,18 @@ private:
     std::atomic<bool> DecompressionErrorsStructCreated = false;
     TAdaptiveLock DecompressionErrorsStructLock;
     std::vector<std::vector<std::exception_ptr>> DecompressionErrors;
+
+    std::atomic<i64> MessagesInflight = 0;
+    std::atomic<i64> CompressedDataSize = 0;
+    std::atomic<i64> DecompressedDataSize = 0;
+
+    std::deque<TDecompressionTask> Tasks;
 };
- 
+
 template <bool UseMigrationProtocol>
 class TDataDecompressionEvent {
 public:
-    TDataDecompressionEvent(size_t batch, size_t message, typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent, std::atomic<bool> &ready) :
+    TDataDecompressionEvent(size_t batch, size_t message, TDataDecompressionInfoPtr<UseMigrationProtocol> parent, std::atomic<bool>& ready) :
         Batch{batch},
         Message{message},
         Parent{std::move(parent)},
@@ -323,23 +361,28 @@ public:
         return Ready;
     }
 
-    bool TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>* messages,
-                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
-                  size_t* maxByteSize) const;
+    void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
+                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
+                  size_t& maxByteSize,
+                  size_t& dataSize) const;
+
+    TDataDecompressionInfoPtr<UseMigrationProtocol> GetParent() const {
+        return Parent;
+    }
 
 private:
     size_t Batch;
     size_t Message;
-    typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr Parent;
-    std::atomic<bool> &Ready;
+    TDataDecompressionInfoPtr<UseMigrationProtocol> Parent;
+    std::atomic<bool>& Ready;
 };
 
 template <bool UseMigrationProtocol>
 struct IUserRetrievedEventCallback {
     virtual ~IUserRetrievedEventCallback() = default;
 
-    virtual void OnUserRetrievedEvent(const typename TAReadSessionEvent<UseMigrationProtocol>::TEvent& event) = 0;
+    virtual void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) = 0;
 };
 
 template <bool UseMigrationProtocol>
@@ -380,8 +423,6 @@ struct TReadSessionEventInfo {
         return *Event;
     }
 
-    void OnUserRetrievedEvent();
-
     bool IsSessionClosedEvent() const {
         return Event && std::holds_alternative<TASessionClosedEvent<UseMigrationProtocol>>(*Event);
     }
@@ -399,7 +440,7 @@ struct TRawPartitionStreamEvent {
 
     TRawPartitionStreamEvent(size_t batch,
                              size_t message,
-                             typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
+                             TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
                              std::atomic<bool> &ready)
         : Event(std::in_place_type_t<TDataDecompressionEvent<UseMigrationProtocol>>(),
                 batch,
@@ -480,12 +521,27 @@ public:
         (NotReady.empty() ? Ready : NotReady).pop_back();
     }
 
-    void SignalReadyEvents(TPartitionStreamImpl<UseMigrationProtocol>& stream,
+    void SignalReadyEvents(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
-    void DeleteNotReadyTail();
+    void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
+
+    void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                          size_t& maxEventsCount,
+                          size_t& maxByteSize,
+                          TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
+                          TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
+                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
 private:
+    static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                 size_t& maxEventsCount,
+                                 size_t& maxByteSize,
+                                 TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
+                                 TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
+                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator,
+                                 std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>>& queue);
+
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> Ready;
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> NotReady;
 };
@@ -584,15 +640,10 @@ public:
 
     void InsertDataEvent(size_t batch,
                          size_t message,
-                         typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
+                         TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
                          std::atomic<bool> &ready)
     {
-        ++DataDecompressionEventsCount;
         EventsQueue.emplace_back(batch, message, std::move(parent), ready);
-    }
-
-    bool IsWaitingForDataDecompression() const {
-        return DataDecompressionEventsCount > 0;
     }
 
     bool HasEvents() const {
@@ -604,9 +655,6 @@ public:
     }
 
     void PopEvent() {
-        if (EventsQueue.front().IsDataEvent()) {
-            --DataDecompressionEventsCount;
-        }
         EventsQueue.pop_front();
     }
 
@@ -616,7 +664,9 @@ public:
 
     TLog GetLog() const;
 
-    void SignalReadyEvents(TReadSessionEventsQueue<UseMigrationProtocol>* queue, TDeferredActions<UseMigrationProtocol>& deferred);
+    static void SignalReadyEvents(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
+                                  TReadSessionEventsQueue<UseMigrationProtocol>* queue,
+                                  TDeferredActions<UseMigrationProtocol>& deferred);
 
     const typename IErrorHandler<UseMigrationProtocol>::TPtr& GetErrorHandler() const {
         return ErrorHandler;
@@ -677,7 +727,14 @@ public:
         return true;
     }
 
-    void DeleteNotReadyTail();
+    void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
+
+    static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                 size_t& maxEventsCount,
+                                 size_t& maxByteSize,
+                                 TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>& messages,
+                                 TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
+                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
 private:
     const TKey Key;
@@ -686,7 +743,6 @@ private:
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     typename IErrorHandler<UseMigrationProtocol>::TPtr ErrorHandler;
     TRawPartitionStreamEventQueue<UseMigrationProtocol> EventsQueue;
-    size_t DataDecompressionEventsCount = 0;
     ui64 MaxReadOffset = 0;
     ui64 MaxCommittedOffset = 0;
 
@@ -707,102 +763,21 @@ class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSetti
                                             TReadSessionEventInfo<UseMigrationProtocol>>;
 
 public:
-    explicit TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session);
+    TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings,
+                            std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session);
 
-    typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent
-        GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream, size_t* maxByteSize); // Assumes that we're under lock.
+    TReadSessionEventInfo<UseMigrationProtocol>
+        GetEventImpl(size_t& maxByteSize,
+                     TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
 
-    TReadSessionEventInfo<UseMigrationProtocol> GetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock.
-        Y_ASSERT(TParent::HasEventsImpl());
+    TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
+        GetEvents(bool block = false,
+                  TMaybe<size_t> maxEventsCount = Nothing(),
+                  size_t maxByteSize = std::numeric_limits<size_t>::max());
 
-        if (!TParent::Events.empty()) {
-            TReadSessionEventInfo<UseMigrationProtocol>& front = TParent::Events.front();
-            auto partitionStream = front.PartitionStream;
-
-            if (!partitionStream->HasEvents()) {
-                Y_FAIL("can't be here - got events in global queue, but nothing in partition queue");
-            }
-
-            TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
-
-            if (partitionStream->TopEvent().IsDataEvent()) {
-                event = GetDataEventImpl(partitionStream, maxByteSize);
-            } else {
-                event = std::move(partitionStream->TopEvent().GetEvent());
-                partitionStream->PopEvent();
-
-                TParent::Events.pop();
-            }
-
-            TParent::RenewWaiterImpl();
-
-            return {partitionStream, front.Session, std::move(*event)};
-        }
-
-        Y_ASSERT(TParent::CloseEvent);
-
-        return {*TParent::CloseEvent, Session};
-    }
-
-    TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(), size_t maxByteSize = std::numeric_limits<size_t>::max()) {
-        TVector<TReadSessionEventInfo<UseMigrationProtocol>> eventInfos;
-        const size_t maxCount = maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max();
-        TDeferredActions<UseMigrationProtocol> deferred;
-        with_lock (TParent::Mutex) {
-            eventInfos.reserve(Min(TParent::Events.size() + TParent::CloseEvent.Defined(), maxCount));
-            do {
-                if (block) {
-                    TParent::WaitEventsImpl();
-                }
-
-                ApplyCallbacksToReadyEventsImpl(deferred);
-
-                while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                    TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(&maxByteSize);
-                    eventInfos.emplace_back(std::move(event));
-                    if (eventInfos.back().IsSessionClosedEvent()) {
-                        break;
-                    }
-                }
-            } while (block && (eventInfos.empty() || eventInfos.back().IsSessionClosedEvent()));
-            ApplyCallbacksToReadyEventsImpl(deferred);
-        }
-
-        TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> result;
-        result.reserve(eventInfos.size());
-        for (TReadSessionEventInfo<UseMigrationProtocol>& eventInfo : eventInfos) {
-            eventInfo.OnUserRetrievedEvent();
-            result.emplace_back(std::move(eventInfo.GetEvent()));
-        }
-        return result;
-    }
-
-    TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> GetEvent(bool block = false, size_t maxByteSize = std::numeric_limits<size_t>::max()) {
-        TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
-        TDeferredActions<UseMigrationProtocol> deferred;
-        with_lock (TParent::Mutex) {
-            do {
-                if (block) {
-                    TParent::WaitEventsImpl();
-                }
-
-                const bool appliedCallbacks = ApplyCallbacksToReadyEventsImpl(deferred);
-
-                if (TParent::HasEventsImpl()) {
-                    eventInfo = GetEventImpl(&maxByteSize);
-                } else if (!appliedCallbacks) {
-                    return Nothing();
-                }
-            } while (block && !eventInfo);
-            ApplyCallbacksToReadyEventsImpl(deferred);
-        }
-        if (eventInfo) {
-            eventInfo->OnUserRetrievedEvent();
-            return std::move(eventInfo->Event);
-        } else {
-            return Nothing();
-        }
-    }
+    TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
+        GetEvent(bool block = false,
+                 size_t maxByteSize = std::numeric_limits<size_t>::max());
 
     void Close(const TASessionClosedEvent<UseMigrationProtocol>& event, TDeferredActions<UseMigrationProtocol>& deferred) {
         TWaiter waiter;
@@ -818,8 +793,14 @@ public:
         waiter.Signal();
     }
 
-    bool HasCallbackForNextEventImpl() const;
-    bool ApplyCallbacksToReadyEventsImpl(TDeferredActions<UseMigrationProtocol>& deferred);
+    bool TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
+                                     TDeferredActions<UseMigrationProtocol>& deferred);
+    bool HasDataEventCallback() const;
+    void ApplyCallbackToEventImpl(TDataReceivedEvent<UseMigrationProtocol>& event,
+                                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
+                                  TDeferredActions<UseMigrationProtocol>& deferred);
+
+    void GetDataEventCallbackSettings(size_t& maxMessagesBytes);
 
     // Push usual event.
     void PushEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
@@ -831,16 +812,17 @@ public:
     void PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                        size_t batch,
                        size_t message,
-                       typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
+                       TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
                        std::atomic<bool> &ready);
 
     void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                          TDeferredActions<UseMigrationProtocol>& deferred,
                          bool isDataEvent); // Assumes that we're under lock.
 
-    void SignalReadyEvents(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
+    void SignalReadyEvents(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
 
-    void SignalReadyEventsImpl(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
+    void SignalReadyEventsImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                               TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
 
     void SignalWaiterImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
         TWaiter waiter = TParent::PopWaiterImpl();
@@ -851,21 +833,21 @@ public:
 
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
-        THandlersVisitor(const TAReadSessionSettings<UseMigrationProtocol>& settings, TReadSessionEventInfo<UseMigrationProtocol>& eventInfo, TDeferredActions<UseMigrationProtocol>& deferred)
-            : TParent::TBaseHandlersVisitor(settings, eventInfo)
+        THandlersVisitor(const TAReadSessionSettings<UseMigrationProtocol>& settings, typename TParent::TEvent& event, TDeferredActions<UseMigrationProtocol>& deferred)
+            : TParent::TBaseHandlersVisitor(settings, event)
             , Deferred(deferred)
         {}
 
-#define DECLARE_HANDLER(type, handler, answer)                          \
-        bool operator()(type&) {                                        \
-            if (this->template PushHandler<type>(                                      \
-                std::move(TParent::TBaseHandlersVisitor::EventInfo),    \
-                this->Settings.EventHandlers_.handler,               \
-                this->Settings.EventHandlers_.CommonHandler_)) {     \
-                return answer;                                          \
-            }                                                           \
-            return false;                                               \
-        }                                                               \
+#define DECLARE_HANDLER(type, handler, answer)                      \
+        bool operator()(type&) {                                    \
+            if (this->template PushHandler<type>(                   \
+                std::move(TParent::TBaseHandlersVisitor::Event),    \
+                this->Settings.EventHandlers_.handler,              \
+                this->Settings.EventHandlers_.CommonHandler_)) {    \
+                return answer;                                      \
+            }                                                       \
+            return false;                                           \
+        }                                                           \
         /**/
 
         DECLARE_HANDLER(typename TAReadSessionEvent<true>::TDataReceivedEvent, DataReceivedHandler_, true);
@@ -883,25 +865,30 @@ private:
         DECLARE_HANDLER(typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent, PartitionSessionClosedHandler_, true);
 
         DECLARE_HANDLER(TASessionClosedEvent<UseMigrationProtocol>, SessionClosedHandler_, false); // Not applied
+
 #undef DECLARE_HANDLER
 
         bool Visit() {
-            return std::visit(*this, TParent::TBaseHandlersVisitor::EventInfo.GetEvent());
+            return std::visit(*this, TParent::TBaseHandlersVisitor::Event);
         }
 
-        void Post(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& f) {
+        void Post(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& f) override {
             Deferred.DeferStartExecutorTask(executor, std::move(f));
         }
 
         TDeferredActions<UseMigrationProtocol>& Deferred;
     };
 
+    typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent
+        GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
+                         size_t& maxByteSize,
+                         TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
+
     bool ApplyHandler(TReadSessionEventInfo<UseMigrationProtocol>& eventInfo, TDeferredActions<UseMigrationProtocol>& deferred) {
-        THandlersVisitor visitor(this->Settings, eventInfo, deferred);
+        THandlersVisitor visitor(this->Settings, eventInfo.GetEvent(), deferred);
         return visitor.Visit();
     }
 
-private:
     bool HasEventCallbacks;
     std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> Session;
 };
@@ -942,6 +929,7 @@ public:
     using TPtr = std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>>;
     using IProcessor = typename IReadSessionConnectionProcessorFactory<UseMigrationProtocol>::IProcessor;
 
+
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
 
     TSingleClusterReadSessionImpl(
@@ -969,7 +957,7 @@ public:
         , ClientContext(std::move(clientContext))
         , CookieMapping(ErrorHandler)
         , ReadSizeBudget(GetCompressedDataSizeLimit())
-        , ReadSizeServerDelta(GetCompressedDataSizeLimit())
+        , ReadSizeServerDelta(0)
     {
     }
 
@@ -980,13 +968,15 @@ public:
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
+    void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount);
+
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
 
     TReadSessionEventsQueue<UseMigrationProtocol>* GetEventsQueue() {
         return EventsQueue.get();
     }
 
-    void OnUserRetrievedEvent(const typename TAReadSessionEvent<UseMigrationProtocol>::TEvent& event) override;
+    void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
 
     void Abort();
     void Close(std::function<void()> callback);
@@ -995,8 +985,6 @@ public:
 
     void StopReadingData();
     void ResumeReadingData();
-
-    void WaitAllDecompressionTasks();
 
     void DumpStatisticsToLog(TLogElement& log);
     void UpdateMemoryUsageStatistics();
@@ -1139,14 +1127,14 @@ private:
     };
 
     struct TDecompressionQueueItem {
-        TDecompressionQueueItem(typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr batchInfo,
+        TDecompressionQueueItem(TDataDecompressionInfoPtr<UseMigrationProtocol> batchInfo,
                                 TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream)
             : BatchInfo(std::move(batchInfo))
             , PartitionStream(std::move(partitionStream))
         {
         }
 
-        typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr BatchInfo;
+        TDataDecompressionInfoPtr<UseMigrationProtocol> BatchInfo;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
     };
 
@@ -1189,8 +1177,8 @@ private:
     bool Closing = false;
     std::function<void()> CloseCallback;
     std::atomic<int> DecompressionTasksInflight = 0;
-    ui64 ReadSizeBudget;
-    i64 ReadSizeServerDelta;
+    i64 ReadSizeBudget;
+    i64 ReadSizeServerDelta = 0;
 };
 
 // High level class that manages several read session impls.
@@ -1260,7 +1248,6 @@ public:
 
     void Abort(TSessionClosedEvent&& closeEvent);
 
-    void WaitAllDecompressionTasks();
     void ClearAllEvents();
 
 private:
@@ -1286,7 +1273,7 @@ private:
     void AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions<true>& deferred);
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<true>& deferred);
 
-    void OnUserRetrievedEvent(const TReadSessionEvent::TEvent& event) override;
+    void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
 
     void MakeCountersIfNeeded();
     void DumpCountersToLog(size_t timeNumber = 0);

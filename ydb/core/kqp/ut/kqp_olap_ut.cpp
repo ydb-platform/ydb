@@ -1426,8 +1426,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
-        // remove this return when COUNT(*) will be implemented on columnshard
-        return;
+        if (UseLlvm) {
+            // remove this return when ResultColumns will be fixed
+            return;
+        }
 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)

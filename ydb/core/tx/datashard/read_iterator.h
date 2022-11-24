@@ -72,7 +72,15 @@ public:
     // must be called only once per SeqNo
     void ConsumeSeqNo(ui64 rows, ui64 bytes) {
         ++SeqNo;
-        ReadStats.emplace_back(rows, bytes);
+
+        ui64 lastRowsTotal = 0;
+        ui64 lastBytesTotal = 0;
+        if (!UnackedReads.empty()) {
+            const auto& back = UnackedReads.back();
+            lastRowsTotal = back.Rows;
+            lastBytesTotal = back.Bytes;
+        }
+        UnackedReads.emplace_back(rows + lastRowsTotal, bytes + lastBytesTotal);
 
         if (Quota.Rows <= rows) {
             Quota.Rows = 0;
@@ -91,16 +99,32 @@ public:
         }
     }
 
-    void UpQuota(ui64 seqNo, ui64 rows, ui64 bytes) {
-        Y_ASSERT(seqNo <= ReadStats.size());
-        // user provided quota for seqNo, if we have sent messages
-        // with higher seqNo then we should account their bytes to
-        // this quota
-        ui64 consumedBytes = 0, consumedRows = 0;
-        for (ui64 i = seqNo; i < ReadStats.size(); ++i) {
-            consumedRows += ReadStats[i].Rows;
-            consumedBytes += ReadStats[i].Bytes;
+    void UpQuota(ui64 ackSeqNo, ui64 rows, ui64 bytes) {
+        if (ackSeqNo <= LastAckSeqNo || ackSeqNo > SeqNo)
+            return;
+
+        size_t ackedIndex = ackSeqNo - LastAckSeqNo - 1;
+        Y_VERIFY(ackedIndex < UnackedReads.size());
+
+        ui64 consumedRows = 0;
+        ui64 consumedBytes = 0;
+        if (ackedIndex < SeqNo) {
+            AckedReads.Rows = UnackedReads[ackedIndex].Rows;
+            AckedReads.Bytes = UnackedReads[ackedIndex].Bytes;
+            UnackedReads.erase(UnackedReads.begin(), UnackedReads.begin() + ackedIndex + 1);
+
+            // user provided quota for seqNo, if we have sent messages
+            // with higher seqNo then we should account their bytes to
+            // this quota
+            consumedRows = UnackedReads.back().Rows - AckedReads.Rows;
+            consumedBytes = UnackedReads.back().Bytes - AckedReads.Bytes;
+        } else {
+            AckedReads.Rows = 0;
+            AckedReads.Bytes = 0;
+            UnackedReads.clear();
         }
+
+        LastAckSeqNo = ackSeqNo;
 
         if (consumedRows >= rows) {
             Quota.Rows = 0;
@@ -144,12 +168,24 @@ public:
 
     std::shared_ptr<TEvDataShard::TEvRead> Request;
 
+    // parallel to Request->Keys, but real data only in indices,
+    // where in Request->Keys we have key prefix (here we have properly extended one).
+    TVector<TSerializedCellVec> Keys;
+
     // State itself //
 
     TQuota Quota;
-    TVector<TQuota> ReadStats; // each index corresponds to SeqNo-1
+
+    // items are running total,
+    // first item corresponds to SeqNo = LastAckSeqNo + 1,
+    // i.e. [LastAckSeqNo + 1; SeqNo]
+    std::deque<TQuota> UnackedReads;
+
+    TQuota AckedReads;
 
     TActorId SessionId;
+
+    // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;
     ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;

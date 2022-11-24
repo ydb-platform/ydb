@@ -546,6 +546,52 @@ void TestDrop(bool reboots) {
     }
 }
 
+void TestDropWriteRace() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime,
+                           CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+                           &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    //
+
+    ui64 tableId = 1;
+    ui64 planStep = 1000000000; // greater then delays
+    ui64 txId = 100;
+
+    NLongTxService::TLongTxId longTxId;
+    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+
+    bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema),
+                              {++planStep, ++txId});
+    UNIT_ASSERT(ok);
+    PlanSchemaTx(runtime, sender, {planStep, txId});
+
+    TString data = MakeTestBlob({0, 100}, testYdbSchema);
+    UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+
+    // Write into InsertTable
+    auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, "0", data);
+    UNIT_ASSERT(writeIdOpt);
+    ProposeCommit(runtime, sender, ++txId, {*writeIdOpt});
+    auto commitTxId = txId;
+
+    // Drop table
+    ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), {++planStep, ++txId});
+    if (ok) {
+        PlanSchemaTx(runtime, sender, {planStep, txId});
+    }
+
+    // Plan commit
+    PlanCommit(runtime, sender, ++planStep, commitTxId);
+}
+
 }
 
 namespace NColumnShard {
@@ -623,6 +669,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
 
     Y_UNIT_TEST(RebootDrop) {
         TestDrop(true);
+    }
+
+    Y_UNIT_TEST(DropWriteRace) {
+        TestDropWriteRace();
     }
 }
 

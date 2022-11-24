@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,7 +10,7 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "Key"
+                        "Key (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Key",
@@ -23,23 +23,207 @@
             "name": "/local/base_json_insert_from_table_sql_plan/ResultTableJD",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key (expr)"
-                    ]
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "Key (expr)"
-                    ],
                     "columns": [
+                        "Key",
                         "Value"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 21,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_3_0",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_json_insert_from_table_sql_plan/ResultTableJD"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_2_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 20,
+                        "Tables": [
+                            "base_json_insert_from_table_sql_plan/ResultTableJD"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 18,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 17,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 16,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Iterator": "If",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 15
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_0"
+            },
+            {
+                "Node Type": "Precompute_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 13,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            }
+                        ],
+                        "PlanNodeId": 12,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 11,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_1_2",
+                                        "Node Type": "Limit-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": null,
+                                                "Table": "base_json_insert_from_table_sql_plan/ResultTableJD"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_0_2",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 10,
+                                        "Tables": [
+                                            "base_json_insert_from_table_sql_plan/ResultTableJD"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Aggregate",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 3,
+                "Subplan Name": "CTE Aggregate"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 2,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_2"
+            },
+            {
+                "Node Type": "Aggregate",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 1,
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            }
+                        ],
+                        "PlanNodeId": 7,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 6,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "Key",
+                                                    "Value"
+                                                ],
+                                                "ReadRange": [
+                                                    "Key (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_json_insert_from_table_sql_plan/InputJD"
+                                            }
+                                        ],
+                                        "PlanNodeId": 5,
+                                        "Tables": [
+                                            "base_json_insert_from_table_sql_plan/InputJD"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE Aggregate"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 8,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_1"
+            }
+        ]
+    }
 }

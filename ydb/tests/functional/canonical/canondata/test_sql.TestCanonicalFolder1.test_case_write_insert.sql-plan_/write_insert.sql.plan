@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -8,21 +8,15 @@
             "name": "/local/base_write_insert_sql_plan/Input",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ]
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ],
                     "columns": [
+                        "key",
+                        "subkey",
                         "value"
                     ]
                 }
@@ -32,38 +26,377 @@
             "name": "/local/base_write_insert_sql_plan/Input1",
             "reads": [
                 {
+                    "type": "Lookup"
+                },
+                {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"1\")"
+                        "Group (1)"
                     ],
                     "scan_by": [
-                        "Name"
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Group",
                         "Name"
-                    ]
-                },
-                {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Group (expr)",
-                        "Name (expr)"
                     ]
                 }
             ],
             "writes": [
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
-                        "Amount"
+                        "Amount",
+                        "Group",
+                        "Name"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 37,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_3_1",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_write_insert_sql_plan/Input"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_2_1",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 36,
+                        "Tables": [
+                            "base_write_insert_sql_plan/Input"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 35,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_3_0",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_write_insert_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_2_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 34,
+                        "Tables": [
+                            "base_write_insert_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_2_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 28,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 27,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 26,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Iterator": "If",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 25
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_1"
+            },
+            {
+                "Node Type": "Precompute_2_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 32,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 31,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 30,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Iterator": "If",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 29
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_2_0"
+            },
+            {
+                "Node Type": "Precompute_1_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 19,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            }
+                        ],
+                        "PlanNodeId": 18,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 17,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_1_5",
+                                        "Node Type": "Limit-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": null,
+                                                "Table": "base_write_insert_sql_plan/Input"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_0_5",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 16,
+                                        "Tables": [
+                                            "base_write_insert_sql_plan/Input"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_1"
+            },
+            {
+                "Node Type": "Precompute_1_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 23,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            }
+                        ],
+                        "PlanNodeId": 22,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 21,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "CTE Name": "tx_result_binding_1_2",
+                                        "Node Type": "Limit-TablePointLookup-ConstantExpr",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": null,
+                                                "Table": "base_write_insert_sql_plan/Input1"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_0_2",
+                                                "Name": "Iterator"
+                                            }
+                                        ],
+                                        "PlanNodeId": 20,
+                                        "Tables": [
+                                            "base_write_insert_sql_plan/Input1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_1_0"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 14,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 10,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_1"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Aggregate",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 9,
+                "Subplan Name": "CTE Aggregate"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 8,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_2"
+            },
+            {
+                "Node Type": "Aggregate",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 7,
+                "Plans": [
+                    {
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Name": "Aggregate"
+                            }
+                        ],
+                        "PlanNodeId": 13,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 12,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "ReadRange": [
+                                                    "Group (1)",
+                                                    "Name (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_write_insert_sql_plan/Input1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 11,
+                                        "Tables": [
+                                            "base_write_insert_sql_plan/Input1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE Aggregate"
+            },
+            {
+                "CTE Name": "ConstantExpr",
+                "Node Type": "Precompute_0_3",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 6,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_3"
+            },
+            {
+                "CTE Name": "ConstantExpr",
+                "Node Type": "Precompute_0_4",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_4"
+            },
+            {
+                "CTE Name": "ConstantExpr",
+                "Node Type": "ConstantExpr",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 3,
+                "Subplan Name": "CTE ConstantExpr"
+            },
+            {
+                "CTE Name": "ConstantExpr",
+                "Node Type": "Precompute_0_5",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 2,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_5"
+            },
+            {
+                "Node Type": "ConstantExpr",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 1,
+                "Plans": [
+                    {
+                        "Node Type": "ConstantExpr",
+                        "Operators": [
+                            {
+                                "Iterator": "[Variant,Variant,Variant]",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 5
+                    }
+                ],
+                "Subplan Name": "CTE ConstantExpr"
+            }
+        ]
+    }
 }

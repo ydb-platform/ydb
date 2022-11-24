@@ -160,10 +160,8 @@ public:
 
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
-        path->StepCreated = step;
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistCreateStep(db, pathId, step);
 
         fs->FinishAlter();
 

@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,10 +10,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Name (\"Anna\")"
+                        "Name (Anna)"
                     ],
                     "scan_by": [
-                        "Type"
+                        "Type (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Name",
@@ -24,10 +24,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Name (\"Dmitry\")"
+                        "Name (Dmitry)"
                     ],
                     "scan_by": [
-                        "Type"
+                        "Type (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Name",
@@ -37,5 +37,110 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 8,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 7,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 6,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-Union",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "Union"
+                                            }
+                                        ],
+                                        "PlanNodeId": 5,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Name",
+                                                                    "Type",
+                                                                    "Value"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "Name (Dmitry)",
+                                                                    "Type (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_utf8_sql_plan/Input3"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_utf8_sql_plan/Input3"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 4,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TablePointLookup",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Name",
+                                                                    "Type",
+                                                                    "Value"
+                                                                ],
+                                                                "ReadRange": [
+                                                                    "Name (Anna)",
+                                                                    "Type (-\u221e, +\u221e)"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_utf8_sql_plan/Input3"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 3,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_utf8_sql_plan/Input3"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

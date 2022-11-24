@@ -3487,6 +3487,24 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(FlatMapLambdaInnerPrecompute) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            $rows = SELECT * FROM KeyValue;
+            $cnt = SELECT count(*) FROM $rows;
+            $join = SELECT l.Value AS value FROM $rows as l LEFT JOIN EightShard AS r on l.Key = r.Key;
+
+            $check = SELECT count(*) FROM $join;
+            SELECT * FROM EightShard WHERE $check = $cnt;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,33 +10,9 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "key",
-                        "subkey"
+                        "key (-\u221e, +\u221e)",
+                        "subkey (-\u221e, +\u221e)"
                     ],
-                    "columns": [
-                        "key",
-                        "value"
-                    ]
-                },
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "key",
-                        "subkey"
-                    ]
-                },
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "limit": "\"1001\"",
                     "columns": [
                         "key",
                         "subkey",
@@ -45,5 +21,202 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "CTE Name": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                "Node Type": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 5,
+                "Subplan Name": "CTE TableFullScan-Limit-Filter-Aggregate-Limit"
+            },
+            {
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 12,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 11,
+                        "Plans": [
+                            {
+                                "CTE Name": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 10,
+                                "PlanNodeType": "Connection"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_3",
+                "PlanNodeId": 4,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "CTE Name": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "ResultSet_0",
+                "PlanNodeId": 18,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 17,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 16,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort-Aggregate",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.key"
+                                            },
+                                            {
+                                                "Name": "Aggregate"
+                                            }
+                                        ],
+                                        "PlanNodeId": 15,
+                                        "Plans": [
+                                            {
+                                                "CTE Name": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                                                "KeyColumns": [
+                                                    "key"
+                                                ],
+                                                "Node Type": "HashShuffle",
+                                                "PlanNodeId": 14,
+                                                "PlanNodeType": "Connection"
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "key (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "CTE Name": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                "Node Type": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 9,
+                "Subplan Name": "CTE TableFullScan-Limit-Filter-Aggregate-Limit"
+            },
+            {
+                "Node Type": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 1,
+                "Plans": [
+                    {
+                        "Node Type": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                        "Operators": [
+                            {
+                                "Name": "TableFullScan",
+                                "ReadColumns": [
+                                    "key",
+                                    "subkey",
+                                    "value"
+                                ],
+                                "ReadRange": [
+                                    "key (-\u221e, +\u221e)",
+                                    "subkey (-\u221e, +\u221e)"
+                                ],
+                                "Table": "base_select_result_limit_sql_plan/Input"
+                            },
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            },
+                            {
+                                "Limit": "1001",
+                                "Name": "Filter",
+                                "Predicate": "item.key < 100"
+                            },
+                            {
+                                "Aggregation": "{_yql_agg_0: MIN(item.value)}",
+                                "GroupBy": "item.key",
+                                "Name": "Aggregate"
+                            },
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 13,
+                        "Tables": [
+                            "base_select_result_limit_sql_plan/Input"
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE TableFullScan-Limit-Filter-Aggregate-Limit"
+            },
+            {
+                "Node Type": "ResultSet_2",
+                "PlanNodeId": 8,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 7,
+                        "Plans": [
+                            {
+                                "CTE Name": "TableFullScan-Limit-Filter-Aggregate-Limit",
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 6,
+                                "PlanNodeType": "Connection"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

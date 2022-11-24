@@ -618,7 +618,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_VERIFY(success);
         TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->IsExtendedFormat());
-        operation->PipeBindedMessages[tablet][cookie] = TOperation::TPreSerialisedMessage(msgType, data);
+        operation->PipeBindedMessages[tablet][cookie] = TOperation::TPreSerializedMessage(msgType, data, opId);
 
         ss->PipeClientCache->Send(ctx, ui64(tablet), msgType,  data, cookie.second);
     }

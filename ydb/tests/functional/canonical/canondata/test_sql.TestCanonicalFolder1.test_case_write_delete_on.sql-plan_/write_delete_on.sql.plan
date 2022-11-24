@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,8 +10,8 @@
                 {
                     "type": "FullScan",
                     "scan_by": [
-                        "key",
-                        "subkey"
+                        "key (-\u221e, +\u221e)",
+                        "subkey (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "key",
@@ -22,11 +22,7 @@
             ],
             "writes": [
                 {
-                    "type": "MultiErase",
-                    "key": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ]
+                    "type": "MultiErase"
                 }
             ]
         },
@@ -34,13 +30,124 @@
             "name": "/local/base_write_delete_on_sql_plan/Input1",
             "writes": [
                 {
-                    "type": "MultiErase",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ]
+                    "type": "MultiErase"
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 11,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_1",
+                        "Node Type": "Delete-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Delete",
+                                "Table": "base_write_delete_on_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_1",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 10,
+                        "Tables": [
+                            "base_write_delete_on_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 9,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_0",
+                        "Node Type": "Delete-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Delete",
+                                "Table": "base_write_delete_on_sql_plan/Input"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 8,
+                        "Tables": [
+                            "base_write_delete_on_sql_plan/Input"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_0_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 6,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 5,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 4,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Filter-TableFullScan",
+                                        "Operators": [
+                                            {
+                                                "Name": "Filter",
+                                                "Predicate": "items2 == \"b\""
+                                            },
+                                            {
+                                                "Name": "TableFullScan",
+                                                "ReadColumns": [
+                                                    "key",
+                                                    "subkey",
+                                                    "value"
+                                                ],
+                                                "ReadRange": [
+                                                    "key (-\u221e, +\u221e)",
+                                                    "subkey (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_write_delete_on_sql_plan/Input"
+                                            }
+                                        ],
+                                        "PlanNodeId": 3,
+                                        "Tables": [
+                                            "base_write_delete_on_sql_plan/Input"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            },
+            {
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 2,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Stage",
+                        "PlanNodeId": 1
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_1"
+            }
+        ]
+    }
 }

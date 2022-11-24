@@ -136,6 +136,8 @@ main := |*
     ('Version')                 { CurrentParams_->Version = value; };
     ('VisibilityTimeout')       { CurrentParams_->VisibilityTimeout = ParseAndValidate(value, TStringBuf("VisibilityTimeout")); };
     ('WaitTimeSeconds')         { CurrentParams_->WaitTimeSeconds = ParseAndValidate(value, TStringBuf("WaitTimeSeconds")); };
+    ('CreatedTimestamp')        { CurrentParams_->CreateTimestampSeconds = ParseAndValidate(value, TStringBuf("CreatedTimestamp")); };
+    ('CustomQueueName')         { CurrentParams_->CustomQueueName = ParseAndValidate(value, TStringBuf("CustomQueueName")); };
 
     attribute;
     attribute_name;

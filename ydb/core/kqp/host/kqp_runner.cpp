@@ -297,6 +297,9 @@ public:
         YQL_ENSURE(queryExpr->Type() == TExprNode::World);
         YQL_ENSURE(cluster == Cluster);
 
+        // Restrict OldEngine
+        YQL_ENSURE(false, "Unexpected data query execution in OldEngine mode.");
+
         PreparedRunTransformer->Rewind();
 
         TransformCtx->Reset();

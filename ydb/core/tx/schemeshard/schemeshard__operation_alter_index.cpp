@@ -41,8 +41,6 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, path->PathId, step);
 
         Y_VERIFY(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);

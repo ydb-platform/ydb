@@ -13,6 +13,7 @@
     <script language="javascript" type="text/javascript" src="cms/enums.js"></script>
     <script language="javascript" type="text/javascript" src="cms/proto_types.js"></script>
     <script language="javascript" type="text/javascript" src="cms/cms_log.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/sentinel_state.js"></script>
     <script language="javascript" type="text/javascript" src="cms/configs.js"></script>
     <script language="javascript" type="text/javascript" src="cms/config_forms.js"></script>
     <script language="javascript" type="text/javascript" src="cms/validators.js"></script>
@@ -25,6 +26,12 @@
       .narrow-line70 {line-height: 70%}
       .narrow-line80 {line-height: 80%}
       .narrow-line90 {line-height: 90%}
+      pre {outline: 1px solid #ccc; padding: 5px; margin: 5px; }
+      .string { color: green; }
+      .number { color: darkorange; }
+      .boolean { color: blue; }
+      .null { color: magenta; }
+      .key { color: red; }
     </style>
   </head>
   <body>
@@ -44,6 +51,9 @@
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#cms-log" data-toggle="tab">CMS Log</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#sentinel-state" data-toggle="tab">Sentinel state</a>
         </li>
       </ul>
       <div class="tab-content" style="padding-top: 10px">
@@ -80,6 +90,11 @@
             <tbody id="cms-log-body">
             </tbody>
           </table>
+        </div>
+        <div id="sentinel-state" class="tab-pane fade">
+          <pre id="sentinel-state-content">
+          Loading...
+          </pre>
         </div>
       </div>
     </div>

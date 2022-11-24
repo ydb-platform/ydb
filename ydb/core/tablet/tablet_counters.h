@@ -3,8 +3,10 @@
 
 #include <ydb/core/protos/counters.pb.h>
 #include <ydb/core/protos/tablet_counters.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <google/protobuf/descriptor.pb.h>
@@ -566,7 +568,7 @@ private:
 class TTabletLabeledCountersBase {
 public:
     //
-    enum EAggregateFunc {
+    enum class EAggregateFunc : ui8 {
         EAF_MAX = 1,
         EAF_MIN = 2,
         EAF_SUM = 3
@@ -581,19 +583,21 @@ public:
         , Group("")
         , GroupNames(nullptr)
         , Drop(false)
+        , DatabasePath(Nothing())
     {}
 
-    //metaInfo - counters names
-    //types - NKikimr::TLabeledCounterOptions::ECounterType
-    //aggrFuncs - EAggreagteFunc-s casted to ui8
-    //group - '/' separated list of group-values (user1/topic1/...)
-    //groupNames - groups names (clientId,topic,...)
-    //id - id for this user counter groups (tabletID or whatever, if there is several concurrent labeledCounters-generators inside one tablet)
+    // metaInfo - counters names
+    // types - NKikimr::TLabeledCounterOptions::ECounterType
+    // aggrFuncs - EAggreagteFunc-s casted to ui8
+    // group - '/' separated list of group-values (user1/topic1/...)
+    // groupNames - groups names (clientId,topic,...)
+    // id - id for this user counter groups (tabletID or whatever, if there is several concurrent labeledCounters-generators inside one tablet)
+    // databasePath - path to the database
     TTabletLabeledCountersBase(ui32 countersQnt,
         const char* const * metaInfo,
         const ui8* types,
         const ui8* aggrFunc,
-        const TString& group, const char* const * groupNames, const ui64 id)
+        const TString& group, const char* const * groupNames, const ui64 id, const TMaybe<TString>& databasePath = Nothing())
         : Counters(countersQnt)
         , Ids(countersQnt)
         , MetaInfo(metaInfo)
@@ -602,6 +606,7 @@ public:
         , Group(group)
         , GroupNames(groupNames)
         , Drop(false)
+        , DatabasePath(databasePath)
     {
         for (ui32 i = 0; i < countersQnt; ++i)
             Ids[i].Set(id);
@@ -626,7 +631,6 @@ public:
     const TString& GetGroup() const {
         return Group;
     }
-
 
     void SetGroup(const TString& group) {
         Group = group;
@@ -675,6 +679,14 @@ public:
         return Drop;
     }
 
+    void SetDatabasePath(const TMaybe<TString>& databasePath) {
+        DatabasePath = databasePath;
+    }
+
+    const TMaybe<TString>& GetDatabasePath() const {
+        return DatabasePath;
+    }
+
     //Counters will be filled with aggragated value by AggregateFunc, Ids will be filled with id from user counters with winning value
     void AggregateWith(const TTabletLabeledCountersBase& rp);
 
@@ -691,11 +703,11 @@ private:
     TString Group;
     const char* const * GroupNames;
     bool Drop;
+    TMaybe<TString> DatabasePath;
 };
 
 
 IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func);
-
 
 } // end of NKikimr
 

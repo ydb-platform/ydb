@@ -102,6 +102,7 @@ public:
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
+
 #define DECLARE_HANDLER(type, handler, answer)          \
         bool operator()(type& event) {                  \
             if (Settings.EventHandlers_.handler) {      \
@@ -111,19 +112,21 @@ private:
             return false;                               \
         }                                               \
         /**/
+
         DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
         DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
         DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
+
         bool Visit() {
-            return std::visit(*this, EventInfo.Event);
+            return std::visit(*this, Event);
         }
 
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {
-        THandlersVisitor visitor(Settings, eventInfo);
+        THandlersVisitor visitor(Settings, eventInfo.GetEvent());
         return visitor.Visit();
     }
 

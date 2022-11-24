@@ -44,4 +44,3 @@ enum ETxTypes {
     TXTYPE_UPDATE_CONFIG = 14                             [(TxTypeOpts) = {Name: "TxUpdateConfig"}];
     TXTYPE_UPDATE_DOWNTIMES = 15                          [(TxTypeOpts) = {Name: "TxUpdateDowntimes"}];
 }
-

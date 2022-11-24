@@ -303,6 +303,7 @@ public:
             if (SerializerCtx.PrecomputePhases.find(TxId) != SerializerCtx.PrecomputePhases.end()) {
                 typeName << "Precompute";
                 planNode.CteName = TStringBuilder() << "tx_result_binding_" << TxId << "_" << resId;
+                planNode.Type = EPlanNodeType::Materialize;
             } else {
                 typeName << "ResultSet";
                 planNode.Type = EPlanNodeType::ResultSet;
@@ -336,8 +337,9 @@ public:
         }
 
         /* set NodeId using reverse order */
+        ui64 firstPlanNodeId = SerializerCtx.PlanNodeId - QueryPlanNodes.size() + 1;
         for (auto& [id, planNode] : QueryPlanNodes) {
-            planNode.NodeId = SerializerCtx.PlanNodeId - id + 1;
+            planNode.NodeId = firstPlanNodeId + SerializerCtx.PlanNodeId - id;
         }
     }
 
@@ -362,6 +364,7 @@ private:
     enum class EPlanNodeType {
         Stage,
         Connection,
+        Materialize,
         ResultSet
     };
 
@@ -449,6 +452,8 @@ private:
         switch (planNode.Type) {
             case EPlanNodeType::Connection:
                 return "Connection";
+            case EPlanNodeType::Materialize:
+                return "Materialize";
             case EPlanNodeType::ResultSet:
                 return "ResultSet";
             default:
@@ -728,7 +733,7 @@ private:
 
                 auto& cteNode = AddPlanNode(QueryPlanNodes.begin()->second);
                 cteNode.Plans.insert(stageId);
-                cteNode.TypeName = TStringBuilder() << commonNode.TypeName << " (PlanNodeId: " << stageId << ")";
+                cteNode.TypeName = TStringBuilder() << commonNode.TypeName;
                 cteNode.CteName = cteNode.TypeName;
 
                 parentNode.CteRefName = *cteNode.CteName;
@@ -1636,13 +1641,13 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
         }
     };
 
-    for (const auto& txPlan : txPlans) {
-        if (txPlan.empty()) {
+    for (auto txPlanIt = txPlans.rbegin(); txPlanIt != txPlans.rend(); ++txPlanIt) {
+        if (txPlanIt->empty()) {
             continue;
         }
 
         NJson::TJsonValue txPlanJson;
-        NJson::ReadJsonTree(txPlan, &txPlanJson, true);
+        NJson::ReadJsonTree(*txPlanIt, &txPlanJson, true);
 
         for (auto& subplan : txPlanJson.GetMapSafe().at("Plans").GetArraySafe()) {
             ModifyPlan(subplan, removeStageGuid);
@@ -1690,13 +1695,13 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
     writer.WriteKey("queries");
     writer.BeginList();
 
-    for (const auto& plan : queryPlans) {
-        if (plan.empty()) {
+    for (auto planIt = queryPlans.rbegin(); planIt != queryPlans.rend(); ++planIt) {
+        if (planIt->empty()) {
             continue;
         }
 
         NJson::TJsonValue root;
-        NJson::ReadJsonTree(plan, &root, true);
+        NJson::ReadJsonTree(*planIt, &root, true);
         auto planMap = root.GetMapSafe();
 
         writer.BeginObject();

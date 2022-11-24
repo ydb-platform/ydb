@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -9,10 +9,6 @@
             "reads": [
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"1\")",
-                        "Name (\"Name1\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
@@ -22,10 +18,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"4\")",
-                        "Name (\"Name4\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
@@ -35,10 +27,6 @@
                 },
                 {
                     "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"6\")",
-                        "Name (\"Name2\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
@@ -48,5 +36,154 @@
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 10,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 9,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 8,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "Limit-Union",
+                                        "Operators": [
+                                            {
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
+                                            {
+                                                "Name": "Union"
+                                            }
+                                        ],
+                                        "PlanNodeId": 7,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 4,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.Amount != 106 And item.Comment == \"Test1\""
+                                                            },
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_equi_multi_rp_1_sql_plan/Input1"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Group: 4,Name: \"Name4\"}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 3,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_equi_multi_rp_1_sql_plan/Input1"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 2,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.Amount != 106 And item.Comment == \"Test1\""
+                                                            },
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_equi_multi_rp_1_sql_plan/Input1"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Group: 6,Name: \"Name2\"}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_equi_multi_rp_1_sql_plan/Input1"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "UnionAll",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "Filter",
+                                                                "Predicate": "item.Amount != 106 And item.Comment == \"Test1\""
+                                                            },
+                                                            {
+                                                                "Name": "TablePointLookup",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Comment",
+                                                                    "Group",
+                                                                    "Name"
+                                                                ],
+                                                                "Table": "base_pk_predicate_pk_predicate_equi_multi_rp_1_sql_plan/Input1"
+                                                            },
+                                                            {
+                                                                "Iterator": "[{Group: 1,Name: \"Name1\"}]",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 5,
+                                                        "Tables": [
+                                                            "base_pk_predicate_pk_predicate_equi_multi_rp_1_sql_plan/Input1"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }

@@ -304,6 +304,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     TVector<TExprBase> lookupMembers;
     TVector<TCoAtom> lookupNames;
     ui32 fixedPrefix = 0;
+    TSet<TString> deduplicateLeftColumns;
     for (auto& rightColumnName : rightTableDesc.Metadata->KeyColumnNames) {
         TExprNode::TPtr member;
 
@@ -320,6 +321,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             if (!leftColumn) {
                 break;
             }
+            deduplicateLeftColumns.insert(*leftColumn);
 
             member = Build<TCoMember>(ctx, join.Pos())
                 .Struct(leftRowArg)
@@ -371,7 +373,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Done()
         : join.LeftInput();
 
-    auto leftDataDeduplicated = DeduplicateByMembers(leftData, leftJoinKeys, ctx, join.Pos());
+    auto leftDataDeduplicated = DeduplicateByMembers(leftData, deduplicateLeftColumns, ctx, join.Pos());
 
     if (!equalLeftKeys.empty()) {
         auto row = Build<TCoArgument>(ctx, join.Pos())

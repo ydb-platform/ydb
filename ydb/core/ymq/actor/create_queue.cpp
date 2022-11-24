@@ -34,7 +34,8 @@ public:
     }
 protected:
     bool IsFifoQueue() const override {
-        return AsciiHasSuffixIgnoreCase(Request().GetQueueName(), ".fifo"); // works for cloud too, since the custom name should end with '.fifo'
+        const TString& name = Request().GetCustomQueueName() ? Request().GetCustomQueueName() : Request().GetQueueName();
+        return AsciiHasSuffixIgnoreCase(name, ".fifo"); // works for cloud too, since the custom name should end with '.fifo'
     }
 
 private:
@@ -76,6 +77,25 @@ private:
             return false;
         }
 
+        if (Request().HasCustomQueueName()) {
+            if (IsCloud()) {
+                if (!ValidateQueueNameOrUserName(Request().GetCustomQueueName())) {
+                    MakeError(result, NErrors::INVALID_PARAMETER_VALUE, "Invalid custom queue name.");
+                    return false;
+                }
+            } else {
+                if (!Request().GetCustomQueueName().empty()) {
+                    MakeError(result, NErrors::INVALID_PARAMETER_VALUE, "Custom queue name must be empty or unset.");
+                    return false;
+                }
+            }
+        }
+
+        if (Request().HasCreatedTimestamp() && Request().GetCreatedTimestamp() > TActivationContext::AsActorContext().Now().Seconds()) {
+            MakeError(result, NErrors::INVALID_PARAMETER_VALUE, "Invalid created timestamp.");
+            return false;
+        }
+
         if (Request().GetShards() > MAX_SHARDS_COUNT) {
             MakeError(result, NErrors::INVALID_PARAMETER_VALUE, "Too many shards.");
             return false;
@@ -111,11 +131,14 @@ private:
         Become(&TThis::StateFunc);
 
         if (IsCloud()) {
-            Register(new TAtomicCounterActor(SelfId(), Cfg().GetRoot(), RequestId_));
+            if (Request().GetCustomQueueName()) {
+                ResourceId_ = Request().GetQueueName();
+                StartQueueCreation(Request().GetQueueName(), UserName_, Request().GetCustomQueueName());
+            } else {
+                Register(new TAtomicCounterActor(SelfId(), Cfg().GetRoot(), RequestId_));
+            }
         } else {
-            static const TString emptyCustomQueueName = "";
-
-            StartQueueCreation(Request().GetQueueName(), UserName_, emptyCustomQueueName);
+            StartQueueCreation(Request().GetQueueName(), UserName_, Request().GetCustomQueueName());
         }
     }
 
@@ -167,7 +190,7 @@ private:
 
         case EQueueState::Active:
             if (event->Success) {
-                const TString& name = Request().GetQueueName();
+                const TString& name = Request().GetCustomQueueName() ? Request().GetCustomQueueName() : Request().GetQueueName();
                 if (IsCloud()) {
                     const auto finalResourceId = event->AlreadyExists ? event->ExistingQueueResourceId : ResourceId_;
                     result->SetQueueName(finalResourceId);

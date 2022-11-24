@@ -198,9 +198,32 @@ TExprBase DqPushMembersFilterToStage(TExprBase node, TExprContext& ctx, IOptimiz
     return result.Cast();
 }
 
+TExprNode::TListType FindLambdaPrecomputes(const TCoLambda& lambda) {
+    auto predicate = [](const TExprNode::TPtr& node) {
+        return TMaybeNode<TDqPrecompute>(node).IsValid();
+    };
+
+    TExprNode::TListType result;
+    VisitExpr(lambda.Body().Ptr(), [&result, &predicate] (const TExprNode::TPtr& node) {
+        if (predicate(node)) {
+            result.emplace_back(node);
+            return false;
+        }
+
+        return true;
+    });
+
+    return result;
+}
+
 TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& flatmap,
-    TExprNode::TListType&& innerConnections, const TParentsMap& parentsMap, TExprContext& ctx)
+    TVector<NNodes::TDqConnection>&& innerConnections, const TParentsMap& parentsMap, TExprContext& ctx)
 {
+    auto innerPrecomputes = FindLambdaPrecomputes(flatmap.Lambda());
+    if (!innerPrecomputes.empty()) {
+        return {};
+    }
+
     TVector<TDqConnection> inputs;
     TNodeOnNodeOwnedMap replaceMap;
 
@@ -208,15 +231,15 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
     inputs.reserve(innerConnections.size() + 1);
     inputs.push_back(flatmap.Input().Cast<TDqConnection>());
     for (auto& cn : innerConnections) {
-        if (!TMaybeNode<TDqCnUnionAll>(cn).IsValid() && !TMaybeNode<TDqCnMerge>(cn).IsValid()) {
+        if (!cn.Maybe<TDqCnUnionAll>() && !cn.Maybe<TDqCnMerge>()) {
             return {};
         }
 
-        if (!IsSingleConsumerConnection(TDqConnection(cn), parentsMap, true)) {
+        if (!IsSingleConsumerConnection(cn, parentsMap, true)) {
             return {};
         }
 
-        inputs.push_back(TDqConnection(cn));
+        inputs.push_back(cn);
     }
 
     auto args = PrepareArgumentsReplacement(flatmap.Input(), inputs, ctx, replaceMap);
@@ -295,19 +318,6 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
             .Build()
         .Settings(TDqStageSettings().BuildNode(ctx, flatmap.Pos()))
         .Done();
-}
-
-TExprNode::TListType FindLambdaConnections(const TCoLambda& lambda) {
-    auto filter = [](const TExprNode::TPtr& node) {
-        return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
-    };
-
-    auto predicate = [](const TExprNode::TPtr& node) {
-        return TMaybeNode<TDqSource>(node).IsValid() ||
-               TMaybeNode<TDqConnection>(node).IsValid();
-    };
-
-    return FindNodes(lambda.Body().Ptr(), filter, predicate);
 }
 
 } // namespace
@@ -462,7 +472,7 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
         return node;
     }
 
-    auto innerConnections = FindLambdaConnections(flatmap.Lambda());
+    auto innerConnections = FindDqConnections(flatmap.Lambda());
     if (innerConnections.empty()) {
         return node;
     }
@@ -502,7 +512,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         return node;
     }
 
-    auto innerConnections = FindLambdaConnections(flatmap.Lambda());
+    auto innerConnections = FindDqConnections(flatmap.Lambda());
 
     TMaybeNode<TDqStage> flatmapStage;
     if (!innerConnections.empty()) {
@@ -1397,7 +1407,10 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
                     .Args({"item", "state"})
                     .Body<TCoAggrAdd>()
                         .Left("state")
-                        .Right("item")
+                        .Right<TCoMember>()
+                            .Struct("item")
+                            .Name(field)
+                            .Build()
                         .Build()
                     .Build()
                 .Build()

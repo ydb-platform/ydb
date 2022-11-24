@@ -1,6 +1,6 @@
 {
     "meta": {
-        "version": "0.1",
+        "version": "0.2",
         "type": "query"
     },
     "tables": [
@@ -10,10 +10,10 @@
                 {
                     "type": "Lookup",
                     "lookup_by": [
-                        "Group (\"1\")"
+                        "Group (1)"
                     ],
                     "scan_by": [
-                        "Name"
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "columns": [
                         "Amount",
@@ -25,15 +25,87 @@
             "writes": [
                 {
                     "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
-                        "Amount"
+                        "Amount",
+                        "Name",
+                        "Group"
                     ]
                 }
             ]
         }
-    ]
+    ],
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "Effect",
+                "PlanNodeId": 7,
+                "Plans": [
+                    {
+                        "CTE Name": "tx_result_binding_1_0",
+                        "Node Type": "Upsert-ConstantExpr",
+                        "Operators": [
+                            {
+                                "Name": "Upsert",
+                                "Table": "base_write_update_sql_plan/Input1"
+                            },
+                            {
+                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                "Name": "Iterator"
+                            }
+                        ],
+                        "PlanNodeId": 6,
+                        "Tables": [
+                            "base_write_update_sql_plan/Input1"
+                        ]
+                    }
+                ]
+            },
+            {
+                "Node Type": "Precompute_0",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 3,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 2,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TablePointLookup",
+                                        "Operators": [
+                                            {
+                                                "Name": "TablePointLookup",
+                                                "ReadColumns": [
+                                                    "Amount",
+                                                    "Group",
+                                                    "Name"
+                                                ],
+                                                "ReadRange": [
+                                                    "Group (1)",
+                                                    "Name (-\u221e, +\u221e)"
+                                                ],
+                                                "Table": "base_write_update_sql_plan/Input1"
+                                            }
+                                        ],
+                                        "PlanNodeId": 1,
+                                        "Tables": [
+                                            "base_write_update_sql_plan/Input1"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE tx_result_binding_0_0"
+            }
+        ]
+    }
 }

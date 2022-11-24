@@ -510,16 +510,16 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
 
             break;
         }
-        case ECreateComponentsStep::DescribeTableForSetSchemeShardId: {
-            SendDescribeTable();
-            break;
-        }
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             RequestLeaderTabletId();
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
             AddRPSQuota();
+            break;
+        }
+        case ECreateComponentsStep::Commit: {
+            CommitNewVersion();
             break;
         }
     }
@@ -529,7 +529,6 @@ STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TSqsEvents::TEvExecuted, OnExecuted);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTableDescription);
         hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
         cFunc(TEvPoisonPill::EventType, PassAway);
     }
@@ -554,7 +553,11 @@ void TCreateQueueSchemaActorV2::Step() {
                     CurrentCreationStep_ = ECreateComponentsStep::MakeShards;
                 }
             } else {
-                CurrentCreationStep_ = ECreateComponentsStep::DescribeTableForSetSchemeShardId;
+                if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
+                    CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+                } else {
+                    CurrentCreationStep_ = ECreateComponentsStep::Commit;
+                }
             }
             break;
         }
@@ -576,19 +579,20 @@ void TCreateQueueSchemaActorV2::Step() {
             CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId;
             break;
         }
-        case ECreateComponentsStep::DescribeTableForSetSchemeShardId: {
-            Y_VERIFY(TablesFormat_ == 1);
-            Y_VERIFY(TableWithLeaderPathId_.first && TableWithLeaderPathId_.second);
-            CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId;
-            break;
-        }
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
-            Y_VERIFY(Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig());
-            CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+            if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
+                CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+            } else {
+                CurrentCreationStep_ = ECreateComponentsStep::Commit;
+            }
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
-            Y_VERIFY(false); // unreachable
+            CurrentCreationStep_ = ECreateComponentsStep::Commit;
+            break;
+        }
+        default: {
+            Y_VERIFY_S(false, "incorrect queue creation step: " << CurrentCreationStep_); // unreachable
             break;
         }
     }
@@ -657,7 +661,7 @@ void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeSh
     const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
 
     if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || pathDescription.TablePartitionsSize() == 0 || !pathDescription.GetTablePartitions(0).GetDatashardId()) {
-        // fail
+        RLOG_SQS_ERROR("Failed to discover leader: " << ev->Get()->GetRecord());
         auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->State = EQueueState::Creating;
         resp->Error = "Failed to discover leader.";
@@ -669,34 +673,6 @@ void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeSh
     }
 
     LeaderTabletId_ = pathDescription.GetTablePartitions(0).GetDatashardId();
-
-    if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
-        Step();
-    } else {
-        CommitNewVersion();
-    }
-}
-
-void TCreateQueueSchemaActorV2::SendDescribeTable() {
-    auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Path = NKikimr::SplitPath(Cfg().GetRoot() + "/.Queues");
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-    navigateRequest->ResultSet.emplace_back(entry);
-    
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
-}
-        
-void TCreateQueueSchemaActorV2::HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-    Y_VERIFY(result->ResultSet.size() == 1);
-    const auto& response = result->ResultSet.front();
-
-    TableWithLeaderPathId_ = std::make_pair(
-        response.TableId.PathId.OwnerId,
-        response.TableId.PathId.LocalPathId
-    );
 
     Step();
 }
@@ -714,7 +690,7 @@ void TCreateQueueSchemaActorV2::HandleAddQuoterResource(NKesus::TEvKesus::TEvAdd
     auto status = ev->Get()->Record.GetError().GetStatus();
     if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) {
         RLOG_SQS_DEBUG("Successfully added quoter resource. Id: " << ev->Get()->Record.GetResourceId());
-        CommitNewVersion();
+        Step();
     } else {
         RLOG_SQS_WARN("Failed to add quoter resource: " << ev->Get()->Record);
         auto resp = MakeErrorResponse(status == Ydb::StatusIds::BAD_REQUEST ? NErrors::VALIDATION_ERROR : NErrors::INTERNAL_FAILURE);
@@ -737,6 +713,7 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let fifo                   (Parameter 'FIFO              (DataType 'Bool)))
         (let contentBasedDeduplication (Parameter 'CONTENT_BASED_DEDUPLICATION (DataType 'Bool)))
         (let now                    (Parameter 'NOW               (DataType 'Uint64)))
+        (let createdTimestamp       (Parameter 'CREATED_TIMESTAMP (DataType 'Uint64)))
         (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
         (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
         (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
@@ -847,7 +824,7 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('QueueState (Uint64 '3))
             '('FifoQueue fifo)
             '('DeadLetterQueue (Bool 'false))
-            '('CreatedTimestamp now)
+            '('CreatedTimestamp createdTimestamp)
             '('Shards shards)
             '('Partitions partitions)
             '('Version queueIdNumber)
@@ -881,7 +858,7 @@ static const char* const CommitQueueParamsQuery = R"__(
 
         (let stateUpdate '(
                         '('CleanupTimestamp now)
-                        '('CreatedTimestamp now)
+                        '('CreatedTimestamp createdTimestamp)
                         '('LastModifiedTimestamp now)
                         '('InflyCount (Int64 '0))
                         '('MessageCount (Int64 '0))
@@ -915,7 +892,7 @@ static const char* const CommitQueueParamsQuery = R"__(
                     (let row '(%5$s))
                     (let update '(
                         '('CleanupTimestamp now)
-                        '('CreatedTimestamp now)
+                        '('CreatedTimestamp createdTimestamp)
                         '('LastModifiedTimestamp now)
                         '('InflyCount (Int64 '0))
                         '('MessageCount (Int64 '0))
@@ -985,7 +962,8 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
 
     auto ev = MakeExecuteEvent(query);
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
-    Y_VERIFY(LeaderTabletId_ != 0);
+    Y_VERIFY(TablesFormat_ == 1 || LeaderTabletId_ != 0);
+    TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_; 
     TParameters(trans->MutableParams()->MutableProto())
         .Utf8("NAME", QueuePath_.QueueName)
         .Utf8("CUSTOMNAME", CustomQueueName_)
@@ -994,6 +972,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Bool("FIFO", IsFifo_)
         .Bool("CONTENT_BASED_DEDUPLICATION", *ValidatedAttributes_.ContentBasedDeduplication)
         .Uint64("NOW", QueueCreationTimestamp_.MilliSeconds())
+        .Uint64("CREATED_TIMESTAMP", createdTimestamp.MilliSeconds())
         .Uint64("SHARDS", RequiredShardsCount_)
         .Uint64("PARTITIONS", Request_.GetPartitions())
         .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
@@ -1174,7 +1153,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
     , Sender_(sender)
-    , SI_(static_cast<ui32>(EDeleting::EraseQueueRecord))
+    , DeletionStep_(EDeleting::EraseQueueRecord)
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
 {
@@ -1193,7 +1172,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
     , Sender_(sender)
-    , SI_(static_cast<ui32>(tablesFormat == 0 ? EDeleting::RemoveTables : EDeleting::RemoveQueueVersionDirectory))
+    , DeletionStep_(tablesFormat == 0 ? EDeleting::RemoveTables : EDeleting::RemoveQueueVersionDirectory)
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
 {
@@ -1365,7 +1344,7 @@ static const char* EraseQueueRecordQuery = R"__(
 )__";
 
 void TDeleteQueueSchemaActorV2::NextAction() {
-    switch (EDeleting(SI_)) {
+    switch (DeletionStep_) {
         case EDeleting::EraseQueueRecord: {
             TString queueStateDir = QueuePath_.GetVersionedQueuePath();
             if (TablesFormat_ == 1) {
@@ -1431,12 +1410,12 @@ void TDeleteQueueSchemaActorV2::NextAction() {
 }
 
 void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
-    switch (EDeleting(SI_)) {
+    switch (DeletionStep_) {
         case EDeleting::EraseQueueRecord: {
             if (TablesFormat_ == 0) {
-                SI_ = ui32(EDeleting::RemoveTables);
+                DeletionStep_ = EDeleting::RemoveTables;
             } else {
-                SI_ = ui32(EDeleting::RemoveQueueVersionDirectory);
+                DeletionStep_ = EDeleting::RemoveQueueVersionDirectory;
             }
             break;
         }
@@ -1445,9 +1424,9 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
 
             if (Tables_.empty()) {
                 if (Shards_.empty()) {
-                    SI_ = ui32(Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory);
+                    DeletionStep_ = Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory;
                 } else {
-                    SI_ = ui32(EDeleting::RemoveShards);
+                    DeletionStep_ = EDeleting::RemoveShards;
                 }
             }
             break;
@@ -1456,15 +1435,28 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
             Shards_.pop_back();
 
             if (Shards_.empty()) {
-                SI_ = ui32(Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory);
+                DeletionStep_ = Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory;
             }
             break;
         }
-        default: {
-            SI_++;
-            if ((!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig()) && EDeleting(SI_) == EDeleting::DeleteQuoterResource) {
-                SI_++;
+        case EDeleting::RemoveQueueVersionDirectory: {
+            DeletionStep_ = EDeleting::RemoveQueueDirectory;
+            break;
+        }
+        case EDeleting::RemoveQueueDirectory: {
+            if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
+                DeletionStep_ = EDeleting::DeleteQuoterResource;
+            } else {
+                DeletionStep_ = EDeleting::Finish;
             }
+            break;
+        }
+        case EDeleting::DeleteQuoterResource: {
+            DeletionStep_ = EDeleting::Finish;
+            break;
+        }
+        default: {
+            Y_VERIFY_S(false, "incorrect queue deletion step: " << DeletionStep_); // unreachable
         }
     }
 
@@ -1474,7 +1466,7 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
 void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     if (IsGoodStatusCode(record.GetStatus())) {
-        if (EDeleting(SI_) == EDeleting::EraseQueueRecord) {
+        if (DeletionStep_ == EDeleting::EraseQueueRecord) {
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             if (!bool(val["exists"])) {
                 Send(Sender_,
@@ -1492,7 +1484,7 @@ void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev
     } else {
         RLOG_SQS_WARN("request execution error: " << record);
 
-        if (EDeleting(SI_) == EDeleting::EraseQueueRecord) {
+        if (DeletionStep_ == EDeleting::EraseQueueRecord) {
             Send(Sender_,
                      MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to erase queue record."));
             PassAway();

@@ -200,6 +200,7 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
+    NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
 }
 
 /// TGuardian
@@ -251,7 +252,8 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     for (const auto& kv : ByRack) {
         Y_VERIFY(all.ByRack.contains(kv.first));
         // ignore check if there is only one node in a rack
-        if (kv.second.size() == 1) {
+        auto it = NodeByRack.find(kv.first);
+        if (it != NodeByRack.end() && it->second.size() == 1) {
             continue;
         }
         if (kv.first && !CheckRatio(kv, all.ByRack, RackRatio)) {
@@ -953,6 +955,31 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
     }
 
+    void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev, const TActorContext &ctx) {
+        THolder<TEvCms::TEvGetSentinelStateResponse> Response;
+        Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
+        auto &rec = Response->Record;
+        rec.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+
+        auto& sentinelConfig = *rec.MutableSentinelConfig();
+        Config.Serialize(sentinelConfig);
+
+        if (SentinelState) {
+            for (auto it = SentinelState->PDisks.begin(); it != SentinelState->PDisks.end(); ++it) {
+                auto &entry = *rec.AddPDisks();
+                entry.MutableId()->SetNodeId(it->first.NodeId);
+                entry.MutableId()->SetDiskId(it->first.DiskId);
+                entry.MutableInfo()->SetState(it->second.GetState());
+                entry.MutableInfo()->SetPrevState(it->second.GetPrevState());
+                entry.MutableInfo()->SetStateCounter(it->second.GetStateCounter());
+                entry.MutableInfo()->SetStatus(it->second.GetStatus());
+                entry.MutableInfo()->SetChangingAllowed(it->second.IsChangingAllowed());
+                entry.MutableInfo()->SetTouched(it->second.IsTouched());
+            }
+        }
+        ctx.Send(ev->Sender, Response.Release());
+    }
+
     void Handle(TEvSentinel::TEvStatusChanged::TPtr& ev) {
         const TPDiskID& id = ev->Get()->Id;
         const bool success = ev->Get()->Success;
@@ -1045,6 +1072,7 @@ public:
             cFunc(TEvSentinel::TEvUpdateState::EventType, UpdateState);
             cFunc(TEvSentinel::TEvStateUpdated::EventType, OnStateUpdated);
             hFunc(TEvSentinel::TEvStatusChanged, Handle);
+            HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
             cFunc(TEvSentinel::TEvBSCPipeDisconnected::EventType, OnPipeDisconnected);
 
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);

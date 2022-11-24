@@ -113,7 +113,9 @@ struct TTxState {
         item(TxCreateBlobDepot, 68) \
         item(TxAlterBlobDepot, 69) \
         item(TxDropBlobDepot, 70) \
-        item(TxUpdateMainTableOnIndexMove, 71)
+        item(TxUpdateMainTableOnIndexMove, 71) \
+        item(TxAllocatePQ, 72) \
+
 
     // TX_STATE_TYPE_ENUM
 
@@ -301,6 +303,7 @@ struct TTxState {
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
+        case TxAllocatePQ:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
@@ -404,6 +407,7 @@ struct TTxState {
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
+        case TxAllocatePQ:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
@@ -491,6 +495,7 @@ struct TTxState {
         case TxCreateColumnTable:
         case TxCopyTable:
         case TxCreatePQGroup:
+        case TxAllocatePQ:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:

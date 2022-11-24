@@ -7,6 +7,15 @@
 namespace NKikimr {
     namespace NBsController {
 
+        struct TConfigFitAction {
+            std::set<TBoxId> Boxes;
+            std::multiset<std::tuple<TBoxStoragePoolId, std::optional<TGroupId>>> PoolsAndGroups; // nullopt goes first and means 'cover all groups in the pool'
+
+            operator bool() const {
+                return !Boxes.empty() || !PoolsAndGroups.empty();
+            }
+        };
+
         class TBlobStorageController::TConfigState {
             template<typename T>
             class TCowHolder {
@@ -101,6 +110,8 @@ namespace NKikimr {
 
             TStoragePoolStat& StoragePoolStat;
 
+            TConfigFitAction Fit;
+
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp)
                 : Self(controller)
@@ -131,6 +142,8 @@ namespace NKikimr {
             }
 
             void Commit() {
+                Y_VERIFY(!Fit);
+
                 HostConfigs.Commit();
                 Boxes.Commit();
                 StoragePools.Commit();

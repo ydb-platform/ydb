@@ -156,6 +156,7 @@ namespace NKikimr::NBsController {
 
         auto &storagePools = StoragePools.Unshare();
         storagePools[id] = std::move(storagePool);
+        Fit.PoolsAndGroups.emplace(id, std::nullopt);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status) {
@@ -361,6 +362,9 @@ namespace NKikimr::NBsController {
         if (cmd.GetSuppressDonorMode()) {
             SuppressDonorMode.insert(vslotInfo->VSlotId);
         }
+
+        Y_VERIFY(vslotInfo->Group);
+        Fit.PoolsAndGroups.emplace(vslotInfo->Group->StoragePoolId, vslotInfo->Group->ID);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& /*status*/) {

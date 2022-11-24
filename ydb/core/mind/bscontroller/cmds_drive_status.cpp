@@ -24,10 +24,12 @@ namespace NKikimr::NBsController {
         }
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
+        bool fitGroups = false;
         const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus();
         if (const auto s = cmd.GetStatus(); s != NKikimrBlobStorage::EDriveStatus::UNKNOWN && s != pdisk->Status) {
             pdisk->Status = s;
             pdisk->StatusTimestamp = Timestamp;
+            fitGroups = s == NKikimrBlobStorage::EDriveStatus::BROKEN;
         }
         if (const auto ds = cmd.GetDecommitStatus(); ds != NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET &&
                 ds != pdisk->DecommitStatus) {
@@ -38,6 +40,14 @@ namespace NKikimr::NBsController {
                 if (slot->Group) {
                     TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                     group->CalculateGroupStatus();
+                }
+            }
+        }
+
+        if (fitGroups) {
+            for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+                if (slot->Group) {
+                    Fit.PoolsAndGroups.emplace(slot->Group->StoragePoolId, slot->Group->ID);
                 }
             }
         }
@@ -129,6 +139,7 @@ namespace NKikimr::NBsController {
                 }
                 STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA06, "Set new ExpectedSerial for HostConfigs drive",
                     (UniqueId, UniqueId), (Serial, newSerial), (BoxId, boxId), (PDiskId, *updatePDiskId), (Path, path));
+                Fit.Boxes.insert(boxId);
                 return;
             }
         }
@@ -173,6 +184,8 @@ namespace NKikimr::NBsController {
         const bool success = cmd.GetPDiskConfig().SerializeToString(&config);
         Y_VERIFY(success);
         driveInfoNew->PDiskConfig = config;
+
+        Fit.Boxes.insert(boxId);
 
         STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (UniqueId, UniqueId), (Serial, newSerial),
             (BoxId, boxId));
@@ -237,6 +250,8 @@ namespace NKikimr::NBsController {
             driveInfoNew->PDiskType = PDiskTypeToPDiskType(pdiskUpdate->Kind.Type());
             driveInfoNew->PDiskConfig = pdiskUpdate->PDiskConfig;
             driveInfoNew->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
+
+            Fit.Boxes.insert(pdiskUpdate->BoxId);
         } else {
             if (driveInfo->LifeStage == NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
                 throw TExAlready() << "Drive is already removed";
@@ -257,6 +272,8 @@ namespace NKikimr::NBsController {
             driveInfoMutable->NodeId.Clear();
             driveInfoMutable->PDiskId.Clear();
             driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED;
+
+            Fit.Boxes.insert(driveInfoMutable->BoxId);
 
             STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA07, "RemoveDriveSerial", (UniqueId, UniqueId), (Serial, serial));
         }

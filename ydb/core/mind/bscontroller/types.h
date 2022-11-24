@@ -26,6 +26,9 @@ namespace NKikimr {
         using TNodeId = Schema::Node::TKey::Type;
         using TGroupId = Schema::Group::TKey::Type;
 
+        using TBoxId = ui64;
+        using TBoxStoragePoolId = std::tuple<ui64, ui64>;
+
         class TBlobStorageController;
 
         struct TGroupLatencyStats {

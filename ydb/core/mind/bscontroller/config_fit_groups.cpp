@@ -525,16 +525,20 @@ namespace NKikimr {
         void TBlobStorageController::FitGroupsForUserConfig(TConfigState& state, ui32 availabilityDomainId,
                 const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
                 NKikimrBlobStorage::TConfigResponse::TStatus& status) {
+            auto poolsAndGroups = std::exchange(state.Fit.PoolsAndGroups, {});
+            if (poolsAndGroups.empty()) {
+                return; // nothing to do
+            }
+
             std::unordered_map<TString, std::pair<ui32, TBoxStoragePoolId>> filterMap;
             std::unordered_set<TString> changedFilters;
 
             // scan through all storage pools and fit the number of groups to desired one
-            for (const auto& [storagePoolId, storagePool] : state.StoragePools.Get()) {
+            auto processSingleStoragePool = [&](TBoxStoragePoolId storagePoolId, const TStoragePoolInfo& storagePool,
+                    bool createNewGroups, const auto& enumerateGroups) {
                 TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, PDiskSpaceMarginPromille,
                     storagePoolId, storagePool, status, VSlotReadyTimestampQ);
 
-                const auto& storagePoolGroups = state.StoragePoolGroups.Get();
-                const auto range = storagePoolGroups.equal_range(storagePoolId);
                 ui32 numActualGroups = 0;
 
                 try {
@@ -552,14 +556,17 @@ namespace NKikimr {
                     numGroups += storagePool.NumGroups;
                     id = storagePoolId;
 
-                    for (auto it = range.first; it != range.second; ++it, ++numActualGroups) {
-                        fitter.CheckExistingGroup(it->second);
-                    }
-                    if (numActualGroups < storagePool.NumGroups) {
-                        changedFilters.insert(identifier);
-                    }
-                    for (; numActualGroups < storagePool.NumGroups; ++numActualGroups) {
-                        fitter.CreateGroup();
+                    enumerateGroups([&](TGroupId groupId) {
+                        fitter.CheckExistingGroup(groupId);
+                        ++numActualGroups;
+                    });
+                    if (createNewGroups) {
+                        if (numActualGroups < storagePool.NumGroups) {
+                            changedFilters.insert(identifier);
+                        }
+                        for (; numActualGroups < storagePool.NumGroups; ++numActualGroups) {
+                            fitter.CreateGroup();
+                        }
                     }
                 } catch (const TExFitGroupError& ex) {
                     throw TExError() << "Group fit error"
@@ -573,6 +580,31 @@ namespace NKikimr {
                         << " StoragePoolId# " << std::get<1>(storagePoolId)
                         << " impossible to reduce number of groups";
                 }
+            };
+
+            const auto& storagePools = state.StoragePools.Get();
+            for (auto it = poolsAndGroups.begin(); it != poolsAndGroups.end(); ) {
+                const auto& [storagePoolId, groupId] = *it;
+                const auto spIt = storagePools.find(storagePoolId);
+                Y_VERIFY(spIt != storagePools.end());
+                if (!groupId) {
+                    // process all groups in this pool and skip the rest
+                    processSingleStoragePool(spIt->first, spIt->second, true, [&](const auto& callback) {
+                        const auto& storagePoolGroups = state.StoragePoolGroups.Get();
+                        for (auto [begin, end] = storagePoolGroups.equal_range(spIt->first); begin != end; ++begin) {
+                            callback(begin->second);
+                        }
+                    });
+                    for (; it != poolsAndGroups.end() && std::get<0>(*it) == storagePoolId; ++it)
+                    {}
+                } else {
+                    // process explicit group set
+                    processSingleStoragePool(spIt->first, spIt->second, false, [&](const auto& callback) {
+                        for (; it != poolsAndGroups.end() && std::get<0>(*it) == spIt->first; ++it) {
+                            callback(*std::get<1>(*it));
+                        }
+                    });
+                }
             }
 
             if (!cmd.GetIgnoreGroupReserve()) {
@@ -584,6 +616,8 @@ namespace NKikimr {
                     fitter.CheckReserve(numGroups, GroupReserveMin, GroupReservePart);
                 }
             }
+
+            state.CheckConsistency();
         }
 
     } // NBsController

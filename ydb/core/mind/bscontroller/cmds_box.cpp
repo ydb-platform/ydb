@@ -38,6 +38,7 @@ namespace NKikimr::NBsController {
 
         auto &boxes = Boxes.Unshare();
         boxes[id] = std::move(box);
+        Fit.Boxes.insert(id);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadBox& cmd, TStatus& status) {
@@ -80,6 +81,7 @@ namespace NKikimr::NBsController {
         }
 
         boxes.erase(it);
+        Fit.Boxes.insert(id);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TMergeBoxes& cmd, TStatus& /*status*/) {

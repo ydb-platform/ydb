@@ -139,10 +139,17 @@ namespace NKikimr {
         }
 
         void TBlobStorageController::FitPDisksForUserConfig(TConfigState &state) {
+            auto pdisksForBoxes = std::exchange(state.Fit.Boxes, {});
+            if (pdisksForBoxes.empty()) {
+                return;
+            }
+
             // re-fill PDisksToRemove set with all PDisks, we will erase remaining ones from this set a bit later
             state.PDisksToRemove.clear();
-            state.PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& /*pdiskInfo*/) {
-                state.PDisksToRemove.insert(pdiskId);
+            state.PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
+                if (pdisksForBoxes.contains(pdiskInfo.BoxId)) {
+                    state.PDisksToRemove.insert(pdiskId);
+                }
                 return true;
             });
 
@@ -150,6 +157,9 @@ namespace NKikimr {
 
             // Iterate over initial DrivesSerials map since every call to Unshare will invalidate iterators
             state.DrivesSerials.ScanRange({}, {}, [&](const auto& serial, const auto& driveInfo, const auto& getMutableItem) {
+                if (!pdisksForBoxes.contains(driveInfo.BoxId)) {
+                    return true;
+                }
                 if (driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN) {
                     // Try to find drive in currently online nodes and create new PDisk
                     if (auto nodeIt = NodeForSerial.find(serial.Serial); nodeIt != NodeForSerial.end()) {
@@ -165,10 +175,15 @@ namespace NKikimr {
                 return true;
             });
 
-            const auto &hostConfigs = state.HostConfigs.Get();
-            for (const auto &kvBox : state.Boxes.Get()) {
-                const TBoxId &boxId = kvBox.first;
-                const TBoxInfo &box = kvBox.second;
+            const auto& hostConfigs = state.HostConfigs.Get();
+            const auto& boxes = state.Boxes.Get();
+            for (const TBoxId& boxId : pdisksForBoxes) {
+                const auto boxIt = boxes.find(boxId);
+                if (boxIt == boxes.end()) {
+                    continue; // box was deleted
+                }
+                const TBoxInfo& box = boxIt->second;
+
                 THashSet<TNodeId> usedNodes;
                 for (const auto& [hostKey, hostValue] : box.Hosts) {
                     const THostConfigId &hostConfigId = hostValue.HostConfigId;
@@ -254,6 +269,7 @@ namespace NKikimr {
             for (const auto& pdiskId : state.PDisksToRemove) {
                 STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId));
             }
+            state.CheckConsistency();
         }
 
         void TBlobStorageController::FitPDisksForNode(TConfigState& state, ui32 nodeId, const std::vector<TSerial>& serials) {

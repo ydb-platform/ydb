@@ -43,8 +43,6 @@ public:
 class TBlobStorageController : public TActor<TBlobStorageController>, public TTabletExecutedFlat {
 public:
     using THostConfigId = Schema::HostConfig::TKey::Type;
-    using TBoxId = Schema::Box::TKey::Type;
-    using TBoxStoragePoolId = Schema::BoxStoragePool::TKey::Type;
     using THostId = std::tuple<TString, i32>; // (Host, IcPort) identifier
 
     class TTxInitScheme;

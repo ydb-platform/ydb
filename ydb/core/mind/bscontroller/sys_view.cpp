@@ -35,11 +35,11 @@ void FillKey(NKikimrSysView::TGroupKey* key, const TGroupId& id) {
     key->SetGroupId(id);
 }
 
-TBlobStorageController::TBoxStoragePoolId TransformKey(const NKikimrSysView::TStoragePoolKey& key) {
+TBoxStoragePoolId TransformKey(const NKikimrSysView::TStoragePoolKey& key) {
     return std::make_tuple(key.GetBoxId(), key.GetStoragePoolId());
 }
 
-void FillKey(NKikimrSysView::TStoragePoolKey* key, const TBlobStorageController::TBoxStoragePoolId& id) {
+void FillKey(NKikimrSysView::TStoragePoolKey* key, const TBoxStoragePoolId& id) {
     key->SetBoxId(std::get<0>(id));
     key->SetStoragePoolId(std::get<1>(id));
 }
@@ -77,7 +77,7 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     std::vector<std::pair<TPDiskId, const NKikimrSysView::TPDiskInfo*>> PDiskIndex;
     std::vector<std::pair<TVSlotId, const NKikimrSysView::TVSlotInfo*>> VSlotIndex;
     std::vector<std::pair<TGroupId, const NKikimrSysView::TGroupInfo*>> GroupIndex;
-    std::vector<std::pair<TBlobStorageController::TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*>> StoragePoolIndex;
+    std::vector<std::pair<TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*>> StoragePoolIndex;
     TBlobStorageController::THostRecordMap HostRecords;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;

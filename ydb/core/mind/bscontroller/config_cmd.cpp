@@ -175,27 +175,21 @@ namespace NKikimr::NBsController {
                 for (const auto& step : Cmd.GetCommand()) {
                     WrapCommand([&] {
                         THPTimer timer;
-                        bool fitPDisks = false;
-                        bool fitGroups = false;
                         auto& status = *Response->MutableStatus()->rbegin();
-                        ExecuteStep(*State, step, status, fitPDisks, fitGroups);
+                        ExecuteStep(*State, step, status);
                         State->CheckConsistency();
-                        if (fitPDisks) {
-                            Self->FitPDisksForUserConfig(*State);
-                            State->CheckConsistency();
-                        }
-                        if (fitGroups) {
-                            std::deque<ui64> expectedSlotSize;
-                            if (step.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kDefineStoragePool) {
-                                const auto& cmd = step.GetDefineStoragePool();
-                                for (ui64 size : cmd.GetExpectedGroupSlotSize()) {
-                                    expectedSlotSize.push_back(size);
-                                }
+                        Self->FitPDisksForUserConfig(*State);
+
+                        std::deque<ui64> expectedSlotSize;
+                        if (step.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kDefineStoragePool) {
+                            const auto& cmd = step.GetDefineStoragePool();
+                            for (ui64 size : cmd.GetExpectedGroupSlotSize()) {
+                                expectedSlotSize.push_back(size);
                             }
-                            const auto availabilityDomainId = AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-                            Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status);
-                            State->CheckConsistency();
                         }
+                        const auto availabilityDomainId = AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
+                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status);
+
                         const TDuration passed = TDuration::Seconds(timer.Passed());
                         switch (step.GetCommandCase()) {
 #define MAP_TIMING(CMD, NAME) \
@@ -289,43 +283,37 @@ namespace NKikimr::NBsController {
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
-                    NKikimrBlobStorage::TConfigResponse::TStatus& status, bool& fitPDisks, bool& fitGroups) {
+                    NKikimrBlobStorage::TConfigResponse::TStatus& status) {
+                state.ExplicitReconfigureMap.clear();
+                state.SuppressDonorMode.clear();
                 switch (cmd.GetCommandCase()) {
-#define HANDLE_COMMAND(NAME, FP, FG) \
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::k ## NAME: \
-                        if (FG) { \
-                            state.ExplicitReconfigureMap.clear(); \
-                            state.SuppressDonorMode.clear(); \
-                        } \
-                        state.ExecuteStep(cmd.Get ## NAME(), status); \
-                        fitPDisks = FP; \
-                        fitGroups = FG; \
-                        return;
+#define HANDLE_COMMAND(NAME) \
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::k ## NAME: return state.ExecuteStep(cmd.Get ## NAME(), status);
 
-                    HANDLE_COMMAND(DefineHostConfig,     true,  false)
-                    HANDLE_COMMAND(ReadHostConfig,       false, false)
-                    HANDLE_COMMAND(DeleteHostConfig,     false, false)
-                    HANDLE_COMMAND(DefineBox,            true,  false)
-                    HANDLE_COMMAND(ReadBox,              false, false)
-                    HANDLE_COMMAND(DeleteBox,            true,  false)
-                    HANDLE_COMMAND(DefineStoragePool,    false, true )
-                    HANDLE_COMMAND(ReadStoragePool,      false, false)
-                    HANDLE_COMMAND(DeleteStoragePool,    false, false)
-                    HANDLE_COMMAND(UpdateDriveStatus,    false, true )
-                    HANDLE_COMMAND(ReadDriveStatus,      false, false)
-                    HANDLE_COMMAND(ProposeStoragePools,  false, false)
-                    HANDLE_COMMAND(QueryBaseConfig,      false, false)
-                    HANDLE_COMMAND(ReassignGroupDisk,    false, true )
-                    HANDLE_COMMAND(MergeBoxes,           false, false)
-                    HANDLE_COMMAND(MoveGroups,           false, false)
-                    HANDLE_COMMAND(DropDonorDisk,        false, false)
-                    HANDLE_COMMAND(AddDriveSerial,       true,  false)
-                    HANDLE_COMMAND(RemoveDriveSerial,    true,  false)
-                    HANDLE_COMMAND(ForgetDriveSerial,    false, false)
-                    HANDLE_COMMAND(MigrateToSerial,      false, false)
-                    HANDLE_COMMAND(AllocateVirtualGroup, false, false)
-                    HANDLE_COMMAND(DecommitGroups,       false, false)
-                    HANDLE_COMMAND(WipeVDisk,            false, true)
+                    HANDLE_COMMAND(DefineHostConfig)
+                    HANDLE_COMMAND(ReadHostConfig)
+                    HANDLE_COMMAND(DeleteHostConfig)
+                    HANDLE_COMMAND(DefineBox)
+                    HANDLE_COMMAND(ReadBox)
+                    HANDLE_COMMAND(DeleteBox)
+                    HANDLE_COMMAND(DefineStoragePool)
+                    HANDLE_COMMAND(ReadStoragePool)
+                    HANDLE_COMMAND(DeleteStoragePool)
+                    HANDLE_COMMAND(UpdateDriveStatus)
+                    HANDLE_COMMAND(ReadDriveStatus)
+                    HANDLE_COMMAND(ProposeStoragePools)
+                    HANDLE_COMMAND(QueryBaseConfig)
+                    HANDLE_COMMAND(ReassignGroupDisk)
+                    HANDLE_COMMAND(MergeBoxes)
+                    HANDLE_COMMAND(MoveGroups)
+                    HANDLE_COMMAND(DropDonorDisk)
+                    HANDLE_COMMAND(AddDriveSerial)
+                    HANDLE_COMMAND(RemoveDriveSerial)
+                    HANDLE_COMMAND(ForgetDriveSerial)
+                    HANDLE_COMMAND(MigrateToSerial)
+                    HANDLE_COMMAND(AllocateVirtualGroup)
+                    HANDLE_COMMAND(DecommitGroups)
+                    HANDLE_COMMAND(WipeVDisk)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

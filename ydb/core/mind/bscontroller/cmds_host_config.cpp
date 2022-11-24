@@ -39,6 +39,15 @@ namespace NKikimr::NBsController {
 
         auto &hostConfigs = HostConfigs.Unshare();
         hostConfigs[id] = std::move(config);
+
+        for (const auto& [boxId, box] : Boxes.Get()) {
+            for (const auto& [hostKey, host] : box.Hosts) {
+                if (host.HostConfigId == id) {
+                    Fit.Boxes.insert(boxId);
+                    break;
+                }
+            }
+        }
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadHostConfig& cmd, TStatus& status) {

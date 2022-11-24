@@ -51,7 +51,7 @@ public:
 
         using TEntityKey = std::tuple<TString, TString>; // PDiskFilter, ErasureSpecies
         std::unordered_map<TEntityKey, size_t> entityMap;
-        std::unordered_map<TBlobStorageController::TBoxStoragePoolId, size_t> spToEntity;
+        std::unordered_map<TBoxStoragePoolId, size_t> spToEntity;
 
         for (const auto erasure : {TBlobStorageGroupType::ErasureMirror3dc, TBlobStorageGroupType::Erasure4Plus2Block}) {
             for (const NKikimrBlobStorage::EPDiskType type : {NKikimrBlobStorage::ROT, NKikimrBlobStorage::SSD}) {
@@ -88,7 +88,7 @@ public:
         }
 
         for (const auto& [groupId, group] : SystemViewsState.Groups) {
-            const TBlobStorageController::TBoxStoragePoolId key(group.GetBoxId(), group.GetStoragePoolId());
+            const TBoxStoragePoolId key(group.GetBoxId(), group.GetStoragePoolId());
             if (const auto it = spToEntity.find(key); it != spToEntity.end()) {
                 auto& e = storageStats[it->second];
                 e.SetCurrentGroupsCreated(e.GetCurrentGroupsCreated() + 1);
@@ -98,7 +98,7 @@ public:
         }
 
         using T = std::decay_t<decltype(SystemViewsState.PDisks)>::value_type;
-        std::unordered_map<TBlobStorageController::TBoxId, std::vector<const T*>> boxes;
+        std::unordered_map<TBoxId, std::vector<const T*>> boxes;
         for (const auto& kv : SystemViewsState.PDisks) {
             if (kv.second.HasBoxId()) {
                 boxes[kv.second.GetBoxId()].push_back(&kv);

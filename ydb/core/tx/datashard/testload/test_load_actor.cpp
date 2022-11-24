@@ -63,6 +63,7 @@ private:
     TString Session;
 
     TActorId HttpInfoCollector;
+    THashSet<TActorId> HttpInfoWaiters;
 
     // info about finished actors
     TVector<TFinishedTestInfo> FinishedTests;
@@ -467,44 +468,56 @@ public:
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
+        if (LoadActors.empty()) {
+            TStringStream ss;
+            ss << "TLoad# " << Tag << " started on " << StartTs
+               << " with no subactors, finished# " << FinishedTests.size()
+               << ", in state# " << State;
+
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
+            auto* info = response->Record.AddInfos();
+            info->SetTag(Tag);
+            info->SetData(ss.Str());
+            ctx.Send(ev->Sender, response.release());
+            return;
+        }
+
+        HttpInfoWaiters.insert(ev->Sender);
         if (HttpInfoCollector)
             return;
 
         TVector<TActorId> actors;
         actors.reserve(LoadActors.size());
-
-        // send messages to subactors
         for (const auto& actorId : LoadActors) {
             actors.push_back(actorId);
         }
-
-        // note that only parent can send us this request
-        Y_VERIFY(ev->Sender == Parent);
         HttpInfoCollector = ctx.Register(CreateInfoCollector(SelfId(), std::move(actors)));
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
-        HttpInfoCollector = {};
-
-        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
-        auto& record = response->Record;
-
         TStringStream ss;
         ss << "TLoad# " << Tag << " started on " << StartTs
            << " with subactors active# " << LoadActors.size()
-           << ", finished# " << FinishedTests.size();
+           << ", finished# " << FinishedTests.size()
+           << ", subactors infos: ";
 
+        for (auto& info: ev->Get()->Record.GetInfos()) {
+            ss << "{ tag: " << info.GetTag() << ", data: " << info.GetData() << " }";
+        }
+
+        NKikimrDataShardLoad::TEvTestLoadInfoResponse record;
         auto* info = record.AddInfos();
         info->SetTag(Tag);
         info->SetData(ss.Str());
 
-        // bad that we copy, but to have it sorted by tag we had to prepend with our info
-        auto& collectedRecord = ev->Get()->Record;
-        for (auto& info: collectedRecord.GetInfos()) {
-            *record.AddInfos() = std::move(info);
+        for (const auto& actorId: HttpInfoWaiters) {
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
+            response->Record = record;
+            ctx.Send(actorId, response.release());
         }
 
-        ctx.Send(Parent, response.release());
+        HttpInfoWaiters.clear();
+        HttpInfoCollector = {};
     }
 
     void HandlePoison(const TActorContext& ctx) {
@@ -686,14 +699,17 @@ public:
             return;
         }
 
+        if (LoadActors.empty()) {
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
+            ctx.Send(ctx.SelfID, response.release());
+            return;
+        }
+
         TVector<TActorId> actors;
         actors.reserve(LoadActors.size());
-
-        // send messages to subactors
         for (const auto& kv : LoadActors) {
             actors.push_back(kv.second.ActorId);
         }
-
         HttpInfoCollector = ctx.Register(CreateInfoCollector(SelfId(), std::move(actors)));
     }
 
@@ -702,6 +718,15 @@ public:
 
         TStringStream str;
         HTML(str) {
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    str << "State";
+                }
+                DIV_CLASS("panel-body") {
+                    str << "Running# " << LoadActors.size() << ", Finished# " << FinishedTests.size();
+                }
+            }
+
             for (const auto& info: record.GetInfos()) {
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {

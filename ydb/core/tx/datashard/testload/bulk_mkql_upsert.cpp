@@ -235,7 +235,7 @@ private:
     }
 
     void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
             << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 
@@ -250,7 +250,7 @@ private:
     }
 
     void Handle(TEvTablet::TEvLocalMKQLResponse::TPtr ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
             << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 

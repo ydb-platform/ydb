@@ -5,7 +5,7 @@ namespace NKikimr::NDataShardLoad {
 
 namespace {
 
-constexpr ui64 WakeupSeconds = 1;
+constexpr ui64 WakeupMs = 500;
 
 class TInfoCollector : public TActorBootstrapped<TInfoCollector> {
     const TActorId Parent;
@@ -30,7 +30,7 @@ public:
             ctx.Send(actorId, new TEvDataShardLoad::TEvTestLoadInfoRequest());
         }
 
-        ctx.Schedule(TDuration::Seconds(WakeupSeconds), new TEvents::TEvWakeup());
+        ctx.Schedule(TDuration::MilliSeconds(WakeupMs), new TEvents::TEvWakeup());
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
@@ -53,7 +53,6 @@ public:
 
         ctx.Send(Parent, response.release());
     }
-
 
     void HandleWakeup(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TInfoCollector# " << Parent

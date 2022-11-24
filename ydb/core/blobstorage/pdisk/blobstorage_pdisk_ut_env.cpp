@@ -2,11 +2,11 @@
 
 namespace NKikimr {
 void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
-    testCtx.TestResponce<NPDisk::TEvSlayResult>(
+    testCtx.TestResponse<NPDisk::TEvSlayResult>(
             new NPDisk::TEvSlay(vdisk.VDiskID, vdisk.OwnerRound + 1, 0, 0),
             NKikimrProto::OK);
 
-    const auto evInitRes = testCtx.TestResponce<NPDisk::TEvYardInitResult>(
+    const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
             new NPDisk::TEvYardInit(vdisk.OwnerRound + 1, vdisk.VDiskID, testCtx.TestCtx.PDiskGuid),
             NKikimrProto::OK);
 
@@ -14,13 +14,13 @@ void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
 }
 
 void TestChunkWriteReleaseRun() {
-    TActorTestContext testCtx(false);
+    TActorTestContext testCtx({ false });
 
     const TVDiskID vDiskID(0, 1, 0, 0, 0);
-    const auto evInitRes = testCtx.TestResponce<NPDisk::TEvYardInitResult>(
+    const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
             new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
             NKikimrProto::OK);
-    const auto evReserveRes = testCtx.TestResponce<NPDisk::TEvChunkReserveResult>(
+    const auto evReserveRes = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
             new NPDisk::TEvChunkReserve(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 1),
             NKikimrProto::OK);
     UNIT_ASSERT(evReserveRes->ChunkIds.size() == 1);
@@ -28,12 +28,12 @@ void TestChunkWriteReleaseRun() {
     const ui32 reservedChunk = evReserveRes->ChunkIds.front();
     NPDisk::TCommitRecord commitRecord;
     commitRecord.CommitChunks.push_back(reservedChunk);
-    testCtx.TestResponce<NPDisk::TEvLogResult>(
+    testCtx.TestResponse<NPDisk::TEvLogResult>(
             new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0, commitRecord,
                     TContiguousData(TString()), TLsnSeg(1, 1), nullptr),
             NKikimrProto::OK);
 
-    const auto evControlRes = testCtx.TestResponce<NPDisk::TEvYardControlResult>(
+    const auto evControlRes = testCtx.TestResponse<NPDisk::TEvYardControlResult>(
             new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
             NKikimrProto::OK);
     auto *pDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
@@ -62,10 +62,10 @@ void TestChunkWriteReleaseRun() {
 
     pDisk->ProcessChunkWriteQueue();
 
-    testCtx.TestResponce<NPDisk::TEvLogResult>(
+    testCtx.TestResponse<NPDisk::TEvLogResult>(
             nullptr,
             NKikimrProto::OK);
-    testCtx.TestResponce<NPDisk::TEvChunkWriteResult>(
+    testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
             nullptr,
             NKikimrProto::ERROR);
 

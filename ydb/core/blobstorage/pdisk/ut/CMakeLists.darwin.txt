@@ -40,6 +40,7 @@ target_sources(ydb-core-blobstorage-pdisk-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_actions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_run.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_sectormap.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_restore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/mock/pdisk_mock.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_yard.cpp

@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestKillOwnerWhileDeletingChunk(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks, ui32 vdisksNum) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx(false, usePDiskMock);
+            TActorTestContext testCtx({ false, usePDiskMock });
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestDecommit(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx(false, usePDiskMock);
+            TActorTestContext testCtx({ false, usePDiskMock });
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 auto& chunkIds = mock.Chunks[EChunkState::COMMITTED];
                 for (auto it = chunkIds.begin(); it != chunkIds.end(); ++it) {
                     TString dataCopy = data;
-                    testCtx.TestResponce<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                    testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
                         *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), (void*)10, false, 0),
                         NKikimrProto::OK);
                 }
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 }
             } 
             for (ui32 i = 0; i < reservedChunks; ++i) {
-                testCtx.TestResponce<NPDisk::TEvChunkForgetResult>(new NPDisk::TEvChunkForget(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound),
+                testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(new NPDisk::TEvChunkForget(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound),
                         NKikimrProto::OK);
             }
         }
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestKillOwnerWhileDecommitting(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks, ui32 vdisksNum) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx(false, usePDiskMock);
+            TActorTestContext testCtx({ false, usePDiskMock });
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     }
 
     void OwnerRecreationRaces(bool usePDiskMock, ui32 timeLimit, ui32 vdisksNum) {
-        TActorTestContext testCtx(false, usePDiskMock);
+        TActorTestContext testCtx({ false, usePDiskMock });
         const TString data = PrepareData(8);
 
         std::vector<TVDiskMock> mocks;

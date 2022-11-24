@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include "blobstorage_pdisk_ut.h"
+#include "blobstorage_pdisk_ut_defs.h"
 
 #include "blobstorage_pdisk_abstract.h"
 #include "blobstorage_pdisk_impl.h"
@@ -14,37 +15,48 @@
 namespace NKikimr {
 
 struct TActorTestContext {
+    using EDiskMode = NPDisk::NSectorMap::EDiskMode;
+public:
+    struct TSettings {
+        bool IsBad;
+        bool UsePDiskMock = false;
+        ui64 DiskSize = 0;
+        EDiskMode DiskMode = EDiskMode::DM_NONE;
+        ui32 ChunkSize = MIN_CHUNK_SIZE;
+    };
+
 private:
     std::optional<TActorId> PDiskActor;
     THolder<TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     NPDisk::TPDisk *PDisk = nullptr;
-    bool UsePDiskMock;
 
 public:
     TActorId Sender;
     NPDisk::TMainKey MainKey = { NPDisk::YdbDefaultPDiskSequence };
-    TTestContext TestCtx{false, /*use sector map*/ true};
+    TTestContext TestCtx;
+    TSettings Settings;
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
         TString path;
         EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
-        FormatPDiskForTest(path, formatGuid, MIN_CHUNK_SIZE, false, TestCtx.SectorMap);
+        FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap);
 
         ui64 pDiskCategory = 0;
         TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(path, TestCtx.PDiskGuid, 1, pDiskCategory);
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        pDiskConfig->ChunkSize = MIN_CHUNK_SIZE;
+        pDiskConfig->ChunkSize = Settings.ChunkSize;
         pDiskConfig->SectorMap = TestCtx.SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         return pDiskConfig;
     }
 
-    TActorTestContext(bool isBad, bool usePDiskMock = false)
+    TActorTestContext(TSettings settings)
         : Runtime(new TTestActorRuntime(1, true))
-        , UsePDiskMock(usePDiskMock)
+        , TestCtx(false, true, settings.DiskMode, settings.DiskSize)
+        , Settings(settings)
     {
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
@@ -57,12 +69,12 @@ public:
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
 
-        TIntrusivePtr<TPDiskConfig> cfg = DefaultPDiskConfig(isBad);
+        TIntrusivePtr<TPDiskConfig> cfg = DefaultPDiskConfig(Settings.IsBad);
         UpdateConfigRecreatePDisk(cfg);
     }
 
     TIntrusivePtr<TPDiskConfig> GetPDiskConfig() {
-        if (!UsePDiskMock) {
+        if (!Settings.UsePDiskMock) {
             return GetPDisk()->Cfg;
         }
         return nullptr;
@@ -70,14 +82,14 @@ public:
 
     void UpdateConfigRecreatePDisk(TIntrusivePtr<TPDiskConfig> cfg) {
         if (PDiskActor) {
-            TestResponce<NPDisk::TEvYardControlResult>(
+            TestResponse<NPDisk::TEvYardControlResult>(
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
                     NKikimrProto::OK);
             PDisk = nullptr;
             Runtime->Send(new IEventHandle(*PDiskActor, Sender, new TKikimrEvents::TEvPoisonPill));
         }
 
-        if (UsePDiskMock) {
+        if (Settings.UsePDiskMock) {
             ui32 nodeId = 1;
             ui64 size = ui64(10) << 40;
             TPDiskMockState::TPtr state(new TPDiskMockState((ui32)nodeId, (ui32)cfg->PDiskId, (ui64)cfg->PDiskGuid, (ui64)size, (ui32)cfg->ChunkSize));
@@ -94,13 +106,13 @@ public:
     }
 
     NPDisk::TPDisk *GetPDisk() {
-        if (!PDisk && !UsePDiskMock) {
+        if (!PDisk && !Settings.UsePDiskMock) {
             // To be sure that pdisk actor is in StateOnline
-            TestResponce<NPDisk::TEvYardControlResult>(
+            TestResponse<NPDisk::TEvYardControlResult>(
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&MainKey)),
                     NKikimrProto::OK);
 
-            const auto evControlRes = TestResponce<NPDisk::TEvYardControlResult>(
+            const auto evControlRes = TestResponse<NPDisk::TEvYardControlResult>(
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
                     NKikimrProto::OK);
             PDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
@@ -115,8 +127,8 @@ public:
     }
 
     void RestartPDiskSync() {
-        if (!UsePDiskMock) {
-            TestResponce<NPDisk::TEvYardControlResult>(
+        if (!Settings.UsePDiskMock) {
+            TestResponse<NPDisk::TEvYardControlResult>(
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
                     NKikimrProto::OK);
             PDisk = nullptr;
@@ -131,7 +143,7 @@ public:
     }
 
     template<typename TRes>
-    THolder<TRes> TestResponce(IEventBase* ev, NKikimrProto::EReplyStatus status) {
+    THolder<TRes> TestResponse(IEventBase* ev, NKikimrProto::EReplyStatus status) {
         if (ev) {
             Send(ev);
         }
@@ -190,7 +202,7 @@ struct TVDiskMock {
     }
 
     void Init() {
-        const auto evInitRes = TestCtx->TestResponce<NPDisk::TEvYardInitResult>(
+        const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid),
                 NKikimrProto::OK);
         PDiskParams = evInitRes->PDiskParams;
@@ -205,7 +217,7 @@ struct TVDiskMock {
 
 
     void ReserveChunk() {
-        const auto evReserveRes = TestCtx->TestResponce<NPDisk::TEvChunkReserveResult>(
+        const auto evReserveRes = TestCtx->TestResponse<NPDisk::TEvChunkReserveResult>(
                 new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 1),
                 NKikimrProto::OK);
         UNIT_ASSERT(evReserveRes->ChunkIds.size() == 1);
@@ -238,7 +250,7 @@ struct TVDiskMock {
         bool endOfLog = false;
         do {
             UNIT_ASSERT(PDiskParams);
-            auto logReadRes = TestCtx->TestResponce<NPDisk::TEvReadLogResult>(
+            auto logReadRes = TestCtx->TestResponse<NPDisk::TEvReadLogResult>(
                 new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound, position),
                 NKikimrProto::OK);
             UNIT_ASSERT(position == logReadRes->Position);
@@ -278,7 +290,7 @@ private:
             evLog->CommitRecord = std::move(*commitRec);
         }
 
-        TestCtx->TestResponce<NPDisk::TEvLogResult>(evLog.Release(), NKikimrProto::OK);
+        TestCtx->TestResponse<NPDisk::TEvLogResult>(evLog.Release(), NKikimrProto::OK);
     }
 
     void SendEvLogImpl(const ui64 size, TMaybe<ui64> firstLsnToKeep, bool isStartingPoint) {

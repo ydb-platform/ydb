@@ -21,3 +21,9 @@ message CostInfo {
 message QuotaExceeded {
     bool disk = 1;
 }
+
+// Specifies a point in database time
+message VirtualTimestamp {
+    uint64 plan_step = 1;
+    uint64 tx_id = 2;
+}

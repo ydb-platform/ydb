@@ -1006,15 +1006,9 @@ message ReadTableResponse {
     // Issues
     repeated Ydb.Issue.IssueMessage issues = 2;
     // Optional snapshot that corresponds to the returned data
-    ReadTableSnapshot snapshot = 4;
+    VirtualTimestamp snapshot = 4;
     // Read table result
     ReadTableResult result = 3;
-}
-
-// Specifies a point in database time that corresponds to the data
-message ReadTableSnapshot {
-    uint64 plan_step = 1;
-    uint64 tx_id = 2;
 }
 
 // Result of read table request

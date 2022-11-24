@@ -5,6 +5,7 @@ package Ydb.Scheme;
 option java_package = "com.yandex.ydb.scheme";
 option java_outer_classname = "SchemeOperationProtos";
 
+import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 // Create directory.
@@ -75,6 +76,9 @@ message Entry {
     // - DATABASE.
     // Empty (zero) in other cases.
     uint64 size_bytes = 8;
+
+    // Virtual timestamp when the object was created
+    VirtualTimestamp created_at = 9;
 }
 
 message ListDirectoryResult {

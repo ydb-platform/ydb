@@ -970,6 +970,22 @@ public:
                                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                         TStringBuilder() << name << " setting is not supported yet"));
                                     return SyncError();
+                                } else if (name == "retention_period") {
+                                    YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
+                                    const auto value = FromString<i64>(
+                                        setting.Value().Cast<TCoInterval>().Literal().Value()
+                                    );
+
+                                    if (value <= 0) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be positive"));
+                                        return SyncError();
+                                    }
+
+                                    const auto duration = TDuration::FromValue(value);
+                                    auto& retention = *add_changefeed->mutable_retention_period();
+                                    retention.set_seconds(duration.Seconds());
+                                    retention.set_nanos(duration.NanoSecondsOfSecond());
                                 } else if (name == "local") {
                                     // nop
                                 } else {

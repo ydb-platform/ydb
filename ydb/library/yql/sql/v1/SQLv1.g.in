@@ -559,10 +559,7 @@ local_index: LOCAL;
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
 changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;
 changefeed_settings_entry: an_id EQUALS changefeed_setting_value;
-changefeed_setting_value:
-    STRING_VALUE
-  | bool_value
-;
+changefeed_setting_value: expr;
 changefeed_alter_settings:
     DISABLE
   | SET LPAREN changefeed_settings RPAREN

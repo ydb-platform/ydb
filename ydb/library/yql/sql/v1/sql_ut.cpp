@@ -1622,7 +1622,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto res = SqlToYql(R"( USE plato;
             CREATE TABLE tableName (
                 Key Uint32, PRIMARY KEY (Key),
-                CHANGEFEED feedName WITH (MODE = 'KEYS_ONLY', FORMAT = 'json', INITIAL_SCAN = TRUE)
+                CHANGEFEED feedName WITH (
+                    MODE = 'KEYS_ONLY',
+                    FORMAT = 'json',
+                    INITIAL_SCAN = TRUE,
+                    RETENTION_PERIOD = Interval("P1D")
+                )
             );
         )");
         UNIT_ASSERT_C(res.Root, Err2Str(res));
@@ -1636,6 +1641,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("initial_scan"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("true"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
             }
         };
 
@@ -3269,7 +3275,20 @@ select FormatType($f());
         )";
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:80: Error: Invalid changefeed setting: INITIAL_SCAN\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:95: Error: Literal of Bool type is expected for INITIAL_SCAN\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedRetentionPeriod) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", RETENTION_PERIOD = "foo")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:99: Error: Literal of Interval type is expected for RETENTION_PERIOD\n");
     }
 
     Y_UNIT_TEST(ErrJoinWithGroupingSetsWithoutCorrelationName) {

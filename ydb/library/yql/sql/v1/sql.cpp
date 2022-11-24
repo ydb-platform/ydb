@@ -665,83 +665,6 @@ static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, T
     return true;
 }
 
-static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
-    const auto id = IdEx(node.GetRule_an_id1(), ctx);
-    if (alter) {
-        // currently we don't support alter settings
-        ctx.Error() << to_upper(id.Name) << " alter is not supported";
-        return false;
-    }
-
-    const TToken* token = nullptr;
-    const auto& setting = node.GetRule_changefeed_setting_value3();
-    switch (setting.Alt_case()) {
-    case TRule_changefeed_setting_value::kAltChangefeedSettingValue1:
-        token = &setting.GetAlt_changefeed_setting_value1().GetToken1();
-        break;
-    case TRule_changefeed_setting_value::kAltChangefeedSettingValue2:
-        token = &setting.GetAlt_changefeed_setting_value2().GetRule_bool_value1().GetToken1();
-        break;
-    default:
-        return false;
-    }
-
-    YQL_ENSURE(token);
-    const TString value(ctx.Token(*token));
-    const auto pos = GetPos(*token);
-
-    if (to_lower(id.Name) == "sink_type") {
-        auto parsed = StringContent(ctx.Context(), pos, value);
-        YQL_ENSURE(parsed.Defined());
-        if (to_lower(parsed->Content) == "local") {
-            settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings();
-        } else {
-            ctx.Context().Error() << "Unknown changefeed sink type: " << to_upper(parsed->Content);
-            return false;
-        }
-    } else if (to_lower(id.Name) == "mode") {
-        settings.Mode = BuildLiteralSmartString(ctx.Context(), value);
-    } else if (to_lower(id.Name) == "format") {
-        settings.Format = BuildLiteralSmartString(ctx.Context(), value);
-    } else if (to_lower(id.Name) == "initial_scan") {
-        bool v;
-        if (!TryFromString<bool>(to_lower(value), v)) {
-            ctx.Context().Error(id.Pos) << "Invalid changefeed setting: " << id.Name;
-            return false;
-        }
-        settings.InitialScan = BuildLiteralBool(pos, v);
-    } else {
-        ctx.Context().Error(id.Pos) << "Unknown changefeed setting: " << id.Name;
-        return false;
-    }
-
-    return true;
-}
-
-static bool ChangefeedSettings(const TRule_changefeed_settings& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
-    if (!ChangefeedSettingsEntry(node.GetRule_changefeed_settings_entry1(), ctx, settings, alter)) {
-        return false;
-    }
-
-    for (auto& block : node.GetBlock2()) {
-        if (!ChangefeedSettingsEntry(block.GetRule_changefeed_settings_entry2(), ctx, settings, alter)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool CreateChangefeed(const TRule_changefeed& node, TTranslation& ctx, TVector<TChangefeedDescription>& changefeeds) {
-    changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
-
-    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
-        return false;
-    }
-
-    return true;
-}
-
 static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
     if (nameWithAt.first) {
         view = "@";
@@ -1848,6 +1771,91 @@ bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNo
     return true;
 }
 
+static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlExpression& ctx, TChangefeedSettings& settings, bool alter) {
+    const auto id = IdEx(node.GetRule_an_id1(), ctx);
+    if (alter) {
+        // currently we don't support alter settings
+        ctx.Error() << to_upper(id.Name) << " alter is not supported";
+        return false;
+    }
+
+    const auto& setting = node.GetRule_changefeed_setting_value3();
+    auto exprNode = ctx.Build(setting.GetRule_expr1());
+
+    if (!exprNode) {
+        ctx.Context().Error(id.Pos) << "Invalid changefeed setting: " << id.Name;
+        return false;
+    }
+
+    if (to_lower(id.Name) == "sink_type") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
+            ctx.Context().Error() << "Literal of String type is expected for " << id.Name;
+            return false;
+        }
+
+        const auto value = exprNode->GetLiteralValue();
+        if (to_lower(value) == "local") {
+            settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings();
+        } else {
+            ctx.Context().Error() << "Unknown changefeed sink type: " << value;
+            return false;
+        }
+    } else if (to_lower(id.Name) == "mode") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
+            ctx.Context().Error() << "Literal of String type is expected for " << id.Name;
+            return false;
+        }
+        settings.Mode = exprNode;
+    } else if (to_lower(id.Name) == "format") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
+            ctx.Context().Error() << "Literal of String type is expected for " << id.Name;
+            return false;
+        }
+        settings.Format = exprNode;
+    } else if (to_lower(id.Name) == "initial_scan") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "Bool") {
+            ctx.Context().Error() << "Literal of Bool type is expected for " << id.Name;
+            return false;
+        }
+        settings.InitialScan = exprNode;
+    } else if (to_lower(id.Name) == "retention_period") {
+        if (exprNode->GetOpName() != "Interval") {
+            ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;
+            return false;
+        }
+        settings.RetentionPeriod = exprNode;
+    } else {
+        ctx.Context().Error(id.Pos) << "Unknown changefeed setting: " << id.Name;
+        return false;
+    }
+
+    return true;
+}
+
+static bool ChangefeedSettings(const TRule_changefeed_settings& node, TSqlExpression& ctx, TChangefeedSettings& settings, bool alter) {
+    if (!ChangefeedSettingsEntry(node.GetRule_changefeed_settings_entry1(), ctx, settings, alter)) {
+        return false;
+    }
+
+    for (auto& block : node.GetBlock2()) {
+        if (!ChangefeedSettingsEntry(block.GetRule_changefeed_settings_entry2(), ctx, settings, alter)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool CreateChangefeed(const TRule_changefeed& node, TSqlExpression& ctx, TVector<TChangefeedDescription>& changefeeds) {
+    changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
+
+    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params)
 {
     switch (node.Alt_case()) {
@@ -1965,7 +1973,8 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
         {
             // changefeed
             auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1();
-            if (!CreateChangefeed(changefeed, *this, params.Changefeeds)) {
+            TSqlExpression expr(Ctx, Mode);
+            if (!CreateChangefeed(changefeed, expr, params.Changefeeds)) {
                 return false;
             }
             break;
@@ -9497,7 +9506,8 @@ void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to&
 }
 
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
-    return CreateChangefeed(node.GetRule_changefeed2(), *this, params.AddChangefeeds);
+    TSqlExpression expr(Ctx, Mode);
+    return CreateChangefeed(node.GetRule_changefeed2(), expr, params.AddChangefeeds);
 }
 
 bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params) {
@@ -9513,7 +9523,8 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
         case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: {
             // SET
             const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3();
-            if (!ChangefeedSettings(rule, *this, params.AlterChangefeeds.back().Settings, true)) {
+            TSqlExpression expr(Ctx, Mode);
+            if (!ChangefeedSettings(rule, expr, params.AlterChangefeeds.back().Settings, true)) {
                 return false;
             }
             break;

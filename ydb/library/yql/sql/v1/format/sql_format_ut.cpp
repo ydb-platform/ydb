@@ -322,6 +322,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = TRUE);\n"},
             {"alter table user add changefeed user with (initial_scan = FaLsE)",
              "ALTER TABLE user\n\tADD CHANGEFEED user WITH (initial_scan = FALSE);\n"},
+            {"alter table user add changefeed user with (retention_period = Interval(\"P1D\"))",
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (retention_period = Interval(\"P1D\"));\n"},
         };
 
         TSetup setup;

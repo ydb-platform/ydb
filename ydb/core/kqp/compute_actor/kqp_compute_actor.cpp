@@ -61,14 +61,12 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
     maxInFlight = 1;
 
     NKikimrSSA::TProgram program;
-    bool hasNoGroupBy = false;
     bool hasGroupByWithFields = false;
     bool hasGroupByWithNoFields = false;
     if (meta.HasOlapProgram()) {
         Y_VERIFY(program.ParseFromString(meta.GetOlapProgram().GetProgram()));
         for (auto&& command : program.GetCommand()) {
             if (!command.HasGroupBy()) {
-                hasNoGroupBy = true;
                 continue;
             }
             if (command.GetGroupBy().GetKeyColumns().size()) {
@@ -77,8 +75,6 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
                 hasGroupByWithNoFields = true;
             }
         }
-    } else {
-        hasNoGroupBy = true;
     }
     isAggregationRequest = hasGroupByWithFields || hasGroupByWithNoFields;
     if (isSorted) {

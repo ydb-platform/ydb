@@ -932,15 +932,6 @@ BlocksList Aggregator::convertToBlocks(AggregatedDataVariants & data_variants, b
         data_variants.aggregator = nullptr;
     }
 
-    size_t rows = 0;
-    //size_t bytes = 0;
-
-    for (const auto & block : blocks)
-    {
-        rows += block->num_rows();
-        //bytes += block.bytes();
-    }
-
     return blocks;
 }
 

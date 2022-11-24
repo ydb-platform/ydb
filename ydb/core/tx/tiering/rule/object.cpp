@@ -2,14 +2,12 @@
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NColumnShard::NTiers {
+
 NJson::TJsonValue TTieringRule::GetDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue(TDecoder::TieringRuleId, TieringRuleId);
-    result.InsertValue(TDecoder::TierName, TierName);
-    result.InsertValue(TDecoder::TablePath, TablePath);
-    result.InsertValue("tablePathId", TablePathId);
-    result.InsertValue(TDecoder::Column, Column);
-    result.InsertValue(TDecoder::DurationForEvict, DurationForEvict.ToString());
+    result.InsertValue(TDecoder::DefaultColumn, DefaultColumn);
+    result.InsertValue(TDecoder::Description, SerializeDescriptionToJson());
     return result;
 }
 
@@ -24,14 +22,41 @@ void TTieringRule::AlteringPreparation(std::vector<TTieringRule>&& objects,
     controller->PreparationFinished(std::move(objects));
 }
 
+NJson::TJsonValue TTieringRule::SerializeDescriptionToJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    auto& jsonRules = result.InsertValue("rules", NJson::JSON_ARRAY);
+    for (auto&& i : Intervals) {
+        jsonRules.AppendValue(i.SerializeToJson());
+    }
+    return result;
+}
+
+bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue & jsonInfo) {
+    const NJson::TJsonValue::TArray* rules;
+    if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
+        return false;
+    }
+    for (auto&& i : *rules) {
+        TTieringInterval interval;
+        if (!interval.DeserializeFromJson(i)) {
+            return false;
+        }
+        Intervals.emplace_back(std::move(interval));
+    }
+    std::sort(Intervals.begin(), Intervals.end());
+    return true;
+}
+
 NKikimr::NMetadataManager::TTableRecord TTieringRule::SerializeToRecord() const {
     NMetadataManager::TTableRecord result;
     result.SetColumn(TDecoder::TieringRuleId, NMetadataManager::TYDBValue::Bytes(TieringRuleId));
-    result.SetColumn(TDecoder::OwnerPath, NMetadataManager::TYDBValue::Bytes(OwnerPath));
-    result.SetColumn(TDecoder::TierName, NMetadataManager::TYDBValue::Bytes(TierName));
-    result.SetColumn(TDecoder::TablePath, NMetadataManager::TYDBValue::Bytes(TablePath));
-    result.SetColumn(TDecoder::DurationForEvict, NMetadataManager::TYDBValue::Bytes(DurationForEvict.ToString()));
-    result.SetColumn(TDecoder::Column, NMetadataManager::TYDBValue::Bytes(Column));
+    result.SetColumn(TDecoder::DefaultColumn, NMetadataManager::TYDBValue::Bytes(DefaultColumn));
+    {
+        auto jsonDescription = SerializeDescriptionToJson();
+        NJsonWriter::TBuf sout;
+        sout.WriteJsonValue(&jsonDescription, true);
+        result.SetColumn(TDecoder::Description, NMetadataManager::TYDBValue::Bytes(sout.Str()));
+    }
     return result;
 }
 
@@ -39,21 +64,14 @@ bool TTieringRule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Val
     if (!decoder.Read(decoder.GetTieringRuleIdIdx(), TieringRuleId, r)) {
         return false;
     }
-    if (!decoder.Read(decoder.GetOwnerPathIdx(), OwnerPath, r)) {
+    if (!decoder.Read(decoder.GetDefaultColumnIdx(), DefaultColumn, r)) {
         return false;
     }
-    OwnerPath = TFsPath(OwnerPath).Fix().GetPath();
-    if (!decoder.Read(decoder.GetTierNameIdx(), TierName, r)) {
+    NJson::TJsonValue jsonDescription;
+    if (!decoder.ReadJson(decoder.GetDescriptionIdx(), jsonDescription, r)) {
         return false;
     }
-    if (!decoder.Read(decoder.GetTablePathIdx(), TablePath, r)) {
-        return false;
-    }
-    TablePath = TFsPath(TablePath).Fix().GetPath();
-    if (!decoder.Read(decoder.GetDurationForEvictIdx(), DurationForEvict, r)) {
-        return false;
-    }
-    if (!decoder.Read(decoder.GetColumnIdx(), Column, r)) {
+    if (!DeserializeDescriptionFromJson(jsonDescription)) {
         return false;
     }
     return true;
@@ -64,69 +82,23 @@ NMetadata::TOperationParsingResult TTieringRule::BuildPatchFromSettings(const NY
     NKikimr::NMetadataManager::TTableRecord result;
     result.SetColumn(TDecoder::TieringRuleId, NMetadataManager::TYDBValue::Bytes(settings.GetObjectId()));
     {
-        auto it = settings.GetFeatures().find(TDecoder::TablePath);
+        auto it = settings.GetFeatures().find(TDecoder::DefaultColumn);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::TablePath, NMetadataManager::TYDBValue::Bytes(it->second));
+            result.SetColumn(TDecoder::DefaultColumn, NMetadataManager::TYDBValue::Bytes(it->second));
         }
     }
     {
-        auto it = settings.GetFeatures().find(TDecoder::TierName);
+        auto it = settings.GetFeatures().find(TDecoder::Description);
         if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::TierName, NMetadataManager::TYDBValue::Bytes(it->second));
-        }
-    }
-    {
-        auto it = settings.GetFeatures().find(TDecoder::OwnerPath);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::OwnerPath, NMetadataManager::TYDBValue::Bytes(it->second));
-        }
-    }
-    {
-        auto it = settings.GetFeatures().find(TDecoder::DurationForEvict);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::DurationForEvict, NMetadataManager::TYDBValue::Bytes(it->second));
-        }
-    }
-    {
-        auto it = settings.GetFeatures().find(TDecoder::Column);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::Column, NMetadataManager::TYDBValue::Bytes(it->second));
+            result.SetColumn(TDecoder::Description, NMetadataManager::TYDBValue::Bytes(it->second));
         }
     }
     return result;
 }
 
-NJson::TJsonValue TTableTiering::GetDebugJson() const {
-    NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue(TTieringRule::TDecoder::TablePath, TablePath);
-    result.InsertValue("tablePathId", TablePathId);
-    result.InsertValue(TTieringRule::TDecoder::Column, Column);
-    auto&& jsonRules = result.InsertValue("rules", NJson::JSON_ARRAY);
-    for (auto&& i : Rules) {
-        jsonRules.AppendValue(i.GetDebugJson());
-    }
-    return result;
-}
-
-void TTableTiering::AddRule(TTieringRule&& tr) {
-    if (Rules.size()) {
-        Y_VERIFY(Rules.back().GetDurationForEvict() <= tr.GetDurationForEvict());
-        if (Column != tr.GetColumn()) {
-            ALS_ERROR(NKikimrServices::TX_TIERING) << "inconsistency rule column: " <<
-                TablePath << "/" << Column << " != " << tr.GetColumn();
-            return;
-        }
-    } else {
-        Column = tr.GetColumn();
-        TablePath = tr.GetTablePath();
-        TablePathId = tr.GetTablePathId();
-    }
-    Rules.emplace_back(std::move(tr));
-}
-
-NKikimr::NOlap::TTiersInfo TTableTiering::BuildTiersInfo() const {
-    NOlap::TTiersInfo result(GetColumn());
-    for (auto&& r : Rules) {
+NKikimr::NOlap::TTiersInfo TTieringRule::BuildTiersInfo() const {
+    NOlap::TTiersInfo result(GetDefaultColumn());
+    for (auto&& r : Intervals) {
         result.AddTier(r.GetTierName(), Now() - r.GetDurationForEvict());
     }
     return result;
@@ -143,11 +115,8 @@ std::vector<Ydb::Column> TTieringRule::TDecoder::GetColumns() {
     return
     {
         NMetadataManager::TYDBColumn::Bytes(TieringRuleId),
-        NMetadataManager::TYDBColumn::Bytes(OwnerPath),
-        NMetadataManager::TYDBColumn::Bytes(TierName),
-        NMetadataManager::TYDBColumn::Bytes(TablePath),
-        NMetadataManager::TYDBColumn::Bytes(Column),
-        NMetadataManager::TYDBColumn::Bytes(DurationForEvict)
+        NMetadataManager::TYDBColumn::Bytes(DefaultColumn),
+        NMetadataManager::TYDBColumn::Bytes(Description)
     };
 }
 

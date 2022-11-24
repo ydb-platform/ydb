@@ -206,7 +206,7 @@ struct TTestSchema {
 
     static void InitTiers(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
         Y_VERIFY(specials.HasTiers());
-        ttlSettings->MutableTiering()->SetEnableTiering(true);
+        ttlSettings->MutableTiering()->SetUseTiering("Tiering1");
     }
 
     static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
@@ -288,7 +288,7 @@ struct TTestSchema {
             enable->SetColumnName(specials.GetTtlColumn());
             enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
         } else if (specials.HasTiers()) {
-            ttlSettings->MutableTiering()->SetEnableTiering(true);
+            ttlSettings->MutableTiering()->SetUseTiering("Tiering1");
         } else {
             ttlSettings->MutableDisabled();
         }
@@ -308,7 +308,7 @@ struct TTestSchema {
         return out;
     }
 
-    static NMetadataProvider::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials, const TString& tablePath, const ui32 tablePathId);
+    static NMetadataProvider::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64 metaShard, const TVector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;

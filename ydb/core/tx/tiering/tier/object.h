@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/tiering/common/global_tier_id.h>
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
 #include <ydb/services/metadata/manager/table_record.h>
@@ -9,38 +8,39 @@
 
 #include <library/cpp/json/writer/json_value.h>
 
+namespace NKikimr::NMetadata::NSecret {
+class TSnapshot;
+}
+
 namespace NKikimr::NColumnShard::NTiers {
 
 class TTierConfig: public NMetadataManager::TObject<TTierConfig> {
 private:
     using TTierProto = NKikimrSchemeOp::TStorageTierConfig;
-    YDB_ACCESSOR_DEF(TString, OwnerPath);
     YDB_ACCESSOR_DEF(TString, TierName);
     YDB_ACCESSOR_DEF(TTierProto, ProtoConfig);
 
 public:
     TTierConfig() = default;
-    TTierConfig(const TString& ownerPath, const TString& tierName)
-        : OwnerPath(ownerPath)
-        , TierName(tierName)
+    TTierConfig(const TString& tierName)
+        : TierName(tierName)
     {
 
     }
 
+    NKikimrSchemeOp::TS3Settings GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const;
+
     class TDecoder: public NInternal::TDecoderBase {
     private:
-        YDB_READONLY(i32, OwnerPathIdx, -1);
         YDB_READONLY(i32, TierNameIdx, -1);
         YDB_READONLY(i32, TierConfigIdx, -1);
     public:
-        static inline const TString OwnerPath = "ownerPath";
         static inline const TString TierName = "tierName";
         static inline const TString TierConfig = "tierConfig";
         static std::vector<Ydb::Column> GetPKColumns();
         static std::vector<Ydb::Column> GetColumns();
         static std::vector<TString> GetPKColumnIds();
         TDecoder(const Ydb::ResultSet& rawData) {
-            OwnerPathIdx = GetFieldIndex(rawData, OwnerPath);
             TierNameIdx = GetFieldIndex(rawData, TierName);
             TierConfigIdx = GetFieldIndex(rawData, TierConfig);
         }
@@ -54,10 +54,6 @@ public:
     static void AlteringPreparation(std::vector<TTierConfig>&& objects,
         NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);
-
-    TGlobalTierId GetGlobalTierId() const {
-        return TGlobalTierId(OwnerPath, TierName);
-    }
 
     bool NeedExport() const {
         return ProtoConfig.HasObjectStorage();

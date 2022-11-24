@@ -46,6 +46,8 @@ public:
 
 class TFakeExternalStorage {
 private:
+    YDB_ACCESSOR_DEF(TString, SecretKey);
+
     mutable TMutex Mutex;
     mutable TMap<TString, TFakeBucketStorage> BucketStorages;
     TEvListObjectsResponse::TResult BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const;
@@ -103,55 +105,54 @@ public:
 class TFakeExternalStorageOperator: public IExternalStorageOperator {
 private:
     const TString Bucket;
+    const TString SecretKey;
+
+    template <class TEvent>
+    void ExecuteImpl(TEvent& ev) const {
+        ev->Get()->MutableRequest().WithBucket(Bucket);
+        Y_VERIFY(SecretKey == Singleton<TFakeExternalStorage>()->GetSecretKey());
+        Singleton<TFakeExternalStorage>()->Execute(ev);
+    }
+
 public:
-    TFakeExternalStorageOperator(const TString& bucket)
+    TFakeExternalStorageOperator(const TString& bucket, const TString& secretKey)
         : Bucket(bucket)
+        , SecretKey(secretKey)
     {
 
     }
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvListObjectsRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvGetObjectRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvHeadObjectRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvPutObjectRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvDeleteObjectsRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvUploadPartRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
     virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override {
-        ev->Get()->MutableRequest().WithBucket(Bucket);
-        Singleton<TFakeExternalStorage>()->Execute(ev);
+        ExecuteImpl(ev);
     }
 };
 } // NKikimr::NWrappers::NExternalStorage

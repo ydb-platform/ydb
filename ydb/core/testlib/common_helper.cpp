@@ -37,7 +37,8 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess)
 }
 
 void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
+        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
     auto expectation = expectSuccess;
     tClient.CreateSession().Subscribe([request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
         auto session = f.GetValueSync().GetSession();

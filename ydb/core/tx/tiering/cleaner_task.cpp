@@ -8,13 +8,13 @@ TTaskCleanerActivity::TFactory::TRegistrator<TTaskCleanerActivity> TTaskCleanerA
 NKikimrSchemeOp::TTaskCleaner TTaskCleanerActivity::DoSerializeToProto() const {
     NKikimrSchemeOp::TTaskCleaner result;
     result.SetPathId(PathId);
-    result.SetOwnerPath(OwnerPath);
+    result.SetTieringId(TieringId);
     return result;
 }
 
 bool TTaskCleanerActivity::DoDeserializeFromProto(const NKikimrSchemeOp::TTaskCleaner& protoData) {
     PathId = protoData.GetPathId();
-    OwnerPath = protoData.GetOwnerPath();
+    TieringId = protoData.GetTieringId();
     return true;
 }
 
@@ -22,7 +22,7 @@ void TTaskCleanerActivity::DoExecute(NBackgroundTasks::ITaskExecutorController::
     const NBackgroundTasks::TTaskStateContainer& /*state*/)
 {
 #ifndef KIKIMR_DISABLE_S3_OPS
-    TActivationContext::AsActorContext().Register(new TPathCleaner(PathId, OwnerPath, controller));
+    TActivationContext::AsActorContext().Register(new TPathCleaner(TieringId, PathId, controller));
 #else
     controller->TaskFinished();
 #endif

@@ -14,12 +14,14 @@ namespace NKikimr::NWrappers::NExternalStorage {
 class TFakeExternalStorageConfig: public IExternalStorageConfig {
 private:
     const TString Bucket;
+    const TString SecretKey;
 protected:
     virtual TString DoGetStorageId() const override;
     virtual IExternalStorageOperator::TPtr DoConstructStorageOperator() const override;
 public:
-    TFakeExternalStorageConfig(const TString& bucket)
+    TFakeExternalStorageConfig(const TString& bucket, const TString& secretKey)
         : Bucket(bucket)
+        , SecretKey(secretKey)
     {
 
     }

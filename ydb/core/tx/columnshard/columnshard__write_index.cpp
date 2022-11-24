@@ -137,7 +137,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 }
 
                 // Mark exported blobs
-                auto& tManager = Self->GetTierManagerVerified(NTiers::TGlobalTierId(Self->OwnerPath, tierName));
+                auto& tManager = Self->GetTierManagerVerified(tierName);
                 if (tManager.NeedExport()) {
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;

@@ -1,6 +1,5 @@
 #pragma once
 #include "snapshot.h"
-#include "snapshot_enrich.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -15,7 +14,6 @@ private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     using TBaseActor = TActor<TSnapshotConstructor>;
     using ISnapshot = NMetadataProvider::ISnapshot;
-    mutable std::shared_ptr<TTablesDecoderCache> TablesDecoder;
 protected:
     virtual std::vector<NMetadata::IOperationsManager::TPtr> DoGetManagers() const override;
 public:

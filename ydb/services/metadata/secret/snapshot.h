@@ -18,6 +18,8 @@ protected:
     virtual TString DoSerializeToString() const override;
 public:
     using TBase::TBase;
+
+    bool PatchString(TString& stringForPath) const;
 };
 
 }

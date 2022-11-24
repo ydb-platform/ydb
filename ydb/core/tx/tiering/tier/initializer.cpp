@@ -12,11 +12,6 @@ TVector<NKikimr::NMetadataInitializer::ITableModifier::TPtr> TTiersInitializer::
         request.add_primary_key("tierName");
         {
             auto& column = *request.add_columns();
-            column.set_name("ownerPath");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
             column.set_name("tierName");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }

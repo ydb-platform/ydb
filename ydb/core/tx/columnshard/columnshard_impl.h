@@ -139,7 +139,7 @@ class TColumnShard
         Y_UNUSED(ctx);
     }
 
-    const NTiers::TManager& GetTierManagerVerified(const NTiers::TGlobalTierId& tierId) const {
+    const NTiers::TManager& GetTierManagerVerified(const TString& tierId) const {
         Y_VERIFY(!!Tiers);
         return Tiers->GetManagerVerified(tierId);
     }
@@ -177,7 +177,7 @@ class TColumnShard
 
     NOlap::TIndexInfo GetActualIndexInfo(const bool tiersUsage = true) const;
 
-    void ActivateTiering(const ui64 pathId, const bool enableTiering);
+    void ActivateTiering(const ui64 pathId, const TString& useTiering);
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
@@ -312,7 +312,7 @@ private:
         ui64 PathId;
         std::map<TRowVersion, TTableVersionInfo> Versions;
         TRowVersion DropVersion = TRowVersion::Max();
-        bool TieringEnabled = false;
+        TString TieringUsage;
 
         bool IsDropped() const {
             return DropVersion != TRowVersion::Max();
@@ -449,7 +449,7 @@ private:
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
-    TActorId GetS3ActorForTier(const NTiers::TGlobalTierId& tierId) const;
+    TActorId GetS3ActorForTier(const TString& tierId) const;
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
         TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
     void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;

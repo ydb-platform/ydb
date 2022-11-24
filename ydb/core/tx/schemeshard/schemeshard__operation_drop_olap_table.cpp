@@ -309,20 +309,25 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+            DebugHint() << " ProgressState"
+            << ", at schemeshard: " << ssId);
 
-        if (NBackgroundTasks::TServiceOperator::IsEnabled()) {
-            NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
-            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
-            NSchemeShard::TPath ownerPath = tableInfo->IsStandalone() ? path : path.FindOlapStore();
-            Y_VERIFY(path.IsResolved());
-            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(txState->TargetPathId.LocalPathId, ownerPath.PathString()), nullptr);
+        if (!NBackgroundTasks::TServiceOperator::IsEnabled()) {
+            return Finish(context);
+        }
+        NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
+        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
+        const TString& tieringId = tableInfo->Description.GetTtlSettings().GetTiering().GetUseTiering();
+        if (!tieringId) {
+            return Finish(context);
+        }
+
+        {
+            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(
+                tieringId, txState->TargetPathId.LocalPathId), nullptr);
             task.SetId(OperationId.SerializeToString());
             context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
             return false;
-        } else {
-            return Finish(context);
         }
     }
 };

@@ -13,6 +13,7 @@ target_link_libraries(tx-tiering-tier PUBLIC
   yutil
   services-metadata-initializer
   services-metadata-abstract
+  services-metadata-secret
 )
 target_sources(tx-tiering-tier PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
@@ -25,6 +26,7 @@ target_link_libraries(tx-tiering-tier.global PUBLIC
   yutil
   services-metadata-initializer
   services-metadata-abstract
+  services-metadata-secret
 )
 target_sources(tx-tiering-tier.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp

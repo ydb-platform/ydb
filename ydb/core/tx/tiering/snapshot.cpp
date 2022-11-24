@@ -20,7 +20,7 @@ bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQuery
                 ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot parse tier config from snapshot";
                 continue;
             }
-            TierConfigs.emplace(config.GetGlobalTierId(), config);
+            TierConfigs.emplace(config.GetTierName(), config);
         }
     }
     {
@@ -36,16 +36,15 @@ bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQuery
             }
             rulesLocal.emplace_back(std::move(tr));
         }
-        std::sort(rulesLocal.begin(), rulesLocal.end());
         for (auto&& i : rulesLocal) {
-            TableTierings[i.GetTablePath()].AddRule(std::move(i));
+            TableTierings.emplace(i.GetTieringRuleId(), std::move(i));
         }
     }
     return true;
 }
 
-std::optional<TTierConfig> TConfigsSnapshot::GetValue(const TGlobalTierId& key) const {
-    auto it = TierConfigs.find(key);
+std::optional<TTierConfig> TConfigsSnapshot::GetTierById(const TString& tierName) const {
+    auto it = TierConfigs.find(tierName);
     if (it == TierConfigs.end()) {
         return {};
     } else {
@@ -53,14 +52,8 @@ std::optional<TTierConfig> TConfigsSnapshot::GetValue(const TGlobalTierId& key) 
     }
 }
 
-void TConfigsSnapshot::RemapTablePathToId(const TString& path, const ui64 pathId) {
-    auto it = TableTierings.find(path);
-    Y_VERIFY(it != TableTierings.end());
-    it->second.SetTablePathId(pathId);
-}
-
-const TTableTiering* TConfigsSnapshot::GetTableTiering(const TString& tablePath) const {
-    auto it = TableTierings.find(tablePath);
+const TTieringRule* TConfigsSnapshot::GetTieringById(const TString& tieringId) const {
+    auto it = TableTierings.find(tieringId);
     if (it == TableTierings.end()) {
         return nullptr;
     } else {
@@ -68,30 +61,11 @@ const TTableTiering* TConfigsSnapshot::GetTableTiering(const TString& tablePath)
     }
 }
 
-std::vector<NKikimr::NColumnShard::NTiers::TTierConfig> TConfigsSnapshot::GetTiersForPathId(const ui64 pathId) const {
-    std::vector<TTierConfig> result;
-    std::set<TGlobalTierId> readyIds;
-    for (auto&& i : TableTierings) {
-        for (auto&& r : i.second.GetRules()) {
-            if (r.GetTablePathId() == pathId) {
-                auto it = TierConfigs.find(r.GetGlobalTierId());
-                if (it == TierConfigs.end()) {
-                    ALS_ERROR(NKikimrServices::TX_TIERING) << "inconsistency tiering for " << r.GetGlobalTierId().ToString();
-                    continue;
-                } else if (readyIds.emplace(r.GetGlobalTierId()).second) {
-                    result.emplace_back(it->second);
-                }
-            }
-        }
-    }
-    return result;
-}
-
 TString NTiers::TConfigsSnapshot::DoSerializeToString() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     auto& jsonTiers = result.InsertValue("tiers", NJson::JSON_MAP);
     for (auto&& i : TierConfigs) {
-        jsonTiers.InsertValue(i.first.ToString(), i.second.GetDebugJson());
+        jsonTiers.InsertValue(i.first, i.second.GetDebugJson());
     }
     auto& jsonTiering = result.InsertValue("rules", NJson::JSON_MAP);
     for (auto&& i : TableTierings) {

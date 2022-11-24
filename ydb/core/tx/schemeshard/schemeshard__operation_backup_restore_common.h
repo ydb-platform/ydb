@@ -188,7 +188,7 @@ public:
             Bill(operationId, txState.TargetPathId, shardIdx, ru, context);
         }
 
-        // TODO(ilnaz): backward compatability, remove it
+        // TODO(ilnaz): backward compatibility, remove it
         if (result.GetSuccess()) {
             if (result.HasBytesProcessed()) {
                 txState.DataTotalSize += result.GetBytesProcessed();

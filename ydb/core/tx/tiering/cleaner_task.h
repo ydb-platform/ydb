@@ -8,7 +8,7 @@ namespace NKikimr::NColumnShard::NTiers {
 
 class TTaskCleanerActivity: public NBackgroundTasks::IProtoStringSerializable<NKikimrSchemeOp::TTaskCleaner, NBackgroundTasks::ITaskActivity> {
 private:
-    YDB_READONLY_DEF(TString, OwnerPath);
+    YDB_READONLY_DEF(TString, TieringId);
     YDB_READONLY(ui64, PathId, 0);
     static TFactory::TRegistrator<TTaskCleanerActivity> Registrator;
 protected:
@@ -20,8 +20,8 @@ protected:
 public:
     TTaskCleanerActivity() = default;
 
-    TTaskCleanerActivity(const ui64 pathId, const TString& ownerPath)
-        : OwnerPath(ownerPath)
+    TTaskCleanerActivity(const TString& tieringId, const ui64 pathId)
+        : TieringId(tieringId)
         , PathId(pathId)
     {
 

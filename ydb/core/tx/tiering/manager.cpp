@@ -3,18 +3,24 @@
 #include "s3_actor.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/services/metadata/secret/fetcher.h>
 
 namespace NKikimr::NColumnShard {
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
     std::shared_ptr<TTiersManager> Owner;
+    NMetadataProvider::ISnapshotParser::TPtr SecretsFetcher;
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
+    std::shared_ptr<NTiers::TConfigsSnapshot> ConfigsSnapshot;
     TActorId GetExternalDataActorId() const {
         return NMetadataProvider::MakeServiceId(SelfId().NodeId());
     }
 public:
     TActor(std::shared_ptr<TTiersManager> owner)
-        : Owner(owner) {
+        : Owner(owner)
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TManager>())
+    {
 
     }
     ~TActor() {
@@ -31,20 +37,34 @@ public:
     void Bootstrap() {
         Become(&TThis::StateMain);
         Send(GetExternalDataActorId(), new NMetadataProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
+        Send(GetExternalDataActorId(), new NMetadataProvider::TEvSubscribeExternal(SecretsFetcher));
     }
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
-        Owner->TakeConfigs(snapshot);
+        if (auto configs = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshot)) {
+            ConfigsSnapshot = configs;
+            if (SecretsSnapshot) {
+                Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
+            }
+        } else if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
+            SecretsSnapshot = secrets;
+            if (ConfigsSnapshot) {
+                Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
+            }
+        } else {
+            Y_VERIFY(false, "unexpected behaviour");
+        }
     }
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
         Send(GetExternalDataActorId(), new NMetadataProvider::TEvUnsubscribeExternal(Owner->GetExternalDataManipulation()));
+        Send(GetExternalDataActorId(), new NMetadataProvider::TEvUnsubscribeExternal(SecretsFetcher));
         PassAway();
     }
 };
 
 namespace NTiers {
 
-TManager& TManager::Restart(const TTierConfig& config) {
+TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     if (Config.IsSame(config)) {
         return *this;
     }
@@ -52,7 +72,7 @@ TManager& TManager::Restart(const TTierConfig& config) {
         Stop();
     }
     Config = config;
-    Start();
+    Start(secrets);
     return *this;
 }
 
@@ -67,7 +87,7 @@ bool TManager::Stop() {
     return true;
 }
 
-bool TManager::Start() {
+bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     if (!Config.NeedExport()) {
         return true;
     }
@@ -79,7 +99,9 @@ bool TManager::Start() {
     const NActors::TActorId newActor = ctx.Register(
         CreateS3Actor(TabletId, TabletActorId, Config.GetTierName())
     );
-    ctx.Send(newActor, new TEvPrivate::TEvS3Settings(Config.GetProtoConfig().GetObjectStorage()));
+    auto s3Config = Config.GetPatchedConfig(secrets);
+    
+    ctx.Send(newActor, new TEvPrivate::TEvS3Settings(s3Config));
     Stop();
     StorageActorId = newActor;
 #endif
@@ -125,10 +147,11 @@ NKikimr::NOlap::TCompression TManager::ConvertCompression(const NKikimrSchemeOp:
 }
 }
 
-void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) {
+void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshotExt);
     Y_VERIFY(snapshotPtr);
     Snapshot = snapshotExt;
+    Secrets = secrets;
     auto& snapshot = *snapshotPtr;
     for (auto itSelf = Managers.begin(); itSelf != Managers.end(); ) {
         auto it = snapshot.GetTierConfigs().find(itSelf->first);
@@ -136,42 +159,38 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt) 
             itSelf->second.Stop();
             itSelf = Managers.erase(itSelf);
         } else {
-            itSelf->second.Restart(it->second);
+            itSelf->second.Restart(it->second, Secrets);
             ++itSelf;
         }
     }
     for (auto&& i : snapshot.GetTierConfigs()) {
-        if (Managers.contains(i.second.GetGlobalTierId())) {
+        if (Managers.contains(i.second.GetTierName())) {
             continue;
         }
         NTiers::TManager localManager(TabletId, TabletActorId, i.second);
-        auto& manager = Managers.emplace(i.second.GetGlobalTierId(), std::move(localManager)).first->second;
-        manager.Start();
+        auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
+        manager.Start(Secrets);
     }
 }
 
-TActorId TTiersManager::GetStorageActorId(const NTiers::TGlobalTierId& tierId) {
+TActorId TTiersManager::GetStorageActorId(const TString& tierId) {
     auto it = Managers.find(tierId);
     if (it == Managers.end()) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "No S3 actor for tier '" << tierId.ToString() << "' at tablet " << TabletId;
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "No S3 actor for tier '" << tierId << "' at tablet " << TabletId;
         return {};
     }
     auto actorId = it->second.GetStorageActorId();
     if (!actorId) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "Not started storage actor for tier '" << tierId.ToString() << "' at tablet " << TabletId;
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "Not started storage actor for tier '" << tierId << "' at tablet " << TabletId;
         return {};
     }
     return actorId;
 }
 
 TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
-    ALS_ERROR(NKikimrServices::TX_TIERING) << "AAAAAAAAAAAAAA ";
     Y_VERIFY(!Actor);
     Actor = new TTiersManager::TActor(ownerPtr);
     TActivationContext::AsActorContext().RegisterWithSameMailbox(Actor);
-    for (auto&& i : Managers) {
-        i.second.Start();
-    }
     return *this;
 }
 
@@ -189,7 +208,7 @@ TTiersManager& TTiersManager::Stop() {
     return *this;
 }
 
-const NTiers::TManager& TTiersManager::GetManagerVerified(const NTiers::TGlobalTierId& tierId) const {
+const NTiers::TManager& TTiersManager::GetManagerVerified(const TString& tierId) const {
     auto it = Managers.find(tierId);
     Y_VERIFY(it != Managers.end());
     return it->second;
@@ -209,11 +228,13 @@ THashMap<ui64, NKikimr::NOlap::TTiersInfo> TTiersManager::GetTiering() const {
     }
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
     Y_VERIFY(snapshotPtr);
-    for (auto&& i : snapshotPtr->GetTableTierings()) {
-        if (!EnabledPathId.contains(i.second.GetTablePathId())) {
-            continue;
+    for (auto&& i : PathIdTiering) {
+        auto* tiering = snapshotPtr->GetTieringById(i.second);
+        if (!tiering) {
+
+        } else {
+            result.emplace(i.first, tiering->BuildTiersInfo());
         }
-        result.emplace(i.second.GetTablePathId(), i.second.BuildTiersInfo());
     }
     return result;
 }

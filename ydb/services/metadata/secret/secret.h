@@ -21,6 +21,9 @@ public:
     {
     }
 
+    bool DeserializeFromString(const TString& info);
+    TString SerializeToString() const;
+
     bool operator<(const TSecretId& item) const {
         return std::tie(OwnerUserId, SecretId) < std::tie(item.OwnerUserId, item.SecretId);
     }

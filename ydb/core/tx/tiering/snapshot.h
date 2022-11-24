@@ -13,18 +13,16 @@ namespace NKikimr::NColumnShard::NTiers {
 class TConfigsSnapshot: public NMetadataProvider::ISnapshot {
 private:
     using TBase = NMetadataProvider::ISnapshot;
-    using TConfigsMap = TMap<TGlobalTierId, TTierConfig>;
+    using TConfigsMap = TMap<TString, TTierConfig>;
     YDB_ACCESSOR_DEF(TConfigsMap, TierConfigs);
-    using TTieringMap = TMap<TString, TTableTiering>;
+    using TTieringMap = TMap<TString, TTieringRule>;
     YDB_ACCESSOR_DEF(TTieringMap, TableTierings);
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;
 public:
-    std::vector<TTierConfig> GetTiersForPathId(const ui64 pathId) const;
-    const TTableTiering* GetTableTiering(const TString& tablePath) const;
-    void RemapTablePathToId(const TString& path, const ui64 pathId);
-    std::optional<TTierConfig> GetValue(const TGlobalTierId& key) const;
+    const TTieringRule* GetTieringById(const TString& tieringId) const;
+    std::optional<TTierConfig> GetTierById(const TString& tierName) const;
     using TBase::TBase;
 };
 

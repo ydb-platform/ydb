@@ -924,13 +924,13 @@ TCheckFunc HasColumnTableTtlSettingsDisabled() {
     };
 }
 
-TCheckFunc HasColumnTableTtlSettingsTiering(const TString& /*tierName*/) {
+TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
         UNIT_ASSERT(ttl.HasTiering());
-        UNIT_ASSERT(ttl.GetTiering().GetEnableTiering());
+        UNIT_ASSERT_EQUAL(ttl.GetTiering().GetUseTiering(), tieringName);
     };
 }
 

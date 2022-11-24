@@ -291,12 +291,20 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
-NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials, const TString& tablePath, const ui32 tablePathId) {
+NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     std::unique_ptr<NColumnShard::NTiers::TConfigsSnapshot> cs(new NColumnShard::NTiers::TConfigsSnapshot(Now()));
+    if (specials.Tiers.empty()) {
+        return cs;
+    }
+    NColumnShard::NTiers::TTieringRule tRule;
+    tRule.SetTieringRuleId("Tiering1");
     for (auto&& tier : specials.Tiers) {
+        if (!tRule.GetDefaultColumn()) {
+            tRule.SetDefaultColumn(tier.GetTtlColumn());
+        }
+        Y_VERIFY(tRule.GetDefaultColumn() == tier.GetTtlColumn());
         {
             NColumnShard::NTiers::TTierConfig tConfig;
-            tConfig.SetOwnerPath("/Root/olapStore");
             tConfig.SetTierName(tier.Name);
             tConfig.MutableProtoConfig().SetName(tier.Name);
             auto& cProto = tConfig.MutableProtoConfig();
@@ -309,18 +317,11 @@ NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecia
             if (tier.CompressionLevel) {
                 cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
             }
-            cs->MutableTierConfigs().emplace(tConfig.GetGlobalTierId(), tConfig);
+            cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
         }
-        {
-            NColumnShard::NTiers::TTieringRule tRule;
-            tRule.SetOwnerPath("/Root/olapStore");
-            tRule.SetDurationForEvict(TDuration::Seconds(tier.GetEvictAfterSecondsUnsafe()));
-            tRule.SetTablePath(tablePath).SetTablePathId(tablePathId);
-            tRule.SetTierName(tier.Name);
-            tRule.SetColumn(tier.GetTtlColumn());
-            cs->MutableTableTierings()[tablePath].AddRule(std::move(tRule));
-        }
+        tRule.AddInterval(tier.Name, TDuration::Seconds(tier.GetEvictAfterSecondsUnsafe()));
     }
+    cs->MutableTableTierings().emplace(tRule.GetTieringRuleId(), tRule);
     return cs;
 }
 

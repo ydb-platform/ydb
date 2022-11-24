@@ -471,7 +471,7 @@ message TColumnDataLifeCycle {
     }
 
     message TStorageTiering {
-        optional bool EnableTiering = 1[default = false];
+        optional string UseTiering = 1;
     }
 
     message TDisabled {
@@ -880,7 +880,7 @@ message TS3Settings {
 message TTaskCleaner {
     optional uint64 PathId = 1;
     optional TS3Settings StorageSettings = 2;
-    optional string OwnerPath = 3;
+    optional string TieringId = 3;
 }
 
 message TBackupTask {

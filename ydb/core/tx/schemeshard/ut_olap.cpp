@@ -512,7 +512,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "Table3"
             TtlSettings {
                 Tiering {
-                    EnableTiering : true
+                    UseTiering : "Tiering1"
                 }
             }
         )";
@@ -524,13 +524,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTiering("tier1")));
+            NLs::HasColumnTableTtlSettingsTiering("Tiering1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
             TtlSettings {
                 Tiering {
-                    EnableTiering : true
+                    UseTiering : "Tiering1"
                 }
             }
         )";
@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "ColumnTable"
             AlterTtlSettings {
                 Tiering {
-                    EnableTiering : true
+                    UseTiering : "Tiering1"
                 }
             }
         )", {NKikimrScheme::StatusInvalidParameter});

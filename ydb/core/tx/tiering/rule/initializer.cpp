@@ -17,27 +17,12 @@ TVector<NKikimr::NMetadataInitializer::ITableModifier::TPtr> TTierRulesInitializ
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("ownerPath");
+            column.set_name("defaultColumn");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("tierName");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("tablePath");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("durationForEvict");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("column");
+            column.set_name("description");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
         result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create_rules"));

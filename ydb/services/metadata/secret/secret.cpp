@@ -87,4 +87,27 @@ std::vector<TString> TSecret::TDecoder::GetPKColumnIds() {
     return { OwnerUserId, SecretId };
 }
 
+TString TSecretId::SerializeToString() const {
+    TStringBuilder sb;
+    sb << "USId:" << OwnerUserId << ":" << SecretId;
+    return sb;
+}
+
+bool TSecretId::DeserializeFromString(const TString& info) {
+    static const TString prefix = "USId:";
+    if (!info.StartsWith(prefix)) {
+        return false;
+    }
+    TStringBuf sb(info.data(), info.size());
+    sb.Skip(prefix.size());
+    TStringBuf uId;
+    TStringBuf sId;
+    if (!sb.TrySplit(':', uId, sId)) {
+        return false;
+    }
+    OwnerUserId = uId;
+    SecretId = sId;
+    return true;
+}
+
 }

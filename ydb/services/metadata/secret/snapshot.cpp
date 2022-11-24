@@ -44,4 +44,17 @@ TString TSnapshot::DoSerializeToString() const {
     return sb;
 }
 
+bool TSnapshot::PatchString(TString& stringForPath) const {
+    TSecretId sId;
+    if (!sId.DeserializeFromString(stringForPath)) {
+        return false;
+    }
+    auto it = Secrets.find(sId);
+    if (it == Secrets.end()) {
+        return false;
+    }
+    stringForPath = it->second.GetValue();
+    return true;
+}
+
 }

@@ -172,7 +172,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
     if (spec.HasTiers()) {
-        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec, "test", tableId));
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
     //
 
@@ -237,7 +237,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
     if (spec.HasTiers()) {
-        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec, "test", tableId));
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
 
     if (internal) {
@@ -270,7 +270,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          {++planStep, ++txId});
     UNIT_ASSERT(ok);
     if (spec.HasTiers()) {
-        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials(), "test", tableId));
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
     PlanSchemaTx(runtime, sender, {planStep, txId});
 
@@ -445,7 +445,7 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     }
     PlanSchemaTx(runtime, sender, {planStep, txId});
     if (specs[0].Tiers.size()) {
-        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0], "test", tableId));
+        ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0]));
     }
 
     for (auto& data : blobs) {
@@ -484,7 +484,7 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
             }
         }
         if (specs[i].Tiers.size()) {
-            ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i], "test", tableId));
+            ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
         counter.SetRestartTabletOnPutData(reboots ? 1 : 0);
 

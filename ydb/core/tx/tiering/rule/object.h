@@ -1,7 +1,6 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/tiering/common/global_tier_id.h>
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/manager/object.h>
@@ -11,21 +10,57 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
+class TTieringInterval {
+private:
+    YDB_ACCESSOR_DEF(TString, TierName);
+    YDB_ACCESSOR_DEF(TDuration, DurationForEvict);
+public:
+    TTieringInterval() = default;
+    TTieringInterval(const TString& name, const TDuration d)
+        : TierName(name)
+        , DurationForEvict(d)
+    {
+
+    }
+
+    bool operator<(const TTieringInterval& item) const {
+        return DurationForEvict < item.DurationForEvict;
+    }
+
+    NJson::TJsonValue SerializeToJson() const {
+        NJson::TJsonValue result;
+        result.InsertValue("tierName", TierName);
+        result.InsertValue("durationForEvict", DurationForEvict.ToString());
+        return result;
+    }
+
+    bool DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        if (!jsonInfo["tierName"].GetString(&TierName)) {
+            return false;
+        }
+        const TString dStr = jsonInfo["durationForEvict"].GetStringRobust();
+        if (!TDuration::TryParse(dStr, DurationForEvict)) {
+            return false;
+        }
+        return true;
+    }
+};
+
 class TTieringRule: public NMetadataManager::TObject<TTieringRule> {
 private:
     YDB_ACCESSOR_DEF(TString, TieringRuleId);
-    YDB_ACCESSOR_DEF(TString, OwnerPath);
-    YDB_ACCESSOR_DEF(TString, TierName);
-    YDB_ACCESSOR_DEF(TString, TablePath);
-    YDB_ACCESSOR(ui64, TablePathId, 0);
-    YDB_ACCESSOR_DEF(TString, Column);
-    YDB_ACCESSOR_DEF(TDuration, DurationForEvict);
+    YDB_ACCESSOR_DEF(TString, DefaultColumn);
+    YDB_ACCESSOR_DEF(TVector<TTieringInterval>, Intervals);
+protected:
+    NJson::TJsonValue SerializeDescriptionToJson() const;
+    bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);
 public:
+    void AddInterval(const TString& name, const TDuration evDuration) {
+        Intervals.emplace_back(TTieringInterval(name, evDuration));
+    }
+
     static TString GetTypeId() {
         return "TIERING_RULE";
-    }
-    TGlobalTierId GetGlobalTierId() const {
-        return TGlobalTierId(OwnerPath, TierName);
     }
 
     static TString GetStorageTablePath();
@@ -33,28 +68,17 @@ public:
         NMetadataManager::IAlterPreparationController<TTieringRule>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);
 
-    bool operator<(const TTieringRule& item) const {
-        return std::tie(TablePath, TierName, Column, DurationForEvict, TieringRuleId)
-            < std::tie(item.TablePath, item.TierName, item.Column, item.DurationForEvict, item.TieringRuleId);
-    }
-
     NJson::TJsonValue GetDebugJson() const;
 
     class TDecoder: public NInternal::TDecoderBase {
     private:
         YDB_READONLY(i32, TieringRuleIdIdx, -1);
-        YDB_READONLY(i32, OwnerPathIdx, -1);
-        YDB_READONLY(i32, TablePathIdx, -1);
-        YDB_READONLY(i32, DurationForEvictIdx, -1);
-        YDB_READONLY(i32, TierNameIdx, -1);
-        YDB_READONLY(i32, ColumnIdx, -1);
+        YDB_READONLY(i32, DefaultColumnIdx, -1);
+        YDB_READONLY(i32, DescriptionIdx, -1);
     public:
         static inline const TString TieringRuleId = "tieringRuleId";
-        static inline const TString OwnerPath = "ownerPath";
-        static inline const TString TierName = "tierName";
-        static inline const TString TablePath = "tablePath";
-        static inline const TString DurationForEvict = "durationForEvict";
-        static inline const TString Column = "column";
+        static inline const TString DefaultColumn = "defaultColumn";
+        static inline const TString Description = "description";
 
         static std::vector<Ydb::Column> GetPKColumns();
         static std::vector<Ydb::Column> GetColumns();
@@ -62,37 +86,15 @@ public:
 
         TDecoder(const Ydb::ResultSet& rawData) {
             TieringRuleIdIdx = GetFieldIndex(rawData, TieringRuleId);
-            OwnerPathIdx = GetFieldIndex(rawData, OwnerPath);
-            TierNameIdx = GetFieldIndex(rawData, TierName);
-            TablePathIdx = GetFieldIndex(rawData, TablePath);
-            DurationForEvictIdx = GetFieldIndex(rawData, DurationForEvict);
-            ColumnIdx = GetFieldIndex(rawData, Column);
+            DefaultColumnIdx = GetFieldIndex(rawData, DefaultColumn);
+            DescriptionIdx = GetFieldIndex(rawData, Description);
         }
     };
     NKikimr::NMetadataManager::TTableRecord SerializeToRecord() const;
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r);
     static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         const NMetadata::IOperationsManager::TModificationContext& context);
-};
-
-class TTableTiering {
-private:
-    YDB_READONLY_DEF(TString, TablePath);
-    YDB_READONLY(ui64, TablePathId, 0);
-    YDB_READONLY_DEF(TString, Column);
-    YDB_READONLY_DEF(TVector<TTieringRule>, Rules);
-public:
-    void SetTablePathId(const ui64 pathId) {
-        Y_VERIFY(!TablePathId);
-        TablePathId = pathId;
-        for (auto&& r : Rules) {
-            r.SetTablePathId(pathId);
-        }
-    }
-    NJson::TJsonValue GetDebugJson() const;
-    void AddRule(TTieringRule&& tr);
-
-    NOlap::TTiersInfo BuildTiersInfo() const;
+    NKikimr::NOlap::TTiersInfo BuildTiersInfo() const;
 };
 
 }

@@ -1,5 +1,4 @@
 #include "external_data.h"
-#include "snapshot_enrich.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/tiering/tier/manager.h>
@@ -12,16 +11,11 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-void TSnapshotConstructor::EnrichSnapshotData(ISnapshot::TPtr original, NMetadataProvider::ISnapshotAcceptorController::TPtr controller) const
-{
-    if (!TablesDecoder) {
-        TablesDecoder = std::make_shared<TTablesDecoderCache>();
-    }
-    TActivationContext::AsActorContext().Register(new TActorSnapshotEnrich(original, controller, TablesDecoder));
+void TSnapshotConstructor::EnrichSnapshotData(ISnapshot::TPtr original, NMetadataProvider::ISnapshotAcceptorController::TPtr controller) const {
+    controller->Enriched(original);
 }
 
-TSnapshotConstructor::TSnapshotConstructor()
-{
+TSnapshotConstructor::TSnapshotConstructor() {
 }
 
 std::vector<NKikimr::NMetadata::IOperationsManager::TPtr> TSnapshotConstructor::DoGetManagers() const {

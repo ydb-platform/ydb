@@ -1271,13 +1271,6 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleKql(TCallable node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Unknown Kql callable in type annotation: " << node.CallableName()));
-
-        return TStatus::Error;
-    }
-
     bool CheckDocApiModifiation(const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) {
         if (!SessionCtx->Query().DocumentApiRestricted) {
             return true;

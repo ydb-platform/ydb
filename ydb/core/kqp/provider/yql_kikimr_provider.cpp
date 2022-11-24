@@ -20,7 +20,6 @@ const TStringBuf CommitModeScheme = "scheme";
 struct TKikimrData {
     THashSet<TStringBuf> DataSourceNames;
     THashSet<TStringBuf> DataSinkNames;
-    THashSet<TStringBuf> KqlNames;
 
     THashSet<TStringBuf> CommitModes;
     THashSet<TStringBuf> SupportedEffects;
@@ -497,10 +496,6 @@ const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
 
 const THashSet<TStringBuf>& KikimrDataSinkFunctions() {
     return Singleton<TKikimrData>()->DataSinkNames;
-}
-
-const THashSet<TStringBuf>& KikimrKqlFunctions() {
-    return Singleton<TKikimrData>()->KqlNames;
 }
 
 const THashSet<TStringBuf>& KikimrSupportedEffects() {

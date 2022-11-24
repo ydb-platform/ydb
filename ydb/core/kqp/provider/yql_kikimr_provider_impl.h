@@ -44,7 +44,6 @@ private:
     virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleWrite(NNodes::TExprBase node, TExprContext& ctx) = 0;
     virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) = 0;
-    virtual TStatus HandleKql(NNodes::TCallable node, TExprContext& ctx) = 0;
     virtual TStatus HandleExecDataQuery(NNodes::TKiExecDataQuery node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQuery(NNodes::TKiDataQuery node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) = 0;
@@ -132,55 +131,6 @@ struct TKiExecDataQuerySettings {
     static TKiExecDataQuerySettings Parse(NNodes::TKiExecDataQuery exec);
 };
 
-template<typename TResult>
-class TKikimrFutureResult : public IKikimrAsyncResult<TResult> {
-public:
-    TKikimrFutureResult(const NThreading::TFuture<TResult>& future, TExprContext& ctx)
-        : Future(future)
-        , ExprCtx(ctx)
-        , Completed(false) {}
-
-    bool HasResult() const override {
-        if (Completed) {
-            YQL_ENSURE(ExtractedResult.has_value());
-        }
-        return Completed;
-    }
-
-    TResult GetResult() override {
-        YQL_ENSURE(Completed);
-        if (ExtractedResult) {
-            return std::move(*ExtractedResult);
-        }
-        return std::move(Future.ExtractValue());
-    }
-
-    NThreading::TFuture<bool> Continue() override {
-        if (Completed) {
-            return NThreading::MakeFuture(true);
-        }
-
-        if (Future.HasValue()) {
-            ExtractedResult.emplace(std::move(Future.ExtractValue()));
-            ExtractedResult->ReportIssues(ExprCtx.IssueManager);
-
-            Completed = true;
-            return NThreading::MakeFuture(true);
-        }
-
-        return Future.Apply([](const NThreading::TFuture<TResult>& future) {
-            YQL_ENSURE(future.HasValue());
-            return false;
-        });
-    }
-
-private:
-    NThreading::TFuture<TResult> Future;
-    std::optional<TResult> ExtractedResult;
-    TExprContext& ExprCtx;
-    bool Completed;
-};
-
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
@@ -225,7 +175,6 @@ TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, T
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
 const THashSet<TStringBuf>& KikimrDataSinkFunctions();
-const THashSet<TStringBuf>& KikimrKqlFunctions();
 const THashSet<TStringBuf>& KikimrSupportedEffects();
 
 const THashSet<TStringBuf>& KikimrCommitModes();

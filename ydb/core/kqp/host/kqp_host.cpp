@@ -104,6 +104,55 @@ void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, TExprNode* queryRoot, T
     queryResult.QueryPlan = planStream.Str();
 }
 
+template<typename TResult>
+class TKqpFutureResult : public IKikimrAsyncResult<TResult> {
+public:
+    TKqpFutureResult(const NThreading::TFuture<TResult>& future, TExprContext& ctx)
+        : Future(future)
+        , ExprCtx(ctx)
+        , Completed(false) {}
+
+    bool HasResult() const override {
+        if (Completed) {
+            YQL_ENSURE(ExtractedResult.has_value());
+        }
+        return Completed;
+    }
+
+    TResult GetResult() override {
+        YQL_ENSURE(Completed);
+        if (ExtractedResult) {
+            return std::move(*ExtractedResult);
+        }
+        return std::move(Future.ExtractValue());
+    }
+
+    NThreading::TFuture<bool> Continue() override {
+        if (Completed) {
+            return NThreading::MakeFuture(true);
+        }
+
+        if (Future.HasValue()) {
+            ExtractedResult.emplace(std::move(Future.ExtractValue()));
+            ExtractedResult->ReportIssues(ExprCtx.IssueManager);
+
+            Completed = true;
+            return NThreading::MakeFuture(true);
+        }
+
+        return Future.Apply([](const NThreading::TFuture<TResult>& future) {
+            YQL_ENSURE(future.HasValue());
+            return false;
+        });
+    }
+
+private:
+    NThreading::TFuture<TResult> Future;
+    std::optional<TResult> ExtractedResult;
+    TExprContext& ExprCtx;
+    bool Completed;
+};
+
 /*
  * Validate YqlScript.
  */
@@ -671,13 +720,6 @@ public:
         , SessionCtx(sessionCtx)
         , KqpRunner(kqpRunner) {}
 
-    TIntrusivePtr<TAsyncQueryResult> ExecuteKql(const TString&, const TExprNode::TPtr&, TExprContext&,
-        const TExecuteSettings&) override
-    {
-        YQL_ENSURE(false, "Unexpected ExecuteKql call.");
-        return nullptr;
-    }
-
     TIntrusivePtr<TAsyncQueryResult> ExecuteDataQuery(const TString& cluster, const TExprNode::TPtr& query,
         TExprContext& ctx, const TExecuteSettings& settings) override
     {
@@ -761,7 +803,7 @@ public:
                     return nullptr;
                 }
 
-                return MakeIntrusive<TKikimrFutureResult<TQueryResult>>(future, ctx);
+                return MakeIntrusive<TKqpFutureResult<TQueryResult>>(future, ctx);
             }
 
             default:

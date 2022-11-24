@@ -283,13 +283,6 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleKql(TCallable node, TExprContext& ctx) override {
-        Y_UNUSED(node);
-        Y_UNUSED(ctx);
-
-        return TStatus::Ok;
-    }
-
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
@@ -385,9 +378,7 @@ public:
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
-        if (KikimrDataSinkFunctions().contains(node.Content()) ||
-            KikimrKqlFunctions().contains(node.Content()))
-        {
+        if (KikimrDataSinkFunctions().contains(node.Content())) {
             return true;
         }
 
@@ -783,10 +774,6 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiEffects>()) {
         return HandleEffects(node.Cast(), ctx);
-    }
-
-    if (KikimrKqlFunctions().contains(callable.CallableName())) {
-        return HandleKql(callable, ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

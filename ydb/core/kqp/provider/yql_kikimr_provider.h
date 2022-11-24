@@ -50,9 +50,6 @@ public:
 
     virtual ~IKikimrQueryExecutor() {}
 
-    virtual TIntrusivePtr<TAsyncQueryResult> ExecuteKql(const TString& cluster,
-        const TExprNode::TPtr& query, TExprContext& ctx, const TExecuteSettings& settings) = 0;
-
     virtual TIntrusivePtr<TAsyncQueryResult> ExecuteDataQuery(const TString& cluster,
         const TExprNode::TPtr& query, TExprContext& ctx, const TExecuteSettings& settings) = 0;
 

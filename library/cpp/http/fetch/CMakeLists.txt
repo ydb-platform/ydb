@@ -36,5 +36,5 @@ generate_enum_serilization(cpp-http-fetch
 target_ragel_lexers(cpp-http-fetch
   PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpfsm.rl6
-  -CF1
+  -CG1
 )

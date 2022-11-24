@@ -65,7 +65,7 @@
  */
 #if defined(__arm__) || defined(__arm) || \
 	defined(__aarch64__) || defined(__aarch64)
-#error #include "port/atomics/arch-arm.h"
+#include "port/atomics/arch-arm.h"
 #elif defined(__i386__) || defined(__i386) || defined(__x86_64__)
 #include "port/atomics/arch-x86.h"
 #elif defined(__ia64__) || defined(__ia64)

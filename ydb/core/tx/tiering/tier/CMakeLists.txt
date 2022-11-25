@@ -18,6 +18,7 @@ target_link_libraries(tx-tiering-tier PUBLIC
 target_sources(tx-tiering-tier PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/initializer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/checker.cpp
 )
 
 add_global_library_for(tx-tiering-tier.global tx-tiering-tier)

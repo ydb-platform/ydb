@@ -74,10 +74,19 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IOperationsManager, TString>;
     using TPtr = std::shared_ptr<IOperationsManager>;
 
+    enum class EActivityType {
+        Undefined,
+        Create,
+        Alter,
+        Drop
+    };
+
     class TModificationContext {
     private:
         YDB_ACCESSOR_DEF(TMaybe<NACLib::TUserToken>, UserToken);
+        YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
     public:
+        TModificationContext() = default;
     };
 protected:
     virtual NThreading::TFuture<TObjectOperatorResult> DoCreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,

@@ -106,6 +106,7 @@ private:
 
     void Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev);
     void Handle(TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(TEvAskSnapshot::TPtr& ev);
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvAlterObjects::TPtr& ev);
@@ -118,6 +119,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvAlterObjects, Handle);
             hFunc(TEvRefreshSubscriberData, Handle);
+            hFunc(TEvAskSnapshot, Handle);
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
             hFunc(NMetadataInitializer::TEvInitializationFinished, Handle);

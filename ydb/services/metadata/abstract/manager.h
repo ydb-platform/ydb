@@ -59,12 +59,16 @@ private:
     YDB_READONLY_DEF(std::vector<NMetadataManager::TTableRecord>, Records);
     YDB_READONLY_DEF(IOperationsManager::TPtr, Manager);
     YDB_READONLY_DEF(NMetadataManager::IAlterController::TPtr, Controller);
-    YDB_READONLY_DEF(IOperationsManager::TModificationContext, Context);
 protected:
+    mutable IOperationsManager::TModificationContext Context;
     virtual void DoExecute() const = 0;
 public:
     using TPtr = std::shared_ptr<IAlterCommand>;
     virtual ~IAlterCommand() = default;
+
+    const IOperationsManager::TModificationContext& GetContext() const {
+        return Context;
+    }
 
     IAlterCommand(const std::vector<NMetadataManager::TTableRecord>& records,
         IOperationsManager::TPtr manager,

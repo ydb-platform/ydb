@@ -351,6 +351,7 @@ private:
     using TBase = NMetadata::IAlterCommand;
 protected:
     virtual void DoExecute() const override {
+        Context.SetActivityType(NMetadata::IOperationsManager::EActivityType::Create);
         TActivationContext::AsActorContext().Register(new NMetadataManager::TCreateActor<TObject>(GetRecords(), GetController(), GetContext()));
     }
 public:
@@ -363,6 +364,7 @@ private:
     using TBase = NMetadata::IAlterCommand;
 protected:
     virtual void DoExecute() const override {
+        Context.SetActivityType(NMetadata::IOperationsManager::EActivityType::Alter);
         TActivationContext::AsActorContext().Register(new NMetadataManager::TAlterActor<TObject>(GetRecords(), GetController(), GetContext()));
     }
 public:
@@ -375,6 +377,7 @@ private:
     using TBase = NMetadata::IAlterCommand;
 protected:
     virtual void DoExecute() const override {
+        Context.SetActivityType(NMetadata::IOperationsManager::EActivityType::Drop);
         TActivationContext::AsActorContext().Register(new NMetadataManager::TDropActor<TObject>(GetRecords(), GetController(), GetContext()));
     }
 public:

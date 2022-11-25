@@ -57,4 +57,27 @@ bool TSnapshot::PatchString(TString& stringForPath) const {
     return true;
 }
 
+bool TSnapshot::CheckSecretAccess(const TString& secretableString, const TMaybe<NACLib::TUserToken>& userToken) const {
+    if (!userToken) {
+        return true;
+    }
+    TSecretId sId;
+    if (!sId.DeserializeFromString(secretableString)) {
+        return true;
+    }
+    auto it = Secrets.find(sId);
+    if (it == Secrets.end()) {
+        return false;
+    }
+    if (it->second.GetOwnerUserId() == userToken->GetUserSID()) {
+        return true;
+    }
+    for (auto&& i : Access) {
+        if (i.GetAccessUserId() == userToken->GetUserSID()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }

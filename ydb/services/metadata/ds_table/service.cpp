@@ -89,6 +89,25 @@ void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
     }
 }
 
+void TService::Handle(TEvAskSnapshot::TPtr& ev) {
+    std::vector<NMetadata::IOperationsManager::TPtr> needManagers;
+    for (auto&& i : ev->Get()->GetFetcher()->GetManagers()) {
+        if (!RegisteredManagers.contains(i->GetTypeId())) {
+            needManagers.emplace_back(i);
+        }
+    }
+    if (needManagers.empty()) {
+        auto it = Accessors.find(ev->Get()->GetFetcher()->GetComponentId());
+        if (it == Accessors.end()) {
+            THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetFetcher());
+            it = Accessors.emplace(ev->Get()->GetFetcher()->GetComponentId(), Register(actor.Release())).first;
+        }
+        Send<TEvAsk>(it->second, ev->Sender);
+    } else {
+        PrepareManagers(needManagers, ev->ReleaseBase(), ev->Sender);
+    }
+}
+
 void TService::Handle(TEvAlterObjects::TPtr& ev) {
     auto it = RegisteredManagers.find(ev->Get()->GetCommand()->GetManager()->GetTypeId());
     if (it != RegisteredManagers.end()) {

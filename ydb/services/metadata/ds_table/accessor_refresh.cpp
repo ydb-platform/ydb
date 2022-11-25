@@ -24,6 +24,8 @@ void TDSAccessorRefresher::Handle(TEvYQLResponse::TPtr& ev) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << ProposedProto.DebugString();
         SnapshotConstructor->EnrichSnapshotData(parsedSnapshot, InternalController);
     } else {
+        CurrentSnapshot->SetActuality(RequestedActuality);
+        OnSnapshotRefresh();
         Schedule(Config.GetRefreshPeriod(), new TEvRefresh());
     }
 }
@@ -34,6 +36,7 @@ void TDSAccessorRefresher::Handle(TEvEnrichSnapshotResult::TPtr& ev) {
     CurrentSnapshot = ev->Get()->GetEnrichedSnapshot();
     *CurrentSelection.mutable_result_sets() = std::move(*ProposedProto.mutable_result_sets());
     OnSnapshotModified();
+    OnSnapshotRefresh();
 }
 
 void TDSAccessorRefresher::Handle(TEvEnrichSnapshotProblem::TPtr& ev) {
@@ -44,6 +47,7 @@ void TDSAccessorRefresher::Handle(TEvEnrichSnapshotProblem::TPtr& ev) {
 
 void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
     TStringBuilder sb;
+    RequestedActuality = TInstant::Now();
     auto& managers = SnapshotConstructor->GetManagers();
     Y_VERIFY(managers.size());
     for (auto&& i : managers) {

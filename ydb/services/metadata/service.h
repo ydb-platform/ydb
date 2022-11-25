@@ -15,6 +15,16 @@ public:
     }
 };
 
+class TEvAskSnapshot: public NActors::TEventLocal<TEvAskSnapshot, EEvSubscribe::EvAskExternal> {
+private:
+    YDB_READONLY_DEF(ISnapshotsFetcher::TPtr, Fetcher);
+public:
+    TEvAskSnapshot(ISnapshotsFetcher::TPtr fetcher)
+        : Fetcher(fetcher) {
+        Y_VERIFY(!!Fetcher);
+    }
+};
+
 class TEvSubscribeExternal: public NActors::TEventLocal<TEvSubscribeExternal, EEvSubscribe::EvSubscribeExternal> {
 private:
     YDB_READONLY_DEF(ISnapshotsFetcher::TPtr, Fetcher);

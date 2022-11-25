@@ -17,6 +17,7 @@ target_link_libraries(tx-tiering-rule PUBLIC
 target_sources(tx-tiering-rule PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/object.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/initializer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/checker.cpp
 )
 
 add_global_library_for(tx-tiering-rule.global tx-tiering-rule)

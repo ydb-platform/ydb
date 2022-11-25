@@ -1,4 +1,8 @@
 #include "object.h"
+
+#include <ydb/core/tx/tiering/rule/checker.h>
+#include <ydb/core/tx/tiering/snapshot.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NColumnShard::NTiers {
@@ -17,9 +21,9 @@ TString TTieringRule::GetStorageTablePath() {
 
 void TTieringRule::AlteringPreparation(std::vector<TTieringRule>&& objects,
     NMetadataManager::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& /*context*/)
+    const NMetadata::IOperationsManager::TModificationContext& context)
 {
-    controller->PreparationFinished(std::move(objects));
+    TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
 }
 
 NJson::TJsonValue TTieringRule::SerializeDescriptionToJson() const {
@@ -102,6 +106,15 @@ NKikimr::NOlap::TTiersInfo TTieringRule::BuildTiersInfo() const {
         result.AddTier(r.GetTierName(), Now() - r.GetDurationForEvict());
     }
     return result;
+}
+
+bool TTieringRule::ContainsTier(const TString& tierName) const {
+    for (auto&& i : Intervals) {
+        if (i.GetTierName() == tierName) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<Ydb::Column> TTieringRule::TDecoder::GetPKColumns() {

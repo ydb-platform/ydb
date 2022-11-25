@@ -55,6 +55,8 @@ protected:
     NJson::TJsonValue SerializeDescriptionToJson() const;
     bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);
 public:
+    bool ContainsTier(const TString& tierName) const;
+
     void AddInterval(const TString& name, const TDuration evDuration) {
         Intervals.emplace_back(TTieringInterval(name, evDuration));
     }

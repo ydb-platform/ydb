@@ -30,7 +30,7 @@ public:
 
 class ISnapshot {
 private:
-    YDB_READONLY_DEF(TInstant, Actuality);
+    YDB_ACCESSOR_DEF(TInstant, Actuality);
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) = 0;
     virtual TString DoSerializeToString() const = 0;

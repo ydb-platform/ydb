@@ -84,6 +84,7 @@ protected:
         return !!CurrentSnapshot;
     }
     virtual void OnSnapshotModified() = 0;
+    virtual void OnSnapshotRefresh() = 0;
 public:
     void Bootstrap();
 

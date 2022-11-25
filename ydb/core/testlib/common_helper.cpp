@@ -40,16 +40,25 @@ void THelper::StartSchemaRequest(const TString& request, const bool expectSucces
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
     auto expectation = expectSuccess;
-    tClient.CreateSession().Subscribe([request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
+
+    bool resultReady = false;
+    bool* rrPtr = &resultReady;
+    tClient.CreateSession().Subscribe([rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
         auto session = f.GetValueSync().GetSession();
-        session.ExecuteSchemeQuery(request).Subscribe([expectation](NYdb::TAsyncStatus f)
+        session.ExecuteSchemeQuery(request).Subscribe([rrPtr, expectation](NYdb::TAsyncStatus f)
             {
+                *rrPtr = true;
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
                 Cerr << ss.Str() << Endl;
                 Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
             });
         });
+    const TInstant start = TInstant::Now();
+    while (!resultReady && start + TDuration::Seconds(20) > TInstant::Now()) {
+        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+    }
+    Y_VERIFY(resultReady);
 }
 
 void THelper::DropTable(const TString& tablePath) {

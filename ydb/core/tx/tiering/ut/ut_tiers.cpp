@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
             runtime.SetObserverFunc(pred);
 
-            for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(10); ) {
+            for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(30); ) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
@@ -185,8 +185,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         void CheckFound(NMetadataProvider::TEvRefreshSubscriberData* event) {
             auto snapshot = event->GetSnapshotAs<NTiers::TConfigsSnapshot>();
             if (!snapshot) {
+                Cerr << "incorrect snapshot" << Endl;
                 return;
             }
+            Cerr << "SNAPSHOT: " << snapshot->SerializeToString() << Endl;
             const auto& tierings = snapshot->GetTableTierings();
             if (tierings.size() != ExpectedTieringsCount) {
                 Cerr << "TieringsCount incorrect: " << snapshot->SerializeToString() << ";expectation=" << ExpectedTieringsCount << Endl;
@@ -272,15 +274,17 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         {
             TTestCSEmulator* emulator = new TTestCSEmulator;
             emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc"));
+            emulator->SetExpectedTiersCount(2);
             runtime.Register(emulator);
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
-                "TYPE TIER) WITH (tierConfig = `" + ConfigProtoStr + "`)");
-            lHelper.StartSchemaRequest("CREATE OBJECT tier1 ("
-                "TYPE TIERING_RULE) WITH (tierName = tier1, "
-                "defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
+            lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr + "`");
+            lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
+                "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", false);
+            lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr + "`");
+            lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
+                "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
@@ -289,10 +293,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 Y_VERIFY(emulator->IsFound());
             }
             {
-                lHelper.StartSchemaRequest("ALTER OBJECT tier1 ( "
-                    "TYPE TIER) SET tierConfig = `" + ConfigProtoStr1 + "`");
+                lHelper.StartSchemaRequest("ALTER OBJECT tier1 (TYPE TIER) SET tierConfig = `" + ConfigProtoStr1 + "`");
 
                 emulator->ResetConditions();
+                emulator->SetExpectedTiersCount(2);
                 emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
                 {
                     const TInstant start = Now();
@@ -311,8 +315,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     patches.emplace_back(std::move(patch));
                 }
 
+                lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIER)", false);
+                lHelper.StartSchemaRequest("DROP OBJECT tiering1(TYPE TIERING_RULE)");
                 lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIER)");
-                lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIERING_RULE)");
+                lHelper.StartSchemaRequest("DROP OBJECT tier2(TYPE TIER)");
 
                 emulator->ResetConditions();
                 emulator->SetExpectedTieringsCount(0);
@@ -360,24 +366,20 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(10));
         Cerr << "Initialization finished" << Endl;
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
-            "TYPE TIER) WITH (tierConfig = `" + ConfigProtoStr1 + "`)");
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
-            "TYPE TIERING_RULE) "
-            "WITH (tierName = tier1, defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` "
-            ")");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr1 + "`");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
-            emulator.SetExpectedTieringsCount(1);
+            emulator.SetExpectedTieringsCount(0);
             emulator.SetExpectedTiersCount(1);
             emulator.CheckRuntime(runtime);
         }
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier2 ( "
-            "TYPE TIER) WITH (tierConfig = `" + ConfigProtoStr2 + "`)");
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering2 ("
-            "TYPE TIERING_RULE) WITH (tierName = tier2, defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
+        lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + ConfigProtoStr2 + "`");
+        lHelper.StartSchemaRequest("CREATE OBJECT tiering1 (TYPE TIERING_RULE) "
+            "WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "`)");
+        lHelper.StartSchemaRequest("CREATE OBJECT tiering2 (TYPE TIERING_RULE) "
+            "WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
@@ -387,16 +389,18 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator.CheckRuntime(runtime);
         }
 
-        lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)");
+        lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)", false);
+        lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIER)", false);
         lHelper.StartSchemaRequest("DROP OBJECT tiering2 (TYPE TIERING_RULE)");
+        lHelper.StartSchemaRequest("DROP OBJECT tiering1 (TYPE TIERING_RULE)");
         {
             TTestCSEmulator emulator;
-            emulator.SetExpectedTieringsCount(1);
-            emulator.SetExpectedTiersCount(1);
+            emulator.SetExpectedTieringsCount(0);
+            emulator.SetExpectedTiersCount(2);
             emulator.CheckRuntime(runtime);
         }
+        lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)");
         lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIER)");
-        lHelper.StartSchemaRequest("DROP OBJECT tiering1 (TYPE TIERING_RULE)");
         {
             TTestCSEmulator emulator;
             emulator.SetExpectedTieringsCount(0);
@@ -480,13 +484,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
             "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
-            "TYPE TIERING_RULE) WITH (tierName = tiering1, defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
-
         lHelper.StartSchemaRequest("CREATE OBJECT tier2 ( "
             "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");
+
+        lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
+            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
         lHelper.StartSchemaRequest("CREATE OBJECT tiering2 ("
-            "TYPE TIERING_RULE) WITH (tierName = tiering2, defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
+            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
         {
             TTestCSEmulator* emulator = new TTestCSEmulator;
             runtime.Register(emulator);

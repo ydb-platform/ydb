@@ -27,8 +27,31 @@ void TDSAccessorNotifier::Handle(TEvSubscribe::TPtr& ev) {
     }
 }
 
+void TDSAccessorNotifier::Handle(TEvAsk::TPtr& ev) {
+    Asked[Now()].emplace(ev->Get()->GetRequesterId());
+    Sender<TEvRefresh>().SendTo(SelfId());
+}
+
 void TDSAccessorNotifier::Handle(TEvUnsubscribe::TPtr& ev) {
     Subscribed.erase(ev->Get()->GetSubscriberId());
+}
+
+void TDSAccessorNotifier::OnSnapshotRefresh() {
+    auto snapshot = GetCurrentSnapshot();
+    for (auto it = Asked.begin(); it != Asked.end(); ) {
+        if (it->first <= snapshot->GetActuality()) {
+            if (!snapshot) {
+                ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot on refresh";
+                return;
+            }
+            for (auto&& s : it->second) {
+                Sender<TEvRefreshSubscriberData>(snapshot).SendTo(s);
+            }
+            it = Asked.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 }

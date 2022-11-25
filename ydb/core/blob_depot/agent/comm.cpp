@@ -4,14 +4,21 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
+        auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA03, "TEvClientConnected", (VirtualGroupId, VirtualGroupId),
-            (Msg, ev->Get()->ToString()));
+            (TabletId, msg.TabletId), (Status, msg.Status), (ClientId, msg.ClientId), (ServerId, msg.ServerId));
+        Y_VERIFY_DEBUG_S(msg.Status == NKikimrProto::OK, "Status# " << NKikimrProto::EReplyStatus_Name(msg.Status));
+        if (msg.Status != NKikimrProto::OK) {
+            ConnectToBlobDepot();
+        } else {
+            PipeServerId = msg.ServerId;
+        }
     }
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA04, "TEvClientDestroyed", (VirtualGroupId, VirtualGroupId),
             (Msg, ev->Get()->ToString()));
-        PipeId = {};
+        PipeId = PipeServerId = {};
         OnDisconnect();
         ConnectToBlobDepot();
     }
@@ -169,12 +176,14 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
-        auto response = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
-
         auto& msg = ev->Get()->Record;
-
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (VirtualGroupId, VirtualGroupId), (Msg, msg),
-            (Id, ev->Cookie));
+            (Id, ev->Cookie), (Sender, ev->Sender), (PipeServerId, PipeServerId));
+        if (ev->Sender != PipeServerId) {
+            return; // race with previous connection
+        }
+
+        auto response = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
 
         BlocksManager.OnBlockedTablets(msg.GetBlockedTablets());
 

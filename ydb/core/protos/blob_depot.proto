@@ -115,6 +115,7 @@ message TEvPushNotify {
     message TBlockedTablet {
         optional fixed64 TabletId = 1;
         optional uint32 BlockedGeneration = 2;
+        optional uint64 IssuerGuid = 3;
     }
     message TInvalidatedStep {
         optional uint32 Channel = 1;

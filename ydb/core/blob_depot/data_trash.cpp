@@ -33,9 +33,10 @@ namespace NKikimr::NBlobDepot {
         std::set<TLogoBlobID>::iterator trashEndIter = record.Trash.end();
 
         // step we are going to invalidate (including blobs with this one)
-        if (TGenStep(record.LeastExpectedBlobId) <= nextGenStep) {
-            const ui32 invalidatedStep = nextGenStep.Step(); // the step we want to invalidate and garbage collect
+        TBlobSeqId leastExpectedBlobId = channel.GetLeastExpectedBlobId(generation);
+        const ui32 invalidatedStep = nextGenStep.Step(); // the step we want to invalidate and garbage collect
 
+        if (TGenStep(leastExpectedBlobId) <= nextGenStep) {
             // remove invalidated step from allocations
             auto blobSeqId = TBlobSeqId::FromSequentalNumber(record.Channel, generation, channel.NextBlobSeqId);
             Y_VERIFY(record.LastConfirmedGenStep < TGenStep(blobSeqId));
@@ -45,29 +46,33 @@ namespace NKikimr::NBlobDepot {
                 channel.NextBlobSeqId = blobSeqId.ToSequentialNumber();
             }
 
-            // issue notifications to agents
+            // recalculate least expected blob id -- it may change if the given id set was empty
+            leastExpectedBlobId = channel.GetLeastExpectedBlobId(generation);
+        }
+
+        if (TGenStep(leastExpectedBlobId) <= nextGenStep) {
+            // issue notifications to agents -- we want to trim their ids
             for (auto& [agentId, agent] : Self->Agents) {
-                if (!agent.AgentId) {
-                    continue;
-                }
                 const auto [it, inserted] = agent.InvalidatedStepInFlight.emplace(record.Channel, invalidatedStep);
                 if (inserted || it->second < invalidatedStep) {
                     it->second = invalidatedStep;
 
-                    auto& ev = outbox[agentId];
-                    if (!ev) {
-                        ev.reset(new TEvBlobDepot::TEvPushNotify);
+                    if (agent.Connection) {
+                        auto& ev = outbox[agentId];
+                        if (!ev) {
+                            ev.reset(new TEvBlobDepot::TEvPushNotify);
+                        }
+                        auto *item = ev->Record.AddInvalidatedSteps();
+                        item->SetChannel(record.Channel);
+                        item->SetGeneration(generation);
+                        item->SetInvalidatedStep(invalidatedStep);
                     }
-                    auto *item = ev->Record.AddInvalidatedSteps();
-                    item->SetChannel(record.Channel);
-                    item->SetGeneration(generation);
-                    item->SetInvalidatedStep(invalidatedStep);
                 }
             }
             
-            // adjust the barrier to keep it safe now
-            const TLogoBlobID maxId(Self->TabletID(), record.LeastExpectedBlobId.Generation,
-                record.LeastExpectedBlobId.Step, record.Channel, 0, 0);
+            // adjust the barrier to keep it safe now (till we trim ids)
+            const TLogoBlobID maxId(Self->TabletID(), leastExpectedBlobId.Generation,
+                leastExpectedBlobId.Step, record.Channel, 0, 0);
             trashEndIter = record.Trash.lower_bound(maxId);
             if (trashEndIter != record.Trash.begin()) {
                 nextGenStep = TGenStep(*std::prev(trashEndIter));
@@ -120,7 +125,7 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "issuing TEvCollectGarbage", (Id, Self->GetLogId()),
                 (Channel, int(record.Channel)), (GroupId, record.GroupId), (Msg, ev->ToString()),
                 (LastConfirmedGenStep, record.LastConfirmedGenStep), (IssuedGenStep, record.IssuedGenStep),
-                (LeastExpectedBlobId, record.LeastExpectedBlobId), (TrashInFlight.size, record.TrashInFlight.size()));
+                (LeastExpectedBlobId, leastExpectedBlobId), (TrashInFlight.size, record.TrashInFlight.size()));
 
             const ui64 id = ++LastCollectCmdId;
             CollectCmdToGroup.emplace(id, record.GroupId);
@@ -140,9 +145,9 @@ namespace NKikimr::NBlobDepot {
                 request[item.GetChannel()] = item.GetInvalidatedStep();
             }
 
-            Y_VERIFY(agent.AgentId);
+            Y_VERIFY(agent.Connection);
             agent.PushCallbacks.emplace(id, std::bind(&TData::OnPushNotifyResult, this, std::placeholders::_1));
-            TActivationContext::Send(new IEventHandle(*agent.AgentId, Self->SelfId(), ev.release(), 0, id));
+            TActivationContext::Send(new IEventHandle(agent.Connection->AgentId, agent.Connection->PipeServerId, ev.release(), 0, id));
         }
     }
 

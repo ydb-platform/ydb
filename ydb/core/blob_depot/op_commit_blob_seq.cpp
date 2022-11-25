@@ -19,6 +19,11 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                TAgent& agent = Self->GetAgent(NodeId);
+                if (!agent.Connection) { // agent disconnected while transaction was in queue -- drop this request
+                    return true;
+                }
+
                 if (!LoadMissingKeys(txc)) {
                     return false;
                 }
@@ -28,7 +33,6 @@ namespace NKikimr::NBlobDepot {
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
                 std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
 
-                TAgent& agent = Self->GetAgent(NodeId);
                 const ui32 generation = Self->Executor()->Generation();
 
                 for (const auto& item : Request->Get()->Record.GetItems()) {
@@ -120,7 +124,7 @@ namespace NKikimr::NBlobDepot {
 
                 const ui64 value = blobSeqId.ToSequentialNumber();
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "MarkGivenIdCommitted", (Id, Self->GetLogId()),
-                    (AgentId, agent.ConnectedNodeId), (BlobSeqId, blobSeqId), (Value, value),
+                    (AgentId, agent.Connection->NodeId), (BlobSeqId, blobSeqId), (Value, value),
                     (GivenIdRanges, Self->Channels[blobSeqId.Channel].GivenIdRanges),
                     (Agent.GivenIdRanges, agent.GivenIdRanges[blobSeqId.Channel]));
 
@@ -161,7 +165,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         TAgent& agent = GetAgent(ev->Recipient);
-        Execute(std::make_unique<TTxCommitBlobSeq>(this, agent.ConnectedNodeId,
+        Execute(std::make_unique<TTxCommitBlobSeq>(this, agent.Connection->NodeId,
             std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle>(ev.Release())));
     }
 
@@ -169,7 +173,7 @@ namespace NKikimr::NBlobDepot {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT57, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.ConnectedNodeId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT57, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
             (Msg, ev->Get()->Record));
 
         // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written

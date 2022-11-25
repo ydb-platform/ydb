@@ -329,7 +329,6 @@ namespace NKikimr::NBlobDepot {
             TGenStep IssuedGenStep; // currently in flight or already confirmed
             TGenStep LastConfirmedGenStep;
             bool CollectGarbageRequestInFlight = false;
-            TBlobSeqId LeastExpectedBlobId;
 
             TRecordsPerChannelGroup(ui8 channel, ui32 groupId)
                 : Channel(channel)
@@ -338,7 +337,7 @@ namespace NKikimr::NBlobDepot {
 
             void MoveToTrash(TLogoBlobID id);
             void OnSuccessfulCollect(TData *self);
-            void OnLeastExpectedBlobIdChange(TData *self, TBlobSeqId leastExpectedBlobId);
+            void OnLeastExpectedBlobIdChange(TData *self);
             void ClearInFlight(TData *self);
             void CollectIfPossible(TData *self);
         };
@@ -457,6 +456,7 @@ namespace NKikimr::NBlobDepot {
         bool OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
+        void AddFirstMentionedBlob(TLogoBlobID id);
         void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(ui32 groupId, TBlobSeqId id) const;

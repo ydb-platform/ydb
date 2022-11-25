@@ -85,6 +85,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 AgentInstanceId;
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
+        TActorId PipeServerId;
         bool IsConnected = false;
 
     private:

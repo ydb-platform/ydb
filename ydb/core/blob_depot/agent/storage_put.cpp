@@ -7,7 +7,7 @@ namespace NKikimr::NBlobDepot {
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
         class TPutQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPut> {
             const bool SuppressFooter = true;
-            const bool IssueUncertainWrites = true;
+            const bool IssueUncertainWrites = false;
 
             std::vector<ui32> BlockChecksRemain;
             ui32 PutsInFlight = 0;
@@ -178,7 +178,7 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
                 const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
-                Y_VERIFY(numErased);
+                Y_VERIFY(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration);
             }
 
             void OnUpdateBlock(bool success) override {

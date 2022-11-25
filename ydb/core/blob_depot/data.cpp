@@ -120,19 +120,13 @@ namespace NKikimr::NBlobDepot {
             EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
                 const auto [it, inserted] = RefCount.try_emplace(id);
                 if (inserted) {
-                    // first mention of this id
-                    auto& record = GetRecordsPerChannelGroup(id);
-                    const auto [_, inserted] = record.Used.insert(id);
-                    Y_VERIFY(inserted);
-                    AccountBlob(id, 1);
-                    TotalStoredDataSize += id.BlobSize();
-
-                    // blob is first mentioned and deleted as well
-                    if (outcome == EUpdateOutcome::DROP) {
+                    AddFirstMentionedBlob(id);
+                }
+                if (outcome == EUpdateOutcome::DROP) {
+                    if (inserted) {
                         deleteQ.push_back(id);
                     }
-                }
-                if (outcome != EUpdateOutcome::DROP) {
+                } else {
                     ++it->second;
                 }
             });
@@ -277,12 +271,8 @@ namespace NKikimr::NBlobDepot {
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(proto), uncertainWrite);
         if (inserted) {
             EnumerateBlobsForValueChain(it->second.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
-                if (!RefCount[id]++) { // first mention of this id
-                    auto& record = GetRecordsPerChannelGroup(id);
-                    const auto [_, inserted] = record.Used.insert(id);
-                    Y_VERIFY(inserted);
-                    AccountBlob(id, 1);
-                    TotalStoredDataSize += id.BlobSize();
+                if (!RefCount[id]++) {
+                    AddFirstMentionedBlob(id);
                 }
             });
         }
@@ -358,51 +348,58 @@ namespace NKikimr::NBlobDepot {
 
         const ui32 generation = Self->Executor()->Generation();
 
-        std::set<TBlobSeqId> writesInFlight;
+        std::vector<TBlobSeqId> writesInFlight;
         for (const auto& item : ev->Get()->Record.GetWritesInFlight()) {
-            writesInFlight.insert(TBlobSeqId::FromProto(item));
+            writesInFlight.push_back(TBlobSeqId::FromProto(item));
         }
+        std::sort(writesInFlight.begin(), writesInFlight.end());
 
         for (const auto& [channel, invalidatedStep] : items) {
             const ui32 channel_ = channel;
-            const ui32 invalidatedStep_ = invalidatedStep;
             auto& agentGivenIdRanges = agent.GivenIdRanges[channel];
             auto& givenIdRanges = Self->Channels[channel].GivenIdRanges;
 
-            auto begin = writesInFlight.lower_bound(TBlobSeqId{channel, 0, 0, 0});
-            auto end = writesInFlight.upper_bound(TBlobSeqId{channel, Max<ui32>(), Max<ui32>(), TBlobSeqId::MaxIndex});
+            auto begin = std::lower_bound(writesInFlight.begin(), writesInFlight.end(), TBlobSeqId{channel, 0, 0, 0});
 
             auto makeWritesInFlight = [&] {
                 TStringStream s;
                 s << "[";
-                for (auto it = begin; it != end; ++it) {
+                for (auto it = begin; it != writesInFlight.end() && it->Channel == channel_; ++it) {
                     s << (it != begin ? " " : "") << it->ToString();
                 }
                 s << "]";
                 return s.Str();
             };
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.ConnectedNodeId),
-                (Id, ev->Cookie), (Channel, channel_), (InvalidatedStep, invalidatedStep_),
-                (GivenIdRanges, Self->Channels[channel_].GivenIdRanges),
-                (Agent.GivenIdRanges, agent.GivenIdRanges[channel_]),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.Connection->NodeId),
+                (Id, ev->Cookie), (Channel, channel), (InvalidatedStep, invalidatedStep),
+                (GivenIdRanges, Self->Channels[channel].GivenIdRanges),
+                (Agent.GivenIdRanges, agent.GivenIdRanges[channel]),
                 (WritesInFlight, makeWritesInFlight()));
 
-            for (auto it = begin; it != end; ++it) {
+            // sanity check -- ensure that current writes in flight would be conserved when processing garbage
+            for (auto it = begin; it != writesInFlight.end() && it->Channel == channel; ++it) {
                 Y_VERIFY_S(agentGivenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
                 Y_VERIFY_S(givenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
             }
+
+            const TBlobSeqId leastExpectedBlobIdBefore = Self->Channels[channel].GetLeastExpectedBlobId(generation);
 
             const TBlobSeqId trimmedBlobSeqId{channel, generation, invalidatedStep, TBlobSeqId::MaxIndex};
             const ui64 validSince = trimmedBlobSeqId.ToSequentialNumber() + 1;
             givenIdRanges.Subtract(agentGivenIdRanges.Trim(validSince));
 
-            for (auto it = begin; it != end; ++it) {
+            for (auto it = begin; it != writesInFlight.end() && it->Channel == channel; ++it) {
                 agentGivenIdRanges.AddPoint(it->ToSequentialNumber());
                 givenIdRanges.AddPoint(it->ToSequentialNumber());
             }
 
-            OnLeastExpectedBlobIdChange(channel);
+            const TBlobSeqId leastExpectedBlobIdAfter = Self->Channels[channel].GetLeastExpectedBlobId(generation);
+            Y_VERIFY(leastExpectedBlobIdBefore <= leastExpectedBlobIdAfter);
+
+            if (leastExpectedBlobIdBefore != leastExpectedBlobIdAfter) {
+                OnLeastExpectedBlobIdChange(channel);
+            }
         }
     }
 
@@ -429,6 +426,14 @@ namespace NKikimr::NBlobDepot {
         return finished;
     }
 
+    void TData::AddFirstMentionedBlob(TLogoBlobID id) {
+        auto& record = GetRecordsPerChannelGroup(id);
+        const auto [_, inserted] = record.Used.insert(id);
+        Y_VERIFY(inserted);
+        AccountBlob(id, true);
+        TotalStoredDataSize += id.BlobSize();
+    }
+
     void TData::AccountBlob(TLogoBlobID id, bool add) {
         // account record
         const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
@@ -446,21 +451,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::OnLeastExpectedBlobIdChange(ui8 channel) {
-        auto& ch = Self->Channels[channel];
-        const ui64 minSequenceNumber = ch.GivenIdRanges.IsEmpty()
-            ? ch.NextBlobSeqId
-            : ch.GivenIdRanges.GetMinimumValue();
-        const TBlobSeqId leastExpectedBlobId = TBlobSeqId::FromSequentalNumber(channel, Self->Executor()->Generation(),
-            minSequenceNumber);
-
-        const TTabletStorageInfo *info = Self->Info();
-        const TTabletChannelInfo *storageChannel = info->ChannelInfo(leastExpectedBlobId.Channel);
+        const TTabletChannelInfo *storageChannel = Self->Info()->ChannelInfo(channel);
         Y_VERIFY(storageChannel);
         for (const auto& entry : storageChannel->History) {
             const auto& key = std::make_tuple(storageChannel->Channel, entry.GroupID);
             auto [it, _] = RecordsPerChannelGroup.emplace(std::piecewise_construct, key, key);
-            auto& record = it->second;
-            record.OnLeastExpectedBlobIdChange(this, leastExpectedBlobId);
+            it->second.OnLeastExpectedBlobIdChange(this);
         }
     }
 
@@ -481,13 +477,8 @@ namespace NKikimr::NBlobDepot {
         LastConfirmedGenStep = IssuedGenStep;
     }
 
-    void TData::TRecordsPerChannelGroup::OnLeastExpectedBlobIdChange(TData *self, TBlobSeqId leastExpectedBlobId) {
-        Y_VERIFY_S(LeastExpectedBlobId <= leastExpectedBlobId, "Prev# " << LeastExpectedBlobId.ToString()
-            << " Next# " << leastExpectedBlobId.ToString());
-        if (LeastExpectedBlobId < leastExpectedBlobId) {
-            LeastExpectedBlobId = leastExpectedBlobId;
-            CollectIfPossible(self);
-        }
+    void TData::TRecordsPerChannelGroup::OnLeastExpectedBlobIdChange(TData *self) {
+        CollectIfPossible(self);
     }
 
     void TData::TRecordsPerChannelGroup::ClearInFlight(TData *self) {

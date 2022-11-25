@@ -55,6 +55,12 @@ namespace NKikimr::NBlobDepot {
     };
 
     class TBlobDepot::TBlocksManager::TBlockProcessorActor : public TActorBootstrapped<TBlockProcessorActor> {
+        struct TEvPrivate {
+            enum {
+                EvCheckWaitingNode = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+        };
+
         TBlobDepot* const Self;
         const ui64 TabletId;
         const ui32 BlockedGeneration;
@@ -113,27 +119,56 @@ namespace NKikimr::NBlobDepot {
                     // skip the origin agent
                     continue;
                 }
-                if (info.ExpirationTimestamp <= now) {
-                    SendPushToAgent(agentId);
+                if (info.ExpirationTimestamp <= now) { // includes case when agent is connected right now
+                    TAgent& agent = Self->GetAgent(agentId);
+
+                    // enqueue push notification
+                    const auto [it, inserted] = agent.BlockToDeliver.try_emplace(TabletId, BlockedGeneration, IssuerGuid, SelfId());
+                    if (!inserted) {
+                        const auto& [currentBlockedGeneration, _1, _2] = it->second;
+                        Y_VERIFY(currentBlockedGeneration < BlockedGeneration);
+                        it->second = {BlockedGeneration, IssuerGuid, SelfId()};
+                    }
+
+                    // add node to wait list; also start timer to remove this node from the wait queue
+                    NodesWaitingForPushResult.insert(agentId);
+                    Y_VERIFY(info.ExpirationTimestamp <= now);
+                    TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandle(TEvPrivate::EvCheckWaitingNode,
+                        0, SelfId(), {}, nullptr, agentId));
+
+                    // issue message to the connected node, if it is
+                    if (const auto& connection = agent.Connection) {
+                        auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
+                        auto *item = ev->Record.AddBlockedTablets();
+                        item->SetTabletId(TabletId);
+                        item->SetBlockedGeneration(BlockedGeneration);
+                        item->SetIssuerGuid(IssuerGuid);
+
+                        const ui64 id = ++agent.LastRequestId;
+                        agent.PushCallbacks.emplace(id, [selfId = SelfId()](TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+                            TActivationContext::Send(ev->Forward(selfId));
+                        });
+                        TActivationContext::Send(new IEventHandle(connection->AgentId, connection->PipeServerId, ev.release(), 0, id));
+                    }
                 }
             }
         }
 
-        void SendPushToAgent(ui32 agentId) {
-            auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
-            auto *item = ev->Record.AddBlockedTablets();
-            item->SetTabletId(TabletId);
-            item->SetBlockedGeneration(BlockedGeneration);
-
-            TAgent& agent = Self->GetAgent(agentId);
-            if (const auto& actorId = agent.AgentId) {
-                const ui64 id = ++agent.LastRequestId;
-                agent.PushCallbacks.emplace(id, [selfId = SelfId()](TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
-                    TActivationContext::Send(ev->Forward(selfId));
-                });
-                Send(*actorId, ev.release(), 0, id);
+        void HandleCheckWaitingNode(TAutoPtr<IEventHandle> ev) {
+            const ui32 agentId = ev->Cookie;
+            if (NodesWaitingForPushResult.contains(agentId)) {
+                const TMonotonic now = TActivationContext::Monotonic();
+                const auto& info = Self->BlocksManager->Blocks[TabletId].PerAgentInfo[agentId];
+                if (info.ExpirationTimestamp <= now) { // node still can write data for this tablet, reschedule timer
+                    TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandle(TEvPrivate::EvCheckWaitingNode,
+                        0, SelfId(), {}, nullptr, agentId));
+                } else {
+                    NodesWaitingForPushResult.erase(agentId);
+                    if (NodesWaitingForPushResult.empty()) {
+                        Finish();
+                    }
+                }
             }
-            NodesWaitingForPushResult.insert(agentId);
         }
 
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
@@ -144,6 +179,11 @@ namespace NKikimr::NBlobDepot {
             // mark lease as successfully revoked one
             auto& block = Self->BlocksManager->Blocks[TabletId];
             block.PerAgentInfo.erase(agentId);
+
+            TAgent& agent = Self->GetAgent(agentId);
+            const auto it = agent.BlockToDeliver.find(TabletId);
+            Y_VERIFY(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
+            agent.BlockToDeliver.erase(it);
 
             if (NodesWaitingForPushResult.empty()) {
                 Finish();
@@ -215,6 +255,7 @@ namespace NKikimr::NBlobDepot {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBlobStorage::TEvBlockResult, Handle);
                 hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
+                fFunc(TEvPrivate::EvCheckWaitingNode, HandleCheckWaitingNode);
                 cFunc(TEvents::TSystem::Wakeup, IssueBlocksToStorage);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             }
@@ -263,7 +304,7 @@ namespace NKikimr::NBlobDepot {
             if (it == Blocks.end() || it->second.CanSetNewBlock(blockedGeneration, issuerGuid)) {
                 TAgent& agent = Self->GetAgent(ev->Recipient);
                 Self->Execute(std::make_unique<TTxUpdateBlock>(Self, tabletId, blockedGeneration,
-                    agent.ConnectedNodeId, record.GetIssuerGuid(), TActivationContext::Now(), std::move(response)));
+                    agent.Connection->NodeId, record.GetIssuerGuid(), TActivationContext::Now(), std::move(response)));
             } else {
                 responseRecord->SetStatus(NKikimrProto::ALREADY);
             }
@@ -274,8 +315,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
         TAgent& agent = Self->GetAgent(ev->Recipient);
-        const ui32 agentId = agent.ConnectedNodeId;
-        Y_VERIFY(agentId);
+        const ui32 agentId = agent.Connection->NodeId;
 
         const TMonotonic now = TActivationContext::Monotonic();
 

@@ -53,9 +53,13 @@ namespace NKikimr::NBlobDepot {
         THashMap<TActorId, std::deque<std::unique_ptr<IEventHandle>>> RegisterAgentQ;
 
         struct TAgent {
-            std::optional<TActorId> PipeServerId;
-            std::optional<TActorId> AgentId;
-            ui32 ConnectedNodeId;
+            struct TConnection {
+                TActorId PipeServerId;
+                TActorId AgentId;
+                ui32 NodeId;
+            };
+
+            std::optional<TConnection> Connection;
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
 
@@ -63,6 +67,9 @@ namespace NKikimr::NBlobDepot {
 
             THashMap<ui8, ui32> InvalidatedStepInFlight;
             THashMap<ui64, THashMap<ui8, ui32>> InvalidateStepRequests;
+
+            THashMap<ui64, std::tuple<ui32, ui64, TActorId>> BlockToDeliver; // TabletId -> (BlockedGeneration, IssuerGuid, ActorId)
+
             THashMap<ui64, std::function<void(TEvBlobDepot::TEvPushNotifyResult::TPtr)>> PushCallbacks;
             ui64 LastRequestId = 0;
 
@@ -81,6 +88,12 @@ namespace NKikimr::NBlobDepot {
             TChannelKind *KindPtr;
             TGivenIdRange GivenIdRanges; // accumulated through all agents
             ui64 NextBlobSeqId = 0;
+
+            // Obtain the least BlobSeqId that is not yet confirmed, but may be written by any agent
+            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) const {
+                return TBlobSeqId::FromSequentalNumber(Index, generation, GivenIdRanges.IsEmpty() ? NextBlobSeqId :
+                    GivenIdRanges.GetMinimumValue());
+            }
         };
         std::vector<TChannelInfo> Channels;
 

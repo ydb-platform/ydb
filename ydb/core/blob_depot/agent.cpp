@@ -5,7 +5,8 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (ClientId, ev->Get()->ClientId),
+            (ServerId, ev->Get()->ServerId));
         const auto [it, inserted] = PipeServerToNode.emplace(ev->Get()->ServerId, std::nullopt);
         Y_VERIFY(inserted);
     }
@@ -16,14 +17,11 @@ namespace NKikimr::NBlobDepot {
         const auto it = PipeServerToNode.find(ev->Get()->ServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         if (const auto& nodeId = it->second) {
-            if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end()) {
-                if (TAgent& agent = agentIt->second; agent.PipeServerId == it->first) {
-                    OnAgentDisconnect(agent);
-                    agent.PipeServerId.reset();
-                    agent.AgentId.reset();
-                    agent.ConnectedNodeId = 0;
-                    agent.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
-                }
+            if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end() && agentIt->second.Connection &&
+                    agentIt->second.Connection->PipeServerId == it->first) {
+                OnAgentDisconnect(agentIt->second);
+                agentIt->second.Connection.reset();
+                agentIt->second.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
             }
         }
         PipeServerToNode.erase(it);
@@ -56,9 +54,11 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(!it->second || *it->second == nodeId);
         it->second = nodeId;
         auto& agent = Agents[nodeId];
-        agent.PipeServerId = pipeServerId;
-        agent.AgentId = ev->Sender;
-        agent.ConnectedNodeId = nodeId;
+        agent.Connection = {
+            .PipeServerId = pipeServerId,
+            .AgentId = ev->Sender,
+            .NodeId = nodeId,
+        };
         agent.ExpirationTimestamp = TInstant::Max();
         agent.LastPushedSpaceColor = SpaceMonitor->GetSpaceColor();
         agent.LastPushedApproximateFreeSpaceShare = SpaceMonitor->GetApproximateFreeSpaceShare();
@@ -89,6 +89,41 @@ namespace NKikimr::NBlobDepot {
         }
 
         TActivationContext::Send(response.release());
+
+        if (!agent.InvalidatedStepInFlight.empty()) {
+            const ui32 generation = Executor()->Generation();
+            const ui64 id = ++agent.LastRequestId;
+
+            auto reply = std::make_unique<TEvBlobDepot::TEvPushNotify>();
+            auto& request = agent.InvalidateStepRequests[id];
+            for (const auto& [channel, invalidatedStep] : agent.InvalidatedStepInFlight) {
+                auto *item = reply->Record.AddInvalidatedSteps();
+                item->SetChannel(channel);
+                item->SetGeneration(generation);
+                item->SetInvalidatedStep(invalidatedStep);
+                request[channel] = invalidatedStep;
+            }
+
+            std::vector<TActorId> blockActorsPending;
+
+            for (const auto& [tabletId, data] : agent.BlockToDeliver) {
+                auto *item = reply->Record.AddBlockedTablets();
+                item->SetTabletId(tabletId);
+                const auto& [blockedGeneration, issuerGuid, actorId] = data;
+                item->SetBlockedGeneration(blockedGeneration);
+                item->SetIssuerGuid(issuerGuid);
+                blockActorsPending.push_back(actorId);
+            }
+
+            agent.PushCallbacks.emplace(id, [this, id, sender = ev->Sender, m = std::move(blockActorsPending)](
+                    TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+                Data->OnPushNotifyResult(ev);
+                for (const TActorId& actorId : m) {
+                    TActivationContext::Send(new IEventHandle(actorId, sender, new TEvBlobDepot::TEvPushNotifyResult, 0, id));
+                }
+            });
+            TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, id));
+        }
     }
 
     void TBlobDepot::OnAgentConnect(TAgent& /*agent*/) {
@@ -155,16 +190,10 @@ namespace NKikimr::NBlobDepot {
             TAgent& agent = GetAgent(ev->Recipient);
             for (const auto& range : givenIdRange->GetChannelRanges()) {
                 agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
-
-                auto& givenIdRanges = Channels[range.GetChannel()].GivenIdRanges;
-                const bool wasEmpty = givenIdRanges.IsEmpty();
-                givenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
-                if (wasEmpty) {
-                    Data->OnLeastExpectedBlobIdChange(range.GetChannel());
-                }
+                Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (Id, GetLogId()),
-                    (AgentId, agent.ConnectedNodeId), (Channel, range.GetChannel()),
+                    (AgentId, agent.Connection->NodeId), (Channel, range.GetChannel()),
                     (Begin, range.GetBegin()), (End, range.GetEnd()));
             }
         }
@@ -177,7 +206,7 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(it != PipeServerToNode.end());
         Y_VERIFY(it->second);
         TAgent& agent = GetAgent(*it->second);
-        Y_VERIFY(agent.PipeServerId == pipeServerId);
+        Y_VERIFY(agent.Connection && agent.Connection->PipeServerId == pipeServerId);
         return agent;
     }
 
@@ -190,15 +219,22 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::ResetAgent(TAgent& agent) {
         for (auto& [channel, agentGivenIdRange] : agent.GivenIdRanges) {
-            Channels[channel].GivenIdRanges.Subtract(agentGivenIdRange);
-            const ui32 channel_ = channel;
-            const auto& agentGivenIdRange_ = agentGivenIdRange;
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.ConnectedNodeId),
-                (Channel, channel_), (GivenIdRanges, Channels[channel_].GivenIdRanges),
-                (Agent.GivenIdRanges, agentGivenIdRange_));
-            agentGivenIdRange = {};
-            Data->OnLeastExpectedBlobIdChange(channel);
+            if (agentGivenIdRange.IsEmpty()) {
+                continue;
+            }
+
+            // calculate if this agent can be blocking garbage collection by holding least conserved blob sequence id
+            const bool unblock = Channels[channel].GivenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
+
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
+                (Channel, channel), (GivenIdRanges, Channels[channel].GivenIdRanges),
+                (Agent.GivenIdRanges, agentGivenIdRange), (Unblock, unblock));
+
+            if (unblock) {
+                Data->OnLeastExpectedBlobIdChange(channel);
+            }
         }
+        agent.InvalidatedStepInFlight.clear();
     }
 
     void TBlobDepot::InitChannelKinds() {
@@ -263,7 +299,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         TAgent& agent = GetAgent(ev->Recipient);
-        Execute(std::make_unique<TTxInvokeCallback>(this, agent.ConnectedNodeId, ev));
+        Execute(std::make_unique<TTxInvokeCallback>(this, agent.Connection->NodeId, ev));
     }
 
     void TBlobDepot::ProcessRegisterAgentQ() {
@@ -281,15 +317,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare) {
         for (auto& [nodeId, agent] : Agents) {
-            if (agent.AgentId && (agent.LastPushedSpaceColor != spaceColor ||
-                    agent.LastPushedApproximateFreeSpaceShare != approximateFreeSpaceShare)) {
-                Y_VERIFY(agent.ConnectedNodeId == nodeId);
+            if (agent.Connection && (agent.LastPushedSpaceColor != spaceColor || agent.LastPushedApproximateFreeSpaceShare != approximateFreeSpaceShare)) {
+                Y_VERIFY(agent.Connection->NodeId == nodeId);
                 const ui64 id = ++agent.LastRequestId;
                 agent.PushCallbacks.emplace(id, [](TEvBlobDepot::TEvPushNotifyResult::TPtr) {});
                 auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
                 ev->Record.SetSpaceColor(spaceColor);
                 ev->Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
-                Send(*agent.AgentId, ev.release(), 0, id);
+                Send(agent.Connection->AgentId, ev.release(), 0, id);
                 agent.LastPushedSpaceColor = spaceColor;
                 agent.LastPushedApproximateFreeSpaceShare = approximateFreeSpaceShare;
             }

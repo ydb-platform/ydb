@@ -89,6 +89,7 @@ namespace NKikimr::NBlobDepot {
             if (const auto it = Blocks.find(tablet.GetTabletId()); it != Blocks.end()) {
                 auto& block = it->second;
                 block.BlockedGeneration = tablet.GetBlockedGeneration();
+                block.IssuerGuid = tablet.GetIssuerGuid();
                 block.ExpirationTimestamp = TMonotonic::Zero();
                 IssueOnUpdateBlock(block, true);
             }

@@ -41,7 +41,9 @@ bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
     }
     auto aggApply = trait.Cast<TCoAggApply>();
     auto aggName = aggApply.Name();
-    if (aggName == "count" || aggName == "count_all" || aggName == "sum") {
+    if (aggName == "count" || aggName == "count_all" || aggName == "sum"
+        || aggName == "min" || aggName == "max")
+    {
         return true;
     }
     YQL_CLOG(DEBUG, ProviderKqp) << "Unsupported type of aggregation: " << aggName.StringValue();

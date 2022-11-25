@@ -105,6 +105,8 @@ std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFun
     { "count", TProgram::TAggregateAssignment::AGG_COUNT },
     { "sum", TProgram::TAggregateAssignment::AGG_SUM },
     { "some", TProgram::TAggregateAssignment::AGG_SOME },
+    { "min", TProgram::TAggregateAssignment::AGG_MIN },
+    { "max", TProgram::TAggregateAssignment::AGG_MAX },
 };
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);

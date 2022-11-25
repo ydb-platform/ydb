@@ -1767,6 +1767,62 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregations({ testCase });
     }
 
+    Y_UNIT_TEST(Aggregation_MinL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    MIN(level)
+                FROM `/Root/olapStore/olapTable`
+            )")
+            .SetExpectedReply("[[[0]]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_MaxL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    MAX(level)
+                FROM `/Root/olapStore/olapTable`
+            )")
+            .SetExpectedReply("[[[4]]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_MinR_GroupL_OrderL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    level, MIN(resource_id)
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY level
+                ORDER BY level
+            )")
+            .SetExpectedReply("[[[0];[\"10000\"]];[[1];[\"10001\"]];[[2];[\"10002\"]];[[3];[\"10003\"]];[[4];[\"10004\"]]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_MaxR_GroupL_OrderL) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    level, MAX(resource_id)
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY level
+                ORDER BY level
+            )")
+            .SetExpectedReply("[[[0];[\"40995\"]];[[1];[\"40996\"]];[[2];[\"40997\"]];[[3];[\"40998\"]];[[4];[\"40999\"]]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+
+        TestAggregations({ testCase });
+    }
+
     Y_UNIT_TEST(StatsSysView) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

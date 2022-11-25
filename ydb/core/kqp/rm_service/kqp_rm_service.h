@@ -90,8 +90,7 @@ public:
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
     virtual NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() = 0;
 
-    virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetLiteralPatternCache() = 0;
-    virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetComputeActorPatternCache() = 0;
+    virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 };
 
 

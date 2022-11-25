@@ -1061,6 +1061,7 @@ message TTableServiceConfig {
         reserved 13;
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
+        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 0]; // 0 is for disable
     }
 
     message TSpillingServiceConfig {
@@ -1196,8 +1197,8 @@ message TTableServiceConfig {
     optional TQueryReplayConfig QueryReplayConfig = 21;
     reserved 22; // ForceNewEngineLevel
     reserved 23; // optional bool EnableKqpSessionActor = 23 [default = true];
-    optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
-    optional bool EnableKqpPatternCacheCompute = 25 [default = false];
+    reserved 24; // optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
+    reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 };
 
 // Config describes immediate controls and allows

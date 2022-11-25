@@ -570,12 +570,13 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 
 Y_UNIT_TEST_SUITE(ComputationPatternCache) {
     Y_UNIT_TEST(Smoke) {
-        const ui32 cacheSize = 10;
+        const ui32 cacheSize = 10'000'000;
+        const ui32 cacheItems = 10;
         TComputationPatternLRUCache cache(cacheSize);
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
 
-        for (ui32 i = 0; i < cacheSize; ++i) {
+        for (ui32 i = 0; i < cacheItems; ++i) {
             auto entry = std::make_shared<TPatternCacheEntry>();
             TScopedAlloc& alloc = entry->Alloc;
             TTypeEnvironment& typeEnv = entry->Env;
@@ -601,7 +602,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
             cache.EmplacePattern(TString((char)('a' + i)), entry);
         }
 
-        for (ui32 i = 0; i < cacheSize; ++i) {
+        for (ui32 i = 0; i < cacheItems; ++i) {
             auto key = TString((char)('a' + i));
 
             auto randomProvider = CreateDeterministicRandomProvider(1);

@@ -256,10 +256,8 @@ public:
     }
 
     bool UseSeparatePatternAlloc() const {
-        return false;
-        // return Settings.OptLLVM == "OFF";
+        return Context.PatternCache && Settings.OptLLVM == "OFF";
     }
-
 
     TComputationPatternOpts CreatePatternOpts(TScopedAlloc& alloc, TTypeEnvironment& typeEnv) {
         auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;

@@ -227,8 +227,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST_TWIN(PatternCache, UseCache) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpPatternCacheLiteral(UseCache);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpPatternCacheCompute(UseCache);
+        size_t cacheSize = UseCache ? 1_MB : 0;
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
         auto kikimr = TKikimrRunner{settings};
         auto driver = kikimr.GetDriver();
 

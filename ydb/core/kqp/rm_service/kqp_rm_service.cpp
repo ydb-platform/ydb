@@ -162,8 +162,6 @@ public:
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , ExecutionUnitsResource(Config.GetComputeActorsCount())
         , ScanQueryMemoryResource(Config.GetQueryMemoryLimit())
-        //, LiteralPatternCache(std::make_shared<NMiniKQL::TComputationPatternLRUCache>())
-        //, ComputeActorPatternCache(std::make_shared<NMiniKQL::TComputationPatternLRUCache>())
     {}
 
     void Bootstrap() {
@@ -171,6 +169,7 @@ public:
         if (!Counters) {
             Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters);
         }
+        UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes(), PatternCache, Counters->GetKqpCounters());
 
         LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
 
@@ -528,15 +527,9 @@ public:
         }
     }
 
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetLiteralPatternCache() override {
+    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() override {
         with_lock (Lock) {
-            return LiteralPatternCache;
-        }
-    }
-
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetComputeActorPatternCache() override {
-        with_lock (Lock) {
-            return ComputeActorPatternCache;
+            return PatternCache;
         }
     }
 
@@ -638,10 +631,10 @@ private:
         LOG_D("Subscribed for config changes");
     }
 
-    static void UpdatePatternCache(bool enable, std::shared_ptr<NMiniKQL::TComputationPatternLRUCache>& cache) {
-        if (enable) {
-            if (!cache) {
-                cache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>();
+    static void UpdatePatternCache(ui64 size, std::shared_ptr<NMiniKQL::TComputationPatternLRUCache>& cache, NMonitoring::TDynamicCounterPtr counters) {
+        if (size) {
+            if (!cache || cache->GetMaxSize() != size) {
+                cache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(size, counters);
             }
         } else {
             cache.reset();
@@ -652,11 +645,8 @@ private:
         auto& event = ev->Get()->Record;
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(event), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
-        const auto& tsConfig = event.MutableConfig()->GetTableServiceConfig();
-        UpdatePatternCache(tsConfig.GetEnableKqpPatternCacheLiteral(), LiteralPatternCache);
-        UpdatePatternCache(tsConfig.GetEnableKqpPatternCacheCompute(), ComputeActorPatternCache);
-
         auto& config = *event.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
+        UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(), PatternCache, Counters->GetKqpCounters());
 
 #define FORCE_VALUE(name) if (!config.Has ## name ()) config.Set ## name(config.Get ## name());
         FORCE_VALUE(ComputeActorsCount)
@@ -880,9 +870,8 @@ private:
     };
     TWhiteBoardState WbState;
 
-    // pattern caches for different actors
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> LiteralPatternCache;
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> ComputeActorPatternCache;
+    // pattern cache for different actors
+    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;
 };
 
 } // namespace NRm

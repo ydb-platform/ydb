@@ -776,6 +776,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {
+    return KqpGroup;
+}
+
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
     return QueryReplayGroup;
 }

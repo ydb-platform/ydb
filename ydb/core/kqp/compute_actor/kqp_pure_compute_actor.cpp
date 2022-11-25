@@ -71,7 +71,7 @@ public:
         execCtx.ApplyCtx = nullptr;
         execCtx.Alloc = nullptr;
         execCtx.TypeEnv = nullptr;
-        execCtx.PatternCache = GetKqpResourceManager()->GetComputeActorPatternCache();
+        execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
 
         TDqTaskRunnerSettings settings;
         settings.CollectBasicStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;

@@ -324,6 +324,7 @@ public:
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
+    ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);

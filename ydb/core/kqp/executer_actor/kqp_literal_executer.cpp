@@ -185,7 +185,7 @@ private:
         // task runner settings
         NMiniKQL::TKqpComputeContextBase computeCtx;
         TDqTaskRunnerContext context = CreateTaskRunnerContext(&computeCtx, &alloc, &typeEnv);
-        context.PatternCache = GetKqpResourceManager()->GetLiteralPatternCache();
+        context.PatternCache = GetKqpResourceManager()->GetPatternCache();
         TDqTaskRunnerSettings settings = CreateTaskRunnerSettings(Request.StatsMode);
 
         Y_DEFER {
@@ -461,4 +461,3 @@ IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TK
 
 } // namespace NKqp
 } // namespace NKikimr
-

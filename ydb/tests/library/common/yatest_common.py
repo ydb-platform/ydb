@@ -7,8 +7,6 @@ For yatest.common package see file
 library/python/testing/yatest_common/yatest/common/__init__.py
 """
 
-__author__ = 'asatarin@yandex-team.ru'
-
 
 def wrap(func, alternative):
     def wrapped(*args, **kwargs):

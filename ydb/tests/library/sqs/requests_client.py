@@ -10,7 +10,6 @@ import six
 
 from ydb.tests.library.common.helpers import wrap_in_list
 
-_author__ = 'komels@yandex-team.ru'
 
 logger = logging.getLogger(__name__)
 

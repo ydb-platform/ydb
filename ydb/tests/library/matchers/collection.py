@@ -7,9 +7,6 @@ from hamcrest.library.collection.is_empty import IsEmpty
 from hamcrest.library.collection.issequence_containinginorder import IsSequenceContainingInOrder
 
 
-__author__ = 'asatarin@yandex-team.ru'
-
-
 class IsEmptyNice(IsEmpty):
     def describe_mismatch(self, item, mismatch_description):
         try:

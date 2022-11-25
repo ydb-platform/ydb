@@ -9,8 +9,6 @@ from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 
-__author__ = 'asatarin@yandex-team.ru'
-
 
 class FakeProtobuf(object):
     """

@@ -6,8 +6,6 @@ from hamcrest.core.base_matcher import BaseMatcher
 
 from ydb.tests.library.matchers.collection import IsSublistOf
 
-_author__ = 'komels@yandex-team.ru'
-
 
 def extract_field(read_response, field):
     if read_response is None:

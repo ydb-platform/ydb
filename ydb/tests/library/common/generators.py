@@ -4,9 +4,6 @@
 import random
 import string
 
-__author__ = 'asatarin@yandex-team.ru'
-
-
 __hex_digits = '0123456789ABCDEF'
 
 

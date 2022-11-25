@@ -109,5 +109,7 @@ items:
       href: commands/workload/index.md
     - name: Stock load
       href: commands/workload/stock.md
+    - name: ClickBench load
+      href: workload-click-bench.md
     - name: Key-Value load
       href: workload-kv.md

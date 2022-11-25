@@ -1078,10 +1078,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         auto filterByStatus = [](const TPDiskInfo& info, NKikimrCms::TGetSentinelStateRequest::EShow filter) {
             switch(filter) {
                 case NKikimrCms::TGetSentinelStateRequest::UNHEALTHY:
-                    return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal || info.GetStatus() != EPDiskStatus::ACTIVE;
+                    return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal
+                        || info.ActualStatus != EPDiskStatus::ACTIVE
+                        || info.GetStatus() != EPDiskStatus::ACTIVE
+                        || info.StatusChangeFailed;
                 case NKikimrCms::TGetSentinelStateRequest::SUSPICIOUS:
                     return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal
+                        || info.ActualStatus != EPDiskStatus::ACTIVE
                         || info.GetStatus() != EPDiskStatus::ACTIVE
+                        || info.StatusChangeFailed
                         || info.StatusChangerState
                         || !info.IsTouched()
                         || !info.IsChangingAllowed();
@@ -1126,12 +1131,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetState(info->GetState());
                     entry.MutableInfo()->SetPrevState(info->GetPrevState());
                     entry.MutableInfo()->SetStateCounter(info->GetStateCounter());
-                    entry.MutableInfo()->SetStatus(info->GetStatus());
+                    entry.MutableInfo()->SetStatus(info->ActualStatus);
+                    entry.MutableInfo()->SetDesiredStatus(info->GetStatus());
                     entry.MutableInfo()->SetChangingAllowed(info->IsChangingAllowed());
                     entry.MutableInfo()->SetTouched(info->IsTouched());
                     entry.MutableInfo()->SetLastStatusChange(info->LastStatusChange.ToString());
+                    entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
                     if (info->StatusChangerState) {
-                        entry.MutableInfo()->SetDesiredStatus(info->StatusChangerState->Status);
                         entry.MutableInfo()->SetStatusChangeAttempts(info->StatusChangerState->Attempt);
                     }
                     if (info->PrevStatusChangerState) {
@@ -1164,10 +1170,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         if (!success) {
             LOG_C("PDisk status has NOT been changed"
                 << ": pdiskId# " << id);
+            it->second->StatusChangeFailed = true;
             (*Counters->PDisksNotChanged)++;
         } else {
             LOG_N("PDisk status has been changed"
                 << ": pdiskId# " << id);
+            it->second->ActualStatus = it->second->GetStatus();
+            it->second->StatusChangeFailed = false;
             (*Counters->PDisksChanged)++;
         }
 

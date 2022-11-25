@@ -627,6 +627,7 @@ message TPDiskInfo {
     optional uint32 PrevStatusChangeAttempts = 10;
     optional string LastStatusChange = 11;
     optional EIgnoreReason IgnoreReason = 12;
+    optional bool StatusChangeFailed = 13;
 }
 
 message TPDisk {

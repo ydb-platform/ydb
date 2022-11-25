@@ -92,6 +92,8 @@ struct TPDiskInfo
 
     TActorId StatusChanger;
     TInstant LastStatusChange;
+    bool StatusChangeFailed = false;
+    EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     TStatusChangerState::TPtr StatusChangerState;
     TStatusChangerState::TPtr PrevStatusChangerState;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;

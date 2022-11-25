@@ -69,7 +69,7 @@ public:
 class TDSAccessorRefresher: public NActors::TActorBootstrapped<TDSAccessorRefresher> {
 private:
     using TBase = NActors::TActorBootstrapped<TDSAccessorRefresher>;
-    ISnapshotParser::TPtr SnapshotConstructor;
+    ISnapshotsFetcher::TPtr SnapshotConstructor;
     std::shared_ptr<TRefreshInternalController> InternalController;
     YDB_READONLY_DEF(ISnapshot::TPtr, CurrentSnapshot);
     YDB_READONLY_DEF(Ydb::Table::ExecuteQueryResult, CurrentSelection);
@@ -98,7 +98,7 @@ public:
         }
     }
 
-    TDSAccessorRefresher(const TConfig& config, ISnapshotParser::TPtr snapshotConstructor);
+    TDSAccessorRefresher(const TConfig& config, ISnapshotsFetcher::TPtr snapshotConstructor);
 
     void Handle(TEvEnrichSnapshotResult::TPtr& ev);
     void Handle(TEvEnrichSnapshotProblem::TPtr& ev);

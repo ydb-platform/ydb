@@ -10,6 +10,7 @@ namespace NKikimr::NInternal {
 class TDecoderBase {
 protected:
     i32 GetFieldIndex(const Ydb::ResultSet& rawData, const TString& columnId) const;
+
 public:
     bool Read(const i32 columnIdx, TString& result, const Ydb::Value& r) const;
     bool ReadDebugProto(const i32 columnIdx, ::google::protobuf::Message& result, const Ydb::Value& r) const;
@@ -26,5 +27,4 @@ public:
         return object.DeserializeFromRecord(decoder, rs.rows()[0]);
     }
 };
-
 }

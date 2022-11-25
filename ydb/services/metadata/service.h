@@ -17,9 +17,9 @@ public:
 
 class TEvSubscribeExternal: public NActors::TEventLocal<TEvSubscribeExternal, EEvSubscribe::EvSubscribeExternal> {
 private:
-    YDB_READONLY_DEF(ISnapshotParser::TPtr, Fetcher);
+    YDB_READONLY_DEF(ISnapshotsFetcher::TPtr, Fetcher);
 public:
-    TEvSubscribeExternal(ISnapshotParser::TPtr fetcher)
+    TEvSubscribeExternal(ISnapshotsFetcher::TPtr fetcher)
         : Fetcher(fetcher)
     {
         Y_VERIFY(!!Fetcher);
@@ -28,9 +28,9 @@ public:
 
 class TEvUnsubscribeExternal: public NActors::TEventLocal<TEvUnsubscribeExternal, EEvSubscribe::EvUnsubscribeExternal> {
 private:
-    YDB_READONLY_DEF(ISnapshotParser::TPtr, Fetcher);
+    YDB_READONLY_DEF(ISnapshotsFetcher::TPtr, Fetcher);
 public:
-    TEvUnsubscribeExternal(ISnapshotParser::TPtr fetcher)
+    TEvUnsubscribeExternal(ISnapshotsFetcher::TPtr fetcher)
         : Fetcher(fetcher) {
         Y_VERIFY(!!Fetcher);
     }

@@ -42,7 +42,8 @@ TString TTierConfig::GetStorageTablePath() {
 
 void TTierConfig::AlteringPreparation(std::vector<TTierConfig>&& objects,
     NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& /*context*/) {
+    const NMetadata::IOperationsManager::TModificationContext& /*context*/)
+{
     controller->PreparationFinished(std::move(objects));
 }
 

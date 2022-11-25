@@ -52,7 +52,7 @@ void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
     Register(new TYQLQuerySessionedActor(sb, Config.GetRequestConfig(), InternalController));
 }
 
-TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotParser::TPtr snapshotConstructor)
+TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotsFetcher::TPtr snapshotConstructor)
     : SnapshotConstructor(snapshotConstructor)
     , Config(config)
 {

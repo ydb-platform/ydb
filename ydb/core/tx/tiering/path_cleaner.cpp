@@ -19,12 +19,12 @@ void TPathCleaner::Handle(TEvTierCleared::TPtr& ev) {
     }
 }
 
-NMetadataProvider::ISnapshotParser::TPtr TPathCleaner::GetTieringSnapshotParser() const {
+NMetadataProvider::ISnapshotsFetcher::TPtr TPathCleaner::GetTieringSnapshotParser() const {
     return std::make_shared<NTiers::TSnapshotConstructor>();
 }
 
-NMetadataProvider::ISnapshotParser::TPtr TPathCleaner::GetSecretsSnapshotParser() const {
-    return std::make_shared<NMetadata::NSecret::TManager>();
+NMetadataProvider::ISnapshotsFetcher::TPtr TPathCleaner::GetSecretsSnapshotParser() const {
+    return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
 }
 
 void TPathCleaner::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {

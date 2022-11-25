@@ -7,7 +7,7 @@
 
 namespace NKikimr::NMetadataInitializer {
 
-class TFetcher: public NMetadataProvider::TSnapshotsManager<TSnapshot> {
+class TFetcher: public NMetadataProvider::TSnapshotsFetcher<TSnapshot> {
 protected:
     virtual std::vector<NMetadata::IOperationsManager::TPtr> DoGetManagers() const override;
 public:

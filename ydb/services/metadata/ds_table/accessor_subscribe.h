@@ -38,7 +38,7 @@ protected:
 public:
     using TBase::Handle;
 
-    TDSAccessorNotifier(const TConfig& config, ISnapshotParser::TPtr sParser)
+    TDSAccessorNotifier(const TConfig& config, ISnapshotsFetcher::TPtr sParser)
         : TBase(config, sParser) {
     }
 
@@ -60,7 +60,7 @@ class TExternalData: public TDSAccessorNotifier {
 private:
     using TBase = TDSAccessorNotifier;
 public:
-    TExternalData(const TConfig& config, ISnapshotParser::TPtr sParser)
+    TExternalData(const TConfig& config, ISnapshotsFetcher::TPtr sParser)
         : TBase(config, sParser) {
 
     }

@@ -3,7 +3,7 @@
 
 namespace NKikimr::NMetadataProvider {
 
-ISnapshot::TPtr ISnapshotParser::ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const {
+ISnapshot::TPtr ISnapshotsFetcher::ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const {
     ISnapshot::TPtr result = CreateSnapshot(actuality);
     Y_VERIFY(result);
     if (!result->DeserializeFromResultSet(rawData)) {
@@ -12,7 +12,7 @@ ISnapshot::TPtr ISnapshotParser::ParseSnapshot(const Ydb::Table::ExecuteQueryRes
     return result;
 }
 
-TString ISnapshotParser::GetComponentId() const {
+TString ISnapshotsFetcher::GetComponentId() const {
     auto managers = GetManagers();
     std::vector<TString> ids;
     for (auto&& i : managers) {

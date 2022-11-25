@@ -44,7 +44,7 @@ private:
 
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     NMetadataProvider::ISnapshot::TPtr Snapshot;
-    mutable NMetadataProvider::ISnapshotParser::TPtr ExternalDataManipulation;
+    mutable NMetadataProvider::ISnapshotsFetcher::TPtr ExternalDataManipulation;
 
 public:
     TTiersManager(const ui64 tabletId, const TActorId& tabletActorId)
@@ -65,7 +65,7 @@ public:
     TTiersManager& Stop();
     TActorId GetStorageActorId(const TString& tierId);
     const NTiers::TManager& GetManagerVerified(const TString& tierId) const;
-    NMetadataProvider::ISnapshotParser::TPtr GetExternalDataManipulation() const;
+    NMetadataProvider::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;
 
     TManagers::const_iterator begin() const {
         return Managers.begin();

@@ -25,8 +25,8 @@ private:
     std::set<TString> TiersWait;
     NBackgroundTasks::ITaskExecutorController::TPtr Controller;
 
-    NMetadataProvider::ISnapshotParser::TPtr GetTieringSnapshotParser() const;
-    NMetadataProvider::ISnapshotParser::TPtr GetSecretsSnapshotParser() const;
+    NMetadataProvider::ISnapshotsFetcher::TPtr GetTieringSnapshotParser() const;
+    NMetadataProvider::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() const;
 protected:
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvTierCleared::TPtr& ev);

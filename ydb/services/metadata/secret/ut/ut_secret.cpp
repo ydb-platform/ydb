@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(Secret) {
     class TSecretUserEmulator: public NActors::TActorBootstrapped<TSecretUserEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TSecretUserEmulator>;
-        std::shared_ptr<NMetadata::NSecret::TManager> Manager = std::make_shared<NMetadata::NSecret::TManager>();
+        std::shared_ptr<NMetadata::NSecret::TSnapshotsFetcher> Manager = std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
         YDB_READONLY_FLAG(Found, false);
         YDB_READONLY(TInstant, Start, Now());
         YDB_ACCESSOR(ui32, ExpectedSecretsCount, 1);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         }
 
         void Bootstrap() {
-            auto manager = std::make_shared<NMetadata::NSecret::TManager>();
+            auto manager = std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
             Become(&TThis::StateInit);
             Sender<NMetadataProvider::TEvSubscribeExternal>(manager).SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
             Start = Now();

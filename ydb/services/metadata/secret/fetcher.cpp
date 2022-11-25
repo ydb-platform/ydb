@@ -3,7 +3,7 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-std::vector<IOperationsManager::TPtr> TManager::DoGetManagers() const {
+std::vector<IOperationsManager::TPtr> TSnapshotsFetcher::DoGetManagers() const {
     return {
         std::make_shared<TSecretManager>(),
         std::make_shared<TAccessManager>(),

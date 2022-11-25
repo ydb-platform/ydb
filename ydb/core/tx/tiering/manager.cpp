@@ -10,7 +10,7 @@ namespace NKikimr::NColumnShard {
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
     std::shared_ptr<TTiersManager> Owner;
-    NMetadataProvider::ISnapshotParser::TPtr SecretsFetcher;
+    NMetadataProvider::ISnapshotsFetcher::TPtr SecretsFetcher;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
     std::shared_ptr<NTiers::TConfigsSnapshot> ConfigsSnapshot;
     TActorId GetExternalDataActorId() const {
@@ -19,7 +19,7 @@ private:
 public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TManager>())
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
     {
 
     }
@@ -214,7 +214,7 @@ const NTiers::TManager& TTiersManager::GetManagerVerified(const TString& tierId)
     return it->second;
 }
 
-NMetadataProvider::ISnapshotParser::TPtr TTiersManager::GetExternalDataManipulation() const {
+NMetadataProvider::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManipulation() const {
     if (!ExternalDataManipulation) {
         ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
     }

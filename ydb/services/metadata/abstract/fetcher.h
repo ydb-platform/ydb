@@ -52,14 +52,14 @@ public:
     virtual ~ISnapshot() = default;
 };
 
-class ISnapshotParser {
+class ISnapshotsFetcher {
 private:
     mutable std::vector<NMetadata::IOperationsManager::TPtr> Managers;
 protected:
     virtual ISnapshot::TPtr CreateSnapshot(const TInstant actuality) const = 0;
     virtual std::vector<NMetadata::IOperationsManager::TPtr> DoGetManagers() const = 0;
 public:
-    using TPtr = std::shared_ptr<ISnapshotParser>;
+    using TPtr = std::shared_ptr<ISnapshotsFetcher>;
 
     TString GetComponentId() const;
     ISnapshot::TPtr ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const;
@@ -75,11 +75,11 @@ public:
         return Managers;
     }
 
-    virtual ~ISnapshotParser() = default;
+    virtual ~ISnapshotsFetcher() = default;
 };
 
 template <class TSnapshot>
-class TSnapshotsManager: public ISnapshotParser {
+class TSnapshotsFetcher: public ISnapshotsFetcher {
 protected:
     virtual ISnapshot::TPtr CreateSnapshot(const TInstant actuality) const override {
         return std::make_shared<TSnapshot>(actuality);

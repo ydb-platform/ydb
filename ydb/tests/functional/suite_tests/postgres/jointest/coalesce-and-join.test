@@ -28,7 +28,7 @@ upsert into b (x) values
  (2);
 
 
-statement skipped query https://st.yandex-team.ru/YQL-2986
+statement skipped query YQL-2986
 select pv.x as pv_x, a.y as a_y
 from
 a left join b as qt ON a.x = qt.x
@@ -70,7 +70,7 @@ select xx.pkxx as xx_pkxx from
   (select yy.pkxx as yt from yy) as Q
   on coalesce(Q.yt, 3) = xx.pkxx
 
-statement skipped query https://st.yandex-team.ru/YQL-2986
+statement skipped query YQL-2986
 select yy.pkyy as yy_pkyy, yy.pkxx as yy_pkxx, yya.pkyy as yya_pkyy,
        xxa.pkxx as xxa_pkxx, xxb.pkxx as xxb_pkxx
 from yy

@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     }
 
     Y_UNIT_TEST(ChaoticWriteRestartHuge) {
-        return; // https://st.yandex-team.ru/KIKIMR-5314
+        return; // KIKIMR-5314
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(100000, 65u << 10u, HUGEB, vdiskSetup),

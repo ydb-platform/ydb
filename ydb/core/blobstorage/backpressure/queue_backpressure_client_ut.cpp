@@ -286,7 +286,7 @@ public:
 Y_UNIT_TEST_SUITE(TBlobStorageQueueTest) {
 
     Y_UNIT_TEST(TMessageLost) {
-        // https://st.yandex-team.ru/KIKIMR-9570 this test not is incorrect because we don't allow 'lost messages'
+        // KIKIMR-9570 this test not is incorrect because we don't allow 'lost messages'
         // without proper interconnect notification; local messages can't be just lost while VDisk is operational
         return; // TODO(alexvru)
 

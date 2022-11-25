@@ -470,7 +470,7 @@ message TSetQueueAttributesResponse {
 
 message TPermissions {
     optional string Subject = 1;
-    repeated string PermissionNames = 2; // https://st.yandex-team.ru/SQS-3
+    repeated string PermissionNames = 2; // SQS-3
 }
 
 message TPermissionsAction {

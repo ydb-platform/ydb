@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(SelectBigRangePerf) {
-        // Scenario from https://st.yandex-team.ru/KIKIMR-2715
+        // Scenario from KIKIMR-2715
         // Increase N_ROWS and N_REQS for profiling
         const int N_ROWS = 100; // 10000
         const int N_REQS = 10;  // 100500
@@ -1413,7 +1413,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(OutOfDiskSpace) {
-        return;  // TODO https://st.yandex-team.ru/KIKIMR-2279
+        return;  // TODO KIKIMR-2279
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 

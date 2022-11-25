@@ -178,7 +178,7 @@ struct TSqsEvents {
 
         THashMap<EAction, TResourceDescription> ActionsResources;
         TResourceDescription OtherActions;
-        TResourceDescription CreateQueueAction; // Separate action for create queue. Quota is requested only when actor knows that there is no such queue. https://st.yandex-team.ru/SQS-620
+        TResourceDescription CreateQueueAction; // Separate action for create queue. Quota is requested only when actor knows that there is no such queue. SQS-620
     };
 
     struct TEvConfiguration : public NActors::TEventLocal<TEvConfiguration, EvConfiguration> {

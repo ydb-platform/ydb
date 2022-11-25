@@ -2792,7 +2792,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    // https://st.yandex-team.ru/KIKIMR-14022
+    // KIKIMR-14022
     Y_UNIT_TEST(JoinSameKey) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

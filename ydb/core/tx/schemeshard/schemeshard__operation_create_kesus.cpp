@@ -212,7 +212,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        // https://st.yandex-team.ru/KIKIMR-9036
+        // KIKIMR-9036
         // usually we make creation over alter, alter as null -> first version
         // but now kesus allready has been persisted as first version at propose stage
         // so we bump version to be sure that actual description pass over caches correctly

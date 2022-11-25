@@ -174,7 +174,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             Y_VERIFY(ResourceBucketMinSize <= ResourceBucketMaxSize);
 
             // Decrease available resource if speed or prefetch settings have been changed.
-            if (prefetch > 0.0) { // https://st.yandex-team.ru/RTMR-3774
+            if (prefetch > 0.0) { // RTMR-3774
                 if (InitedProps && ResourceBucketMaxSize < prevBucketMaxSize) {
                     if (const double maxAvailable = ResourceBucketMaxSize + QueueWeight; Available > maxAvailable) {
                         if (Counters.Dropped) {

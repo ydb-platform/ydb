@@ -5024,7 +5024,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "Value"  Family: 0 FamilyName: "default" }
                             )", {NKikimrScheme::StatusInvalidParameter});
 
-//        https://st.yandex-team.ru/KIKIMR-10458
+//        KIKIMR-10458
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table1"
                             Columns { Name: "key"  Family: 0 FamilyName: "ExtBlobsOnHDD" }

@@ -238,7 +238,7 @@ class TestClientTimeouts(object):
 
 class TestManySelectsInRow(object):
     """
-    Test for bug https://st.yandex-team.ru/KIKIMR-3109
+    Test for bug KIKIMR-3109
     """
     @classmethod
     def setup_class(cls):

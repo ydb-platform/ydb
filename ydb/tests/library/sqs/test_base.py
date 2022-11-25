@@ -376,7 +376,7 @@ class KikimrSqsTestBase(object):
                 return data_result_sets
             except (ydb.ConnectionError, ydb.Timeout, ydb.BadSession, ydb.Unavailable, ydb.InternalError) as ex:
                 logging.warning('Kikimr driver exception: {}'.format(ex))
-                # https://st.yandex-team.ru/SQS-307
+                # SQS-307
                 if retries_left:
                     logging.info('Retrying query')
                     time.sleep(1)

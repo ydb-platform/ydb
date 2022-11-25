@@ -450,7 +450,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         TBase::Die(ctx);
     }
 
-    // https://st.yandex-team.ru/KIKIMR-12624 move that logic to the schemeshard
+    // KIKIMR-12624 move that logic to the schemeshard
     bool CheckTablePrereqs(const NKikimrSchemeOp::TTableDescription &desc, const TString &path, const TActorContext& ctx) {
         // check ad-hoc prereqs for table alter/creation
 

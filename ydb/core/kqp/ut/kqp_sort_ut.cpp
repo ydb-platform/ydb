@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    // https://st.yandex-team.ru/KIKIMR-11523
+    // KIKIMR-11523
     Y_UNIT_TEST(PassLimit) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

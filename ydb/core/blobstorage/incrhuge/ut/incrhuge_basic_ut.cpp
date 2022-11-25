@@ -135,7 +135,7 @@ public:
 
 Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
     Y_UNIT_TEST(WriteReadDeleteEnum) {
-        return; /* TODO(alexvru): https://st.yandex-team.ru/KIKIMR-7588 */
+        return; /* TODO(alexvru): KIKIMR-7588 */
 
         TTestEnv env;
         env.Setup();
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
     }
 
     Y_UNIT_TEST(WriteReadDeleteEnumRecover) {
-        return; /* TODO(alexvru): https://st.yandex-team.ru/KIKIMR-7588 */
+        return; /* TODO(alexvru): KIKIMR-7588 */
 
         TTestActorConcurrent::TTestActorState state;
         TManualEvent event;
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
     }
 
     Y_UNIT_TEST(Recovery) {
-        return; // TODO https://st.yandex-team.ru/KIKIMR-3065
+        return; // TODO KIKIMR-3065
         TTestEnv env;
         env.Setup(true, 0, nullptr, 2000, 128 << 20);
         env.Start();

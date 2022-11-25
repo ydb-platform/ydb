@@ -8,7 +8,7 @@ from ydb.tests.library.common import msgbus_types
 
 class TestPDiskInfo(object):
     """
-    See ticket https://st.yandex-team.ru/KIKIMR-1831
+    See ticket KIKIMR-1831
     """
     @classmethod
     def setup_class(cls):

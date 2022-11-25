@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TFpBits) {
 
     Y_UNIT_TEST(CanonizeLongDouble) {
         if (NValgrind::ValgrindIsOn()) {
-            return; // TODO https://st.yandex-team.ru/KIKIMR-3431
+            return; // TODO KIKIMR-3431
         }
         CanonizeFpBitsTest<long double>();
     }

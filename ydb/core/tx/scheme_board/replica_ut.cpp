@@ -612,7 +612,7 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
             Cerr << "=========== " << argsLeft.GenerateDescribe().ShortDebugString()
                  << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << Endl;
 
-            // https://st.yandex-team.ru/KIKIMR-9236#5e70e0b141a0f221ddada730
+            // KIKIMR-9236#5e70e0b141a0f221ddada730
             if (argsLeft.PathId == TPathId(800, 2) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2)
                 && argsRight.PathId == TPathId(800, 3) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3))
             {

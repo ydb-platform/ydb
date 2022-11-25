@@ -212,7 +212,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
                     TSqsEvents::TQuoterResourcesForActions::TResourceDescription res{TEvQuota::TResourceLeaf::QuoterSystem, CreateObjectsQuoterResource_};
                     QuoterResources_->ActionsResources.emplace(EAction::CreateUser, res);
 
-                    // https://st.yandex-team.ru/SQS-620
+                    // SQS-620
                     QuoterResources_->CreateQueueAction = res;
                 }
                 {

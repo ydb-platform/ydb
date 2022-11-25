@@ -3977,7 +3977,7 @@ public:
     }
 
     void TestCompactedGetMultipart() {
-        return;  // TODO https://st.yandex-team.ru/KIKIMR-2244
+        return;  // TODO KIKIMR-2244
         TTempDir tempDir;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
         TestBlobStorage<TTestVDiskCompacted<0>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());

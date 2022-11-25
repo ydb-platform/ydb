@@ -207,7 +207,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             argTypes.push_back(arg.Ref().GetTypeAnn());
         }
 
-        // TODO: get rid of TKqpProgram-callable (https://st.yandex-team.ru/YQL-10078)
+        // TODO: get rid of TKqpProgram-callable (YQL-10078)
         TNodeOnNodeOwnedMap tmp;
         auto program = Build<TKqpProgram>(ctx, stage.Pos())
             //.Lambda(ctx.DeepCopy(stage.Program().Ref(), ctx, tmp, true /* internStrings */, false /* copyTypes */))

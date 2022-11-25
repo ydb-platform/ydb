@@ -51,7 +51,7 @@ INSERT INTO CASE2_TBL (i, j) VALUES (NULL, -6);
 -- Simplest examples without tables
 --
 
-statement skipped https://st.yandex-team.ru/YQL-2961
+statement skipped YQL-2961
 SELECT '3' AS "One",
   CASE
     WHEN 1 < 2 THEN 3
@@ -61,7 +61,7 @@ SELECT '3' AS "One",
 -----+-------------
  3  |           3
 
-statement skipped https://st.yandex-team.ru/YQL-2961
+statement skipped YQL-2961
 SELECT '<NULL>' AS "One",
   CASE
     WHEN 1 > 2 THEN 3
@@ -93,7 +93,7 @@ SELECT 6 AS `One`,
     ELSE 7
   END AS `Two_WHEN_with_default`;
 
-statement skipped https://st.yandex-team.ru/YQL-2961
+statement skipped YQL-2961
 SELECT '7' AS "NonR",
    CASE WHEN random() < 0 THEN 1
    END AS "NULL_on_no_matches";

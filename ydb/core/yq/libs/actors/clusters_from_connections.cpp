@@ -72,29 +72,18 @@ void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
 }
 
 void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
-        const TString& name, const TString& authToken,
-        const THashMap<TString, TString>& accountIdSignatures,
-        const YandexQuery::Monitoring& monitoring) {
-        clusterConfig.SetName(name);
+    const TString& name,
+    const TString& authToken,
+    const TString& endpoint,
+    const THashMap<TString, TString>& accountIdSignatures,
+    const YandexQuery::Monitoring& monitoring) {
+    clusterConfig.SetName(name);
 
-        // TODO: move Endpoint to yq config
-        auto solomonEndpointForTest = GetEnv("SOLOMON_ENDPOINT");
-        auto solomonEndpoint = solomonEndpointForTest ? TString(solomonEndpointForTest) : TString();
-        if (solomonEndpoint.empty()) {
-            if (name.StartsWith("__pre")) {
-                solomonEndpoint = "monitoring.api.cloud-preprod.yandex.net";
-                clusterConfig.SetUseSsl(true);
-            } else {
-                solomonEndpoint = "monitoring.api.cloud.yandex.net";
-                clusterConfig.SetUseSsl(true);
-            }
-        }
-
-        clusterConfig.SetCluster(solomonEndpoint);
-        clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
-        clusterConfig.MutablePath()->SetProject(monitoring.project());
-        clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
-        FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
+    clusterConfig.SetCluster(endpoint);
+    clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+    clusterConfig.MutablePath()->SetProject(monitoring.project());
+    clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
+    FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 
 } //namespace
@@ -122,22 +111,27 @@ NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
 }
 
 NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
-        const TString& authToken, const TString& accountSignature,
+        const TString& authToken,
+        const TString& endpoint,
+        const TString& accountSignature,
         const YandexQuery::Monitoring& monitoring) {
     NYql::TSolomonClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
-    FillSolomonClusterConfig(cluster, name, authToken, accountIdSignatures, monitoring);
+    FillSolomonClusterConfig(cluster, name, authToken, endpoint, accountIdSignatures, monitoring);
     return cluster;
 }
 
-void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>& connections,
+void AddClustersFromConnections(
+    const THashMap<TString, YandexQuery::Connection>& connections,
     bool useBearerForYdb,
     const TString& objectStorageEndpoint,
+    const TString& monitoringEndpoint,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures,
     TGatewaysConfig& gatewaysConfig,
-    THashMap<TString, TString>& clusters) {
+    THashMap<TString, TString>& clusters)
+{
     for (const auto&[_, conn] : connections) {
         auto connectionName = conn.content().name();
         switch (conn.content().setting().connection_case()) {
@@ -186,7 +180,7 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
         case YandexQuery::ConnectionSetting::kMonitoring: {
             const auto& monitoring = conn.content().setting().monitoring();
             auto* clusterCfg = gatewaysConfig.MutableSolomon()->AddClusterMapping();
-            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, accountIdSignatures, monitoring);
+            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
             clusters.emplace(connectionName, SolomonProviderName);
             break;
         }

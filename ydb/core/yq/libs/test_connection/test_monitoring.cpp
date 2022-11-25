@@ -24,6 +24,7 @@ class TTestMonitoringConnectionActor : public NActors::TActorBootstrapped<TTestM
     TActorId Sender;
     TActorId HttpProxyId;
     ui64 Cookie;
+    TString Endpoint;
     TString Scope;
     TString User;
     TString Token;
@@ -38,6 +39,7 @@ public:
         const YandexQuery::Monitoring& monitoring,
         const TActorId& sender,
         ui64 cookie,
+        const TString& endpoint,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
@@ -46,13 +48,14 @@ public:
         const TTestConnectionRequestCountersPtr& counters)
         : Sender(sender)
         , Cookie(cookie)
+        , Endpoint(endpoint)
         , Scope(scope)
         , User(user)
         , Token(token)
         , Counters(counters)
         , CredentialsFactory(credentialsFactory)
         , Signer(signer)
-        , ClusterConfig(NYq::CreateSolomonClusterConfig({}, token, signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
+        , ClusterConfig(NYq::CreateSolomonClusterConfig({}, token, endpoint, signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
     {
         Counters->InFly->Inc();
     }
@@ -150,6 +153,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const YandexQuery::Monitoring& monitoring,
         const TActorId& sender,
         ui64 cookie,
+        const TString& endpoint,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
@@ -158,7 +162,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const TTestConnectionRequestCountersPtr& counters) {
     return new TTestMonitoringConnectionActor(
                     monitoring, sender,
-                    cookie, credentialsFactory,
+                    cookie, endpoint, credentialsFactory,
                     scope, user, token, signer, counters);
 }
 

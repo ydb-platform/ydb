@@ -23,4 +23,5 @@ message TCommonConfig {
     uint64 MaxTasksPerOperation = 8;
     string QueryArtifactsCompressionMethod = 9;
     uint64 QueryArtifactsCompressionMinSize = 10;
+    string MonitoringEndpoint = 11;
 }

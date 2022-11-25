@@ -1572,12 +1572,23 @@ private:
 
         THashMap<TString, TString> clusters;
 
+        TString monitoringEndpoint = Params.CommonConfig.GetMonitoringEndpoint();
+        // TODO: get monitoring endpoint from config only after YQ-148
+        if (monitoringEndpoint.Empty()) {
+            if (Params.CommonConfig.GetObjectStorageEndpoint().Contains("preprod")) {
+                monitoringEndpoint = "monitoring.api.cloud-preprod.yandex.net";
+            } else {
+                monitoringEndpoint = "monitoring.api.cloud.yandex.net";
+            }
+        }
+
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
         AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
         AddClustersFromConnections(YqConnections,
             Params.CommonConfig.GetUseBearerForYdb(),
             Params.CommonConfig.GetObjectStorageEndpoint(),
+            monitoringEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,
             // out params:

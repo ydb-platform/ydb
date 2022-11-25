@@ -85,6 +85,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const YandexQuery::Monitoring& monitoring,
         const NActors::TActorId& sender,
         ui64 cookie,
+        const TString& endpoint,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,

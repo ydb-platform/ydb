@@ -247,6 +247,7 @@ public:
     TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode AsScalar(TRuntimeNode value);
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
+    TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);

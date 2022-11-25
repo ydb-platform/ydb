@@ -23,6 +23,8 @@ TType* UnpackOptional(TType* type, bool& isOptional);
 TDataType* UnpackOptionalData(TRuntimeNode data, bool& isOptional);
 TDataType* UnpackOptionalData(TType* type, bool& isOptional);
 
+TBlockType::EShape GetResultShape(const TVector<TType*>& types);
+
 class TStructTypeBuilder {
 public:
     TStructTypeBuilder(const TTypeEnvironment& env);

@@ -7,6 +7,7 @@
 #include "mkql_block_func.h"
 #include "mkql_blocks.h"
 #include "mkql_block_agg.h"
+#include "mkql_block_coalesce.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_callable.h"
@@ -273,6 +274,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideSkipBlocks", &WrapWideSkipBlocks},
         {"WideTakeBlocks", &WrapWideTakeBlocks},
         {"AsScalar", &WrapAsScalar},
+        {"BlockCoalesce", &WrapBlockCoalesce},
         {"BlockCompress", &WrapBlockCompress},
         {"BlockCombineAll", &WrapBlockCombineAll},
         {"MakeHeap", &WrapMakeHeap},

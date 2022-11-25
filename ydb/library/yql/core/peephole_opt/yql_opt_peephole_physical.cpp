@@ -4488,8 +4488,9 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsCallable({"And", "Or", "Xor"}) && node->ChildrenSize() > 2) {
-            // Split original argument list by pairs (since the order is not important balanced tree is used)
+        if (node->IsCallable({"And", "Or", "Xor"}) && node->ChildrenSize() > 2 ||
+            node->IsCallable("Coalesce") && node->ChildrenSize() == 2)
+        {
             for (auto& child : node->ChildrenList()) {
                 if (child->IsComplete()) {
                     funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
@@ -4500,12 +4501,17 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 }
             }
 
-            auto fit = funcs.find(node->Content());
-            YQL_ENSURE(fit != funcs.end());
-            arrowFunctionName = fit->second.Name;
+            if (node->IsCallable("Coalesce")) {
+                rewrites[node.Get()] = ctx.NewCallable(node->Pos(), "BlockCoalesce", std::move(funcArgs));
+            } else {
+                auto fit = funcs.find(node->Content());
+                YQL_ENSURE(fit != funcs.end());
+                arrowFunctionName = fit->second.Name;
 
-            auto nameAtom = ctx.NewAtom(node->Pos(), arrowFunctionName);
-            rewrites[node.Get()] = SplitByPairs(node->Pos(), nameAtom, funcArgs, 0, funcArgs.size(), ctx);
+                auto nameAtom = ctx.NewAtom(node->Pos(), arrowFunctionName);
+                // Split original argument list by pairs (since the order is not important balanced tree is used)
+                rewrites[node.Get()] = SplitByPairs(node->Pos(), nameAtom, funcArgs, 0, funcArgs.size(), ctx);
+            }
             ++newNodes;
             return true;
         }

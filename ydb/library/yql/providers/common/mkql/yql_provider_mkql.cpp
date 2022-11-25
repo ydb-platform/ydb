@@ -520,6 +520,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"WideTakeBlocks", &TProgramBuilder::WideTakeBlocks},
         {"WideSkipBlocks", &TProgramBuilder::WideSkipBlocks},
+        {"BlockCoalesce", &TProgramBuilder::BlockCoalesce},
 
         {"Append", &TProgramBuilder::Append},
         {"Insert", &TProgramBuilder::Append},

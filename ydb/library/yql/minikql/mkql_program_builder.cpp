@@ -1513,6 +1513,27 @@ TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode flow, ui32 bitmapIndex)
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode second) {
+    auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
+    auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
+
+    bool firstOptional;
+    auto firstItemType = UnpackOptionalData(firstType->GetItemType(), firstOptional);
+
+    bool secondOptional;
+    auto secondItemType = UnpackOptionalData(secondType->GetItemType(), secondOptional);
+
+    MKQL_ENSURE(firstOptional, "BlockCoalesce with non-optional first argument");
+    MKQL_ENSURE(firstItemType->IsSameType(*secondItemType), "Argument should have same base types");
+
+    auto outputType = NewBlockType(secondType->GetItemType(), GetResultShape({firstType, secondType}));
+
+    TCallableBuilder callableBuilder(Env, __func__, outputType);
+    callableBuilder.Add(first);
+    callableBuilder.Add(second);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");

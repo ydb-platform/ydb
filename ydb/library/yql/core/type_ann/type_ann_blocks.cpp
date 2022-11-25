@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+
 
 namespace NYql {
 namespace NTypeAnnImpl {
@@ -71,6 +73,52 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
 
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(flowItemTypes);
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto first  = input->Child(0);
+    auto second = input->Child(1);
+    if (!EnsureBlockOrScalarType(*first, ctx.Expr) ||
+        !EnsureBlockOrScalarType(*second, ctx.Expr))
+    {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool firstIsScalar;
+    auto firstItemType = GetBlockItemType(*first->GetTypeAnn(), firstIsScalar);
+    bool firstIsOptional = firstItemType->GetKind() == ETypeAnnotationKind::Optional;
+    firstItemType = RemoveOptionalType(firstItemType);
+
+    bool secondIsScalar;
+    auto secondItemType = GetBlockItemType(*second->GetTypeAnn(), secondIsScalar);
+    bool secondIsOptional = secondItemType->GetKind() == ETypeAnnotationKind::Optional;
+    secondItemType = RemoveOptionalType(secondItemType);
+
+    if (!IsSameAnnotation(*firstItemType, *secondItemType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
+            "Mismatch item types: first is " << *firstItemType << ", second is " << *secondItemType));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!firstIsOptional) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto outputItemType = secondItemType;
+    if (secondIsOptional) {
+        outputItemType = ctx.Expr.MakeType<TOptionalExprType>(outputItemType);
+    }
+    if (firstIsScalar && secondIsScalar) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(outputItemType));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(outputItemType));
+    }
     return IGraphTransformer::TStatus::Ok;
 }
 

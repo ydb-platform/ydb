@@ -94,6 +94,18 @@ TDataType* UnpackOptionalData(TType* type, bool& isOptional) {
     return static_cast<TDataType*>(unpackedType);
 }
 
+TBlockType::EShape GetResultShape(const TVector<TType*>& types) {
+    TBlockType::EShape result = TBlockType::EShape::Scalar;
+    for (auto& type : types) {
+        MKQL_ENSURE(type->IsBlock(),
+                    "Expected block, actual: " << PrintNode(type, true));
+        if (static_cast<TBlockType*>(type)->GetShape() == TBlockType::EShape::Many) {
+            result = TBlockType::EShape::Many;
+        }
+    }
+    return result;
+}
+
 TStructTypeBuilder::TStructTypeBuilder(const TTypeEnvironment& env)
     : Env(&env)
 {

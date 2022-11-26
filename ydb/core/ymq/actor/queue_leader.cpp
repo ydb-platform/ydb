@@ -636,62 +636,73 @@ void TQueueLeader::ReadFifoMessages(TReceiveMessageBatchRequestProcessing& reqIn
     builder.Start();
 }
 
+void TQueueLeader::OnFifoMessagesReadSuccess(const NKikimr::NClient::TValue& value, TReceiveMessageBatchRequestProcessing& reqInfo) {
+    const NKikimr::NClient::TValue list(value["result"]);
+
+    if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
+        ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
+
+        const i64 newMessagesCount = value["newMessagesCount"];
+        Y_VERIFY(newMessagesCount >= 0);
+        auto& shardInfo = Shards_[0];
+        shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
+    }
+
+    reqInfo.Answer->Messages.resize(list.Size());
+    for (size_t i = 0; i < list.Size(); ++i) {
+        const NKikimr::NClient::TValue& data = list[i]["SourceDataFieldsRead"];
+        const NKikimr::NClient::TValue& msg  = list[i]["SourceMessageFieldsRead"];
+        const ui64 receiveTimestamp = msg["FirstReceiveTimestamp"];
+        auto& msgAnswer = reqInfo.Answer->Messages[i];
+
+        msgAnswer.FirstReceiveTimestamp = (receiveTimestamp ? TInstant::MilliSeconds(receiveTimestamp) : reqInfo.LockSendTs);
+        msgAnswer.ReceiveCount = ui32(msg["ReceiveCount"]) + 1; // since the query returns old receive count value
+        msgAnswer.MessageId = data["MessageId"];
+        msgAnswer.MessageDeduplicationId = data["DedupId"];
+        msgAnswer.MessageGroupId = msg["GroupId"];
+        msgAnswer.Data = data["Data"];
+        msgAnswer.SentTimestamp = TInstant::MilliSeconds(ui64(msg["SentTimestamp"]));
+        msgAnswer.SequenceNumber = msg["Offset"];
+
+        msgAnswer.ReceiptHandle.SetMessageGroupId(TString(msg["GroupId"]));
+        msgAnswer.ReceiptHandle.SetOffset(msgAnswer.SequenceNumber);
+        msgAnswer.ReceiptHandle.SetReceiveRequestAttemptId(reqInfo.Event->Get()->ReceiveAttemptId);
+        msgAnswer.ReceiptHandle.SetLockTimestamp(reqInfo.LockSendTs.MilliSeconds());
+        msgAnswer.ReceiptHandle.SetShard(0);
+
+        const NKikimr::NClient::TValue senderIdValue = data["SenderId"];
+        if (senderIdValue.HaveValue()) {
+            if (const TString senderId = TString(senderIdValue)) {
+                msgAnswer.SenderId = senderId;
+            }
+        }
+
+        const NKikimr::NClient::TValue attributesValue = data["Attributes"];
+        if (attributesValue.HaveValue()) {
+            msgAnswer.MessageAttributes = attributesValue;
+        }
+    }
+}
+
 void TQueueLeader::OnFifoMessagesRead(const TString& requestId, const TSqsEvents::TEvExecuted::TRecord& ev, const bool usedDLQ) {
     auto reqInfoIt = ReceiveMessageRequests_.find(requestId);
     Y_VERIFY(reqInfoIt != ReceiveMessageRequests_.end());
     auto& reqInfo = reqInfoIt->second;
 
+    bool dlqExists = true;
+    bool success = false;
     if (ev.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-        using NKikimr::NClient::TValue;
-        const TValue value(TValue::Create(ev.GetExecutionEngineEvaluatedResponse()));
-        const TValue list(value["result"]);
-
-        if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
-            ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
-
-            const i64 newMessagesCount = value["newMessagesCount"];
-            Y_VERIFY(newMessagesCount >= 0);
-            auto& shardInfo = Shards_[0];
-            shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
+        const NKikimr::NClient::TValue value = NKikimr::NClient::TValue::Create(ev.GetExecutionEngineEvaluatedResponse());
+        dlqExists = value["dlqExists"];
+        if (dlqExists) {
+            success = true;
+            OnFifoMessagesReadSuccess(value, reqInfo);
         }
+    }
 
-        reqInfo.Answer->Messages.resize(list.Size());
-        for (size_t i = 0; i < list.Size(); ++i) {
-            const TValue& data = list[i]["SourceDataFieldsRead"];
-            const TValue& msg  = list[i]["SourceMessageFieldsRead"];
-            const ui64 receiveTimestamp = msg["FirstReceiveTimestamp"];
-            auto& msgAnswer = reqInfo.Answer->Messages[i];
-
-            msgAnswer.FirstReceiveTimestamp = (receiveTimestamp ? TInstant::MilliSeconds(receiveTimestamp) : reqInfo.LockSendTs);
-            msgAnswer.ReceiveCount = ui32(msg["ReceiveCount"]) + 1; // since the query returns old receive count value
-            msgAnswer.MessageId = data["MessageId"];
-            msgAnswer.MessageDeduplicationId = data["DedupId"];
-            msgAnswer.MessageGroupId = msg["GroupId"];
-            msgAnswer.Data = data["Data"];
-            msgAnswer.SentTimestamp = TInstant::MilliSeconds(ui64(msg["SentTimestamp"]));
-            msgAnswer.SequenceNumber = msg["Offset"];
-
-            msgAnswer.ReceiptHandle.SetMessageGroupId(TString(msg["GroupId"]));
-            msgAnswer.ReceiptHandle.SetOffset(msgAnswer.SequenceNumber);
-            msgAnswer.ReceiptHandle.SetReceiveRequestAttemptId(reqInfo.Event->Get()->ReceiveAttemptId);
-            msgAnswer.ReceiptHandle.SetLockTimestamp(reqInfo.LockSendTs.MilliSeconds());
-            msgAnswer.ReceiptHandle.SetShard(0);
-
-            const TValue senderIdValue = data["SenderId"];
-            if (senderIdValue.HaveValue()) {
-                if (const TString senderId = TString(senderIdValue)) {
-                    msgAnswer.SenderId = senderId;
-                }
-            }
-
-            const TValue attributesValue = data["Attributes"];
-            if (attributesValue.HaveValue()) {
-                msgAnswer.MessageAttributes = attributesValue;
-            }
-        }
-    } else {
+    if (!success) {
         const auto errStatus = NKikimr::NTxProxy::TResultStatus::EStatus(ev.GetStatus());
-        if (usedDLQ && !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus)) {
+        if (usedDLQ && (!dlqExists || !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus))) {
             // it's possible that DLQ was removed, hence it'd be wise to refresh corresponding info
             DlqInfo_.Clear();
             reqInfo.Answer->Failed = false;
@@ -735,13 +746,13 @@ void TQueueLeader::LoadStdMessages(TReceiveMessageBatchRequestProcessing& reqInf
     }
 }
 
-void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 offset, const TSqsEvents::TEvExecuted::TRecord& ev, const NKikimr::NClient::TValue* messageRecord, const bool ignoreMessageLoadingErrors) {
+void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 offset, bool success, const NKikimr::NClient::TValue* messageRecord, const bool ignoreMessageLoadingErrors) {
     auto reqInfoIt = ReceiveMessageRequests_.find(requestId);
     Y_VERIFY(reqInfoIt != ReceiveMessageRequests_.end());
     auto& reqInfo = reqInfoIt->second;
 
     --reqInfo.LoadAnswersLeft;
-    if (ev.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
+    if (success) {
         bool deleted = true;
         bool deadlineChanged = true;
         const bool exists = (*messageRecord)["Exists"];
@@ -820,6 +831,33 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
     }
 }
 
+void TQueueLeader::OnLoadStdMessagesBatchSuccess(const NKikimr::NClient::TValue& value, TShardInfo& shardInfo, TIntrusivePtr<TLoadBatch> batch) {
+    const NKikimr::NClient::TValue list(value["result"]);
+    Y_VERIFY(list.Size() == batch->Size());
+
+    if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
+        ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
+
+        const i64 newMessagesCount = value["newMessagesCount"];
+        Y_VERIFY(newMessagesCount >= 0);
+        shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
+    }
+
+    THashMap<ui64, const TLoadBatchEntry*> offset2entry;
+    offset2entry.reserve(batch->Entries.size());
+    for (const TLoadBatchEntry& entry : batch->Entries) {
+        offset2entry.emplace(entry.Offset, &entry);
+    }
+
+    for (size_t i = 0; i < list.Size(); ++i) {
+        auto msg = list[i];
+        const ui64 offset = msg["Offset"];
+        const auto entry = offset2entry.find(offset);
+        Y_VERIFY(entry != offset2entry.end());
+        OnLoadStdMessageResult(entry->second->RequestId, offset, true, &msg, false);
+    }
+}
+
 void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, const bool usedDLQ, const TSqsEvents::TEvExecuted::TRecord& reply) {
     auto& shardInfo = Shards_[shard];
     auto& batchingState = shardInfo.LoadBatchingState;
@@ -827,37 +865,22 @@ void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, cons
     Y_VERIFY(batchIt != batchingState.BatchesExecuting.end());
     auto batch = batchIt->second;
     auto status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus(reply.GetStatus());
-    bool ignoreMessageLoadingErrors = false;
+
+    bool dlqExists = true;
+    bool success = false;
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-        using NKikimr::NClient::TValue;
-        const TValue value(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
-        const TValue list(value["result"]);
-        Y_VERIFY(list.Size() == batch->Size());
-
-        if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
-            ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
-
-            const i64 newMessagesCount = value["newMessagesCount"];
-            Y_VERIFY(newMessagesCount >= 0);
-            shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
+        const NKikimr::NClient::TValue value = NKikimr::NClient::TValue::Create(reply.GetExecutionEngineEvaluatedResponse());
+        dlqExists = value["dlqExists"];
+        if (dlqExists) {
+            success = true;
+            OnLoadStdMessagesBatchSuccess(value, shardInfo, batch);
         }
+    }
 
-        THashMap<ui64, const TLoadBatchEntry*> offset2entry;
-        offset2entry.reserve(batch->Entries.size());
-        for (const TLoadBatchEntry& entry : batch->Entries) {
-            offset2entry.emplace(entry.Offset, &entry);
-        }
-
-        for (size_t i = 0; i < list.Size(); ++i) {
-            auto msg = list[i];
-            const ui64 offset = msg["Offset"];
-            const auto entry = offset2entry.find(offset);
-            Y_VERIFY(entry != offset2entry.end());
-            OnLoadStdMessageResult(entry->second->RequestId, offset, reply, &msg, ignoreMessageLoadingErrors);
-        }
-    } else {
+    if (!success) {
         const auto errStatus = NKikimr::NTxProxy::TResultStatus::EStatus(reply.GetStatus());
-        if (usedDLQ && !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus)) {
+        bool ignoreMessageLoadingErrors = false;
+        if (usedDLQ && (!dlqExists || !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus))) {
             // it's possible that DLQ was removed, hence it'd be wise to refresh corresponding info
             DlqInfo_.Clear();
             ignoreMessageLoadingErrors = true;
@@ -868,9 +891,11 @@ void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, cons
             const TLoadBatchEntry& entry = batch->Entries[i];
             if (!prevRequestId || *prevRequestId != entry.RequestId) {
                 prevRequestId = &entry.RequestId;
-                RLOG_SQS_REQ_ERROR(entry.RequestId, "Batch transaction failed: " << reply << ". BatchId: " << batch->BatchId);
+                RLOG_SQS_REQ_ERROR(entry.RequestId,
+                    "Batch transaction failed: " << reply << ". DlqExists=" << dlqExists << ". BatchId: " << batch->BatchId 
+                );
             }
-            OnLoadStdMessageResult(entry.RequestId, entry.Offset, reply, nullptr, ignoreMessageLoadingErrors);
+            OnLoadStdMessageResult(entry.RequestId, entry.Offset, success, nullptr, ignoreMessageLoadingErrors);
         }
     }
     batchingState.BatchesExecuting.erase(batchId);

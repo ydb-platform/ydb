@@ -18,6 +18,7 @@ target_link_libraries(abseil-cpp-tstring-y_absl-types PUBLIC
   contrib-libs-cxxsupp
   yutil
   abseil-cpp-tstring-y_absl-base
+  abseil-cpp-tstring-y_absl-memory
 )
 target_sources(abseil-cpp-tstring-y_absl-types PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/types/bad_any_cast.cc

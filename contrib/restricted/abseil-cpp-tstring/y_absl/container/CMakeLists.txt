@@ -20,6 +20,7 @@ target_link_libraries(abseil-cpp-tstring-y_absl-container PUBLIC
   abseil-cpp-tstring-y_absl-base
   abseil-cpp-tstring-y_absl-debugging
   abseil-cpp-tstring-y_absl-hash
+  abseil-cpp-tstring-y_absl-memory
   abseil-cpp-tstring-y_absl-numeric
   abseil-cpp-tstring-y_absl-profiling
   abseil-cpp-tstring-y_absl-strings

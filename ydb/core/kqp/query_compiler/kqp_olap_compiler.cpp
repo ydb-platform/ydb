@@ -382,22 +382,6 @@ void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx
     filter->MutablePredicate()->SetId(condition->GetColumn().GetId());
 }
 
-std::string GetColumnAnnTypeFromAgg(const TKqpOlapAgg& aggNode, const std::string& aggColName)
-{
-    auto itemType = GetSeqItemType(aggNode.Ptr()->GetTypeAnn());
-    YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct, "KqpOlapAgg must contain Struct inside.");
-    auto structType = itemType->Cast<TStructExprType>();
-    auto colType = structType->FindItemType(aggColName);
-    if (colType->GetKind() == ETypeAnnotationKind::Optional) {
-        colType = colType->Cast<TOptionalExprType>()->GetItemType();
-    } else if (colType->GetKind() == ETypeAnnotationKind::Null) {
-        return "";
-    }
-    YQL_ENSURE(colType->GetKind() == ETypeAnnotationKind::Data, "KqpOlapAgg must contain Struct of Data fields inside.");
-    auto dataTypeInfo = NUdf::GetDataTypeInfo(colType->Cast<TDataExprType>()->GetSlot());
-    return dataTypeInfo.Name.data();
-}
-
 std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) {
     std::vector<TAggColInfo> aggColInfos;
     aggColInfos.reserve(aggNode.Aggregates().Size());
@@ -411,16 +395,7 @@ std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKq
         colInfo.Operation = aggKqp.Type().StringValue();
 
         auto opType = aggKqp.Type().StringValue();
-        if (opType == "sum") {
-            // For SUM we need to extend type because of potential overflow
-            auto sumDataType = GetColumnAnnTypeFromAgg(aggNode, colInfo.AggColName);
-            if (!sumDataType.empty()) {
-                // Not NULL
-                colInfo.BaseColId = ConvertSafeCastToColumn(aggKqp.Column(), sumDataType, ctx);
-            } else {
-                colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
-            }
-        } else if (opType != "count" || (opType == "count" && colInfo.BaseColName != "*")) {
+        if (opType != "count" || (opType == "count" && colInfo.BaseColName != "*")) {
             colInfo.BaseColId = GetOrCreateColumnId(aggKqp.Column(), ctx);
         }
         aggColInfos.push_back(colInfo);

@@ -80,6 +80,26 @@ bool IsArgumentsOnlyLambda(const TExprNode& lambda, TVector<ui32>& argIndices) {
     return true;
 }
 
+TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TExprContext& ctx) {
+    TVector<ui32> argIndicies;
+    if (!IsArgumentsOnlyLambda(lambda, argIndicies)) {
+        return {};
+    }
+
+    TExprNode::TListType newArgs, newRoots;
+    for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
+        newArgs.push_back(ctx.NewArgument(lambda.Head().Child(i)->Pos(), "arg" + ToString(i)));
+    }
+
+    newArgs.push_back(ctx.NewArgument(lambda.Pos(), "len"));
+    for (const auto i : argIndicies) {
+        newRoots.push_back(newArgs[i]);
+    }
+
+    newRoots.push_back(newArgs.back());
+    return ctx.NewLambda(lambda.Pos(), ctx.NewArguments(lambda.Pos(), std::move(newArgs)), std::move(newRoots));
+}
+
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     if (node->Head().IsCallable("WideFromBlocks")) {
@@ -90,22 +110,7 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
     if (node->Head().IsCallable("WideMap")) {
         // swap if all outputs are arguments
         const auto& lambda = node->Head().Tail();
-        TVector<ui32> argIndices;
-        bool onlyArguments = IsArgumentsOnlyLambda(lambda, argIndices);
-        if (onlyArguments) {
-            TExprNode::TListType newArgs, newRoots;
-            for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
-                newArgs.push_back(ctx.NewArgument(node->Pos(), "arg" + ToString(i)));
-            }
-
-            newArgs.push_back(ctx.NewArgument(node->Pos(), "len"));
-            for (const auto i : argIndices) {
-                newRoots.push_back(newArgs[i]);
-            }
-
-            newRoots.push_back(newArgs.back());
-            auto newLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(newArgs)), std::move(newRoots));
-
+        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(lambda, ctx)) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
                 .Callable("WideMap")
@@ -4691,9 +4696,22 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 }
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-    auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
-    auto lambda = node->TailPtr();
+    const auto lambda = node->TailPtr();
+    if (node->Head().IsCallable("WideFromBlocks")) {
+        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx)) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("WideFromBlocks")
+                    .Callable(0, "WideMap")
+                        .Add(0, node->Head().HeadPtr())
+                        .Add(1, newLambda)
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    }
 
+    auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
     ui32 newNodes;
     TNodeMap<size_t> rewritePositions;
     TExprNode::TPtr blockLambda;

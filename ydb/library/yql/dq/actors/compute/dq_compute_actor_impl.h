@@ -128,6 +128,8 @@ protected:
 public:
     void Bootstrap() {
         try {
+            LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
+
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -180,7 +182,6 @@ protected:
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
-        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ")
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn)
@@ -1991,7 +1992,7 @@ protected:
     const NActors::TActorId ExecuterId;
     const TTxId TxId;
     const NDqProto::TDqTask Task;
-    const TString LogPrefix;
+    TString LogPrefix;
     const TComputeRuntimeSettings RuntimeSettings;
     const TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;

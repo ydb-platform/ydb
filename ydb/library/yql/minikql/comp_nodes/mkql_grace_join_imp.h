@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -15,10 +17,11 @@ const ui64 DefaultTupleBytes = 512; // Default size of all columns in table row 
 const ui64 HashSize = 1; // Using ui64 hash size
 
 /*
-Table data stored in buckets. Table columns are interpreted either as integers or strings.  
+Table data stored in buckets. Table columns are interpreted either as integers, strings or some interface-based type,
+providing IHash, IEquate, IPack and IUnpack functions.  
 External clients should transform (pack) data into appropriate presentation.
 
-Key columns always first, following int columns and string columns.
+Key columns always first, following int columns, string columns and interface-based columns.
 
 Optimum presentation of table data is chosen based on locality to perform most
 processing of related data in processor caches.
@@ -45,7 +48,10 @@ struct TTableBucket {
     std::vector<ui64> KeyIntVals;  // Vector to store table key values
     std::vector<ui64> DataIntVals; // Vector to store data values in bucket
     std::vector<char> StringsValues; // Vector to store data strings values
-    std::vector<ui32> StringsOffsets; // Vector to store strings values sizes (offsets in StringsValues are calculated) for particular tuple. 
+    std::vector<ui32> StringsOffsets; // Vector to store strings values sizes (offsets in StringsValues are calculated) for particular tuple.
+    std::vector<char> InterfaceValues; // Vector to store types to work through external-provided IHash, IEquate interfaces
+    std::vector<ui32> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces 
+ 
     std::vector<JoinTuplesIds>  JoinIds;    // Results of join operations stored as index of tuples in buckets 
                                             // of two tables with the same number
     std::vector<ui32> RightIds; // Sorted Ids of right table joined tuples to process full join and exclusion join
@@ -56,28 +62,44 @@ struct TupleData {
     ui64 * IntColumns = nullptr; // Array of packed int  data of the table. Caller should allocate array of NumberOfIntColumns size
     char ** StrColumns = nullptr; // Pointers to values of strings for table.  Strings are not null-terminated
     ui32 * StrSizes = nullptr; // Sizes of strings for table.
+    NYql::NUdf::TUnboxedValue * IColumns = nullptr; // Array of TUboxedValues for interface-based columns. Caller should allocate array of required size.
     bool AllNulls = false; // If tuple data contains all nulls (it is required for corresponding join types)
 
+};
+
+// Interface to work with complex column types without "simple" byte-serialized representation (which can be used for keys comparison)
+struct TColTypeInterface {
+    NYql::NUdf::IHash::TPtr HashI = nullptr;  // Interface to calculate hash of column value
+    NYql::NUdf::IEquate::TPtr EquateI = nullptr; // Interface to compare two column values
+    TValuePacker Packer; // Class to pack and unpack column values
+    const THolderFactory& HolderFactory; // To use during unpacking 
 };
 
 
 // Class which represents single table data stored in buckets
 class TTable {
     ui64 NumberOfKeyIntColumns = 0; // Key int columns always first and padded to sizeof(ui64).
-    ui64 NumberOfKeyStringColumns = 0; // String key columns go after key int columns 
+    ui64 NumberOfKeyStringColumns = 0; // String key columns go after key int columns
+    ui64 NumberOfKeyIColumns = 0; // Number of interface - provided key columns
 
-    ui64 NumberOfDataIntColumns = 0; //Number of integer columns in the Table
-    ui64 NumberOfDataStringColumns = 0; // Number of strings columns in the Table
+
+    ui64 NumberOfDataIntColumns = 0; //Number of integer data columns in the Table
+    ui64 NumberOfDataStringColumns = 0; // Number of strings data columns in the Table
+    ui64 NumberOfDataIColumns = 0; //  Number of interface - provided data columns
+    
+    TColTypeInterface * ColInterfaces = nullptr; // Array of interfaces to work with corresponding columns data
+
 
     ui64 NumberOfColumns = 0; // Number of columns in the Table
     ui64 NumberOfKeyColumns = 0; // Number of key columns in the Table
     ui64 NumberOfDataColumns = 0; // Number of data columns in the Table
     ui64 NumberOfStringColumns = 0; // Total number of String Columns
+    ui64 NumberOfIColumns = 0; // Total number of interface-based columns
     ui64 NullsBitmapSize = 1; // Default size of ui64 values used for null columns bitmap.
                                 // Every bit set means null value. Order of columns is equal to order in AddTuple call.
                                 // First key int column is  bit 0 in bit mask, second - bit 1, etc.  Bit 0 is least significant in bitmask.
     ui64 TotalStringsSize = 0; // Bytes in tuple header reserved to store total strings size key tuple columns
-    ui64 HeaderSize = HashSize + NullsBitmapSize + NumberOfKeyIntColumns + TotalStringsSize; // Header of all tuples size
+    ui64 HeaderSize = HashSize + NullsBitmapSize + NumberOfKeyIntColumns + NumberOfKeyIColumns + TotalStringsSize; // Header of all tuples size
 
     ui64 BytesInKeyIntColumns = sizeof(ui64) * NumberOfKeyIntColumns;
     
@@ -86,6 +108,12 @@ class TTable {
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;
+
+    // Hashes for interface - based columns values
+    std::vector<ui64> IColumnsHashes;
+
+    // Serialized values for interface-based columns
+    std::vector<TString> IColumnsVals;
 
     // Current iterator index for NextTuple iterator
     ui64 CurrIterIndex = 0;
@@ -117,9 +145,9 @@ class TTable {
 public:
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 
-    // stringsSizes - sizes of strings columns, Indexes of null-value columns
+    // stringsSizes - sizes of strings columns.  Indexes of null-value columns
     // in the form of bit array should be first values of intColumns.
-    void AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes);
+    void AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns = nullptr);
 
     // Resets iterators. In case of join results table it also resets iterators for joined tables
     void ResetIterator();
@@ -140,7 +168,8 @@ public:
 
     // Creates new table with key columns and data columns
     TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
-            ui64 NumberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0);
+            ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
+            ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, TColTypeInterface * colInterfaces = nullptr);
 
 };
 

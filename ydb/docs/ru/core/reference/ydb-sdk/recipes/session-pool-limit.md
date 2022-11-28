@@ -61,6 +61,7 @@
     defer db.Close(ctx)
     db.SetMaxOpenConns(100)
     db.SetMaxIdleConns(100)
+    db.SetConnMaxIdleTime(time.Second) // workaround for background keep-aliving of YDB sessions
     ...
   }
   ```

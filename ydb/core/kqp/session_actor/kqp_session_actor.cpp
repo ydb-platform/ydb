@@ -1317,8 +1317,6 @@ public:
             LOG_I("TEvTxResponse has non-success status, CurrentTx: "
                 << QueryState->CurrentTx << " response->ShortDebugString(): " << response->ShortDebugString());
 
-            QueryState->TxCtx->Invalidate();
-
             auto status = response->GetStatus();
             TIssues issues;
             IssuesFromMessage(response->GetIssues(), issues);
@@ -2012,6 +2010,7 @@ public:
 
         auto* response = QueryResponse->Record.GetRef().MutableResponse();
 
+        Y_ENSURE(QueryState);
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
         }
@@ -2026,13 +2025,12 @@ public:
             IssueToMessage(TIssue{message}, response->AddQueryIssues());
         }
 
-        if (QueryState) {
-            if (QueryState->TxCtx) {
-                QueryState->TxCtx->Invalidate();
-            }
-
-            FillTxInfo(response);
+        if (QueryState->TxCtx) {
+            QueryState->TxCtx->OnEndQuery();
+            QueryState->TxCtx->Invalidate();
         }
+
+        FillTxInfo(response);
 
         Cleanup(IsFatalError(ydbStatus));
     }

@@ -450,6 +450,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
                     UNIT_ASSERT(deferred.ready() == true);
                     Ydb::Scheme::DescribePathResult result;
                     deferred.result().UnpackTo(&result);
+                    result.mutable_self()->clear_created_at(); // variadic part
                     TString tmp;
                     google::protobuf::TextFormat::PrintToString(result, &tmp);
                     const TString expected = R"___(self {
@@ -952,6 +953,10 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
             Ydb::Scheme::ListDirectoryResult result;
             response.operation().result().UnpackTo(&result);
+            result.mutable_self()->clear_created_at(); // variadic part
+            for (auto& child : *result.mutable_children()) {
+                child.clear_created_at();
+            }
             TString tmp;
             google::protobuf::TextFormat::PrintToString(result, &tmp);
             const TString expected = "self {\n"
@@ -1240,6 +1245,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
             Ydb::Table::DescribeTableResult result;
             response.operation().result().UnpackTo(&result);
+            result.mutable_self()->clear_created_at(); // variadic part
             TString tmp;
             google::protobuf::TextFormat::PrintToString(result, &tmp);
             const TString expected = R"___(self {
@@ -1292,6 +1298,7 @@ partitioning_settings {
             UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
             Ydb::Scheme::DescribePathResult result;
             response.operation().result().UnpackTo(&result);
+            result.mutable_self()->clear_created_at(); // variadic part
             TString tmp;
             google::protobuf::TextFormat::PrintToString(result, &tmp);
             const TString expected = "self {\n"
@@ -1575,6 +1582,7 @@ value {
             UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
             Ydb::Table::DescribeTableResult result;
             response.operation().result().UnpackTo(&result);
+            result.mutable_self()->clear_created_at(); // variadic part
             TString tmp;
             google::protobuf::TextFormat::PrintToString(result, &tmp);
             const TString expected = R"___(self {

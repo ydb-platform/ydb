@@ -332,9 +332,12 @@ int TClickBenchCommandInit::Run(TConfig& config) {
     StoreType = to_lower(StoreType);
     TString partitionBy = "";
     TString storageType = "";
+    TString notNull = "";
     if (StoreType == "column") {
-        partitionBy = "PARTITION BY HASH(CounterID)";
+        //partitionBy = "PARTITION BY HASH(CounterID)"; Not enough cardinality in CounterID column @sa KIKIMR-16478
+        partitionBy = "PARTITION BY HASH(EventTime)";
         storageType = "STORE = COLUMN,";
+        notNull = "NOT NULL";
     } else if (StoreType != "row") {
         throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
     }
@@ -345,6 +348,7 @@ int TClickBenchCommandInit::Run(TConfig& config) {
     TTableClient client(driver);
 
     SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Table));
+    SubstGlobal(createSql, "{notnull}", notNull);
     SubstGlobal(createSql, "{partition}", partitionBy);
     SubstGlobal(createSql, "{store}", storageType);
 

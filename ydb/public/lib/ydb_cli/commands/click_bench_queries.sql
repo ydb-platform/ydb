@@ -33,18 +33,18 @@ SELECT UserID, SearchPhrase, count(*) AS c FROM {table} GROUP BY UserID, SearchP
 SELECT UserID, m, SearchPhrase, count(*) AS c
 FROM {table} GROUP BY UserID, DateTime::GetMinute(EventTime) AS m, SearchPhrase ORDER BY c DESC LIMIT 10;
 -- q20
-SELECT UserID FROM {table} WHERE UserID = 12345678901234567890;
+SELECT UserID FROM {table} WHERE UserID = 435090932899640449;
 -- q21
-SELECT count(*) FROM {table} WHERE URL LIKE '%metrika%';
+SELECT count(*) FROM {table} WHERE URL LIKE '%google%';
 -- q22
-SELECT SearchPhrase, some(URL), count(*) AS c
-FROM {table} WHERE URL LIKE '%metrika%' AND SearchPhrase != '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+SELECT SearchPhrase, MIN(URL), COUNT(*) AS c
+FROM {table} WHERE URL LIKE '%google%' AND SearchPhrase != '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
 -- q23
 SELECT SearchPhrase, some(URL), some(Title), count(*) AS c, CountDistinctEstimate(UserID)
-FROM {table} WHERE Title LIKE '%Яндекс%' AND URL NOT LIKE '%.yandex.%' AND SearchPhrase != ''
+FROM {table} WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase != ''
 GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
 -- q24
-SELECT * FROM {table} WHERE URL LIKE '%metrika%' ORDER BY EventTime LIMIT 10;
+SELECT * FROM {table} WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;
 -- q25
 SELECT SearchPhrase, EventTime FROM {table} WHERE SearchPhrase != '' ORDER BY EventTime LIMIT 10;
 -- q26

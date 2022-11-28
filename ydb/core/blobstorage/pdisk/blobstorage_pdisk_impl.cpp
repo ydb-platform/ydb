@@ -62,6 +62,15 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     ForsetiOpPieceSizeRot = TControlWrapper(2 * 1024 * 1024, 1, 64 * 1024 * 1024);
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
 
+    if (Cfg->SectorMap) {
+        auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
+        if (diskModeParams) {
+            SectorMapFirstSectorRate = TControlWrapper(diskModeParams->FirstSectorRate, 0, 100000ull * 1024 * 1024);
+            SectorMapLastSectorRate = TControlWrapper(diskModeParams->LastSectorRate, 0, 100000ull * 1024 * 1024);
+            SectorMapSeekSleepMicroSeconds = TControlWrapper(diskModeParams->SeekSleepMicroSeconds, 0, 100ul * 1000 * 1000);
+        }
+    }
+
     AddCbs(OwnerSystem, GateLog, "Log", 2'000'000ull);
     ConfigureCbs(OwnerSystem, GateLog, 16);
     AddCbs(OwnerUnallocated, GateTrim, "Trim", 0ull);
@@ -2501,6 +2510,17 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeSsd);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
             REGISTER_LOCAL_CONTROL(Cfg->UseT1ha0HashInFooter);
+
+            if (Cfg->SectorMap) {
+                auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
+                if (diskModeParams) {
+                    REGISTER_LOCAL_CONTROL(SectorMapFirstSectorRate);
+                    REGISTER_LOCAL_CONTROL(SectorMapLastSectorRate);
+                    REGISTER_LOCAL_CONTROL(SectorMapSeekSleepMicroSeconds);
+
+                    LastSectorRateControlName = TStringBuilder() << "PDisk_" << PDiskId << "_SectorMapLastSectorRate";
+                }
+            }
         }
         Y_VERIFY(BlockDevice);
         BlockDevice->Initialize(actorSystem, PDiskActor);
@@ -3491,6 +3511,22 @@ void TPDisk::Update() {
 
 
     Mon.UpdateDurationTracker.WaitingStart(isNothingToDo);
+
+    if (Cfg->SectorMap) {
+        auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
+        if (diskModeParams) {
+            diskModeParams->FirstSectorRate.store(SectorMapFirstSectorRate);
+            if (SectorMapFirstSectorRate < SectorMapLastSectorRate) {
+                TAtomic prevValue;
+                ActorSystem->AppData<TAppData>()->Icb->SetValue(LastSectorRateControlName, SectorMapFirstSectorRate, prevValue);
+                diskModeParams->LastSectorRate.store(SectorMapFirstSectorRate);
+            } else {
+                diskModeParams->LastSectorRate.store(SectorMapLastSectorRate);
+            }
+            
+            diskModeParams->SeekSleepMicroSeconds.store(SectorMapSeekSleepMicroSeconds);
+        }
+    }
 
     // Wait for something to do
     if (isNothingToDo && InputQueue.GetWaitingSize() == 0 && ForsetiScheduler.IsEmpty()) {

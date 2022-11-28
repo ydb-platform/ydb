@@ -15,27 +15,26 @@ Y_UNIT_TEST_SUITE(TSectorMap) {
 
     bool TestSectorMapPerformance(NPDisk::NSectorMap::EDiskMode diskMode, ui64 diskSizeGb, ui64 dataSizeMb, bool toFirstSector,
             bool testRead, ui32 tries, double deviationRange = 0.05, std::pair<double, double>* time = nullptr) {
+        static TString data = PrepareData(1024 * 1024 * 1024);
         ui64 dataSize = dataSizeMb * 1024 * 1024;
         ui64 deviceSize = diskSizeGb * 1024 * 1024 * 1024;
 
-        ui64 diskRate = toFirstSector ? 200 * 1024 * 1024 : 66 * 1024 * 1024;
+        ui64 diskRate = toFirstSector ? 
+            NPDisk::NSectorMap::DiskModeParamPresets[(ui32)diskMode][1] : 
+            NPDisk::NSectorMap::DiskModeParamPresets[(ui32)diskMode][2];
         ui64 sectorsNum = deviceSize / NPDisk::NSectorMap::SECTOR_SIZE;
         ui64 sectorPos = toFirstSector ? 0 : sectorsNum - dataSize / NPDisk::NSectorMap::SECTOR_SIZE - 2;
         double timeExpected = (double)dataSize / diskRate;
         double timeSum = 0;
         for (ui32 i = 0; i < tries; ++i) {
-            THPTimer timer1;
-            TString data = PrepareData(dataSize);
             NPDisk::TSectorMap sectorMap(deviceSize, diskMode);
-            sectorMap.ZeroInit(100);
+            sectorMap.ZeroInit(2);
 
             double timeElapsed = 0;
             if (testRead) {
-                TString buf;
-                buf.reserve(dataSize);
                 sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
                 THPTimer timer;
-                sectorMap.Read((ui8*)buf.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
+                sectorMap.Read((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
                 timeElapsed = timer.Passed();
             } else {
                 THPTimer timer;
@@ -68,18 +67,15 @@ Y_UNIT_TEST_SUITE(TSectorMap) {
             }
         };
 
-        for (auto diskMode : { EDiskMode::DM_HDD}) {
-            for (ui32 dataSizeMb : { 1, 10 }) {
+        for (auto diskMode : { EDiskMode::DM_HDD, EDiskMode::DM_SSD }) {
+            for (ui32 dataSizeMb : { 100, 1000 }) {
                 for (bool testRead : { false, true }) {
-                    test(diskMode, 1960, dataSizeMb, true, testRead, 5);
+                    test(diskMode, 1960, dataSizeMb, true, testRead, 1);
                 }
             }
         }
-        
-        test(EDiskMode::DM_HDD, 1960, 100, true, true, 3);
-        test(EDiskMode::DM_HDD, 1960, 100, true, false, 3);
-        test(EDiskMode::DM_HDD, 1960, 100, false, true, 3);
-        test(EDiskMode::DM_HDD, 1960, 100, false, false, 3);
+        test(EDiskMode::DM_HDD, 1960, 100, false, true, 1);
+        test(EDiskMode::DM_HDD, 1960, 100, false, false, 1);
 
         for (auto& testName : failedTests) {
             Cerr << testName << Endl;

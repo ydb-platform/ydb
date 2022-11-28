@@ -96,6 +96,14 @@ public:
     TControlWrapper ForsetiMaxLogBatchNs;
     TControlWrapper ForsetiOpPieceSizeSsd;
     TControlWrapper ForsetiOpPieceSizeRot;
+
+    // SectorMap Controls
+    TControlWrapper SectorMapFirstSectorRate;
+    TControlWrapper SectorMapLastSectorRate;
+    // to update if SectorMapFirstSectorRate < SectorMapLastSectorRate
+    TString LastSectorRateControlName;
+    TControlWrapper SectorMapSeekSleepMicroSeconds;
+
     ui64 ForsetiMinLogCostNs = 2000000ull;
     i64 ForsetiMaxLogBatchNsCached;
     i64 ForsetiOpPieceSizeCached;

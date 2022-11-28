@@ -12,6 +12,7 @@
 #include <util/stream/format.h>
 #include <util/system/mutex.h>
 #include <util/system/types.h>
+#include <util/system/hp_timer.h>
 
 #include <contrib/libs/lz4/lz4.h>
 
@@ -26,13 +27,19 @@ namespace NSectorMap {
 
 enum EDiskMode {
     DM_NONE = 0,
-    DM_HDD = 1,
-    DM_COUNT = 2
+    DM_HDD,
+    DM_SSD,
+    DM_NVME,
+    DM_COUNT
 };
 
 inline EDiskMode DiskModeFromString(const TString& diskMode) {
     if (diskMode == "HDD") {
         return DM_HDD;
+    } else if (diskMode == "SSD") {
+        return DM_SSD;
+    } else if (diskMode == "NVME") {
+        return DM_NVME;
     } else if (diskMode == "NONE") {
         return DM_NONE;
     }
@@ -46,28 +53,34 @@ inline TString DiskModeToString(EDiskMode diskMode) {
         return "NONE";
     case DM_HDD:
         return "HDD";
+    case DM_SSD:
+        return "SSD";
+    case DM_NVME:
+        return "NVME";
     default:
         return "UNKNOWN";
     }
 }
+
+static constexpr std::array<std::array<ui64, 3>, NSectorMap::DM_COUNT> DiskModeParamPresets = {
+    {
+        {0, 0, 0}, // DM_NONE
+        {9000, 200ull * 1024 * 1024, 66ull * 1024 * 1024}, // DM_HDD
+        {0, 500ull * 1024 * 1024, 500ull * 1024 * 1024}, // DM_SSD
+        {0, 1000ull * 1024 * 1024, 1000ull * 1024 * 1024}, // DM_NVME, probably unusable
+    }
+};
 
 constexpr ui64 SECTOR_SIZE = 4096;
 
 /* TSectorOperationThrottler: thread-safe */
 
 class TSectorOperationThrottler {
-private:
+public:
     struct TDiskModeParams {
-        TDuration SeekSleep;
-        double FirstSectorRate;
-        double LastSectorRate;
-    };
-
-    static constexpr std::array<TDiskModeParams, NSectorMap::DM_COUNT> DiskModeParams = {
-        {
-            {TDuration::MilliSeconds(0), 0, 0}, // DM_NONE
-            {TDuration::MilliSeconds(9), 200 * 1024 * 1024, 66 * 1024 * 1024} // DM_HDD
-        }
+        std::atomic<ui64> SeekSleepMicroSeconds;
+        std::atomic<ui64> FirstSectorRate;
+        std::atomic<ui64> LastSectorRate;
     };
 
 public:
@@ -78,46 +91,51 @@ public:
     void Init(ui64 sectors, NSectorMap::EDiskMode diskMode) {
         Y_VERIFY(sectors > 0);
 
-        DiskMode = diskMode;
+        Y_VERIFY((ui32)diskMode < DiskModeParamPresets.size());
+        DiskModeParams.SeekSleepMicroSeconds = DiskModeParamPresets[diskMode][0];
+        DiskModeParams.FirstSectorRate = DiskModeParamPresets[diskMode][1];
+        DiskModeParams.LastSectorRate = DiskModeParamPresets[diskMode][2];
+
         MaxSector = sectors - 1;
         MostRecentlyUsedSector = 0;
     }
 
-    void ThrottleRead(i64 size, ui64 offset, bool prevOperationIsInProgress) {
-        ThrottleOperation(size, offset, prevOperationIsInProgress);
+    void ThrottleRead(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
+        ThrottleOperation(size, offset, prevOperationIsInProgress, operationTimeMs);
     }
 
-    void ThrottleWrite(i64 size, ui64 offset, bool prevOperationIsInProgress) {
-        ThrottleOperation(size, offset, prevOperationIsInProgress);
+    void ThrottleWrite(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
+        ThrottleOperation(size, offset, prevOperationIsInProgress, operationTimeMs);
+    }
+
+    TDiskModeParams* GetDiskModeParams() {
+        return &DiskModeParams;
     }
 
 private:
     /* throttle read/write operation */
-    void ThrottleOperation(i64 size, ui64 offset, bool prevOperationIsInProgress) {
+    void ThrottleOperation(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
         if (size == 0) {
             return;
         }
-
+        
         ui64 beginSector = offset / NSectorMap::SECTOR_SIZE;
         ui64 endSector = (offset + size + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE;
         ui64 midSector = (beginSector + endSector) / 2;
 
-        Y_VERIFY(DiskMode < DiskModeParams.size());
-        const auto& diskModeParams = DiskModeParams[DiskMode];
-
         {
             TGuard<TMutex> guard(Mutex);
             if (beginSector != MostRecentlyUsedSector + 1 || !prevOperationIsInProgress) {
-                Sleep(diskModeParams.SeekSleep);
+                Sleep(TDuration::MicroSeconds(DiskModeParams.SeekSleepMicroSeconds));
             }
 
             MostRecentlyUsedSector = endSector - 1;
         }
 
-        auto rate = CalcRate(diskModeParams.FirstSectorRate, diskModeParams.LastSectorRate, midSector, MaxSector);
+        auto rate = CalcRate(DiskModeParams.FirstSectorRate, DiskModeParams.LastSectorRate, midSector, MaxSector);
 
         auto rateByMilliSeconds = rate / 1000;
-        auto milliSecondsToWait = (double)size / rateByMilliSeconds;
+        auto milliSecondsToWait = std::max(0., (double)size / rateByMilliSeconds - operationTimeMs);
         Sleep(TDuration::MilliSeconds(milliSecondsToWait));
     }
 
@@ -131,7 +149,7 @@ private:
     TMutex Mutex;
     ui64 MaxSector = 0;
     ui64 MostRecentlyUsedSector = 0;
-    NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
+    TDiskModeParams DiskModeParams;
 };
 
 } // NSectorMap
@@ -200,9 +218,9 @@ public:
         Y_VERIFY(size % NSectorMap::SECTOR_SIZE == 0);
         Y_VERIFY(offset % NSectorMap::SECTOR_SIZE == 0);
 
-        if (SectorOperationThrottler.Get() != nullptr) {
-            SectorOperationThrottler->ThrottleRead(size, offset, prevOperationIsInProgress);
-        }
+        i64 dataSize = size;
+        ui64 dataOffset = offset;
+        THPTimer timer;
 
         TGuard<TTicketLock> guard(MapLock);
         for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
@@ -217,32 +235,42 @@ public:
             offset += NSectorMap::SECTOR_SIZE;
             data += NSectorMap::SECTOR_SIZE;
         }
+        
+        if (SectorOperationThrottler.Get() != nullptr) {
+            SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+        }
     }
 
     void Write(const ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
         Y_VERIFY(size % NSectorMap::SECTOR_SIZE == 0);
         Y_VERIFY(offset % NSectorMap::SECTOR_SIZE == 0);
 
-        if (SectorOperationThrottler.Get() != nullptr) {
-            SectorOperationThrottler->ThrottleWrite(size, offset, prevOperationIsInProgress);
-        }
+        i64 dataSize = size;
+        ui64 dataOffset = offset;
+        THPTimer timer;
 
-        TGuard<TTicketLock> guard(MapLock);
-        for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
-            char tmp[4 * NSectorMap::SECTOR_SIZE];
-            int written = LZ4_compress_default((const char*)data, tmp, NSectorMap::SECTOR_SIZE, 4 * NSectorMap::SECTOR_SIZE);
-            Y_VERIFY_S(written > 0, "written# " << written);
-            TString str = TString::Uninitialized(written);
-            memcpy(str.Detach(), tmp, written);
-            if (auto it = Map.find(offset); it != Map.end()) {
-                AllocatedBytes.fetch_sub(it->second.size());
-                it->second = str;
-            } else {
-                Map[offset] = str;
+        {
+            TGuard<TTicketLock> guard(MapLock);
+            for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
+                char tmp[4 * NSectorMap::SECTOR_SIZE];
+                int written = LZ4_compress_default((const char*)data, tmp, NSectorMap::SECTOR_SIZE, 4 * NSectorMap::SECTOR_SIZE);
+                Y_VERIFY_S(written > 0, "written# " << written);
+                TString str = TString::Uninitialized(written);
+                memcpy(str.Detach(), tmp, written);
+                if (auto it = Map.find(offset); it != Map.end()) {
+                    AllocatedBytes.fetch_sub(it->second.size());
+                    it->second = str;
+                } else {
+                    Map[offset] = str;
+                }
+                AllocatedBytes.fetch_add(Map[offset].size());
+                offset += NSectorMap::SECTOR_SIZE;
+                data += NSectorMap::SECTOR_SIZE;
             }
-            AllocatedBytes.fetch_add(Map[offset].size());
-            offset += NSectorMap::SECTOR_SIZE;
-            data += NSectorMap::SECTOR_SIZE;
+        }
+        
+        if (SectorOperationThrottler.Get() != nullptr) {
+            SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
     }
 
@@ -283,6 +311,13 @@ public:
     // Requires proto information, so should be defined in cpp
     void LoadFromFile(const TString& path);
     void StoreToFile(const TString& path);
+
+    NSectorMap::TSectorOperationThrottler::TDiskModeParams* GetDiskModeParams() {
+        if (SectorOperationThrottler) {
+            return SectorOperationThrottler->GetDiskModeParams();
+        }
+        return nullptr;
+    }
 
 private:
     THashMap<ui64, TString> Map;

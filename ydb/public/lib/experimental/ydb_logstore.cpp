@@ -56,7 +56,10 @@ static TCompression CompressionFromProto(const Ydb::LogStore::Compression& compr
     return out;
 }
 
-TType MakeColumnType(EPrimitiveType primitiveType) {
+TType MakeColumnType(EPrimitiveType primitiveType, bool notNull) {
+    if (notNull) {
+        return TTypeBuilder().Primitive(primitiveType).Build();
+    }
     return TTypeBuilder().BeginOptional().Primitive(primitiveType).EndOptional().Build();
 }
 

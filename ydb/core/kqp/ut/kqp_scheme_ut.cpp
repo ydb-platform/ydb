@@ -3127,11 +3127,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto& description = describeResult.GetTableDescription();
             // TODO: table type
-            UNIT_ASSERT_VALUES_EQUAL(description.GetTableColumns().size(), 3);
-            // TODO: NOT NULL
+            auto columns = description.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionsCount(), 10);
             UNIT_ASSERT_VALUES_EQUAL(description.GetPrimaryKeyColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(description.GetPrimaryKeyColumns()[0], "Key");
+
+            for (auto& column : columns) {
+                auto type = column.Type.ToString();
+                UNIT_ASSERT(column.Name != "Key" || type == "Uint64"); // NOT NULL
+                UNIT_ASSERT(column.Name != "Value1" || type == "String?");
+                UNIT_ASSERT(column.Name != "Value2" || type == "Int64"); // NOT NULL
+            }
 
             auto partSettings = description.GetPartitioningSettings().GetProto();
             auto& partition_by = partSettings.partition_by();
@@ -3189,7 +3196,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
-#if 0
+
         { // disallow nullable key
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
@@ -3206,7 +3213,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
-#endif
     }
 #if 0
     Y_UNIT_TEST(AlterColumnTableTtl) {

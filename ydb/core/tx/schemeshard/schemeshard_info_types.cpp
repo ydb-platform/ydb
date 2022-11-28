@@ -2044,8 +2044,60 @@ bool TOlapSchema::UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TStrin
     return true;
 }
 
-bool TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr) {
+bool TOlapSchema::IsAllowedType(ui32 typeId) {
+    if (!NScheme::NTypeIds::IsYqlType(typeId)) {
+        return false;
+    }
+
+    switch (typeId) {
+        case NYql::NProto::Bool:
+        case NYql::NProto::Interval:
+        case NYql::NProto::Decimal:
+        case NYql::NProto::DyNumber:
+            return false;
+        default:
+            break;
+    }
+    return true;
+}
+
+bool TOlapSchema::IsAllowedFirstPkType(ui32 typeId) {
+    switch (typeId) {
+        //case NYql::NProto::Bool
+        case NYql::NProto::Uint8: // Byte
+        case NYql::NProto::Int32:
+        case NYql::NProto::Uint32:
+        case NYql::NProto::Int64:
+        case NYql::NProto::Uint64:
+        //case NYql::NProto::Float:
+        //case NYql::NProto::Double:
+        case NYql::NProto::String:
+        case NYql::NProto::Utf8:
+        //case NYql::NProto::Yson:
+        //case NYql::NProto::Json:
+        //case NYql::NProto::JsonDocument:
+        case NYql::NProto::Date:
+        case NYql::NProto::Datetime:
+        case NYql::NProto::Timestamp:
+        //case NYql::NProto::Interval:
+        //case NYql::NProto::Decimal:
+        //case NYql::NProto::DyNumber:
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
+bool TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr, bool allowNullableKeys) {
     NextColumnId = proto.GetNextColumnId();
+
+    if (proto.GetKeyColumnNames().empty()) {
+        errStr = Sprintf("No primary key specified");
+        return false;
+    }
+
+    auto firstPkKey = proto.GetKeyColumnNames()[0];
 
     Columns.clear();
     for (auto& colProto : proto.GetColumns()) {
@@ -2062,14 +2114,31 @@ bool TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TStrin
         auto& col = Columns[colId];
         col.Id = colId;
         col.Name = colProto.GetName();
+        col.NotNull = colProto.GetNotNull();
 
         if (ColumnsByName.contains(col.Name)) {
             errStr = Sprintf("Duplicate column '%s'", col.Name.c_str());
             return false;
         }
 
+        if (!colProto.HasType()) {
+            errStr = TStringBuilder() << "Missing Type for column '" << col.Name << "'";
+            return false;
+        }
+
         if (!colProto.HasTypeId()) {
-            errStr = Sprintf("No generated TypeId for column '%s'", col.Name.c_str());
+            errStr = TStringBuilder() << "No generated TypeId for column '" << col.Name << "'";
+            return false;
+        }
+
+        if (col.Name == firstPkKey && !IsAllowedFirstPkType(colProto.GetTypeId())) {
+            errStr = TStringBuilder()
+                << "Type '" << colProto.GetType() << "' specified for column '" << col.Name
+                << "' is not supported in first PK position";
+            return false;
+        } else if (!IsAllowedType(colProto.GetTypeId())) {
+            errStr = TStringBuilder()
+                << "Type '" << colProto.GetType() << "' specified for column '" << col.Name << "' is not supported";
             return false;
         }
 
@@ -2094,6 +2163,10 @@ bool TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TStrin
             errStr = Sprintf("Unknown key column '%s'", keyName.c_str());
             return false;
         }
+        if (!col->NotNull && !allowNullableKeys) {
+            errStr = Sprintf("Nullable key column '%s'", keyName.c_str());
+            return false;
+        }
         if (col->IsKeyColumn()) {
             errStr = Sprintf("Duplicate key column '%s'", keyName.c_str());
             return false;
@@ -2108,6 +2181,108 @@ bool TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TStrin
     }
 
     Engine = proto.GetEngine();
+    return true;
+}
+
+bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema,
+                           TEvSchemeShard::EStatus& status, TString& errStr) const
+{
+    const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
+
+    ui32 lastColumnId = 0;
+    THashSet<ui32> usedColumns;
+    for (const auto& colProto : opSchema.GetColumns()) {
+        if (colProto.GetName().empty()) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Columns cannot have an empty name";
+            return false;
+        }
+        const TString& colName = colProto.GetName();
+        auto* col = FindColumnByName(colName);
+        if (!col) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Column '" << colName << "' does not match schema preset";
+            return false;
+        }
+        if (colProto.HasId() && colProto.GetId() != col->Id) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Column '" << colName << "' has id " << colProto.GetId() << " that does not match schema preset";
+            return false;
+        }
+
+        if (!usedColumns.insert(col->Id).second) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Column '" << colName << "' is specified multiple times";
+            return false;
+        }
+        if (col->Id < lastColumnId) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Column order does not match schema preset";
+            return false;
+        }
+        lastColumnId = col->Id;
+
+        if (colProto.HasTypeId()) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Cannot set TypeId for column '" << colName << "', use Type";
+            return false;
+        }
+        if (!colProto.HasType()) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Missing Type for column '" << colName << "'";
+            return false;
+        }
+
+        auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
+        const NScheme::IType* type = typeRegistry->GetType(typeName);
+        if (!type || !IsAllowedType(type->GetTypeId())) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Type '" << colProto.GetType() << "' specified for column '" << colName << "' is not supported";
+            return false;
+        }
+        NScheme::TTypeInfo typeInfo(type->GetTypeId());
+
+        if (typeInfo != col->Type) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder()
+                << "Type '" << TypeName(typeInfo) << "' specified for column '" << colName
+                << "' does not match schema preset type '" << TypeName(col->Type) << "'";
+            return false;
+        }
+    }
+
+    for (auto& pr : Columns) {
+        if (!usedColumns.contains(pr.second.Id)) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = "Specified schema is missing some schema preset columns";
+            return false;
+        }
+    }
+
+    TVector<ui32> keyColumnIds;
+    for (const TString& keyName : opSchema.GetKeyColumnNames()) {
+        auto* col = FindColumnByName(keyName);
+        if (!col) {
+            status = NKikimrScheme::StatusSchemeError;
+            errStr = TStringBuilder() << "Unknown key column '" << keyName << "'";
+            return false;
+        }
+        keyColumnIds.push_back(col->Id);
+    }
+    if (keyColumnIds != KeyColumnIds) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "Specified schema key columns not matching schema preset";
+        return false;
+    }
+
+    if (opSchema.GetEngine() != Engine) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = "Specified schema engine does not match schema preset";
+        return false;
+    }
     return true;
 }
 
@@ -2184,7 +2359,7 @@ TColumnTableInfo::TColumnTableInfo(
     if (Description.HasSchema()) {
         Schema = TOlapSchema();
         TString strError;
-        Y_VERIFY((*Schema).Parse(Description.GetSchema(), strError), "Cannot parse column table schema");
+        Y_VERIFY((*Schema).Parse(Description.GetSchema(), strError, true), "Cannot parse column table schema");
     }
 
     ColumnShards.reserve(Sharding.GetColumnShards().size());

@@ -76,34 +76,6 @@ void ConvertCompressionFromInternalToPublic(const NKikimrSchemeOp::TCompressionO
     to.set_compression_level(from.GetCompressionLevel());
 }
 
-static bool IsAllowedFirstPkField(ui32 typeId) {
-    switch (typeId) {
-        //case NYql::NProto::Bool
-        case NYql::NProto::Uint8: // Byte
-        case NYql::NProto::Int32:
-        case NYql::NProto::Uint32:
-        case NYql::NProto::Int64:
-        case NYql::NProto::Uint64:
-        //case NYql::NProto::Float:
-        //case NYql::NProto::Double:
-        case NYql::NProto::String:
-        case NYql::NProto::Utf8:
-        //case NYql::NProto::Yson:
-        //case NYql::NProto::Json:
-        //case NYql::NProto::JsonDocument:
-        case NYql::NProto::Date:
-        case NYql::NProto::Datetime:
-        case NYql::NProto::Timestamp:
-        //case NYql::NProto::Interval:
-        //case NYql::NProto::Decimal:
-        //case NYql::NProto::DyNumber:
-            return true;
-        default:
-            break;
-    }
-    return false;
-}
-
 bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
@@ -118,7 +90,6 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         error = "no columns in primary key";
         return false;
     }
-    TString firstKeyColumn = from.primary_key()[0];
 
     for (const auto& column : from.columns()) {
         auto* col = to.AddColumns();
@@ -129,12 +100,11 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         }
         auto typeName = NScheme::TypeName(typeInfo);
         col->SetType(typeName);
+        if (key.count(column.name())) {
+            col->SetNotNull(true);
+        }
 
         key.erase(column.name());
-        if (column.name() == firstKeyColumn && !IsAllowedFirstPkField(typeInfo.GetTypeId())) {
-            error = "not supported first PK column type for LogStore";
-            return false;
-        }
     }
     if (!key.empty()) {
         error = "unknown cloumn in primary key";
@@ -167,12 +137,18 @@ bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema
         auto* col = to.add_columns();
         col->set_name(column.GetName());
         ui32 typeId = column.GetTypeId();
-        auto& item = *col->mutable_type()->mutable_optional_type()->mutable_item();
+
+        auto& item = column.GetNotNull()
+            ? *col->mutable_type()
+            : *col->mutable_type()->mutable_optional_type()->mutable_item();
+#if 0 // not supported
         if (typeId == NYql::NProto::TypeIds::Decimal) {
             auto typeParams = item.mutable_decimal_type();
             typeParams->set_precision(22);
             typeParams->set_scale(9);
         } else {
+#endif
+        {
             try {
                 NMiniKQL::ExportPrimitiveTypeToProto(typeId, item);
             } catch (...) {

@@ -34,10 +34,10 @@ const std::vector<EPrimitiveType> allowedTypes = {
 
 TVector<NYdb::TColumn> TestSchemaColumns(EPrimitiveType pkField = EPrimitiveType::Timestamp) {
     return {
-        NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(pkField)),
-        NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-        NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-        NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
+        NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(pkField, true)),
+        NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8, true)),
+        NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8, true)),
+        NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8, true)),
         NYdb::TColumn("level",          NYdb::NLogStore::MakeColumnType(EPrimitiveType::Int32)),
         NYdb::TColumn("message",        NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
         NYdb::TColumn("json_payload",   NYdb::NLogStore::MakeColumnType(EPrimitiveType::JsonDocument)),
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             const auto& schema = descr.GetSchemaPresets().begin()->second;
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
             UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8? }");
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
                 TVector<TString>({"timestamp", "resource_type", "resource_id", "uid"}));
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
             UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8? }");
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
                 TVector<TString>({"timestamp", "resource_type", "resource_id", "uid"}));
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             const auto& schema = descr.GetSchema();
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
             UNIT_ASSERT(schema.GetColumns()[0].ToString().StartsWith("{ name: \"timestamp\", type:"));
-            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8? }");
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[1].ToString(), "{ name: \"resource_type\", type: Utf8 }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
                 TVector<TString>({"timestamp", "resource_type", "resource_id", "uid"}));

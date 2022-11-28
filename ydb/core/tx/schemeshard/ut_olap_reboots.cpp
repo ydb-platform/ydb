@@ -5,6 +5,31 @@ using namespace NKikimr;
 using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
+static const TString defaultStoreSchema = R"(
+    Name: "OlapStore"
+    ColumnShardCount: 1
+    SchemaPresets {
+        Name: "default"
+        Schema {
+            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+            Columns { Name: "data" Type: "Utf8" }
+            KeyColumnNames: "timestamp"
+            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+        }
+    }
+)";
+
+static const TString defaultTableSchema = R"(
+    Name: "ColumnTable"
+    ColumnShardCount: 1
+    Schema {
+        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+        Columns { Name: "data" Type: "Utf8" }
+        KeyColumnNames: "timestamp"
+        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+    }
+)";
+
 Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateStore) {
         TTestWithReboots t(false);
@@ -15,21 +40,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 // no inactive initialization
             }
 
-            TString olapSchema = R"(
-                Name: "OlapStore"
-                ColumnShardCount: 1
-                SchemaPresets {
-                    Name: "default"
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                }
-            )";
-
-            TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", olapSchema);
+            TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
@@ -50,19 +61,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 // no inactive initialization
             }
 
-            TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
-                Name: "OlapStore"
-                ColumnShardCount: 1
-                SchemaPresets {
-                    Name: "default"
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                }
-            )");
+            TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
@@ -88,16 +87,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 // no inactive initialization
             }
 
-            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
-                Name: "ColumnTable"
-                ColumnShardCount: 1
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            )");
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", defaultTableSchema);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -115,19 +105,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "OlapStore"
-                    ColumnShardCount: 1
-                    SchemaPresets {
-                        Name: "default"
-                        Schema {
-                            Columns { Name: "timestamp" Type: "Timestamp" }
-                            Columns { Name: "data" Type: "Utf8" }
-                            KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                        }
-                    }
-                )");
+                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -157,16 +135,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 // no inactive initialization
             }
 
-            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
-                Name: "ColumnTable"
-                ColumnShardCount: 1
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            )");
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", defaultTableSchema);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "ColumnTable");
@@ -187,19 +156,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "OlapStore"
-                    ColumnShardCount: 1
-                    SchemaPresets {
-                        Name: "default"
-                        Schema {
-                            Columns { Name: "timestamp" Type: "Timestamp" }
-                            Columns { Name: "data" Type: "Utf8" }
-                            KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                        }
-                    }
-                )");
+                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -234,28 +191,12 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime,
-                CreateColumnTableRequest(t.TxId += 2, "/MyRoot", R"(
-                    Name: "ColumnTable1"
-                    ColumnShardCount: 1
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                )"),
+                CreateColumnTableRequest(t.TxId += 2, "/MyRoot",
+                                         SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable1")),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->ReliablePropose(runtime,
-                CreateColumnTableRequest(t.TxId - 1, "/MyRoot", R"(
-                    Name: "ColumnTable2"
-                    ColumnShardCount: 1
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                )"),
+                CreateColumnTableRequest(t.TxId - 1, "/MyRoot",
+                                         SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable2")),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
@@ -275,19 +216,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "OlapStore"
-                    ColumnShardCount: 1
-                    SchemaPresets {
-                        Name: "default"
-                        Schema {
-                            Columns { Name: "timestamp" Type: "Timestamp" }
-                            Columns { Name: "data" Type: "Utf8" }
-                            KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                        }
-                    }
-                )");
+                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
@@ -325,28 +254,12 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "ColumnTable1"
-                    ColumnShardCount: 1
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                )");
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
+                                      SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable1"));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "ColumnTable2"
-                    ColumnShardCount: 1
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                )");
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
+                                      SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable2"));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -376,22 +289,8 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 // no inactive initialization
             }
 
-            TString olapSchema = R"(
-                Name: "OlapStore"
-                ColumnShardCount: 1
-                SchemaPresets {
-                    Name: "default"
-                    Schema {
-                        Columns { Name: "timestamp" Type: "Timestamp" }
-                        Columns { Name: "data" Type: "Utf8" }
-                        KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                    }
-                }
-            )";
-
             t.TestEnv->ReliablePropose(runtime,
-                CreateOlapStoreRequest(++t.TxId, "/MyRoot", olapSchema),
+                CreateOlapStoreRequest(++t.TxId, "/MyRoot", defaultStoreSchema),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -415,19 +314,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "OlapStore"
-                    ColumnShardCount: 1
-                    SchemaPresets {
-                        Name: "default"
-                        Schema {
-                            Columns { Name: "timestamp" Type: "Timestamp" }
-                            Columns { Name: "data" Type: "Utf8" }
-                            KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                        }
-                    }
-                )");
+                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
@@ -462,19 +349,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "OlapStore"
-                    ColumnShardCount: 1
-                    SchemaPresets {
-                        Name: "default"
-                        Schema {
-                            Columns { Name: "timestamp" Type: "Timestamp" }
-                            Columns { Name: "data" Type: "Utf8" }
-                            KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                        }
-                    }
-                )");
+                TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", defaultStoreSchema);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(

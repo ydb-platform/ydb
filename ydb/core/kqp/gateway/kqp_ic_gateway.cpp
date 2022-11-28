@@ -2100,6 +2100,7 @@ private:
             TOlapColumnDescription& columnDesc = *schema.AddColumns();
             columnDesc.SetName(columnIt->second.Name);
             columnDesc.SetType(columnIt->second.Type);
+            columnDesc.SetNotNull(columnIt->second.NotNull);
         }
 
         for (const auto& keyColumn : metadata.KeyColumnNames) {

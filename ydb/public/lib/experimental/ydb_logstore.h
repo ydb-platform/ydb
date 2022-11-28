@@ -76,7 +76,7 @@ private:
     TMaybe<TAlterTtlSettings> AlterTtlSettings_;
 };
 
-TType MakeColumnType(EPrimitiveType primitiveType);
+TType MakeColumnType(EPrimitiveType primitiveType, bool notNull = false);
 
 class TSchema {
 public:

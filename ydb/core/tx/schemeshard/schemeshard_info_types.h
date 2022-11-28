@@ -793,7 +793,8 @@ struct TOlapSchema {
         TString Name;
         NScheme::TTypeInfo Type;
         ui32 KeyOrder = Max<ui32>();
-        // TODO: per-column ACL?
+        bool NotNull = false;
+        // TODO: DefaultValue
 
         bool IsKeyColumn() const { return KeyOrder != Max<ui32>(); }
     };
@@ -825,7 +826,11 @@ struct TOlapSchema {
     }
 
     static bool UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
-    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
+    static bool IsAllowedType(ui32 typeId);
+    static bool IsAllowedFirstPkType(ui32 typeId);
+
+    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr, bool allowNullableKeys);
+    bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, TEvSchemeShard::EStatus& status, TString& errStr) const;
 };
 
 struct TOlapStoreSchemaPreset : public TOlapSchema {

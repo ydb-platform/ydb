@@ -16,7 +16,10 @@ bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& sche
     if (!TOlapSchema::UpdateProto(proto, errStr)) {
         return false;
     }
-    return schema.Parse(proto, errStr);
+    // Backward compatibility. It should be removed in future versions.
+    // ColumnShards do not allow nullable PK. But it was possible to make tables with such PK before.
+    bool allowNullableKeys = true;
+    return schema.Parse(proto, errStr, allowNullableKeys);
 }
 
 // TODO: make it a part of TOlapStoreInfo

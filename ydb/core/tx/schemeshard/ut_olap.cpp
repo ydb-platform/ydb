@@ -20,7 +20,7 @@ static const TString defaultStoreSchema = R"(
     SchemaPresets {
         Name: "default"
         Schema {
-            Columns { Name: "timestamp" Type: "Timestamp" }
+            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
             Columns { Name: "data" Type: "Utf8" }
             KeyColumnNames: "timestamp"
             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -28,11 +28,11 @@ static const TString defaultStoreSchema = R"(
     }
 )";
 
-TString defaultTableSchema = R"(
+static const TString defaultTableSchema = R"(
     Name: "ColumnTable"
     ColumnShardCount: 1
     Schema {
-        Columns { Name: "timestamp" Type: "Timestamp" }
+        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "data" Type: "Utf8" }
         KeyColumnNames: "timestamp"
         Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -415,8 +415,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "ColumnTable"
             ColumnShardCount: 4
             Schema {
-                Columns { Name: "timestamp" Type: "Timestamp" }
-                Columns { Name: "some" Type: "Uint64" }
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "some" Type: "Uint64" NotNull: true }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "some"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -459,21 +459,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TString olapSchema = R"(
-            Name: "OlapStore"
-            ColumnShardCount: 1
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            }
-        )";
-
-        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
         env.TestWaitNotification(runtime, txId);
 
         TString tableSchema1 = R"(
@@ -602,7 +588,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             SchemaPresets {
                 Name: "default"
                 Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES

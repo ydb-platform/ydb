@@ -3988,7 +3988,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         alter(request, Ydb::StatusIds::SUCCESS, false);
 
         TString topic4 = "rt3.dc1--acc--topic4";
-        server.AnnoyingClient->CreateTopic(topic4, 1); //ensure creation
+        server.AnnoyingClient->CreateTopic(topic4, 3); //ensure creation
         auto res = server.AnnoyingClient->DescribeTopic({topic3});
         Cerr << res.DebugString();
         TString resultDescribe = R"___(TopicInfo {
@@ -4121,6 +4121,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::DescribeTopicRequest request;
             Ydb::Topic::DescribeTopicResponse response;
             request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
+
             grpc::ClientContext rcontext;
 
             auto status = TopicStubP_->DescribeTopic(&rcontext, request, &response);
@@ -4128,6 +4129,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(status.ok());
             Ydb::Topic::DescribeTopicResult res;
             response.operation().result().UnpackTo(&res);
+
+            Cerr << response.DebugString() << "\n" << res.DebugString() << "\n";
 
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
             res1 = res;
@@ -4148,10 +4151,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(status.ok());
             Ydb::Topic::DescribeTopicResult descrRes;
             response.operation().result().UnpackTo(&descrRes);
-            Cerr << response << "\n" << descrRes << "\n";
+            Cerr << response.DebugString() << "\n" << descrRes.DebugString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(descrRes.DebugString(), res1.DebugString());
 
+            UNIT_ASSERT_VALUES_EQUAL(descrRes.DebugString(), res1.DebugString());
 
             {
                 NYdb::TDriverConfig driverCfg;
@@ -4221,6 +4224,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
 
         }
+
         {
             Ydb::Topic::DropTopicRequest request;
             Ydb::Topic::DropTopicResponse response;
@@ -4235,7 +4239,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
             server.AnnoyingClient->RemoveTopic(topic3);
         }
-
 
         {
             Ydb::Topic::DropTopicRequest request;
@@ -4266,6 +4269,146 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             res.Wait();
             Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
         }
+
+        for (ui32 i = 0; i < 5; ++ i) {
+            auto writer = CreateWriter(*driver, "acc/topic4", TStringBuilder() << "abacaba" << i);
+            auto ev = writer->GetEvent(true);
+            auto ct = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*ev);
+            UNIT_ASSERT(ct);
+            writer->Write(std::move(ct->ContinuationToken), "1234567890");
+            UNIT_ASSERT(ev.Defined());
+            while(true) {
+                ev = writer->GetEvent(true);
+                auto ack = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*ev);
+                if (ack) {
+                    break;
+                }
+            }
+        }
+
+        {
+            Ydb::Topic::DescribeTopicRequest request;
+            Ydb::Topic::DescribeTopicResponse response;
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic4);
+            request.set_include_stats(true);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->DescribeTopic(&rcontext, request, &response);
+
+            UNIT_ASSERT(status.ok());
+            Ydb::Topic::DescribeTopicResult res;
+            response.operation().result().UnpackTo(&res);
+
+            Cerr << response.DebugString() << "\n" << res.DebugString() << "\n";
+
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res.topic_stats().store_size_bytes(), 800);
+            UNIT_ASSERT_GE(res.partitions(0).partition_stats().partition_offsets().end(), 1);
+        }
+
+        auto reader1 = CreateReader(
+                *driver,
+                NYdb::NPersQueue::TReadSessionSettings()
+                    .AppendTopics(
+                        NYdb::NPersQueue::TTopicReadSettings("acc/topic4")
+                    )
+                    .ConsumerName("shared/user")
+                    .ReadOnlyOriginal(true)
+            );
+        int numLocks = 3;
+        while (numLocks > 0) {
+            auto msg = reader1->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << "===Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+            --numLocks;
+        }
+
+        auto reader2 = CreateReader(
+                *driver,
+                NYdb::NPersQueue::TReadSessionSettings()
+                    .AppendTopics(
+                        NYdb::NPersQueue::TTopicReadSettings("acc/topic4")
+                    )
+                    .ConsumerName("shared/user")
+                    .ReadOnlyOriginal(true)
+            );
+
+        numLocks = 1;
+        while (numLocks > 0) {
+            {
+                auto msg = reader1->GetEvent(true, 1);
+                UNIT_ASSERT(msg);
+                Cerr << "===Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+                auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*msg);
+                UNIT_ASSERT(ev);
+                ev->Confirm();
+            }
+            {
+                auto msg = reader2->GetEvent(true, 1);
+                UNIT_ASSERT(msg);
+
+                Cerr << "===Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+                auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+                UNIT_ASSERT(ev);
+            }
+            --numLocks;
+        }
+
+        {
+            Ydb::Topic::DescribeConsumerRequest request;
+            Ydb::Topic::DescribeConsumerResponse response;
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic4);
+            request.set_consumer("user");
+            request.set_include_stats(true);
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->DescribeConsumer(&rcontext, request, &response);
+
+            UNIT_ASSERT(status.ok());
+            Ydb::Topic::DescribeConsumerResult res;
+            response.operation().result().UnpackTo(&res);
+
+            Cerr << "DESCRIBE CONSUMER RESULT:\n" << response << "\n" << res.DebugString() << "\n";
+
+//            UNIT_ASSERT_GE(res.partitions(0).partition_stats().partition_offsets().end(), 1);
+            //TODO: check here some stats from describe consumer
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res.partitions_size(), 3);
+            UNIT_ASSERT(res.partitions(0).partition_consumer_stats().read_session_id().size() > 0);
+            UNIT_ASSERT(res.partitions(1).partition_consumer_stats().read_session_id().size() > 0);
+            UNIT_ASSERT(res.partitions(2).partition_consumer_stats().read_session_id().size() > 0);
+
+        }
+
+        {
+            Ydb::Topic::DescribeConsumerRequest request;
+            Ydb::Topic::DescribeConsumerResponse response;
+            request.set_path(TStringBuilder() << "/Root/PQ/" << topic4);
+            request.set_consumer("not-consumer");
+            request.set_include_stats(true);
+
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->DescribeConsumer(&rcontext, request, &response);
+
+            Cerr << response << "\n" << res << "\n";
+
+            UNIT_ASSERT(status.ok());
+            Ydb::Topic::DescribeConsumerResult res;
+            response.operation().result().UnpackTo(&res);
+
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
+        }
+
+
+
     }
 
     Y_UNIT_TEST(SchemeOperationFirstClassCitizen) {

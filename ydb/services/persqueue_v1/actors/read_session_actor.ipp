@@ -617,6 +617,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         << "_" << "v1";
     CommitsDisabled = false;
 
+    PeerName = ev->Get()->PeerName;
+
     if constexpr (UseMigrationProtocol) {
         RangesMode = init.ranges_mode();
         MaxReadMessagesCount = NormalizeMaxReadMessagesCount(init.read_params().max_read_messages_count());
@@ -631,6 +633,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         MaxTimeLagMs = 0; // max_lag per topic only
         ReadTimestampMs = 0; // read_from per topic only
         ReadOnlyLocal = true;
+        if (init.reader_name()) {
+            PeerName = init.reader_name();
+        }
     }
 
     if (MaxTimeLagMs < 0) {
@@ -641,7 +646,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "start_from_written_at_ms must be nonnegative number", ctx);
     }
 
-    PeerName = ev->Get()->PeerName;
 
     auto getTopicPath = [](const auto& settings) {
         if constexpr (UseMigrationProtocol) {

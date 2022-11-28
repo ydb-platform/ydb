@@ -41,7 +41,7 @@ private:
             HFunc(NKikimr::NGRpcService::TEvCreateTopicRequest, Handle);
             HFunc(NKikimr::NGRpcService::TEvAlterTopicRequest, Handle);
             HFunc(NKikimr::NGRpcService::TEvDescribeTopicRequest, Handle);
-
+            HFunc(NKikimr::NGRpcService::TEvDescribeConsumerRequest, Handle);
             hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
         }
     }
@@ -57,6 +57,7 @@ private:
     void Handle(NKikimr::NGRpcService::TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcService::TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcService::TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NGRpcService::TEvDescribeConsumerRequest::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev);
 

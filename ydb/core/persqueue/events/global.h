@@ -81,7 +81,11 @@ struct TEvPersQueue {
 
     struct TEvGetReadSessionsInfo: public TEventPB<TEvGetReadSessionsInfo,
             NKikimrPQ::TGetReadSessionsInfo, EvGetReadSessionsInfo> {
-            TEvGetReadSessionsInfo() {}
+            TEvGetReadSessionsInfo(const TString& consumer = "") {
+                if (!consumer.empty()) {
+                    Record.SetClientId(consumer);
+                }
+            }
     };
 
     struct TEvReadSessionsInfoResponse: public TEventPB<TEvReadSessionsInfoResponse,
@@ -125,9 +129,11 @@ struct TEvPersQueue {
 
     struct TEvStatus : public TEventPB<TEvStatus,
             NKikimrPQ::TStatus, EvStatus> {
-        explicit TEvStatus(const TString& consumer = "") {
+        explicit TEvStatus(const TString& consumer = "", bool getStatForAllConsumers = false) {
             if (!consumer.empty())
                 Record.SetClientId(consumer);
+            if (getStatForAllConsumers)
+                Record.SetGetStatForAllConsumers(true);
         }
     };
 

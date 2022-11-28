@@ -2094,6 +2094,22 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (ctx.Now() - userInfo.GetReadTimestamp()).MilliSeconds();
             clientInfo->SetTotalLagMs(totalLag);
         }
+
+        if (ev->Get()->GetStatForAllConsumers) { //fill lags
+            auto* clientInfo = result.AddConsumerResult();
+            clientInfo->SetConsumer(userInfo.User);
+            auto readTimestamp = (userInfo.GetReadWriteTimestamp() ? userInfo.GetReadWriteTimestamp() : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds();
+            clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
+                                        ? (userInfo.GetReadTimestamp() - TInstant::MilliSeconds(readTimestamp)).MilliSeconds()
+                                        : 0);
+            clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
+            clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
+
+            clientInfo->SetAvgReadSpeedPerMin(userInfo.AvgReadBytes[1].GetValue());
+            clientInfo->SetAvgReadSpeedPerHour(userInfo.AvgReadBytes[2].GetValue());
+            clientInfo->SetAvgReadSpeedPerDay(userInfo.AvgReadBytes[3].GetValue());
+        }
+
     }
     result.SetAvgReadSpeedPerSec(resSpeed[0]);
     result.SetAvgReadSpeedPerMin(resSpeed[1]);

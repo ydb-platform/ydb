@@ -541,8 +541,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvCreateTopicRequest, PreHandle);
         HFunc(TEvAlterTopicRequest, PreHandle);
         HFunc(TEvDescribeTopicRequest, PreHandle);
+        HFunc(TEvDescribeConsumerRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
-
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 
         default:

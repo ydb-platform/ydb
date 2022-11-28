@@ -904,11 +904,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
                     pi->SetProxyNodeId(jt->second.ProxyNodeId);
                     pi->SetSession(jt->second.Session);
                     pi->SetTimestamp(jt->second.Timestamp.Seconds());
+                    pi->SetTimestampMs(jt->second.Timestamp.MilliSeconds());
                 } else {
                     pi->SetClientNode("");
                     pi->SetProxyNodeId(0);
                     pi->SetSession("");
                     pi->SetTimestamp(0);
+                    pi->SetTimestampMs(0);
                 }
             }
             for (auto& s : c.second.SessionsInfo) {

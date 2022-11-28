@@ -185,7 +185,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 NSchemeCache::TSchemeCacheNavigate::KindTopic) {
                 this->Request_->RaiseIssue(
                     FillIssue(
-                              TStringBuilder() << "path '" << path << "' is not a stream",
+                              TStringBuilder() << "path '" << path << "' is not a topic",
                               Ydb::PersQueue::ErrorCode::ERROR
                               )
                     );

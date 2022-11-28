@@ -875,6 +875,7 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     }
 
     void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+        Stats.Aggregated.PartCount = ColumnShards.size();
         Stats.PartitionStats[shardIdx]; // insert if none
         Stats.UpdateShardStats(shardIdx, newStats);
     }
@@ -919,6 +920,7 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
     }
 
     void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+        Stats.Aggregated.PartCount = ColumnShards.size();
         Stats.PartitionStats[shardIdx]; // insert if none
         Stats.UpdateShardStats(shardIdx, newStats);
     }

@@ -158,6 +158,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     switch (entry.Type) {
     case NScheme::ESchemeEntryType::Table:
         return DescribeTable(driver);
+    case NScheme::ESchemeEntryType::ColumnTable:
+        return DescribeColumnTable(driver);
     case NScheme::ESchemeEntryType::PqGroup:
     case NScheme::ESchemeEntryType::Topic:
         return DescribeTopic(driver);
@@ -264,6 +266,21 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
             .WithKeyShardBoundary(ShowKeyShardBoundaries)
             .WithTableStatistics(ShowTableStats || ShowPartitionStats)
             .WithPartitionStatistics(ShowPartitionStats)
+        )
+    ).GetValueSync();
+    ThrowOnError(result);
+    return PrintTableResponse(result);
+}
+
+int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
+    NTable::TTableClient client(driver);
+    NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
+    ThrowOnError(sessionResult);
+    NTable::TDescribeTableResult result = sessionResult.GetSession().DescribeTable(
+        Path,
+        FillSettings(
+            NTable::TDescribeTableSettings()
+            .WithTableStatistics(ShowTableStats)
         )
     ).GetValueSync();
     ThrowOnError(result);

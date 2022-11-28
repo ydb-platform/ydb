@@ -43,6 +43,7 @@ public:
 private:
     int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result);
     int DescribeTable(TDriver& driver);
+    int DescribeColumnTable(TDriver& driver);
     int PrintTableResponse(NTable::TDescribeTableResult& result);
     void PrintResponsePretty(const NTable::TTableDescription& tableDescription);
     int PrintResponseProtoJsonBase64(const NTable::TTableDescription& tableDescription);

@@ -371,11 +371,14 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     Y_VERIFY(tableInfo, "ColumnTable not found");
     Y_UNUSED(pathEl);
 
-    auto description = Result->Record.MutablePathDescription()->MutableColumnTableDescription();
+    auto* pathDescription = Result->Record.MutablePathDescription();
+    auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Sharding);
 
-    if (!description->HasSchema() && description->HasSchemaPresetId()) {
+    if (tableInfo->IsStandalone()) {
+        FillAggregatedStats(*pathDescription, tableInfo->GetStats());
+    } else {
         const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(*tableInfo->OlapStorePathId);
         Y_VERIFY(storeInfo, "OlapStore not found");
 

@@ -45,7 +45,6 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic);
-void FillColumnTableStats(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TPathDescription& in);
 
 // out
 void FillStorageSettings(Ydb::Table::DescribeTableResult& out,

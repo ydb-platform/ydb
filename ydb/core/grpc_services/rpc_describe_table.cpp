@@ -62,7 +62,10 @@ private:
                     FillColumnDescription(describeTableResult, tableDescription);
 
                     if (GetProtoRequest()->include_table_stats()) {
-                        FillColumnTableStats(describeTableResult, pathDescription);
+                        FillTableStats(describeTableResult, pathDescription, false);
+
+                        describeTableResult.mutable_table_stats()->set_partitions(
+                            tableDescription.GetColumnShardCount());
                     }
 
                     return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);

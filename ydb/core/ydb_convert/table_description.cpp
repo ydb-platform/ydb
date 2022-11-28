@@ -500,11 +500,6 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
     }
 }
 
-void FillColumnTableStats(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TPathDescription& in) {
-    auto stats = out.mutable_table_stats();
-    stats->set_partitions(in.GetColumnTableDescription().GetColumnShardCount());
-}
-
 static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) {
     if (family.HasId() && family.GetId() == 0) {
         return true; // explicit id 0

@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
@@ -2885,6 +2886,62 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreatedAt) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto scheme = NYdb::NScheme::TSchemeClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/dir/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NScheme::TVirtualTimestamp createdAt;
+
+        { // describe table
+            auto desc = session.DescribeTable("/Root/dir/table").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            createdAt = desc.GetEntry().CreatedAt;
+            UNIT_ASSERT(createdAt.PlanStep() > 0);
+            UNIT_ASSERT(createdAt.TxId() != 0);
+        }
+
+        { // describe dir
+            auto desc = scheme.DescribePath("/Root/dir").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetEntry().CreatedAt, createdAt);
+        }
+
+        { // list dir
+            auto desc = scheme.ListDirectory("/Root/dir").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetEntry().CreatedAt, createdAt);
+
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetChildren().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetChildren()[0].CreatedAt, createdAt);
+        }
+
+        { // copy table
+            const auto result = session.CopyTable("/Root/dir/table", "/Root/dir/copy").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = session.DescribeTable("/Root/dir/copy").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetEntry().CreatedAt > createdAt);
         }
     }
 

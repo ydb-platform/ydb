@@ -20,6 +20,7 @@ target_link_libraries(cpp-client-ydb_table PUBLIC
   cpp-client-ydb_params
   cpp-client-ydb_proto
   cpp-client-ydb_result
+  cpp-client-ydb_scheme
   client-ydb_table-impl
   client-ydb_table-query_stats
   client-ydb_types-operation

@@ -806,6 +806,10 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
         to->set_type(static_cast<Ydb::Scheme::Entry::Type>(from.GetPathType()));
     }
 
+    auto& timestamp = *to->mutable_created_at();
+    timestamp.set_plan_step(from.GetCreateStep());
+    timestamp.set_tx_id(from.GetCreateTxId());
+
     if (processAcl) {
         const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
         ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());

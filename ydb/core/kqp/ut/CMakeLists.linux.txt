@@ -33,6 +33,7 @@ target_link_libraries(ydb-core-kqp-ut PUBLIC
   kqp-ut-common
   cpp-client-draft
   cpp-client-ydb_proto
+  cpp-client-ydb_scheme
   cpp-client-ydb_topic
   yql-sql-pg_dummy
   re2_udf

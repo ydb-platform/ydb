@@ -1,6 +1,6 @@
 ## Memory tracker
 
-https://a.yandex-team.ru/arc/trunk/arcadia/library/cpp/actors/core/memory_track.h
+https://a.yandex-team.ru/arc/trunk/arcadia/library/cpp/actors/util/memory_track.h
 
 Использование:
 
@@ -15,7 +15,7 @@ https://a.yandex-team.ru/arc/trunk/arcadia/library/cpp/actors/core/memory_track.
 Использование с автоматически генерируемой меткой:
 
 ```cpp
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 
 struct TTypeLabeled
     : public NActors::NMemory::TTrack<TTypeLabeled>
@@ -27,7 +27,7 @@ struct TTypeLabeled
 Использование с пользовательским именем метки:
 
 ```cpp
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 
 static const char NamedLabel[] = "NamedLabel";
 
@@ -43,7 +43,7 @@ struct TNameLabeled
 ### Отслеживание аллокаций в контейнерах
 
 ```cpp
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 
 static const char InContainerLabel[] = "InContainerLabel";
 
@@ -75,7 +75,7 @@ std::unordered_map<TKey, TInContainer, std::hash<TKey>, std::equal_to<TKey>,
 ### Ручное отслеживание аллокаций/деаллокаций
 
 ```cpp
-#include <library/cpp/actors/core/memory_track.h>
+#include <library/cpp/actors/util/memory_track.h>
 
 static const char ManualLabel[] = "ManualLabel";
 
@@ -92,7 +92,7 @@ NActors::NMemory::TLabel<ManualLabel>::Sub(size);
 
 Сервис **utils**, пользовательская метка **label**, сенсоры:
 
-- MT/Count: количество аллокаций в моменте 
+- MT/Count: количество аллокаций в моменте
 - MT/Memory: аллоцированная память в моменте
 - MT/PeakCount: пиковое значение количества аллокаций (сэмплится с фиксированной частотой)
 - MT/PeakMemory: пиковое значение аллоцированной памяти

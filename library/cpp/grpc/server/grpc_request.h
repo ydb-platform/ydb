@@ -179,6 +179,11 @@ public:
         return Request_;
     }
 
+    NProtoBuf::Message* GetRequestMut() override {
+        return Request_;
+    }
+
+
     TAuthState& GetAuthState() override {
         return AuthState_;
     }

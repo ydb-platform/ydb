@@ -72,7 +72,7 @@
                 "PlanNodeId": 24,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_2_1",
+                        "CTE Name": "tx_result_binding_1_1",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -96,7 +96,7 @@
                 "PlanNodeId": 22,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_2_0",
+                        "CTE Name": "tx_result_binding_1_0",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -131,7 +131,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_2",
+                                        "CTE Name": "tx_result_binding_0_2",
                                         "Node Type": "TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -175,7 +175,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_0",
+                                        "CTE Name": "tx_result_binding_0_0",
                                         "Node Type": "TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {

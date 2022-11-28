@@ -262,6 +262,8 @@ public:
 
     TActorId SysPartitionStatsCollector;
 
+    TActorId SVPMigrator;
+
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
     ui32 StatsMaxBatchSize = 0;

@@ -825,6 +825,8 @@ private:
             operatorId = Visit(maybeExtend.Cast(), planNode);
         } else if (auto maybeIter = TMaybeNode<TCoIterator>(node)) {
             operatorId = Visit(maybeIter.Cast(), planNode);
+        } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
+            operatorId = Visit(maybePartitionByKey.Cast(), planNode);
         } else if (auto maybeUpsert = TMaybeNode<TKqpUpsertRows>(node)) {
             operatorId = Visit(maybeUpsert.Cast(), planNode);
         } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
@@ -924,10 +926,25 @@ private:
 
         if (auto maybeResultBinding = ContainResultBinding(iterValue)) {
             auto [txId, resId] = *maybeResultBinding;
-            planNode.CteRefName = TStringBuilder() << "tx_result_binding_" << TxId << "_" << resId;
+            planNode.CteRefName = TStringBuilder() << "tx_result_binding_" << txId << "_" << resId;
         }
 
         return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    ui32 Visit(const TCoPartitionByKey& partitionByKey, TQueryPlanNode& planNode) {
+        const auto inputValue = PrettyExprStr(partitionByKey.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "PartitionByKey";
+        op.Properties["Input"] = inputValue;
+
+        if (auto maybeResultBinding = ContainResultBinding(inputValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "tx_result_binding_" << txId << "_" << resId;
+        }
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     ui32 Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {

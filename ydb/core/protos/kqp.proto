@@ -93,6 +93,9 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
+    reserved 22; // optional TTopicOperations TopicOperations = 22;
+    optional bool UsePublicResponseDataFormat = 23;
+    map<string, Ydb.TypedValue> YdbParameters = 24;
 }
 
 message TKqpPathIdProto {
@@ -255,6 +258,7 @@ message TQueryResponse {
     repeated TParameterDescription QueryParameters = 10;
     optional Ydb.Table.TransactionMeta TxMeta = 11;
     optional NKqpProto.TKqpStatsQuery QueryStats = 12;
+    repeated Ydb.ResultSet YdbResults = 13;
 }
 
 message TEvQueryResponse {
@@ -376,6 +380,7 @@ message TExecuterTxResult {
     optional NKikimrMiniKQL.TResult Locks = 4;
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
+    repeated Ydb.ResultSet YdbResults = 7;
 };
 
 message TExecuterTxResponse {

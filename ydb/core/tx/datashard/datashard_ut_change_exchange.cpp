@@ -1002,7 +1002,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-
     struct TopicRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TString>& records)
@@ -1157,6 +1156,32 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST_TRIPLET(NaN, PqRunner, YdsRunner, TopicRunner) {
+        const auto variants = std::vector<std::pair<const char*, const char*>>{
+            {"Double", ""},
+            {"Float", "f"},
+        };
+
+        for (const auto& [type, s] : variants) {
+            const auto table = TShardedTableOptions()
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"value", type, false, false},
+                });
+
+            TRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {Sprintf(R"(
+                UPSERT INTO `/Root/Table` (key, value) VALUES
+                (1, 0.0%s/0.0%s),
+                (2, 1.0%s/0.0%s),
+                (3, -1.0%s/0.0%s);
+            )", s, s, s, s, s, s)}, { 
+                R"({"update":{"value":"nan"},"key":[1]})",
+                R"({"update":{"value":"inf"},"key":[2]})",
+                R"({"update":{"value":"-inf"},"key":[3]})",
+            });
+        }
+    }
+
     TShardedTableOptions Utf8Table() {
         return TShardedTableOptions()
             .Columns({
@@ -1183,7 +1208,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
     Y_UNIT_TEST_TRIPLET(Drop, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Drop(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
     }
-
 
     Y_UNIT_TEST(AlterViaTopicService) {
         TTestTopicEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));

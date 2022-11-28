@@ -120,7 +120,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_3_0",
+                                        "CTE Name": "tx_result_binding_2_0",
                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -175,7 +175,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_3_1",
+                                        "CTE Name": "tx_result_binding_1_0",
                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -194,7 +194,7 @@
                                                 "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2"
                                             },
                                             {
-                                                "Iterator": "%kqp%tx_result_binding_1_1",
+                                                "Iterator": "%kqp%tx_result_binding_1_0",
                                                 "Name": "Iterator"
                                             }
                                         ],
@@ -230,7 +230,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_3_2",
+                                        "CTE Name": "tx_result_binding_1_2",
                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -280,7 +280,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_2_0",
+                                        "CTE Name": "tx_result_binding_1_1",
                                         "Node Type": "TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -292,7 +292,7 @@
                                                 "Table": "base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2/Index/indexImplTable"
                                             },
                                             {
-                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                "Iterator": "%kqp%tx_result_binding_1_1",
                                                 "Name": "Iterator"
                                             }
                                         ],
@@ -315,11 +315,16 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Filter-Limit",
+                        "CTE Name": "tx_result_binding_0_1",
+                        "Node Type": "Aggregate-Filter-Limit",
                         "Operators": [
                             {
+                                "Input": "%kqp%tx_result_binding_0_1",
+                                "Name": "PartitionByKey"
+                            },
+                            {
                                 "Name": "Filter",
-                                "Predicate": "Exist(item.Key1)"
+                                "Predicate": "Exist(item.Key1) And Exist(item.Key2)"
                             },
                             {
                                 "Limit": "1",
@@ -338,11 +343,16 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Filter-Limit",
+                        "CTE Name": "tx_result_binding_0_0",
+                        "Node Type": "Aggregate-Filter-Limit",
                         "Operators": [
                             {
+                                "Input": "%kqp%tx_result_binding_0_0",
+                                "Name": "PartitionByKey"
+                            },
+                            {
                                 "Name": "Filter",
-                                "Predicate": "Exist(item.Key1) And Exist(item.Key2)"
+                                "Predicate": "Exist(item.Key1)"
                             },
                             {
                                 "Limit": "1",
@@ -361,8 +371,13 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Filter-Limit",
+                        "CTE Name": "tx_result_binding_0_2",
+                        "Node Type": "Aggregate-Filter-Limit",
                         "Operators": [
+                            {
+                                "Input": "%kqp%tx_result_binding_0_2",
+                                "Name": "PartitionByKey"
+                            },
                             {
                                 "Name": "Filter",
                                 "Predicate": "Exist(item.Fk21)"

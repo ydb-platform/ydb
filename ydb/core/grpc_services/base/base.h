@@ -372,6 +372,7 @@ class IRequestCtx : public virtual IRequestCtxBase  {
 public:
     virtual void SetClientLostAction(std::function<void()>&& cb) = 0;
     virtual const google::protobuf::Message* GetRequest() const = 0;
+    virtual google::protobuf::Message* GetRequestMut() = 0;
     virtual google::protobuf::Arena* GetArena() = 0;
     virtual const TMaybe<TString> GetRequestType() const = 0;
     virtual void SetRuHeader(ui64 ru) = 0;
@@ -1003,6 +1004,13 @@ public:
         return request;
     }
 
+    template <typename T>
+    static TRequest* GetProtoRequestMut(const T& req) {
+        auto request = dynamic_cast<TRequest*>(req->GetRequestMut());
+        Y_VERIFY(request != nullptr, "Wrong using of TGRpcRequestWrapper");
+        return request;
+    }
+
     const TRequest* GetProtoRequest() const {
         return GetProtoRequest(this);
     }
@@ -1091,6 +1099,10 @@ public:
 
     const google::protobuf::Message* GetRequest() const override {
         return Ctx_->GetRequest();
+    }
+
+    google::protobuf::Message* GetRequestMut() override {
+        return Ctx_->GetRequestMut();
     }
 
     void SetRespHook(TRespHook&& hook) override {

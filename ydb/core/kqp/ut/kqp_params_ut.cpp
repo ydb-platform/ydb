@@ -274,8 +274,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected: " << expected1 << ", got: " << actual);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InvalidJson) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_QUAD(InvalidJson, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

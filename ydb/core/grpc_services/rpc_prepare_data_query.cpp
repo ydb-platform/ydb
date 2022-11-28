@@ -100,7 +100,13 @@ public:
             queryResult.set_query_id(ProtoToString(opId));
             for (const auto& queryParameter: queryParameters) {
                 Ydb::Type parameterType;
-                ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
+                try {
+                    ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
+                } catch (const std::exception& ex) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(NYql::ExceptionToIssue(ex));
+                    return Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+                }
                 queryResult.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
             }
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, queryResult, ctx);

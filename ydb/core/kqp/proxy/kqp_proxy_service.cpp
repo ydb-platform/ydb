@@ -19,6 +19,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -549,6 +550,8 @@ public:
         if (sessionInfo) {
             targetId = sessionInfo->WorkerId;
         } else {
+            // No local session. Disable public format due to compatibility.
+            request.SetUsePublicResponseDataFormat(false);
             targetId = TryGetSessionTargetActor(request.GetSessionId(), requestInfo, requestId);
             if (!targetId) {
                 return;

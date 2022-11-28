@@ -74,44 +74,6 @@ inline bool CheckQuery(const TString& query, NYql::TIssues& issues) {
 
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse);
 
-inline void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to) {
-    const auto& type = from.GetType();
-    TStackVec<NKikimrMiniKQL::TType> columnTypes;
-    Y_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
-    for (const auto& member : type.GetStruct().GetMember()) {
-        if (member.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
-            for (const auto& column : member.GetType().GetList().GetItem().GetStruct().GetMember()) {
-                auto columnMeta = to->add_columns();
-                columnMeta->set_name(column.GetName());
-                columnTypes.push_back(column.GetType());
-                ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta->mutable_type());
-            }
-        }
-    }
-    for (const auto& responseStruct : from.GetValue().GetStruct()) {
-        for (const auto& row : responseStruct.GetList()) {
-            auto newRow = to->add_rows();
-            ui32 columnCount = static_cast<ui32>(row.StructSize());
-            Y_ENSURE(columnCount == columnTypes.size());
-            for (ui32 i = 0; i < columnCount; i++) {
-                const auto& column = row.GetStruct(i);
-                ConvertMiniKQLValueToYdbValue(columnTypes[i], column, *newRow->add_items());
-            }
-        }
-        if (responseStruct.Getvalue_valueCase() == NKikimrMiniKQL::TValue::kBool) {
-            to->set_truncated(responseStruct.GetBool());
-        }
-    }
-}
-
-template<typename TFrom, typename TTo>
-inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {
-    const auto& results = from.GetResults();
-    for (const auto& result : results) {
-        ConvertKqpQueryResultToDbResult(result, to->add_result_sets());
-    }
-}
-
 template <typename TDerived, typename TRequest>
 class TRpcKqpRequestActor : public TRpcOperationRequestActor<TDerived, TRequest> {
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;

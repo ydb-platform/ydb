@@ -63,7 +63,7 @@
                 "PlanNodeId": 37,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_3_1",
+                        "CTE Name": "tx_result_binding_2_1",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -87,7 +87,7 @@
                 "PlanNodeId": 35,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_3_0",
+                        "CTE Name": "tx_result_binding_2_0",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -191,7 +191,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_5",
+                                        "CTE Name": "tx_result_binding_0_5",
                                         "Node Type": "Limit-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -241,7 +241,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_2",
+                                        "CTE Name": "tx_result_binding_0_4",
                                         "Node Type": "Limit-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -254,7 +254,7 @@
                                                 "Table": "base_write_insert_sql_plan/Input1"
                                             },
                                             {
-                                                "Iterator": "%kqp%tx_result_binding_0_2",
+                                                "Iterator": "%kqp%tx_result_binding_0_4",
                                                 "Name": "Iterator"
                                             }
                                         ],
@@ -294,7 +294,7 @@
                 "Subplan Name": "CTE Aggregate"
             },
             {
-                "CTE Name": "Aggregate",
+                "CTE Name": "ConstantExpr",
                 "Node Type": "Precompute_0_2",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 8,
@@ -302,9 +302,32 @@
                 "Subplan Name": "CTE tx_result_binding_0_2"
             },
             {
+                "CTE Name": "ConstantExpr",
+                "Node Type": "Precompute_0_3",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 6,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_3"
+            },
+            {
+                "CTE Name": "ConstantExpr",
+                "Node Type": "ConstantExpr",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 5,
+                "Subplan Name": "CTE ConstantExpr"
+            },
+            {
+                "CTE Name": "Aggregate",
+                "Node Type": "Precompute_0_4",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 4,
+                "PlanNodeType": "Materialize",
+                "Subplan Name": "CTE tx_result_binding_0_4"
+            },
+            {
                 "Node Type": "Aggregate",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 7,
+                "PlanNodeId": 3,
                 "Plans": [
                     {
                         "Node Type": "Aggregate",
@@ -350,29 +373,6 @@
             },
             {
                 "CTE Name": "ConstantExpr",
-                "Node Type": "Precompute_0_3",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 6,
-                "PlanNodeType": "Materialize",
-                "Subplan Name": "CTE tx_result_binding_0_3"
-            },
-            {
-                "CTE Name": "ConstantExpr",
-                "Node Type": "Precompute_0_4",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
-                "PlanNodeType": "Materialize",
-                "Subplan Name": "CTE tx_result_binding_0_4"
-            },
-            {
-                "CTE Name": "ConstantExpr",
-                "Node Type": "ConstantExpr",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 3,
-                "Subplan Name": "CTE ConstantExpr"
-            },
-            {
-                "CTE Name": "ConstantExpr",
                 "Node Type": "Precompute_0_5",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 2,
@@ -392,7 +392,7 @@
                                 "Name": "Iterator"
                             }
                         ],
-                        "PlanNodeId": 5
+                        "PlanNodeId": 7
                     }
                 ],
                 "Subplan Name": "CTE ConstantExpr"

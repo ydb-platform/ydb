@@ -71,8 +71,27 @@ private:
 
 }; // TPDiskStatus
 
-struct TPDiskInfo: public TPDiskStatus {
+struct TStatusChangerState: public TSimpleRefCount<TStatusChangerState> {
+    using TPtr = TIntrusivePtr<TStatusChangerState>;
+
+    explicit TStatusChangerState(NKikimrBlobStorage::EDriveStatus status)
+        : Status(status)
+    {}
+
+    const NKikimrBlobStorage::EDriveStatus Status;
+    ui32 Attempt = 0;
+}; // TStatusChangerState
+
+struct TPDiskInfo
+    : public TSimpleRefCount<TPDiskInfo>
+    , public TPDiskStatus
+{
+    using TPtr = TIntrusivePtr<TPDiskInfo>;
+
     TActorId StatusChanger;
+    TInstant LastStatusChange;
+    TStatusChangerState::TPtr StatusChangerState;
+    TStatusChangerState::TPtr PrevStatusChangerState;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
 
@@ -84,8 +103,36 @@ struct TPDiskInfo: public TPDiskStatus {
 
 private:
     bool Touched;
-
 }; // TPDiskInfo
+
+struct TNodeInfo {
+    TString Host;
+    NActors::TNodeLocation Location;
+};
+
+struct TConfigUpdaterState {
+    ui32 BSCAttempt = 0;
+    ui32 CMSAttempt = 0;
+    bool GotBSCResponse = false;
+    bool GotCMSResponse = false;
+
+    void Clear() {
+        *this = TConfigUpdaterState{};
+    }
+};
+
+/// Main state
+struct TSentinelState: public TSimpleRefCount<TSentinelState> {
+    using TPtr = TIntrusivePtr<TSentinelState>;
+
+    using TNodeId = ui32;
+
+    TMap<TPDiskID, TPDiskInfo::TPtr> PDisks;
+    TMap<TNodeId, TNodeInfo> Nodes;
+    THashSet<ui32> StateUpdaterWaitNodes;
+    TConfigUpdaterState ConfigUpdaterState;
+    TConfigUpdaterState PrevConfigUpdaterState;
+};
 
 class TClusterMap {
 public:
@@ -93,13 +140,13 @@ public:
     using TDistribution = THashMap<TString, TPDiskIDSet>;
     using TNodeIDSet = THashSet<ui32>;
 
-    TCmsStatePtr State;
+    TSentinelState::TPtr State;
     TDistribution ByDataCenter;
     TDistribution ByRoom;
     TDistribution ByRack;
     THashMap<TString, TNodeIDSet> NodeByRack;
 
-    TClusterMap(TCmsStatePtr state);
+    TClusterMap(TSentinelState::TPtr state);
 
     void AddPDisk(const TPDiskID& id);
 }; // TClusterMap
@@ -114,7 +161,7 @@ class TGuardian : public TClusterMap {
     }
 
 public:
-    explicit TGuardian(TCmsStatePtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100);
+    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100);
 
     TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIDSet& disallowed) const;
 

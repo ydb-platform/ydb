@@ -785,6 +785,36 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(sortColumns.size() == 1);
         UNIT_ASSERT(sortColumns.at(0) == "Key (Asc)");
     }
+
+    Y_UNIT_TEST_TWIN(CteLinks, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            select * from `/Root/KeyValue` as kv
+                inner join `/Root/EightShard` as es on kv.Key == es.Key;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        auto cteLink0 = FindPlanNodeByKv(
+            plan,
+            "CTE Name",
+            "tx_result_binding_0_0"
+        );
+        UNIT_ASSERT(cteLink0.IsDefined());
+
+        auto cteLink1 = FindPlanNodeByKv(
+            plan,
+            "CTE Name",
+            "tx_result_binding_1_0"
+        );
+        UNIT_ASSERT(cteLink1.IsDefined());
+    }
 }
 
 } // namespace NKqp

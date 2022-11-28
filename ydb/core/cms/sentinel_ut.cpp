@@ -1,6 +1,7 @@
 #include "cms_ut_common.h"
 #include "sentinel.h"
 #include "sentinel_impl.h"
+#include "cms_impl.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -136,7 +137,8 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         }
     }
 
-    TCmsStatePtr MockCmsState(ui16 numDataCenter, ui16 racksPerDataCenter, ui16 nodesPerRack, ui16 pdisksPerNode, bool anyDC, bool anyRack) {
+    std::pair<TCmsStatePtr, TSentinelState::TPtr> MockCmsState(ui16 numDataCenter, ui16 racksPerDataCenter, ui16 nodesPerRack, ui16 pdisksPerNode, bool anyDC, bool anyRack) {
+        TSentinelState::TPtr sentinelState = new TSentinelState;
         TCmsStatePtr state = new TCmsState;
         state->ClusterInfo = new TClusterInfo;
 
@@ -156,6 +158,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                     location.SetUnit(ToString(id));
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
+                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location)};
 
                     for (ui64 npdisk : xrange(pdisksPerNode)) {
                         NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
@@ -168,16 +171,16 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             }
         }
 
-        return state;
+        return {state, sentinelState};
     }
 
     void GuardianDataCenterRatio(ui16 numDataCenter, const TVector<ui16>& nodesPerDataCenterVariants, bool anyDC = false) {
         UNIT_ASSERT(!anyDC || numDataCenter == 1);
 
         for (ui16 nodesPerDataCenter : nodesPerDataCenterVariants) {
-            TCmsStatePtr state = MockCmsState(numDataCenter, nodesPerDataCenter, 1, 1, anyDC, false);
-            TGuardian all(state);
-            TGuardian changed(state, 50);
+            auto [state, sentinelState] = MockCmsState(numDataCenter, nodesPerDataCenter, 1, 1, anyDC, false);
+            TGuardian all(sentinelState);
+            TGuardian changed(sentinelState, 50);
             THashSet<TPDiskID, TPDiskIDHash> changedSet;
 
             const auto& nodes = state->ClusterInfo->AllNodes();
@@ -233,10 +236,10 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
     void GuardianRackRatio(ui16 numRacks, const TVector<ui16>& nodesPerRackVariants, ui16 numPDisks, bool anyRack) {
         for (ui16 nodesPerRack : nodesPerRackVariants) {
-            TCmsStatePtr state = MockCmsState(1, numRacks, nodesPerRack, numPDisks, false, anyRack);
+            auto [state, sentinelState] = MockCmsState(1, numRacks, nodesPerRack, numPDisks, false, anyRack);
 
-            TGuardian all(state);
-            TGuardian changed(state, 100, 100, 50);
+            TGuardian all(sentinelState);
+            TGuardian changed(sentinelState, 100, 100, 50);
             THashSet<TPDiskID, TPDiskIDHash> changedSet;
 
             const auto& nodes = state->ClusterInfo->AllNodes();
@@ -371,9 +374,27 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                     return true;
                 }
             });
+            auto prevObserver = SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+            SetObserverFunc([this, prevObserver](TTestActorRuntimeBase& runtime,
+                                    TAutoPtr<IEventHandle> &event){
+                if (event->GetTypeRewrite() == TEvCms::TEvClusterStateRequest::EventType) {
+                    TAutoPtr<TEvCms::TEvClusterStateResponse> resp = new TEvCms::TEvClusterStateResponse;
+                    if (State) {
+                        resp->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+                        for (const auto &entry : State->ClusterInfo->AllNodes()) {
+                            NCms::TCms::AddHostState(State->ClusterInfo, *entry.second, resp->Record, State->ClusterInfo->GetTimestamp());
+                        }
+                    }
+                    Send(new IEventHandle(event->Sender, TActorId(), resp.Release()));
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+                return prevObserver(runtime, event);
+            });
 
             State = new TCmsState;
             MockClusterInfo(State->ClusterInfo);
+            State->CmsActorId = GetSender();
 
             Sentinel = Register(CreateSentinel(State));
             EnableScheduleForActor(Sentinel, true);

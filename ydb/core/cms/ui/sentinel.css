@@ -1,0 +1,94 @@
+#sentinel-state table,
+#sentinel-state th,
+#sentinel-state td {
+  font: 12px/18px Arial, Sans-serif;
+  border: #cdcdcd 1px solid;
+}
+
+.sentinel-checkbox {
+  display: inline-block;
+  padding-right: 8px;
+  padding-top: 4px;
+}
+
+.sentinel-checkbox > label {
+  padding: 0 4px;
+}
+
+#sentinel-state > form {
+  margin-bottom: 0;
+}
+
+#sentinel-state th {
+    background-color: #99bfe6;
+    font-weight: bold;
+}
+
+#sentinel-state .red {
+    font-weight: bold;
+    color: red;
+}
+
+#sentinel-state .yellow {
+    font-weight: bold;
+    color: yellow;
+}
+
+#sentinel-state .green {
+    font-weight: bold;
+    color: green;
+}
+
+#sentinel-loader {
+    display: none;
+}
+
+.active > #sentinel-loader {
+    display: inline-block;
+}
+
+#sentinel-state table {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+#sentinel-state .side {
+  width: 22px;
+  writing-mode: vertical-lr;
+}
+
+circle {
+  fill: transparent;
+  stroke: #5555ff;
+  stroke-width: 10px;
+  stroke-dasharray: 33;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+#sentinel-state .highlight {
+    animation: highlight 5s linear;
+}
+
+@keyframes highlight {
+    0% {
+        background: green;
+    }
+    100% {
+        background: none;
+    }
+}
+
+#sentinel-loader .anim {
+  animation: clock-animation 5s linear;
+}
+
+@keyframes clock-animation {
+  0% {
+    stroke-dashoffset: 33;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}

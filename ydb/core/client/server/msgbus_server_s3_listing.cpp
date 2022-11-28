@@ -747,8 +747,13 @@ protected:
             }
             GrpcRequest->ReplyWithYdbStatus(grpcStatus);
         } else {
-            Ydb::S3Internal::S3ListingResult grpcResult = TMessageConverter::ConvertResult(msgbusResponse);
-            GrpcRequest->SendResult(grpcResult, Ydb::StatusIds::SUCCESS);
+            try {
+                Ydb::S3Internal::S3ListingResult grpcResult = TMessageConverter::ConvertResult(msgbusResponse);
+                GrpcRequest->SendResult(grpcResult, Ydb::StatusIds::SUCCESS);
+            } catch(std::exception ex) {
+                GrpcRequest->RaiseIssue(NYql::ExceptionToIssue(ex));
+                GrpcRequest->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+            }
         }
     }
 };

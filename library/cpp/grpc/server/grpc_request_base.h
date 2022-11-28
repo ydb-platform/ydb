@@ -53,6 +53,9 @@ public:
     //! Get pointer to the request's message.
     virtual const NProtoBuf::Message* GetRequest() const = 0;
 
+    //! Get mutable pointer to the request's message.
+    virtual NProtoBuf::Message* GetRequestMut() = 0;
+
     //! Get current auth state
     virtual TAuthState& GetAuthState() = 0;
 

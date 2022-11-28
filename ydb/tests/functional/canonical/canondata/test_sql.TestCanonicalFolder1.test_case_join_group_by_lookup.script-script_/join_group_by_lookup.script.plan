@@ -60,7 +60,7 @@
                                                                     }
                                                                 ],
                                                                 "Node Type": "ConstantExpr",
-                                                                "CTE Name": "tx_result_binding_2_0"
+                                                                "CTE Name": "tx_result_binding_0_0"
                                                             }
                                                         ],
                                                         "Node Type": "Map",
@@ -99,7 +99,7 @@
                                                                                     }
                                                                                 ],
                                                                                 "Node Type": "Filter-TablePointLookup-ConstantExpr",
-                                                                                "CTE Name": "tx_result_binding_2_0"
+                                                                                "CTE Name": "tx_result_binding_1_0"
                                                                             }
                                                                         ],
                                                                         "Node Type": "UnionAll",
@@ -155,6 +155,10 @@
                                 "PlanNodeId": 8,
                                 "Operators": [
                                     {
+                                        "Name": "PartitionByKey",
+                                        "Input": "%kqp%tx_result_binding_0_0"
+                                    },
+                                    {
                                         "Predicate": "Exist(item.Group)",
                                         "Name": "Filter"
                                     },
@@ -163,7 +167,8 @@
                                         "Limit": "1"
                                     }
                                 ],
-                                "Node Type": "Filter-Limit"
+                                "Node Type": "Aggregate-Filter-Limit",
+                                "CTE Name": "tx_result_binding_0_0"
                             }
                         ],
                         "Node Type": "Precompute_1",
@@ -269,7 +274,7 @@
                                     }
                                 ],
                                 "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_0"
+                                "CTE Name": "tx_result_binding_0_0"
                             }
                         ],
                         "Node Type": "Effect"

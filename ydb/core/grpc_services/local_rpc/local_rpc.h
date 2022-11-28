@@ -137,6 +137,10 @@ public:
         return &Request;
     }
 
+    google::protobuf::Message* GetRequestMut() override {
+        return &Request;
+    }
+
     void SetClientLostAction(std::function<void()>&&) override {}
 
     void AddServerHint(const TString&) override {}

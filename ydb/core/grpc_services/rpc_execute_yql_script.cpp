@@ -98,7 +98,14 @@ public:
         const auto& issueMessage = kqpResponse.GetQueryIssues();
 
         auto queryResult = TEvExecuteYqlScriptRequest::AllocateResult<TResult>(Request_);
-        ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+
+        try {
+            NKqp::ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
+        } catch (const std::exception& ex) {
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::ExceptionToIssue(ex));
+            return Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+        }
 
         if (kqpResponse.HasQueryStats()) {
             FillQueryStats(*queryResult->mutable_query_stats(), kqpResponse);

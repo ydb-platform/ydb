@@ -50,7 +50,7 @@
                 "PlanNodeId": 20,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_3_0",
+                        "CTE Name": "tx_result_binding_2_0",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -74,7 +74,7 @@
                 "PlanNodeId": 22,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_3_1",
+                        "CTE Name": "tx_result_binding_2_1",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -178,7 +178,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_3",
+                                        "CTE Name": "tx_result_binding_0_2",
                                         "Node Type": "Limit-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -191,7 +191,7 @@
                                                 "Table": "base_write_insert_revert_sql_plan/Input1"
                                             },
                                             {
-                                                "Iterator": "%kqp%tx_result_binding_0_3",
+                                                "Iterator": "%kqp%tx_result_binding_0_2",
                                                 "Name": "Iterator"
                                             }
                                         ],
@@ -228,7 +228,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_2",
+                                        "CTE Name": "tx_result_binding_0_5",
                                         "Node Type": "Limit-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -241,7 +241,7 @@
                                                 "Table": "base_write_insert_revert_sql_plan/Input"
                                             },
                                             {
-                                                "Iterator": "%kqp%tx_result_binding_0_2",
+                                                "Iterator": "%kqp%tx_result_binding_0_5",
                                                 "Name": "Iterator"
                                             }
                                         ],

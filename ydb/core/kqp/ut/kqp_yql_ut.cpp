@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
+#include <library/cpp/testing/unittest/registar.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -356,6 +358,30 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([["Some text";"Some bytes"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(BinaryJsonOffsetBound) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query = Q1_(R"(SELECT Unpickle(JsonDocument, "\x09\x00\x00\x00\x01\xf2\xb7\xff\x8a\xff\xff\xd2\xff");)");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(BinaryJsonOffsetNormal) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query = Q1_(R"(select Unpickle(JsonDocument, Pickle(JsonDocument('{"a" : 5, "b" : 0.1, "c" : [1, 2, 3]}')));)");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_NEW_ENGINE(JsonNumberPrecision) {

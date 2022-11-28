@@ -93,7 +93,13 @@ public:
             queryResult.set_plan(kqpResponse.GetQueryPlan());
             for (const auto& queryParameter : queryParameters) {
                 Ydb::Type parameterType;
-                ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
+                try {
+                    ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
+                } catch (const std::exception& ex) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(NYql::ExceptionToIssue(ex));
+                    return Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+                }
                 queryResult.mutable_parameters_types()->insert({ queryParameter.GetName(), parameterType });
             }
 

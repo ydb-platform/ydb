@@ -31,7 +31,7 @@
                 "PlanNodeId": 19,
                 "Plans": [
                     {
-                        "CTE Name": "tx_result_binding_3_0",
+                        "CTE Name": "tx_result_binding_2_0",
                         "Node Type": "Upsert-ConstantExpr",
                         "Operators": [
                             {
@@ -103,7 +103,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_1_2",
+                                        "CTE Name": "tx_result_binding_0_2",
                                         "Node Type": "Limit-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {

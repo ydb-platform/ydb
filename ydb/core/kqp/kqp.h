@@ -15,6 +15,16 @@
 namespace NKikimr {
 namespace NKqp {
 
+void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to);
+
+template<typename TFrom, typename TTo>
+inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {
+    const auto& results = from.GetResults();
+    for (const auto& result : results) {
+        ConvertKqpQueryResultToDbResult(result, to->add_result_sets());
+    }
+}
+
 enum class ETableReadType {
     Other = 0,
     Scan = 1,

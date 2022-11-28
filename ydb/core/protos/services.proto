@@ -901,5 +901,6 @@ message TActivity {
         BS_STORAGE_STATS_ACTOR = 573;
         DS_LOAD_ACTOR = 574;
         PQ_META_CACHE = 575;
+        SCHEMESHARD_SVP_MIGRATOR = 597;
     };
 };

@@ -1,27 +1,28 @@
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "library/cpp/actors/protos/interconnect.proto";
 
 package NKikimrCms;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TStatus {
     enum ECode {
-        UNKNOWN       = 0;
-        OK            = 1;
-        ALLOW         = 2;
+        UNKNOWN = 0;
+        OK = 1;
+        ALLOW = 2;
         ALLOW_PARTIAL = 3;
-        DISALLOW      = 4;
+        DISALLOW = 4;
         DISALLOW_TEMP = 5;
         WRONG_REQUEST = 6;
-        ERROR         = 7;
-        ERROR_TEMP    = 8;
-        UNAUTHORIZED  = 9;
-        NO_SUCH_HOST   = 10;
+        ERROR = 7;
+        ERROR_TEMP = 8;
+        UNAUTHORIZED = 9;
+        NO_SUCH_HOST = 10;
         NO_SUCH_DEVICE = 11;
         NO_SUCH_SERVICE = 12;
     }
 
-    optional ECode   Code   = 1;
+    optional ECode   Code = 1;
     optional string  Reason = 2;
 }
 
@@ -29,11 +30,11 @@ enum EState {
   // Service/host state couldn't be identified.
   UNKNOWN = 0;
   // Service/host is up.
-  UP      = 1;
+  UP = 1;
   // Service/host is down due to planned restart.
   RESTART = 2;
   // Service/host is down off-schedule.
-  DOWN    = 3;
+  DOWN = 3;
 }
 
 enum EMarker {
@@ -53,33 +54,34 @@ enum EMarker {
 }
 
 message TServiceState {
-  optional string   Name      = 1;
-  optional EState   State     = 2;
-  optional string   Version   = 3;
+  optional string   Name = 1;
+  optional EState   State = 2;
+  optional string   Version = 3;
   optional uint64   Timestamp = 4;
 }
 
 message TDeviceState {
-  optional string   Name      = 1;
-  optional EState   State     = 2;
+  optional string   Name = 1;
+  optional EState   State = 2;
   optional uint64   Timestamp = 3;
-  repeated EMarker  Markers   = 4;
+  repeated EMarker  Markers = 4;
 }
 
 message THostState {
-  optional string        Name      = 1;
-  optional EState        State     = 2;
-  repeated TServiceState Services  = 3;
-  repeated TDeviceState  Devices   = 4;
+  optional string        Name = 1;
+  optional EState        State = 2;
+  repeated TServiceState Services = 3;
+  repeated TDeviceState  Devices = 4;
   optional uint64        Timestamp = 5;
-  optional uint32        NodeId    = 6;
+  optional uint32        NodeId = 6;
   optional uint32        InterconnectPort = 7;
-  repeated EMarker       Markers   = 8;
+  repeated EMarker       Markers = 8;
+  optional NActorsInterconnect.TNodeLocation Location = 9;
 }
 
 message TClusterState {
-  optional string     Name      = 1;
-  repeated THostState Hosts     = 2;
+  optional string     Name = 1;
+  repeated THostState Hosts = 2;
   optional uint64     Timestamp = 3;
 }
 
@@ -89,35 +91,35 @@ message TClusterStateRequest {
 
 message TClusterStateResponse {
     optional TStatus       Status = 1;
-    optional TClusterState State  = 2;
+    optional TClusterState State = 2;
 }
 
 message TAction {
   enum EType {
-    UNKNOWN           = 0;
-    START_SERVICES    = 1;
-    RESTART_SERVICES  = 2;
-    STOP_SERVICES     = 3;
-    ADD_HOST          = 4;
-    SHUTDOWN_HOST     = 5;
+    UNKNOWN = 0;
+    START_SERVICES = 1;
+    RESTART_SERVICES = 2;
+    STOP_SERVICES = 3;
+    ADD_HOST = 4;
+    SHUTDOWN_HOST = 5;
     DECOMMISSION_HOST = 6;
-    ADD_DEVICES       = 7;
-    REPLACE_DEVICES   = 8;
-    REMOVE_DEVICES    = 9;
+    ADD_DEVICES = 7;
+    REPLACE_DEVICES = 8;
+    REMOVE_DEVICES = 9;
   }
 
-  optional EType     Type        = 1;
-  optional string    Host        = 2;
-  repeated string    Services    = 3;
-  repeated string    Devices     = 4;
-  optional uint64    Duration    = 5;
+  optional EType     Type = 1;
+  optional string    Host = 2;
+  repeated string    Services = 3;
+  repeated string    Devices = 4;
+  optional uint64    Duration = 5;
   // If specified will be expanded to list of hosts.
-  optional string    Tenant      = 6;
+  optional string    Tenant = 6;
 }
 
 enum ETenantPolicy {
     // No limits for computational nodes restarts.
-    NONE    = 0;
+    NONE = 0;
     // Follow TenantLimits specified in CMS config.
     DEFAULT = 1;
 }
@@ -146,15 +148,15 @@ enum EAvailabilityMode {
 }
 
 message TPermissionRequest {
-  optional string  User                     = 1;
-  repeated TAction Actions                  = 2;
+  optional string  User = 1;
+  repeated TAction Actions = 2;
   optional bool    PartialPermissionAllowed = 3 [default = false];
-  optional bool    Schedule                 = 4;
-  optional bool    DryRun                   = 5;
-  optional string  Reason                   = 6;
+  optional bool    Schedule = 4;
+  optional bool    DryRun = 5;
+  optional string  Reason = 6;
   // If not specified then default duration from CMS config is used.
-  optional uint64  Duration                 = 7;
-  optional ETenantPolicy TenantPolicy       = 8 [default = DEFAULT];
+  optional uint64  Duration = 7;
+  optional ETenantPolicy TenantPolicy = 8 [default = DEFAULT];
   // Availability mode is not preserved for scheduled events.
   optional EAvailabilityMode AvailabilityMode = 9 [default = MODE_MAX_AVAILABILITY];
 }
@@ -164,105 +166,105 @@ enum EExtensionType {
 }
 
 message TPermissionExtension {
-    optional EExtensionType Type  = 1;
-    repeated THostState Hosts     = 2;
+    optional EExtensionType Type = 1;
+    repeated THostState Hosts = 2;
 }
 
 message TPermission {
-  optional string   Id       = 1;
-  optional TAction  Action   = 2;
+  optional string   Id = 1;
+  optional TAction  Action = 2;
   optional uint64   Deadline = 3;
   repeated TPermissionExtension Extentions = 4;
 }
 
 message TPermissionResponse {
-  optional TStatus     Status       = 1;
-  optional string      RequestId    = 2;
-  repeated TPermission Permissions  = 3;
-  optional uint64      Deadline     = 4;
+  optional TStatus     Status = 1;
+  optional string      RequestId = 2;
+  repeated TPermission Permissions = 3;
+  optional uint64      Deadline = 4;
 }
 
 message TManageRequestRequest {
   enum ECommand {
     UNKNOWN = 0;
-    LIST    = 1;
-    GET     = 2;
-    REJECT  = 3;
+    LIST = 1;
+    GET = 2;
+    REJECT = 3;
   }
 
-  optional string   User      = 1;
-  optional ECommand Command   = 2;
+  optional string   User = 1;
+  optional ECommand Command = 2;
   optional string   RequestId = 3;
-  optional bool     DryRun    = 4;
+  optional bool     DryRun = 4;
 }
 
 message TManageRequestResponse {
   message TScheduledRequest {
-    optional string  RequestId                = 1;
-    optional string  Owner                    = 2;
-    repeated TAction Actions                  = 3;
+    optional string  RequestId = 1;
+    optional string  Owner = 2;
+    repeated TAction Actions = 3;
     optional bool    PartialPermissionAllowed = 4;
-    optional string  Reason                   = 5;
+    optional string  Reason = 5;
   }
 
-  optional TStatus           Status   = 1;
+  optional TStatus           Status = 1;
   repeated TScheduledRequest Requests = 2;
 }
 
 message TCheckRequest {
-  optional string   User      = 1;
+  optional string   User = 1;
   optional string   RequestId = 2;
-  optional bool     DryRun    = 3;
+  optional bool     DryRun = 3;
   optional EAvailabilityMode AvailabilityMode = 4 [default = MODE_MAX_AVAILABILITY];
 }
 
 message TManagePermissionRequest {
   enum ECommand {
     UNKNOWN = 0;
-    LIST    = 1;
-    GET     = 2;
-    DONE    = 3;
-    EXTEND  = 4;
-    REJECT  = 5;
+    LIST = 1;
+    GET = 2;
+    DONE = 3;
+    EXTEND = 4;
+    REJECT = 5;
   }
 
-  optional string   User        = 1;
-  optional ECommand Command     = 2;
+  optional string   User = 1;
+  optional ECommand Command = 2;
   repeated string   Permissions = 3;
-  optional uint64   Deadline    = 4;
-  optional bool     DryRun      = 5;
+  optional uint64   Deadline = 4;
+  optional bool     DryRun = 5;
 }
 
 message TManagePermissionResponse {
-  optional TStatus     Status      = 1;
+  optional TStatus     Status = 1;
   repeated TPermission Permissions = 2;
 }
 
 message TVersionFilter {
   enum EType {
-    UNKNOWN  = 0;
-    MATCH    = 1;
+    UNKNOWN = 0;
+    MATCH = 1;
     MISMATCH = 2;
-    LOWER    = 3;
-    GREATER  = 4;
+    LOWER = 3;
+    GREATER = 4;
   }
-  optional EType  Type    = 1;
+  optional EType  Type = 1;
   optional string Version = 2;
 }
 
 message TNameFilter {
   enum EType {
     UNKNOWN = 0;
-    ONE_OF  = 1;
-    NOT_IN  = 2;
+    ONE_OF = 1;
+    NOT_IN = 2;
   }
 
-  optional EType  Type  = 1;
+  optional EType  Type = 1;
   repeated string Names = 2;
 }
 
 message TServiceFilter {
-  optional TNameFilter    NameFilter    = 1;
+  optional TNameFilter    NameFilter = 1;
   optional TVersionFilter VersionFilter = 2;
 }
 
@@ -271,23 +273,23 @@ message THostFilter {
 }
 
 message TConditionalPermissionRequest {
-  optional string         User                     = 1;
-  optional TAction        Action                   = 2;
-  optional TServiceFilter ServiceFilter            = 3;
-  optional THostFilter    HostFilter               = 4;
+  optional string         User = 1;
+  optional TAction        Action = 2;
+  optional TServiceFilter ServiceFilter = 3;
+  optional THostFilter    HostFilter = 4;
   optional bool           PartialPermissionAllowed = 5;
-  optional bool           Schedule                 = 6;
-  optional bool           DryRun                   = 7;
-  optional string         Reason                   = 8;
+  optional bool           Schedule = 6;
+  optional bool           DryRun = 7;
+  optional string         Reason = 8;
   // If not specified then default duration from CMS config is used.
-  optional uint64         Duration                 = 9;
+  optional uint64         Duration = 9;
 }
 
 message TNotification {
-  optional string   User    = 1;
+  optional string   User = 1;
   repeated TAction  Actions = 2;
-  optional uint64   Time    = 3;
-  optional string   Reason  = 4;
+  optional uint64   Time = 3;
+  optional string   Reason = 4;
 }
 
 message TNotificationResponse {
@@ -298,43 +300,43 @@ message TNotificationResponse {
 message TManageNotificationRequest {
   enum ECommand {
     UNKNOWN = 0;
-    LIST    = 1;
-    GET     = 2;
-    REJECT  = 3;
+    LIST = 1;
+    GET = 2;
+    REJECT = 3;
   }
 
-  optional string   User           = 1;
-  optional ECommand Command        = 2;
+  optional string   User = 1;
+  optional ECommand Command = 2;
   optional string   NotificationId = 3;
-  optional bool     DryRun         = 4;
+  optional bool     DryRun = 4;
 }
 
 message TManageNotificationResponse {
   message TStoredNotification {
     optional string  NotificationId = 1;
-    optional string  Owner          = 2;
-    repeated TAction Actions        = 3;
-    optional uint64  Time           = 4;
-    optional string  Reason         = 5;
+    optional string  Owner = 2;
+    repeated TAction Actions = 3;
+    optional uint64  Time = 4;
+    optional string  Reason = 5;
   }
 
-  optional TStatus             Status        = 1;
+  optional TStatus             Status = 1;
   repeated TStoredNotification Notifications = 2;
 }
 
 message TWalleCreateTaskRequest {
   optional string TaskId = 1;
-  optional string Type   = 2;
+  optional string Type = 2;
   optional string Issuer = 3;
   optional string Action = 4;
-  repeated string Hosts  = 5;
+  repeated string Hosts = 5;
   optional bool   DryRun = 6;
 }
 
 message TWalleCreateTaskResponse {
-  optional TStatus Status  = 1;
-  optional string  TaskId  = 2;
-  repeated string  Hosts   = 3;
+  optional TStatus Status = 1;
+  optional string  TaskId = 2;
+  repeated string  Hosts = 3;
 }
 
 message TWalleListTasksRequest {
@@ -342,7 +344,7 @@ message TWalleListTasksRequest {
 
 message TWalleTaskInfo {
   optional string TaskId = 1;
-  repeated string Hosts  = 2;
+  repeated string Hosts = 2;
   optional string Status = 3;
 }
 
@@ -356,7 +358,7 @@ message TWalleCheckTaskRequest {
 
 message TWalleCheckTaskResponse {
   optional TStatus        Status = 1;
-  optional TWalleTaskInfo Task   = 2;
+  optional TWalleTaskInfo Task = 2;
 }
 
 message TWalleRemoveTaskRequest {
@@ -371,7 +373,7 @@ message TLimits {
     // Max number of nodes which may be disabled at once.
     // It includes down/locked nodes and nodes with
     // down/locked disks.
-    optional uint32 DisabledNodesLimit      = 1;
+    optional uint32 DisabledNodesLimit = 1;
     // Works similarly to DisabledNodesLimit but specify
     // limit in percents of cluster/tenant nodes count.
     optional uint32 DisabledNodesRatioLimit = 2 [default = 10];
@@ -380,22 +382,22 @@ message TLimits {
 message TCmsConfig {
     message TMonitorConfig {
         // Enable monitor creation.
-        optional bool EnableAutoUpdates    = 1;
+        optional bool EnableAutoUpdates = 1;
         // State update interval.
-        optional uint64 UpdateInterval     = 2 [default = 60000000];
+        optional uint64 UpdateInterval = 2 [default = 60000000];
         // Gaps between downtime periods of smaller size are
         // ignored.
         optional uint64 IgnoredDowntimeGap = 3 [default = 600000000];
         // Device gets broken status after specified timeout or in
         // advance if specified downtime is planned soon enough
         // (see BrokenPrepTimeout).
-        optional uint64 BrokenTimeout      = 4 [default = 7200000000];
+        optional uint64 BrokenTimeout = 4 [default = 7200000000];
         // Device become broken if big enough (>= BrokenTimeout)
         // downtime is planned within specified period.
-        optional uint64 BrokenPrepTimeout  = 5 [default = 600000000];
+        optional uint64 BrokenPrepTimeout = 5 [default = 600000000];
         // Device become faulty if big enough (>= BrokenTimeout)
         // downtime is planned within specified period.
-        optional uint64 FaultyPrepTimeout  = 6 [default = 3600000000];
+        optional uint64 FaultyPrepTimeout = 6 [default = 3600000000];
     }
 
     message TSentinelConfig {
@@ -588,7 +590,19 @@ message TGetLogTailResponse {
     repeated TLogRecord LogRecords = 2;
 }
 
+message TFilterRange {
+    optional uint32 Begin = 1;
+    optional uint32 End = 2;
+}
+
 message TGetSentinelStateRequest {
+    enum EShow {
+        UNHEALTHY = 1;
+        SUSPICIOUS = 2;
+        ALL = 3;
+    }
+    optional EShow Show = 1;
+    repeated TFilterRange Ranges = 2;
 }
 
 message TPDiskInfo {
@@ -598,6 +612,11 @@ message TPDiskInfo {
     optional uint32 Status = 4; // EPDiskStatus
     optional bool ChangingAllowed = 5;
     optional bool Touched = 6;
+    optional uint32 DesiredStatus = 7;
+    optional uint32 StatusChangeAttempts = 8;
+    optional uint32 PrevDesiredStatus = 9;
+    optional uint32 PrevStatusChangeAttempts = 10;
+    optional string LastStatusChange = 11;
 }
 
 message TPDisk {
@@ -605,8 +624,31 @@ message TPDisk {
     optional TPDiskInfo Info = 2;
 }
 
+message TUpdaterInfo {
+    optional string ActorId = 1;
+    optional string StartedAt = 2;
+    optional bool Delayed = 3;
+}
+
+message TStateUpdaterState {
+    optional TUpdaterInfo UpdaterInfo = 1;
+    optional TUpdaterInfo PrevUpdaterInfo = 2;
+    repeated uint32 WaitNodes = 3;
+}
+
+message TConfigUpdaterState {
+    optional TUpdaterInfo UpdaterInfo = 1;
+    optional TUpdaterInfo PrevUpdaterInfo = 2;
+    optional uint32 BSCAttempt = 3;
+    optional uint32 PrevBSCAttempt = 4;
+    optional uint32 CMSAttempt = 5;
+    optional uint32 PrevCMSAttempt = 6;
+}
+
 message TGetSentinelStateResponse {
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
+    optional TStateUpdaterState StateUpdater = 4;
+    optional TConfigUpdaterState ConfigUpdater = 5;
 }

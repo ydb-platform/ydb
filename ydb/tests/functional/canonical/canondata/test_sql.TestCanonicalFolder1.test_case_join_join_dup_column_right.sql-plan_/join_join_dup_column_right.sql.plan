@@ -77,7 +77,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "tx_result_binding_2_0",
+                                                        "CTE Name": "tx_result_binding_0_0",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
@@ -104,7 +104,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "tx_result_binding_2_0",
+                                                                        "CTE Name": "tx_result_binding_1_0",
                                                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                                                         "Operators": [
                                                                             {
@@ -153,8 +153,13 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Filter-Limit",
+                        "CTE Name": "tx_result_binding_0_0",
+                        "Node Type": "Aggregate-Filter-Limit",
                         "Operators": [
+                            {
+                                "Input": "%kqp%tx_result_binding_0_0",
+                                "Name": "PartitionByKey"
+                            },
                             {
                                 "Name": "Filter",
                                 "Predicate": "... And Exist(item.Key)"

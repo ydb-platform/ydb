@@ -146,7 +146,7 @@
                                                     }
                                                 ],
                                                 "Node Type": "ConstantExpr",
-                                                "CTE Name": "tx_result_binding_1_0"
+                                                "CTE Name": "tx_result_binding_0_0"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -319,7 +319,7 @@
                                                     }
                                                 ],
                                                 "Node Type": "ConstantExpr",
-                                                "CTE Name": "tx_result_binding_1_0"
+                                                "CTE Name": "tx_result_binding_0_0"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -424,7 +424,7 @@
                                     }
                                 ],
                                 "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_0"
+                                "CTE Name": "tx_result_binding_0_0"
                             }
                         ],
                         "Node Type": "Effect"
@@ -470,7 +470,7 @@
                                     }
                                 ],
                                 "Node Type": "Upsert-ConstantExpr",
-                                "CTE Name": "tx_result_binding_1_0"
+                                "CTE Name": "tx_result_binding_0_0"
                             }
                         ],
                         "Node Type": "Effect"

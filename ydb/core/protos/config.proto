@@ -660,7 +660,7 @@ message TFeatureFlags {
     optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
-    optional bool EnablePersistentQueryStats = 25 [default = false];
+    optional bool EnablePersistentQueryStats = 25 [default = true];
     optional bool DisableDataShardBarrier = 26 [default = false];
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
     optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true

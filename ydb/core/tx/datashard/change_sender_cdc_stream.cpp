@@ -109,7 +109,14 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 case NKikimrSchemeOp::ECdcStreamFormatJson: {
                     NJson::TJsonValue json;
                     record.SerializeTo(json);
-                    data.SetData(WriteJson(json, false));
+
+                    TStringStream str;
+                    NJson::TJsonWriterConfig jsonConfig;
+                    jsonConfig.ValidateUtf8 = false;
+                    jsonConfig.WriteNanAsString = true;
+                    WriteJson(&str, &json, jsonConfig);
+
+                    data.SetData(str.Str());
                     cmd.SetPartitionKey(record.GetPartitionKey());
                     break;
                 }

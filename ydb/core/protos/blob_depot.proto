@@ -130,6 +130,7 @@ message TEvPushNotify {
 
 message TEvPushNotifyResult {
     repeated TBlobSeqId WritesInFlight = 1;
+    optional uint64 Id = 2; // original request cookie
 }
 
 message TEvQueryBlocks {

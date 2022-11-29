@@ -172,8 +172,9 @@ namespace NKikimr::NBlobDepot {
 
         using TRequestsInFlight = THashMap<ui64, TRequestInFlight>;
 
-        ui64 NextRequestId = 1;
+        ui64 NextTabletRequestId = 1;
         TRequestsInFlight TabletRequestInFlight;
+        ui64 NextOtherRequestId = 1;
         TRequestsInFlight OtherRequestInFlight;
 
         void RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,

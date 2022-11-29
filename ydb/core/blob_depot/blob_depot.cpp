@@ -20,28 +20,59 @@ namespace NKikimr::NBlobDepot {
     TBlobDepot::~TBlobDepot()
     {}
 
+    void TBlobDepot::HandleFromAgent(STATEFN_SIG) {
+        switch (const ui32 type = ev->GetTypeRewrite()) {
+            hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
+            hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
+            hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
+            hFunc(TEvBlobDepot::TEvDiscardSpoiledBlobSeq, Handle);
+            hFunc(TEvBlobDepot::TEvResolve, Data->Handle);
+            hFunc(TEvBlobDepot::TEvBlock, BlocksManager->Handle);
+            hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);
+            hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
+            hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
+
+            default:
+                Y_FAIL();
+        }
+    }
+
     STFUNC(TBlobDepot::StateWork) {
         try {
-            // postpone any messages from agents until metadata suction is done
-            if (const auto it = RegisterAgentQ.find(ev->Recipient); it != RegisterAgentQ.end()) {
-                it->second.emplace_back(ev.Release());
-                return;
-            }
+            auto handleFromAgentPipe = [this](auto& ev) {
+                const auto it = PipeServers.find(ev->Recipient);
+                Y_VERIFY(it != PipeServers.end());
+
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT69, "HandleFromAgentPipe", (Id, GetLogId()), (RequestId, ev->Cookie),
+                    (Postpone, it->second.PostponeFromAgent), (Sender, ev->Sender), (PipeServerId, ev->Recipient));
+
+                if (it->second.PostponeFromAgent) {
+                    it->second.PostponeQ.emplace_back(ev.Release());
+                    return;
+                }
+
+                Y_VERIFY_S(ev->Cookie == it->second.NextExpectedMsgId, "pipe reordering detected Cookie# " << ev->Cookie
+                    << " NextExpectedMsgId# " << it->second.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
+                    ev->GetTypeRewrite()) << " Id# " << GetLogId());
+
+                ++it->second.NextExpectedMsgId;
+                HandleFromAgent(ev);
+            };
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
                 cFunc(TEvents::TSystem::Poison, HandlePoison);
 
                 hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
-                hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
-                hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
-                hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
-                hFunc(TEvBlobDepot::TEvDiscardSpoiledBlobSeq, Handle);
-                hFunc(TEvBlobDepot::TEvResolve, Data->Handle);
 
-                hFunc(TEvBlobDepot::TEvBlock, BlocksManager->Handle);
-                hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);
-
-                hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
+                fFunc(TEvBlobDepot::EvRegisterAgent, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvAllocateIds, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvCommitBlobSeq, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvDiscardSpoiledBlobSeq, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvResolve, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvBlock, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvQueryBlocks, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
+                fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Data->Handle);
@@ -49,8 +80,6 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
-
-                hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);

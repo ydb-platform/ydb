@@ -7,16 +7,16 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (ClientId, ev->Get()->ClientId),
             (ServerId, ev->Get()->ServerId));
-        const auto [it, inserted] = PipeServerToNode.emplace(ev->Get()->ServerId, std::nullopt);
+        const auto [it, inserted] = PipeServers.try_emplace(ev->Get()->ServerId);
         Y_VERIFY(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
 
-        const auto it = PipeServerToNode.find(ev->Get()->ServerId);
-        Y_VERIFY(it != PipeServerToNode.end());
-        if (const auto& nodeId = it->second) {
+        const auto it = PipeServers.find(ev->Get()->ServerId);
+        Y_VERIFY(it != PipeServers.end());
+        if (const auto& nodeId = it->second.NodeId) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end() && agentIt->second.Connection &&
                     agentIt->second.Connection->PipeServerId == it->first) {
                 OnAgentDisconnect(agentIt->second);
@@ -24,9 +24,7 @@ namespace NKikimr::NBlobDepot {
                 agentIt->second.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
             }
         }
-        PipeServerToNode.erase(it);
-
-        RegisterAgentQ.erase(ev->Get()->ServerId);
+        PipeServers.erase(it);
     }
 
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
@@ -36,9 +34,10 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
         if (!Configured || (Config.GetIsDecommittingGroup() && DecommitState < EDecommitState::BlocksFinished)) {
-            auto& q = RegisterAgentQ[ev->Recipient];
-            Y_VERIFY(q.empty());
-            q.emplace_back(ev.Release());
+            const auto it = PipeServers.find(ev->Recipient);
+            Y_VERIFY(it != PipeServers.end());
+            it->second.PostponeFromAgent = true;
+            it->second.PostponeQ.emplace_back(ev.Release());
             return;
         }
 
@@ -49,10 +48,10 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (Id, GetLogId()), (Msg, req), (NodeId, nodeId),
             (PipeServerId, pipeServerId), (Id, ev->Cookie));
 
-        const auto it = PipeServerToNode.find(pipeServerId);
-        Y_VERIFY(it != PipeServerToNode.end());
-        Y_VERIFY(!it->second || *it->second == nodeId);
-        it->second = nodeId;
+        const auto it = PipeServers.find(pipeServerId);
+        Y_VERIFY(it != PipeServers.end());
+        Y_VERIFY(!it->second.NodeId || *it->second.NodeId == nodeId);
+        it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
         agent.Connection = {
             .PipeServerId = pipeServerId,
@@ -115,14 +114,17 @@ namespace NKikimr::NBlobDepot {
                 blockActorsPending.push_back(actorId);
             }
 
-            agent.PushCallbacks.emplace(id, [this, id, sender = ev->Sender, m = std::move(blockActorsPending)](
-                    TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
-                Data->OnPushNotifyResult(ev);
-                for (const TActorId& actorId : m) {
-                    TActivationContext::Send(new IEventHandle(actorId, sender, new TEvBlobDepot::TEvPushNotifyResult, 0, id));
-                }
-            });
             TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, id));
+
+            agent.PushCallbacks.emplace(id, [this, sender = ev->Sender, m = std::move(blockActorsPending)](
+                    TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+                for (const TActorId& actorId : m) {
+                    auto clone = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
+                    clone->Record.CopyFrom(ev->Get()->Record);
+                    TActivationContext::Send(new IEventHandle(actorId, sender, clone.release()));
+                }
+                Data->OnPushNotifyResult(ev);
+            });
         }
     }
 
@@ -202,10 +204,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     TBlobDepot::TAgent& TBlobDepot::GetAgent(const TActorId& pipeServerId) {
-        const auto it = PipeServerToNode.find(pipeServerId);
-        Y_VERIFY(it != PipeServerToNode.end());
-        Y_VERIFY(it->second);
-        TAgent& agent = GetAgent(*it->second);
+        const auto it = PipeServers.find(pipeServerId);
+        Y_VERIFY(it != PipeServers.end());
+        Y_VERIFY(it->second.NodeId);
+        TAgent& agent = GetAgent(*it->second.NodeId);
         Y_VERIFY(agent.Connection && agent.Connection->PipeServerId == pipeServerId);
         return agent;
     }
@@ -227,7 +229,7 @@ namespace NKikimr::NBlobDepot {
             const bool unblock = Channels[channel].GivenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Channel, channel), (GivenIdRanges, Channels[channel].GivenIdRanges),
+                (Channel, int(channel)), (GivenIdRanges, Channels[channel].GivenIdRanges),
                 (Agent.GivenIdRanges, agentGivenIdRange), (Unblock, unblock));
 
             if (unblock) {
@@ -287,7 +289,7 @@ namespace NKikimr::NBlobDepot {
 
             bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
                 TAgent& agent = Self->GetAgent(NodeId);
-                if (const auto it = agent.PushCallbacks.find(Ev->Cookie); it != agent.PushCallbacks.end()) {
+                if (const auto it = agent.PushCallbacks.find(Ev->Get()->Record.GetId()); it != agent.PushCallbacks.end()) {
                     auto callback = std::move(it->second);
                     agent.PushCallbacks.erase(it);
                     callback(Ev);
@@ -307,10 +309,16 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        for (auto& [pipeServerId, events] : std::exchange(RegisterAgentQ, {})) {
-            for (auto& ev : events) {
-                TAutoPtr<IEventHandle> tmp(ev.release());
-                Receive(tmp, TActivationContext::AsActorContext());
+        for (auto& [pipeServerId, info] : PipeServers) {
+            if (info.PostponeFromAgent) {
+                info.PostponeFromAgent = false;
+                for (auto& ev : std::exchange(info.PostponeQ, {})) {
+                    Y_VERIFY(ev->Cookie == info.NextExpectedMsgId);
+                    ++info.NextExpectedMsgId;
+
+                    TAutoPtr<IEventHandle> tmp(ev.release());
+                    HandleFromAgent(tmp);
+                }
             }
         }
     }

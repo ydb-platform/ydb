@@ -71,7 +71,7 @@ namespace NKikimr::NBlobDepot {
             Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(it->first));
         }
 
-        const ui64 id = Agent.NextRequestId++;
+        const ui64 id = Agent.NextOtherRequestId++;
         auto queryIt = entry.QueriesWaitingForKey.emplace(entry.QueriesWaitingForKey.end(), query, id);
         auto cancelCallback = [&entry, queryIt] {
             entry.QueriesWaitingForKey.erase(queryIt);

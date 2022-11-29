@@ -341,7 +341,7 @@ namespace NKikimr::NBlobDepot {
     void TData::OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
         TAgent& agent = Self->GetAgent(ev->Recipient);
 
-        const auto it = agent.InvalidateStepRequests.find(ev->Cookie);
+        const auto it = agent.InvalidateStepRequests.find(ev->Get()->Record.GetId());
         Y_VERIFY(it != agent.InvalidateStepRequests.end());
         auto items = std::move(it->second);
         agent.InvalidateStepRequests.erase(it);
@@ -372,7 +372,7 @@ namespace NKikimr::NBlobDepot {
             };
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Id, ev->Cookie), (Channel, channel), (InvalidatedStep, invalidatedStep),
+                (Id, ev->Cookie), (Channel, channel_), (InvalidatedStep, invalidatedStep),
                 (GivenIdRanges, Self->Channels[channel].GivenIdRanges),
                 (Agent.GivenIdRanges, agent.GivenIdRanges[channel]),
                 (WritesInFlight, makeWritesInFlight()));

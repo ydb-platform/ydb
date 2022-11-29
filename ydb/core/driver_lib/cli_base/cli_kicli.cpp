@@ -74,7 +74,7 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
         kikimr.SetSecurityToken(config.SecurityToken);
     }
 
-    if (config.UseStaticCredentials) {
+    if (!config.StaticCredentials.User.empty()) {
         TAutoPtr<NMsgBusProxy::TBusLoginRequest> request = new NMsgBusProxy::TBusLoginRequest();
         request.Get()->Record.SetUser(config.StaticCredentials.User);
         request.Get()->Record.SetPassword(config.StaticCredentials.Password);

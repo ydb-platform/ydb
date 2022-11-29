@@ -3637,7 +3637,8 @@ TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, const TString& s
 
 TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<TImpl> sessionid)
     : Client_(client)
-    , SessionImpl_(sessionid) {}
+    , SessionImpl_(sessionid)
+{}
 
 TFuture<TStatus> TSession::CreateTable(const TString& path, TTableDescription&& tableDesc,
         const TCreateTableSettings& settings)
@@ -3967,16 +3968,19 @@ const TString& TSession::GetId() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TTxControl::TTxControl(const TTransaction& tx)
-    : TxId_(tx.GetId()) {}
+    : TxId_(tx.GetId())
+{}
 
 TTxControl::TTxControl(const TTxSettings& begin)
-    : BeginTx_(begin) {}
+    : BeginTx_(begin)
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const TString& txId)
     : Session_(session)
-    , TxId_(txId) {}
+    , TxId_(txId)
+{}
 
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
     return Session_.Client_->CommitTransaction(Session_, *this, settings);
@@ -3990,12 +3994,14 @@ TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
 
 TDataQuery::TDataQuery(const TSession& session, const TString& text, const TString& id)
     : Impl_(new TImpl(session, text, session.Client_->Settings_.KeepDataQueryText_, id,
-                      session.Client_->Settings_.AllowRequestMigration_)) {}
+                      session.Client_->Settings_.AllowRequestMigration_))
+{}
 
 TDataQuery::TDataQuery(const TSession& session, const TString& text, const TString& id,
     const ::google::protobuf::Map<TString, Ydb::Type>& types)
     : Impl_(new TImpl(session, text, session.Client_->Settings_.KeepDataQueryText_, id,
-                      session.Client_->Settings_.AllowRequestMigration_, types)) {}
+                      session.Client_->Settings_.AllowRequestMigration_, types))
+{}
 
 const TString& TDataQuery::GetId() const {
     return Impl_->GetId();
@@ -4055,7 +4061,8 @@ TAsyncDataQueryResult TDataQuery::Execute(const TTxControl& txControl, const TPa
 
 TCreateSessionResult::TCreateSessionResult(TStatus&& status, TSession&& session)
     : TStatus(std::move(status))
-    , Session_(std::move(session)) {}
+    , Session_(std::move(session))
+{}
 
 TSession TCreateSessionResult::GetSession() const {
     CheckStatusOk("TCreateSessionResult::GetSession");
@@ -4066,7 +4073,8 @@ TSession TCreateSessionResult::GetSession() const {
 
 TKeepAliveResult::TKeepAliveResult(TStatus&& status, ESessionStatus sessionStatus)
     : TStatus(std::move(status))
-    , SessionStatus(sessionStatus) {}
+    , SessionStatus(sessionStatus)
+{}
 
 ESessionStatus TKeepAliveResult::GetSessionStatus() const {
     return SessionStatus;
@@ -4077,7 +4085,8 @@ ESessionStatus TKeepAliveResult::GetSessionStatus() const {
 TPrepareQueryResult::TPrepareQueryResult(TStatus&& status, const TDataQuery& query, bool fromCache)
     : TStatus(std::move(status))
     , PreparedQuery_(query)
-    , FromCache_(fromCache) {}
+    , FromCache_(fromCache)
+{}
 
 TDataQuery TPrepareQueryResult::GetQuery() const {
     CheckStatusOk("TPrepareQueryResult");
@@ -4093,8 +4102,8 @@ bool TPrepareQueryResult::IsQueryFromCache() const {
 
 TExplainQueryResult::TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast)
     : TStatus(std::move(status))
-    , Plan_(plan)
-    , Ast_(ast)
+    , Plan_(std::move(plan))
+    , Ast_(std::move(ast))
 {}
 
 const TString& TExplainQueryResult::GetPlan() const {
@@ -4176,7 +4185,8 @@ const TString TDataQueryResult::GetQueryPlan() const {
 
 TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)
     : TStatus(std::move(status))
-    , Transaction_(transaction) {}
+    , Transaction_(transaction)
+{}
 
 const TTransaction& TBeginTransactionResult::GetTransaction() const {
     CheckStatusOk("TDataQueryResult::GetTransaction");
@@ -4187,7 +4197,8 @@ const TTransaction& TBeginTransactionResult::GetTransaction() const {
 
 TCommitTransactionResult::TCommitTransactionResult(TStatus&& status, const TMaybe<TQueryStats>& queryStats)
     : TStatus(std::move(status))
-    , QueryStats_(queryStats) {}
+    , QueryStats_(queryStats)
+{}
 
 const TMaybe<TQueryStats>& TCommitTransactionResult::GetStats() const {
     return QueryStats_;

@@ -51,6 +51,9 @@ items:
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Публичные материалы
   href: public-talks.md
-- name: История изменений
-  href: changelog.md
-
+- name: Что нового
+  items:
+  - name: Список изменений
+    href: changelog.md
+  - name: Список изменений безопасности
+    href: security-changelog.md

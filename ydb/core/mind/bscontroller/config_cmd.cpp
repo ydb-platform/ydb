@@ -333,7 +333,7 @@ namespace NKikimr::NBsController {
 
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
-                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, State->UniqueId));
+                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId));
                     state->ApplyConfigUpdates();
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));

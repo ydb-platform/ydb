@@ -2916,8 +2916,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
             createdAt = desc.GetEntry().CreatedAt;
-            UNIT_ASSERT(createdAt.PlanStep() > 0);
-            UNIT_ASSERT(createdAt.TxId() != 0);
+            UNIT_ASSERT(createdAt.PlanStep > 0);
+            UNIT_ASSERT(createdAt.TxId != 0);
         }
 
         { // describe dir

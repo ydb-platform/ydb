@@ -41,15 +41,23 @@ enum class ESchemeEntryType : i32 {
     Topic = 17
 };
 
-struct TVirtualTimestamp : std::tuple<ui64, ui64> {
-    ui64 PlanStep() const { return std::get<0>(*this); }
-    ui64 TxId() const { return std::get<1>(*this); }
+struct TVirtualTimestamp {
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
 
     TVirtualTimestamp() = default;
+    TVirtualTimestamp(ui64 planStep, ui64 txId);
     TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto);
 
     TString ToString() const;
     void Out(IOutputStream& o) const;
+
+    bool operator<(const TVirtualTimestamp& rhs) const;
+    bool operator<=(const TVirtualTimestamp& rhs) const;
+    bool operator>(const TVirtualTimestamp& rhs) const;
+    bool operator>=(const TVirtualTimestamp& rhs) const;
+    bool operator==(const TVirtualTimestamp& rhs) const;
+    bool operator!=(const TVirtualTimestamp& rhs) const;
 };
 
 struct TSchemeEntry {
@@ -166,7 +174,3 @@ private:
 
 } // namespace NScheme
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(inline, NYdb::NScheme::TVirtualTimestamp, o, x) {
-    return x.Out(o);
-}

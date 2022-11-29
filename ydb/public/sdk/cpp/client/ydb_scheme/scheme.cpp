@@ -15,8 +15,13 @@ namespace NScheme {
 using namespace NThreading;
 using namespace Ydb::Scheme;
 
+TVirtualTimestamp::TVirtualTimestamp(ui64 planStep, ui64 txId)
+    : PlanStep(planStep)
+    , TxId(txId)
+{}
+
 TVirtualTimestamp::TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto)
-    : std::tuple<ui64, ui64>(proto.plan_step(), proto.tx_id())
+    : TVirtualTimestamp(proto.plan_step(), proto.tx_id())
 {}
 
 TString TVirtualTimestamp::ToString() const {
@@ -27,9 +32,33 @@ TString TVirtualTimestamp::ToString() const {
 }
 
 void TVirtualTimestamp::Out(IOutputStream& o) const {
-    o << "{ plan_step: " << PlanStep()
-      << ", tx_id: " << TxId()
+    o << "{ plan_step: " << PlanStep
+      << ", tx_id: " << TxId
       << " }";
+}
+
+bool TVirtualTimestamp::operator<(const TVirtualTimestamp& rhs) const {
+    return PlanStep < rhs.PlanStep && TxId < rhs.TxId;
+}
+
+bool TVirtualTimestamp::operator<=(const TVirtualTimestamp& rhs) const {
+    return PlanStep <= rhs.PlanStep && TxId <= rhs.TxId;
+}
+
+bool TVirtualTimestamp::operator>(const TVirtualTimestamp& rhs) const {
+    return PlanStep > rhs.PlanStep && TxId > rhs.TxId;
+}
+
+bool TVirtualTimestamp::operator>=(const TVirtualTimestamp& rhs) const {
+    return PlanStep >= rhs.PlanStep && TxId >= rhs.TxId;
+}
+
+bool TVirtualTimestamp::operator==(const TVirtualTimestamp& rhs) const {
+    return PlanStep == rhs.PlanStep && TxId == rhs.TxId;
+}
+
+bool TVirtualTimestamp::operator!=(const TVirtualTimestamp& rhs) const {
+    return !(*this == rhs);
 }
 
 static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) {
@@ -262,3 +291,7 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path,
 
 } // namespace NScheme
 } // namespace NYdb
+
+Y_DECLARE_OUT_SPEC(, NYdb::NScheme::TVirtualTimestamp, o, x) {
+    return x.Out(o);
+}

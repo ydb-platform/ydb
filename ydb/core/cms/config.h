@@ -24,6 +24,8 @@ struct TCmsSentinelConfig {
     TDuration RetryChangeStatus;
     ui32 ChangeStatusRetries;
 
+    TDuration BSCBatchTimeout;
+
     ui32 DefaultStateLimit;
     TMap<EPDiskState, ui32> StateLimits;
 

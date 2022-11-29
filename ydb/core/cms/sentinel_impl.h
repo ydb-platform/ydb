@@ -90,12 +90,12 @@ struct TPDiskInfo
 
     using EIgnoreReason = NKikimrCms::TPDiskInfo::EIgnoreReason;
 
-    TActorId StatusChanger;
+    EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
+    EPDiskStatus PrevStatus = EPDiskStatus::ACTIVE;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
-    EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
-    TStatusChangerState::TPtr StatusChangerState;
-    TStatusChangerState::TPtr PrevStatusChangerState;
+    ui32 StatusChangeAttempt = 0;
+    ui32 PrevStatusChangeAttempt = 0;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const TLimitsMap& stateLimits);
@@ -137,6 +137,9 @@ struct TSentinelState: public TSimpleRefCount<TSentinelState> {
     THashSet<ui32> StateUpdaterWaitNodes;
     TConfigUpdaterState ConfigUpdaterState;
     TConfigUpdaterState PrevConfigUpdaterState;
+    TMap<TPDiskID, TPDiskInfo::TPtr> ChangeRequests;
+    ui32 StatusChangeAttempt = 0;
+    ui32 ChangeRequestId = 0;
 };
 
 class TClusterMap {
@@ -176,6 +179,8 @@ private:
     const ui32 RoomRatio;
     const ui32 RackRatio;
 }; // TGuardian
+
+IActor* CreateBSCClientActor(const TCmsStatePtr& cmsState);
 
 } // NSentinel
 } // NCms

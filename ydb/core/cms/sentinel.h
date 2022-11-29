@@ -17,7 +17,6 @@ struct TEvSentinel {
 
         EvStatusChanged,
 
-        EvRetry,
         EvTimeout,
 
         EvBSCPipeDisconnected,
@@ -33,7 +32,6 @@ struct TEvSentinel {
     struct TEvUpdateState: public TEventLocal<TEvUpdateState, EvUpdateState> {};
     struct TEvStateUpdated: public TEventLocal<TEvStateUpdated, EvStateUpdated> {};
 
-    struct TEvRetry: public TEventLocal<TEvRetry, EvRetry> {};
     struct TEvTimeout: public TEventLocal<TEvTimeout, EvTimeout> {};
 
     struct TEvStatusChanged: public TEventLocal<TEvStatusChanged, EvStatusChanged> {

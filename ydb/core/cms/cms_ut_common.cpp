@@ -1,6 +1,7 @@
 #include "cms_impl.h"
 #include "cms_ut_common.h"
 #include "ut_helpers.h"
+#include "sentinel.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
@@ -66,9 +67,25 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
         driveStatus.MutableHostKey()->SetIcPort(drive.GetHostKey().GetIcPort());
         driveStatus.SetPath(drive.GetPath());
         driveStatus.SetStatus(NKikimrBlobStorage::ACTIVE);
-    } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) {
-        resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
-        resp->Record.MutableResponse()->SetSuccess(true);
+    } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) { // assume that all commands are UpdateDriveStatus
+        if (NoisyBSCPipe && ++NoisyBSCPipeCounter % 3) {
+            ctx.Send(ev->Sender, new TEvSentinel::TEvBSCPipeDisconnected, 0);
+            delete resp;
+            return;
+        }
+        bool success = true;
+        for (ui32 i = 0; i < rec.GetRequest().CommandSize(); ++i) {
+            auto cmd = rec.GetRequest().GetCommand(i).GetUpdateDriveStatus();
+            auto id = NCms::TPDiskID(cmd.GetHostKey().GetNodeId(), cmd.GetPDiskId());
+            if (auto& pattern = BSControllerResponsePatterns[id]; !pattern.empty() && !pattern[0]) {
+                success = false;
+                pattern.erase(pattern.begin());
+                resp->Record.MutableResponse()->AddStatus()->SetSuccess(false);
+            } else {
+                resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
+            }
+        }
+        resp->Record.MutableResponse()->SetSuccess(success);
     }
     ctx.Send(ev->Sender, resp, 0, ev->Cookie);
 }
@@ -165,11 +182,6 @@ void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvSystemStateRequest::TP
     response->Record.SetResponseTime(ctx.Now().MilliSeconds());
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
-
-NKikimrBlobStorage::TEvControllerConfigResponse TFakeNodeWhiteboardService::Config;
-THashMap<ui32, TFakeNodeInfo> TFakeNodeWhiteboardService::Info;
-TMutex TFakeNodeWhiteboardService::Mutex;
-NKikimrConfig::TBootstrap TFakeNodeWhiteboardService::BootstrapConfig;
 
 namespace {
 
@@ -1129,6 +1141,16 @@ NKikimrCms::TGetLogTailResponse TCmsTestEnv::GetLogTail(ui32 type,
     return rec;
 }
 
+void TCmsTestEnv::AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> failuresPattern) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    auto& vec = TFakeNodeWhiteboardService::BSControllerResponsePatterns[id];
+    vec.insert(vec.end(), failuresPattern.begin(), failuresPattern.end());
+}
+
+void TCmsTestEnv::EnableNoisyBSCPipe() {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    TFakeNodeWhiteboardService::NoisyBSCPipe = true;
+}
 
 } // namespace NCmsTest
 } // namespace NKikimr

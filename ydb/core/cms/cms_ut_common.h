@@ -40,10 +40,13 @@ class TFakeNodeWhiteboardService : public TActorBootstrapped<TFakeNodeWhiteboard
 public:
     using TEvWhiteboard = NNodeWhiteboard::TEvWhiteboard;
 
-    static NKikimrBlobStorage::TEvControllerConfigResponse Config;
-    static NKikimrConfig::TBootstrap BootstrapConfig;
-    static THashMap<ui32, TFakeNodeInfo> Info;
-    static TMutex Mutex;
+    static inline NKikimrBlobStorage::TEvControllerConfigResponse Config;
+    static inline NKikimrConfig::TBootstrap BootstrapConfig;
+    static inline THashMap<ui32, TFakeNodeInfo> Info;
+    static inline THashMap<NCms::TPDiskID, TVector<bool>, NCms::TPDiskIDHash> BSControllerResponsePatterns;
+    static inline bool NoisyBSCPipe = false;
+    static inline ui32 NoisyBSCPipeCounter = 0;
+    static inline TMutex Mutex;
 
     void Bootstrap(const TActorContext &ctx)
     {
@@ -381,6 +384,10 @@ public:
                                                TInstant to = TInstant::Zero(),
                                                ui32 limit = 100,
                                                ui32 offset = 0);
+
+    void AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> failuresPattern);
+
+    void EnableNoisyBSCPipe();
 
     const ui64 CmsId;
 

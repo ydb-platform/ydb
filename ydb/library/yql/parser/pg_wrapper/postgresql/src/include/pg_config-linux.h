@@ -762,7 +762,7 @@
 /* #undef HAVE__CPUID */
 
 /* Define to 1 if you have __get_cpuid. */
-#define HAVE__GET_CPUID 1
+// #define HAVE__GET_CPUID 1
 
 /* Define to 1 if your compiler understands _Static_assert. */
 #define HAVE__STATIC_ASSERT 1
@@ -933,7 +933,7 @@
 /* #undef USE_SSE42_CRC32C */
 
 /* Define to 1 to use Intel SSE 4.2 CRC instructions with a runtime check. */
-#define USE_SSE42_CRC32C_WITH_RUNTIME_CHECK 1
+// #define USE_SSE42_CRC32C_WITH_RUNTIME_CHECK 1
 
 /* Define to build with systemd support. (--with-systemd) */
 /* #undef USE_SYSTEMD */

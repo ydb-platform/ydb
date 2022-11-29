@@ -228,9 +228,10 @@ namespace NYql {
 
 static struct TGlobalInit {
     TGlobalInit() {
+        pg_crc32c crc = 0;
         pg_popcount32(0);
         pg_popcount64(0);
-        pg_comp_crc32c(0,"",0);
+        COMP_CRC32C(crc,"",0);
     }
 } GlobalInit;
 

@@ -734,8 +734,6 @@ SRCS(
     postgresql/src/port/path.c
     postgresql/src/port/pg_bitutils.c
     postgresql/src/port/pg_crc32c_sb8.c
-    postgresql/src/port/pg_crc32c_sse42.c
-    postgresql/src/port/pg_crc32c_sse42_choose.c
     postgresql/src/port/pg_strong_random.c
     postgresql/src/port/pgcheckdir.c
     postgresql/src/port/pgmkdirp.c

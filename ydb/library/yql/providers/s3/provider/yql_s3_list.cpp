@@ -282,7 +282,7 @@ class TS3ParallelLimitedLister : public IS3Lister {
 public:
     explicit TS3ParallelLimitedLister(const IS3Lister::TPtr& lister, size_t maxParallelOps = 1)
     : Lister(lister)
-    , Semaphore(TAsyncSemaphore::Make(maxParallelOps))
+    , Semaphore(TAsyncSemaphore::Make(std::max<size_t>(1, maxParallelOps)))
     {}
 
 private:

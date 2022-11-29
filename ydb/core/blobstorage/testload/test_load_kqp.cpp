@@ -474,11 +474,24 @@ private:
 
         auto* finishEv = new TEvTestLoadFinished(Tag, Report, "OK called StartDeathProcess");
         finishEv->LastHtmlPage = RenderHTML();
+        finishEv->JsonResult = GetJsonResult();
         ctx.Send(Parent, finishEv);
         Die(ctx);
     }
 
 private:
+
+    NJson::TJsonValue GetJsonResult() const {
+        NJson::TJsonValue value;
+        value["duration_s"] = DurationSeconds;
+        value["tx/s"] = Total->WindowHist.GetTotalCount() / (WindowDuration * std::max(ui64(1), Phase) * 1.0);
+        value["errors"] = Total->WindowErrors;
+        value["p50_ms"] = Total->WindowHist.GetValueAtPercentile(50.0) / 1000.0;
+        value["p95_ms"] = Total->WindowHist.GetValueAtPercentile(95.0) / 1000.0;
+        value["p99_ms"] = Total->WindowHist.GetValueAtPercentile(99.0) / 1000.0;
+        value["p100_ms"] = Total->WindowHist.GetMax() / 1000.0;
+        return value;
+    }
 
     // monitoring
     void HandleMonitoring(TEvKqpWorkerResponse::TPtr& ev, const TActorContext& ctx) {

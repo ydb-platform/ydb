@@ -1390,7 +1390,7 @@ message TEvControllerGroupDecommittedResponse {
     optional string ErrorReason = 2;
 }
 
-message TGroupMetrics { 
+message TGroupMetrics {
     optional fixed64 GroupId = 1;
     optional TEvControllerSelectGroupsResult.TGroupParameters GroupParameters = 2;
 }
@@ -1642,6 +1642,7 @@ message TEvTestLoadResponse {
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
     optional string ErrorReason = 2;
     optional uint64 Cookie = 3;
+    optional uint64 Tag = 4;
 }
 
 message TEvNodeWardenQueryGroupInfo {

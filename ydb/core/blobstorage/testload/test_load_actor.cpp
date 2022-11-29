@@ -5,8 +5,10 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
 
@@ -55,6 +57,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         TString ErrorReason;
         TInstant FinishTime;
         TString LastHtmlPage;
+        NJson::TJsonValue JsonResult;
     };
 
     // info about finished actors
@@ -94,9 +97,10 @@ public:
     void Handle(TEvBlobStorage::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
         ui32 status = NMsgBusProxy::MSTATUS_OK;
         TString error;
+        ui64 tag = 0;
         const auto& record = ev->Get()->Record;
         try {
-            ProcessCmd(record, ctx);
+            tag = ProcessCmd(record, ctx);
         } catch (const TLoadActorException& ex) {
             LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, "Exception while creating load actor, what# "
                     << ex.what());
@@ -111,6 +115,7 @@ public:
         if (record.HasCookie()) {
             response->Record.SetCookie(record.GetCookie());
         }
+        response->Record.SetTag(tag);
         ctx.Send(ev->Sender, response.release());
     }
 
@@ -123,11 +128,12 @@ public:
         }
     }
 
-    void ProcessCmd(const NKikimrBlobStorage::TEvTestLoadRequest& record, const TActorContext& ctx) {
+    ui64 ProcessCmd(const NKikimrBlobStorage::TEvTestLoadRequest& record, const TActorContext& ctx) {
+        ui64 tag = 0;
         switch (record.Command_case()) {
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kLoadStart: {
                 const auto& cmd = record.GetLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -146,7 +152,7 @@ public:
                     }
                 } else {
                     VERIFY_PARAM(Tag);
-                    const ui64 tag = cmd.GetTag();
+                    tag = cmd.GetTag();
                     auto iter = LoadActors.find(tag);
                     if (iter == LoadActors.end()) {
                         ythrow TLoadActorException()
@@ -161,7 +167,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kPDiskLoadStart: {
                 const auto& cmd = record.GetPDiskLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -173,7 +179,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kPDiskReadLoadStart: {
                 const auto& cmd = record.GetPDiskReadLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -185,7 +191,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kPDiskLogLoadStart: {
                 const auto& cmd = record.GetPDiskLogLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -197,7 +203,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kVDiskLoadStart: {
                 const auto& cmd = record.GetVDiskLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -208,7 +214,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKeyValueLoadStart: {
                 const auto& cmd = record.GetKeyValueLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -221,7 +227,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKqpLoadStart: {
                 const auto& cmd = record.GetKqpLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -234,7 +240,7 @@ public:
 
             case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kMemoryLoadStart: {
                 const auto& cmd = record.GetMemoryLoadStart();
-                const ui64 tag = GetOrGenerateTag(cmd);
+                tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
@@ -254,6 +260,7 @@ public:
                         << " protoTxt# " << protoTxt.Quote());
             }
         }
+        return tag;
     }
 
     void Handle(TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -262,7 +269,21 @@ public:
         Y_VERIFY(iter != LoadActors.end());
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor with tag# " << msg->Tag << " finished");
         LoadActors.erase(iter);
-        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->LastHtmlPage});
+        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->LastHtmlPage,
+            msg->JsonResult});
+        {
+            auto& val = FinishedTests.back().JsonResult;
+            val["tag"] = msg->Tag;
+
+
+            auto& build = val["build"];
+            build["date"] = GetProgramBuildDate();
+            build["timestamp"] = GetProgramBuildTimestamp();
+            build["branch"] = GetBranch();
+            build["last_author"] = GetArcadiaLastAuthor();
+            build["build_user"] = GetProgramBuildUser();
+            build["change_num"] = GetArcadiaLastChangeNum();
+        }
 
         auto it = InfoRequests.begin();
         while (it != InfoRequests.end()) {
@@ -334,13 +355,16 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
             NKikimrBlobStorage::TEvTestLoadRequest record;
             record.MutableLoadStop()->SetRemoveAllTags(true);
-            if (params.Has("stop_all") && params.Get("stop_all") == "true") {
+            if (params.Has("stop_all_nodes") && params.Get("stop_all_nodes") == "true") {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
                 RunRecordOnAllNodes(record, ctx);
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on node: " << SelfId().NodeId());
                 ProcessCmd(record, ctx);
             }
+        } else if (params.Has("json_results")) {
+            GenerateJsonInfoRes(ctx, id);
+            return;
         }
 
         // send messages to subactors
@@ -402,7 +426,29 @@ public:
         }
     }
 
-    void GenerateHttpInfoRes(const TActorContext& ctx, ui32 id, bool nodata = false) {
+    void GenerateJsonInfoRes(const TActorContext& ctx, ui32 id) {
+        auto it = InfoRequests.find(id);
+        Y_VERIFY(it != InfoRequests.end());
+        THttpInfoRequest& info = it->second;
+
+        NJson::TJsonArray array;
+
+        for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
+            array.AppendValue(it->JsonResult);
+        }
+
+        TStringStream str;
+        str << NMonitoring::HTTPOKJSON;
+        NJson::WriteJson(&str, &array);
+
+        auto result = std::make_unique<NMon::TEvHttpInfoRes>(str.Str(), info.SubRequestId,
+                NMon::IEvHttpInfoRes::EContentType::Custom);
+        ctx.Send(info.Origin, result.release());
+
+        InfoRequests.erase(it);
+    }
+
+    void GenerateHttpInfoRes(const TActorContext& ctx, ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
@@ -456,7 +502,7 @@ public:
                                 url: "",
                                 data: {
                                     stop_request: true,
-                                    stop_all: document.querySelector('input[id=stopAllNodes]').checked
+                                    stop_all_nodes: document.querySelector('input[id=stopAllNodes]').checked
                                 },
                                 method: "GET",
                                 dataType: "html",
@@ -472,30 +518,28 @@ public:
                 str << R"(<button onClick='sendStopRequest()' name='stopNewLoad' class='btn btn-default'>Stop load</button>)" << "<br><br>";
             }
 
-            if (!nodata) {
-                for (const auto& pair : info.ActorMap) {
-                    const TActorInfo& perActorInfo = pair.second;
-                    DIV_CLASS("panel panel-info") {
-                        DIV_CLASS("panel-heading") {
-                            str << "Tag# " << perActorInfo.Tag;
-                        }
-                        DIV_CLASS("panel-body") {
-                            str << perActorInfo.Data;
-                        }
+            for (const auto& pair : info.ActorMap) {
+                const TActorInfo& perActorInfo = pair.second;
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << "Tag# " << perActorInfo.Tag;
+                    }
+                    DIV_CLASS("panel-body") {
+                        str << perActorInfo.Data;
                     }
                 }
+            }
 
-                COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
-                    for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
-                        DIV_CLASS("panel panel-info") {
-                            DIV_CLASS("panel-heading") {
-                                str << "Tag# " << it->Tag;
-                            }
-                            DIV_CLASS("panel-body") {
-                                str << "Finish reason# " << it->ErrorReason << "<br/>";
-                                str << "Finish time# " << it->FinishTime << "<br/>";
-                                str << it->LastHtmlPage;
-                            }
+            COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
+                for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            str << "Tag# " << it->Tag;
+                        }
+                        DIV_CLASS("panel-body") {
+                            str << "Finish reason# " << it->ErrorReason << "<br/>";
+                            str << "Finish time# " << it->FinishTime << "<br/>";
+                            str << it->LastHtmlPage;
                         }
                     }
                 }

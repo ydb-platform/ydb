@@ -2,7 +2,10 @@
 
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
+
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+#include <library/cpp/json/writer/json_value.h>
+
 #include <cmath>
 
 namespace NKikimr {
@@ -117,6 +120,7 @@ namespace NKikimr {
         TIntrusivePtr<TLoadReport> Report; // nullptr indicates error
         TString ErrorReason;
         TString LastHtmlPage;
+        NJson::TJsonValue JsonResult;
 
         TEvTestLoadFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason)
             : Tag(tag)

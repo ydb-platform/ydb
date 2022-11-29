@@ -110,6 +110,11 @@ message TDqMkqlStat {
     bool Deriv = 3;
 }
 
+message TDqDataProviderStats {
+    string Name = 1;
+    uint64 Bytes = 2;
+}
+
 message TDqTaskStats {
     reserved 154;
 
@@ -126,8 +131,8 @@ message TDqTaskStats {
 
     repeated TDqTableStats Tables = 10;
 
-    uint64 IngressBytes = 11;
-    uint64 EgressBytes = 12;
+    repeated TDqDataProviderStats Ingress = 13;
+    repeated TDqDataProviderStats Egress = 14;
 
     // profile stats
     uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ...

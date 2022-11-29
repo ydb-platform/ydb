@@ -935,6 +935,7 @@ protected:
     };
 
     struct TAsyncInputInfoBase {
+        TString Type;
         const TString LogPrefix;
         ui64 Index;
         IDqAsyncInputBuffer::TPtr Buffer;
@@ -1008,6 +1009,7 @@ protected:
     };
 
     struct TAsyncOutputInfoBase {
+        TString Type;
         IDqAsyncOutputBuffer::TPtr Buffer;
         IDqComputeActorAsyncOutput* AsyncOutput = nullptr;
         NActors::IActor* Actor = nullptr;
@@ -1486,6 +1488,8 @@ protected:
             if (TaskRunner) { source.Buffer = TaskRunner->GetSource(inputIndex); Y_VERIFY(source.Buffer);}
             Y_VERIFY(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
+            Y_VERIFY(inputDesc.HasSource());
+            source.Type = inputDesc.GetSource().GetType();
             const ui64 i = inputIndex; // Crutch for clang
             CA_LOG_D("Create source for input " << i << " " << inputDesc);
             try {
@@ -1571,6 +1575,8 @@ protected:
             if (TaskRunner) { sink.Buffer = TaskRunner->GetSink(outputIndex); }
             Y_VERIFY(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
+            Y_VERIFY(outputDesc.HasSink());
+            sink.Type = outputDesc.GetSink().GetType();
             const ui64 i = outputIndex; // Crutch for clang
             CA_LOG_D("Create sink for output " << i << " " << outputDesc);
             try {
@@ -1872,10 +1878,15 @@ public:
         } else if (auto* taskStats = GetTaskRunnerStats()) { // for task_runner_actor_local
             auto* protoTask = dst->AddTasks();
 
+            THashMap<TString, ui64> Ingress;
+            THashMap<TString, ui64> Egress;
+
             THashMap<ui64, ui64> ingressBytesMap;
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
                 if (sourceInfo.AsyncInput) {
-                    ingressBytesMap.emplace(inputIndex, sourceInfo.AsyncInput->GetIngressBytes());
+                    auto ingressBytes = sourceInfo.AsyncInput->GetIngressBytes();
+                    ingressBytesMap.emplace(inputIndex, ingressBytes);
+                    Ingress[sourceInfo.Type] = Ingress.Value(sourceInfo.Type, 0) + ingressBytes;
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats(), ingressBytesMap);
@@ -1884,7 +1895,7 @@ public:
             if (TDerived::HasAsyncTaskRunner) {
                 protoTask->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
             }
-
+                
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
 
                 ui64 egressBytes = sinkInfo.AsyncOutput ? sinkInfo.AsyncOutput->GetEgressBytes() : 0;
@@ -1892,7 +1903,7 @@ public:
                 if (auto* sinkStats = GetSinkStats(outputIndex, sinkInfo)) {
                     protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
                     protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
-                    protoTask->SetEgressBytes(protoTask->GetEgressBytes() + egressBytes);
+                    Egress[sinkInfo.Type] = Egress.Value(sinkInfo.Type, 0) + egressBytes;
 
                     if (GetProfileStats()) {
                         auto* protoSink = protoTask->AddSinks();
@@ -1908,6 +1919,17 @@ public:
                         protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
                     }
                 }
+            }
+
+            for (auto& [name, bytes] : Egress) {
+                auto* egressStats = protoTask->AddEgress();
+                egressStats->SetName(name);
+                egressStats->SetBytes(bytes);
+            }
+            for (auto& [name, bytes] : Ingress) {
+                auto* ingressStats = protoTask->AddIngress();
+                ingressStats->SetName(name);
+                ingressStats->SetBytes(bytes);
             }
 
             if (GetProfileStats()) {

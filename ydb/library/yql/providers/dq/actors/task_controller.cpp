@@ -324,15 +324,21 @@ private:
         ADD_COUNTER(FinishTimeUs)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
-        ADD_COUNTER(IngressBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
-        ADD_COUNTER(EgressBytes)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
         ADD_COUNTER(WaitTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
+
+        for (const auto& ingress : s.GetIngress()) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
+        }
+
+        for (const auto& egress : s.GetEgress()) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Egress" + egress.GetName() + "Bytes"), egress.GetBytes());
+        }
 
         if (auto v = x.GetMkqlMaxMemoryUsage()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v);

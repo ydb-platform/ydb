@@ -93,8 +93,8 @@ To update cluster (stop + start):
             help='The path to Streaming config'
         )
         sub_parser.add_argument(
-            '--yq-config-path', default=None,
-            help='The path to Yandex Query config'
+            '--fq-config-path', default=None,
+            help='The path to Federated Query config'
         )
         sub_parser.add_argument(
             '--suppress-version-check', default=False, action='store_true',

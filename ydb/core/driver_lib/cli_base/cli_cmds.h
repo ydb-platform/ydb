@@ -18,6 +18,7 @@ public:
     TClientCommandRootKikimrBase(const TString& name);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    void ParseCredentials(TConfig& config) override;
 
 protected:
     bool GetProfileVariable(const TString& name, TString& value);
@@ -27,6 +28,9 @@ private:
 
     THolder<TProfileConfig> ProfileConfig;
     TString LocalProfileName;
+    TString UserName;
+    TString PasswordFile;
+    bool DoNotAskForPassword = false;
     bool DumpRequests = false;
 };
 

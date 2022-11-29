@@ -36,6 +36,23 @@ void TClientCommandRootKikimrBase::Config(TConfig& config) {
         << "    3. Default profile file \"" << defaultProfileFile << "\" file";
     opts.AddLongOption("profile", profileHelp).RequiredArgument("NAME").StoreResult(&LocalProfileName);
 
+    // Static credentials
+    TStringBuilder userHelp;
+    userHelp << "User name to authenticate with" << Endl
+        << "  User name search order:" << Endl
+        << "    1. This option" << Endl
+        << "    2. \"YDB_USER\" environment variable" << Endl;
+    opts.AddLongOption("user", userHelp).RequiredArgument("STR").StoreResult(&UserName);
+
+    TStringBuilder passwordHelp;
+    passwordHelp << "File with password to authenticate with" << Endl
+        << "  Password search order:" << Endl
+        << "    1. This option" << Endl
+        << "    2. \"YDB_PASSWORD\" environment variable" << Endl;
+    opts.AddLongOption("password-file", passwordHelp).RequiredArgument("PATH").StoreResult(&PasswordFile);
+
+    opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
+
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " -s <[protocol://]host[:port]> [options] <subcommand>" << Endl << Endl
@@ -71,6 +88,60 @@ bool TClientCommandRootKikimrBase::GetProfileVariable(const TString& name, TStri
         return false;
     }
     return ProfileConfig->GetVariable(name, value);
+}
+
+void TClientCommandRootKikimrBase::ParseCredentials(TConfig& config) {
+    if (!Token.empty()) {
+        config.SecurityToken = Token;
+        return;
+    }
+    // 1. command line options
+    if (TokenFile) {
+        if (UserName) {
+            throw TMisuseException() << "Both TokenFile and User options are used. Use only one of them";
+        }
+        Token = ReadFromFile(TokenFile, "token");
+        config.SecurityToken = Token;
+        return;
+    }
+    if (UserName) {
+        config.StaticCredentials.User = UserName;
+        if (PasswordFile) {
+            config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
+        } else if (!DoNotAskForPassword) {
+            Cout << "Enter password for user " << UserName << ": ";
+            config.StaticCredentials.Password = InputPassword();
+        }
+        return;
+    } else if (PasswordFile) {
+        throw TMisuseException() << "PasswordFile option used without User option";
+    }
+
+    // 2. Environment variables
+    TString ydbToken = GetEnv("YDB_TOKEN");
+    if (!ydbToken.empty()) {
+        Token = ydbToken;
+        config.SecurityToken = Token;
+        return;
+    }
+
+    TString envUser = GetEnv("YDB_USER");
+    if (!envUser.empty()) {
+        config.StaticCredentials.User = envUser;
+        TString envPassword = GetEnv("YDB_PASSWORD");
+        if (!envPassword.empty()) {
+            config.StaticCredentials.Password = envPassword;
+        } else if (!DoNotAskForPassword) {
+            Cout << "Enter password for user " << envUser << ": ";
+            config.StaticCredentials.Password = InputPassword();
+        }
+        return;
+    }
+
+    // 3. Default token file
+    TokenFile = defaultTokenFile;
+    ReadFromFileIfExists(TokenFile, "default token", Token);
+    config.SecurityToken = Token;
 }
 
 class TClientCommandRootLite : public TClientCommandRootKikimrBase {

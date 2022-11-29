@@ -77,6 +77,9 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]");
         opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN");
         opts.AddLongOption('f', "token-file", "Security token file").RequiredArgument("PATH");
+        opts.AddLongOption("user", "User name to authenticate with").RequiredArgument("STR");
+        opts.AddLongOption("password-file", "File with password to authenticate with").RequiredArgument("PATH");
+        opts.AddLongOption("no-password", "Do not ask for user password (if empty)").NoArgument();
         opts.AddLongOption('d', "dump", "Dump requests to error log").NoArgument();
         opts.AddLongOption('t', "time", "Show request execution time").NoArgument();
         opts.AddLongOption('o', "progress", "Show progress of long requests").NoArgument();

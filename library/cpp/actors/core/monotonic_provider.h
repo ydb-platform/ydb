@@ -1,13 +1,10 @@
 #pragma once
 
-#include "monotonic.h"
+#include <library/cpp/time_provider/monotonic_provider.h>
 
 namespace NActors {
 
-class IMonotonicTimeProvider : public TThrRefBase {
-public:
-    virtual TMonotonic Now() = 0;
-};
+using IMonotonicTimeProvider = ::IMonotonicTimeProvider;
 
 TIntrusivePtr<IMonotonicTimeProvider> CreateDefaultMonotonicTimeProvider();
 

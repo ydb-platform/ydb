@@ -2,15 +2,8 @@
 
 namespace NActors {
 
-class TDefaultMonotonicTimeProvider : public IMonotonicTimeProvider {
-public:
-    TMonotonic Now() override {
-        return TMonotonic::Now();
-    }
-};
-
-TIntrusivePtr<IMonotonicTimeProvider> CreateDefaultMonotonicTimeProvider() {
-    return TIntrusivePtr<IMonotonicTimeProvider>(new TDefaultMonotonicTimeProvider);
+TIntrusivePtr<NActors::IMonotonicTimeProvider> CreateDefaultMonotonicTimeProvider() {
+    return NMonotonic::CreateDefaultMonotonicTimeProvider();
 }
 
 } // namespace NActors

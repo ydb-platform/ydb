@@ -22,6 +22,7 @@ target_link_libraries(cpp-actors-core PUBLIC
   library-cpp-lwtrace
   cpp-monlib-dynamic_counters
   library-cpp-svnversion
+  library-cpp-time_provider
   cpp-threading-future
 )
 target_sources(cpp-actors-core PRIVATE

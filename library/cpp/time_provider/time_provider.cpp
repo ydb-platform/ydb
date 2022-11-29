@@ -28,3 +28,19 @@ TIntrusivePtr<ITimeProvider> CreateDefaultTimeProvider() {
 TIntrusivePtr<ITimeProvider> CreateDeterministicTimeProvider(ui64 seed) {
     return TIntrusivePtr<ITimeProvider>(new TDeterministicTimeProvider(seed));
 }
+
+namespace {
+TIntrusivePtr<ITimeProvider> GlobalTimeProvider;
+}
+
+void TInstantOperator::RegisterProvider(TIntrusivePtr<ITimeProvider> provider) {
+    GlobalTimeProvider = provider;
+}
+
+TInstant TInstantOperator::Now() {
+    if (!GlobalTimeProvider) {
+        return TInstant::Now();
+    } else {
+        return GlobalTimeProvider->Now();
+    }
+}

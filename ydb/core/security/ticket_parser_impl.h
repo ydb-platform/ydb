@@ -228,9 +228,16 @@ protected:
                 return true;
             }
 
-            if(record.Ticket.EndsWith("@" BUILTIN_ERROR_DOMAIN)) {
+            if (record.Ticket.EndsWith("@" BUILTIN_ERROR_DOMAIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
-                SetError(key, record, {"Builtin error simulation"}, ctx);
+                SetError(key, record, { "Builtin error simulation" }, ctx);
+                CounterTicketsBuiltin->Inc();
+                return true;
+            }
+
+            if (record.Ticket.EndsWith("@" BUILTIN_SYSTEM_DOMAIN)) {
+                record.TokenType = TDerived::ETokenType::Builtin;
+                SetError(key, record, { "System domain not available for user usage", false }, ctx);
                 CounterTicketsBuiltin->Inc();
                 return true;
             }

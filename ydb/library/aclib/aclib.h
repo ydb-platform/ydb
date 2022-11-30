@@ -9,6 +9,14 @@ namespace NACLib {
 #define BUILTIN_ACL_DOMAIN "builtin"
 #define BUILTIN_ACL_ROOT "root@" BUILTIN_ACL_DOMAIN
 #define BUILTIN_ERROR_DOMAIN "error"
+#define BUILTIN_SYSTEM_DOMAIN "system"
+
+#define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
+class TUserToken;
+class TSystemUsers {
+public:
+    static const TUserToken& Metadata();
+};
 
 enum EAccessRights : ui32 { // bitmask
     NoAccess = 0x00000000,

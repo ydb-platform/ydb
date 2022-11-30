@@ -161,6 +161,9 @@ ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
 }
 
 bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
+    if (user.GetUserSID().EndsWith("@" BUILTIN_SYSTEM_DOMAIN)) {
+        return true;
+    }
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
         return true; // the owner always has access
     if (HasACL()) {
@@ -748,6 +751,11 @@ TString AccessRightsToString(ui32 accessRights) {
         result += *it;
     }
     return result;
+}
+
+const NACLib::TUserToken& TSystemUsers::Metadata() {
+    static TUserToken GlobalMetadataUser = TUserToken(BUILTIN_ACL_METADATA, {});
+    return GlobalMetadataUser;
 }
 
 }

@@ -47,7 +47,6 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, _FallbackOnRuntimeErrors);
     REGISTER_SETTING(*this, WorkerFilter);
     REGISTER_SETTING(*this, _EnablePrecompute);
-    REGISTER_SETTING(*this, EnableGraceJoin);
     REGISTER_SETTING(*this, EnableDqReplicate);
     REGISTER_SETTING(*this, WatermarksMode);
     REGISTER_SETTING(*this, WatermarksGranularityMs);

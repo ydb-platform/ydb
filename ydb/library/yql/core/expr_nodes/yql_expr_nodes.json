@@ -1480,13 +1480,13 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "GraceJoinCore"},
             "Children": [
-                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase", "Optional": true},
-                {"Index": 1, "Name": "RightInput", "Type": "TExprBase" , "Optional": true},
-                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom" , "Optional": true},
-                {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList" , "Optional": true},
-                {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList", "Optional": true},
-                {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList", "Optional": true},
-                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList", "Optional": true}
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"}
             ]
         },
 

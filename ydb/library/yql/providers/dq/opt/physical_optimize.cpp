@@ -316,7 +316,7 @@ protected:
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         const auto join = node.Cast<TDqJoin>();
         const TParentsMap* parentsMap = getParents();
-        const auto mode = Config->HashJoinMode.Get().GetOrElse(Config->EnableGraceJoin.Get().GetOrElse(false) ?  EHashJoinMode::Grace : EHashJoinMode::Off);
+        const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
         return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
     }
 

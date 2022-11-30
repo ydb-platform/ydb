@@ -33,7 +33,6 @@ public:
         }
         AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin));
         AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
-        AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&NDq::AnnotateDqGraceJoin));
         AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin));
         AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink));

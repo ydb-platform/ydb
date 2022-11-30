@@ -75,7 +75,6 @@ struct TDqSettings {
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
     NCommon::TConfSetting<bool, false> _EnablePrecompute;
     NCommon::TConfSetting<bool, false> EnableDqReplicate;
-    NCommon::TConfSetting<bool, false> EnableGraceJoin; // TODO: drop.
     NCommon::TConfSetting<TString, false> WatermarksMode;
     NCommon::TConfSetting<bool, false> WatermarksEnableIdlePartitions;
     NCommon::TConfSetting<ui64, false> WatermarksGranularityMs;
@@ -124,7 +123,6 @@ struct TDqSettings {
         SAVE_SETTING(ComputeActorType);
         SAVE_SETTING(WatermarksMode);
         SAVE_SETTING(WatermarksEnableIdlePartitions);
-        SAVE_SETTING(EnableGraceJoin);
         SAVE_SETTING(WatermarksGranularityMs);
         SAVE_SETTING(WatermarksLateArrivalDelayMs);
         SAVE_SETTING(UseAggPhases);

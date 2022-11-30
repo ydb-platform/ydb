@@ -721,17 +721,6 @@ TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx)
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqGraceJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto resultRowType = GetDqJoinResultType<true>(input, true, ctx);
-    if (!resultRowType) {
-        return TStatus::Error;
-    }
-
-    input->SetTypeAnn(ctx.MakeType<TFlowExprType>(resultRowType));
-    return TStatus::Ok;
-}
-
-
 TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto resultRowType = GetDqJoinResultType<false>(input, true, ctx);
     if (!resultRowType) {

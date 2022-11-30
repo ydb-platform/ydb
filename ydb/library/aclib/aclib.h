@@ -91,6 +91,7 @@ public:
     TString GetOriginalUserToken() const;
     TString SerializeAsString() const;
     void AddGroupSID(const TSID& groupSID);
+    bool IsSystemUser() const;
 
     using NACLibProto::TUserToken::ShortDebugString;
 

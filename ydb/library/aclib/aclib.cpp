@@ -125,6 +125,10 @@ void TUserToken::AddGroupSID(const TSID& groupSID) {
     bucket.AddValues(groupSID);
 }
 
+bool TUserToken::IsSystemUser() const {
+    return GetUserSID().EndsWith("@" BUILTIN_SYSTEM_DOMAIN);
+}
+
 TSecurityObject::TSecurityObject(const NACLibProto::TSecurityObject& protoSecObj, bool isContainer)
     : NACLibProto::TSecurityObject(protoSecObj)
     , IsContainer(isContainer)
@@ -137,6 +141,9 @@ TSecurityObject::TSecurityObject(const TSID& owner, bool isContainer)
 }
 
 ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
+    if (user.IsSystemUser()) {
+        return EAccessRights::GenericFull; // the system always has access
+    }
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
         return EAccessRights::GenericFull; // the owner always has access
     ui32 deniedAccessRights = EAccessRights::NoAccess;
@@ -161,8 +168,8 @@ ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
 }
 
 bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
-    if (user.GetUserSID().EndsWith("@" BUILTIN_SYSTEM_DOMAIN)) {
-        return true;
+    if (user.IsSystemUser()) {
+        return true; // the system alway has access
     }
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
         return true; // the owner always has access

@@ -122,6 +122,7 @@ private:
         queryResult.SetTruncated(Truncated);
         queryResult.SetRowsCount(Rows);
 
+        LOG_D("Send response to executer");
         Send(ExecuterId, new TEvQueryResponse(std::move(queryResult)));
     }
 

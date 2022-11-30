@@ -676,6 +676,8 @@ private:
             Channels->SendChannelDataAck(it->second.ChannelId, inputChannel->FreeSpace);
         }
 
+        TakeInputChannelDataRequests.erase(it);
+
         ResumeExecution();
     }
 
@@ -843,6 +845,14 @@ private:
         }
 
         ProcessContinueRun();
+    }
+
+    void CheckRunStatus() override {
+        if (!TakeInputChannelDataRequests.empty()) {
+            CA_LOG_T("AsyncCheckRunStatus: TakeInputChannelDataRequests: " << TakeInputChannelDataRequests.size());
+            return;
+        }
+        TBase::CheckRunStatus();
     }
 
 private:

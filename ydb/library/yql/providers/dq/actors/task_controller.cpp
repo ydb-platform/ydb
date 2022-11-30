@@ -170,9 +170,9 @@ private:
                 break;
             }
             case NDqProto::COMPUTE_STATE_FINISHED: {
-                YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " Finish TaskId: " << taskId;
                 Executing.erase(taskId);
                 FinishedTasks.insert(taskId);
+                YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " Finish TaskId: " << taskId << ". Tasks finished: " << FinishedTasks.size() << "/" << Tasks.size();
                 break;
             }
         }

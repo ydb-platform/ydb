@@ -428,7 +428,7 @@ protected:
         CheckRunStatus();
     }
 
-    void CheckRunStatus() {
+    virtual void CheckRunStatus() {
         if (ProcessOutputsState.Inflight != 0) {
             return;
         }

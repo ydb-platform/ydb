@@ -886,10 +886,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     Y_UNIT_TEST(CheckCounters) {
         TTestBasicRuntime runtime;
-        TTestEnvOptions opts;
-        opts.DisableStatsBatching(true);
-
-        TTestEnv env(runtime, opts);
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnablePersistentQueryStats(false)
+            .DisableStatsBatching(true));
         ui64 txId = 100;
 
         runtime.UpdateCurrentTime(TInstant::Now());

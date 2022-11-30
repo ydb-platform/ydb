@@ -496,6 +496,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     app.SetEnableDataColumnForIndexTable(true);
     app.SetEnableSystemViews(opts.EnableSystemViews_);
+    app.SetEnablePersistentQueryStats(opts.EnablePersistentQueryStats_);
     app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
     app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);

@@ -348,8 +348,10 @@ public:
 
         ScanLimiter = MakeIntrusive<TScanLimiter>(ConcurrentScansLimit);
 
-        IntervalEnd = GetNextIntervalEnd();
-        Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
+        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
+            IntervalEnd = GetNextIntervalEnd();
+            Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
+        }
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             auto intervalSize = ProcessCountersInterval.MicroSeconds();
@@ -666,6 +668,11 @@ private:
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
         auto response = MakeHolder<TEvSysView::TEvGetIntervalMetricsResponse>();
 
+        if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
+            Send(ev->Sender, std::move(response), 0, ev->Cookie);
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         response->Record.SetIntervalEndUs(record.GetIntervalEndUs());
         const auto& database = record.GetDatabase();
@@ -909,7 +916,7 @@ private:
             << ", query hash# " << stats->GetQueryTextHash()
             << ", cpu time# " << stats->GetTotalCpuTimeUs());
 
-        if (!database.empty()) {
+        if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && !database.empty()) {
             auto queryEnd = TInstant::MilliSeconds(stats->GetEndTimeMs());
             if (queryEnd < IntervalEnd - TotalInterval) {
                 return;

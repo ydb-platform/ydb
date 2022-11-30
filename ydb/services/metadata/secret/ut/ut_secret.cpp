@@ -135,6 +135,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         void Bootstrap() {
             auto manager = std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
             Become(&TThis::StateInit);
+            Y_VERIFY(NMetadataProvider::TServiceOperator::IsEnabled());
             Sender<NMetadataProvider::TEvSubscribeExternal>(manager).SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
             Start = Now();
         }
@@ -173,7 +174,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             Cerr << "Initialization finished" << Endl;
 
             Tests::NCS::THelper lHelper(*server);
-            lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET WITH value = `100`, ownerUserId = `root@root`)");
+            lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
 
             emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(0);
             {
@@ -184,8 +185,8 @@ Y_UNIT_TEST_SUITE(Secret) {
                 Y_VERIFY(emulator->IsFound());
             }
 
-            lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET SET value = `abcde`, ownerUserId = `root@root`)");
-            lHelper.StartSchemaRequest("CREATE OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS WITH ownerUserId = `root@root`)");
+            lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS)");
 
             emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(1);
             {
@@ -196,8 +197,8 @@ Y_UNIT_TEST_SUITE(Secret) {
                 Y_VERIFY(emulator->IsFound());
             }
 
-            lHelper.StartSchemaRequest("DROP OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS WITH ownerUserId = `root@root`)");
-            lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET WITH ownerUserId = `root@root`)");
+            lHelper.StartSchemaRequest("DROP OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS) WITH ownerUserId = `root@root`");
+            lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET) WITH ownerUserId = `root@root`");
 
             emulator->SetExpectedSecretsCount(0).SetExpectedAccessCount(0);
             {

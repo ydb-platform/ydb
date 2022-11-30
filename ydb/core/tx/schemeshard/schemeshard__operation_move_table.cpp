@@ -228,7 +228,7 @@ public:
         Y_VERIFY(!context.SS->Tables.contains(dstPath.Base()->PathId));
         Y_VERIFY(context.SS->Tables.contains(srcPath.Base()->PathId));
 
-        TTableInfo::TPtr tableInfo = new TTableInfo(*context.SS->Tables.at(srcPath.Base()->PathId));
+        TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
         tableInfo->ResetDescriptionCache();
         tableInfo->AlterVersion += 1;
 
@@ -400,15 +400,33 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
 
-        TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+        auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
+        auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
 
         Y_VERIFY(txState->PlanStep);
 
         MarkSrcDropped(db, context, OperationId, *txState, srcPath);
 
+        Y_VERIFY(context.SS->Tables.contains(dstPath.Base()->PathId));
+        auto tableInfo = context.SS->Tables.at(dstPath.Base()->PathId);
+
+        if (tableInfo->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(dstPath.Base()->PathId)) {
+            context.SS->TTLEnabledTables[dstPath.Base()->PathId] = tableInfo;
+            // MarkSrcDropped() removes srcPath from TTLEnabledTables & decrements the counters
+            context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+
+            const auto now = context.Ctx.Now();
+            for (auto& shard : tableInfo->GetPartitions()) {
+                auto& lag = shard.LastCondEraseLag;
+                lag = now - shard.LastCondErase;
+                context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+            }
+        }
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }
+
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         context.OnComplete.RouteByTabletsFromOperation(OperationId);

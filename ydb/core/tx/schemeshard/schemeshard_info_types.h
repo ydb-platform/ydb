@@ -493,6 +493,17 @@ public:
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
     }
 
+    static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
+        TTableInfo::TPtr copy(new TTableInfo(other));
+        // rebuild conditional erase schedule since it uses iterators
+        copy->CondEraseSchedule.clear();
+        for (ui32 i = 0; i < copy->Partitions.size(); ++i) {
+            copy->CondEraseSchedule.push(copy->Partitions.begin() + i);
+        }
+
+        return copy;
+    }
+
     static TAlterDataPtr CreateAlterData(
         TPtr source,
         NKikimrSchemeOp::TTableDescription& descr,

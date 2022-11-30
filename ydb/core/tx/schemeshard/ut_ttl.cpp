@@ -995,6 +995,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        // move table
+        TestMoveTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", "/MyRoot/TTLEnabledTableMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        // just after move
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+
+        // after a while
+        runtime.AdvanceCurrentTime(TDuration::Minutes(20));
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 2}, {"inf", 0}});
+
+        // after erase
+        runtime.AdvanceCurrentTime(TDuration::Minutes(40));
+        WaitForCondErase(runtime);
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
+
+        // after a while
+        runtime.AdvanceCurrentTime(TDuration::Minutes(10));
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
     }
 }
 

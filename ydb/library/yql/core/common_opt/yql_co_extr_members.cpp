@@ -947,4 +947,14 @@ TExprNode::TPtr ApplyExtractMembersToCombineCore(const TExprNode::TPtr& node, co
         .Ptr();
 }
 
+TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, const TExprNode::TPtr& members, bool isFlat, TExprContext& ctx, TStringBuf logSuffix) {
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    auto body = GetLambdaBody(node->Tail());
+    std::for_each(body.begin(), body.end(), [&](TExprNode::TPtr& root) {
+        const auto pos = root->Pos();
+        root = ctx.NewCallable(pos, isFlat ? TCoExtractMembers::CallableName() : TCoFilterMembers::CallableName(), {std::move(root), members});
+    });
+    return ctx.ChangeChild(*node, TCoMapBase::idx_Lambda, ctx.DeepCopyLambda(node->Tail(), std::move(body)));
+}
+
 } // NYql

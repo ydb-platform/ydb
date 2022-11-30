@@ -1494,6 +1494,27 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
+        if (self.Input().Maybe<TCoNarrowMap>()) {
+            if (auto res = ApplyExtractMembersToNarrowMap(self.Input().Ptr(), self.Members().Ptr(), false, ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (self.Input().Maybe<TCoNarrowMultiMap>()) {
+            if (auto res = ApplyExtractMembersToNarrowMap(self.Input().Ptr(), self.Members().Ptr(), false, ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (const auto narrow = self.Input().Maybe<TCoNarrowFlatMap>()) {
+            if (auto res = ApplyExtractMembersToNarrowMap(self.Input().Ptr(), self.Members().Ptr(), ETypeAnnotationKind::Optional != narrow.Cast().Lambda().Body().Ref().GetTypeAnn()->GetKind(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
         return node;
     };
 

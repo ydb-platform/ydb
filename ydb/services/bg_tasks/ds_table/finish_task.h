@@ -17,7 +17,7 @@ protected:
 public:
 
     TDropTaskActor(const TString& taskId, TExecutorController::TPtr controller)
-        : TBase(controller->GetRequestConfig())
+        : TBase(controller->GetRequestConfig(), controller->GetUserToken())
         , TaskId(taskId)
         , Controller(controller) {
 

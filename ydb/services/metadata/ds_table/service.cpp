@@ -139,6 +139,7 @@ void TService::Handle(TEvRefreshSubscriberData::TPtr& ev) {
 }
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
+    ALS_INFO(0) << "metadata service started" << Endl;
     Become(&TService::StateMain);
     InternalController = std::make_shared<TServiceInternalController>(SelfId());
 }

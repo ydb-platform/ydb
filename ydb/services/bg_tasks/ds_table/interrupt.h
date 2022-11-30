@@ -28,7 +28,7 @@ public:
 
     TInterruptTaskActor(TExecutorController::TPtr executorController,
         const TString& taskId, const TInstant nextStartInstant, TTaskStateContainer state)
-        : TBase(executorController->GetRequestConfig())
+        : TBase(executorController->GetRequestConfig(), executorController->GetUserToken())
         , ExecutorController(executorController)
         , TaskId(taskId)
         , NextStartInstant(nextStartInstant)

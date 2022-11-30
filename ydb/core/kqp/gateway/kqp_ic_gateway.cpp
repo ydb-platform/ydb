@@ -1415,7 +1415,9 @@ public:
                     return MakeFuture(ResultFromError<TGenericResult>("incorrect object type"));
                 }
                 NMetadata::IOperationsManager::TModificationContext context;
-                context.SetUserToken(GetUserToken());
+                if (GetUserToken()) {
+                    context.SetUserToken(*GetUserToken());
+                }
                 return DoExecute(manager, settings, context).Apply([](const NThreading::TFuture<NMetadata::TObjectOperatorResult>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().IsSuccess()) {
                         TGenericResult result;

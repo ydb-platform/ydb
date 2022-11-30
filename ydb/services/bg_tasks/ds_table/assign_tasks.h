@@ -16,7 +16,7 @@ private:
     virtual std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
 public:
     TAssignTasksActor(const ui32 tasksCount, TExecutorController::TPtr controller, const TString& executorId)
-        : TBase(controller->GetRequestConfig())
+        : TBase(controller->GetRequestConfig(), controller->GetUserToken())
         , Controller(controller)
         , TasksCount(tasksCount)
         , ExecutorId(executorId)

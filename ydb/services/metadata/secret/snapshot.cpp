@@ -57,7 +57,7 @@ bool TSnapshot::PatchString(TString& stringForPath) const {
     return true;
 }
 
-bool TSnapshot::CheckSecretAccess(const TString& secretableString, const TMaybe<NACLib::TUserToken>& userToken) const {
+bool TSnapshot::CheckSecretAccess(const TString& secretableString, const std::optional<NACLib::TUserToken>& userToken) const {
     if (!userToken) {
         return true;
     }

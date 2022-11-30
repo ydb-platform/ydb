@@ -20,7 +20,7 @@ protected:
 public:
     TUpdateTaskEnabledActor(TExecutorController::TPtr executorController,
         const TString& taskId, const bool enabled, const TActorId& resultWaiter)
-        : TBase(executorController->GetRequestConfig())
+        : TBase(executorController->GetRequestConfig(), executorController->GetUserToken())
         , ExecutorController(executorController)
         , TaskId(taskId)
         , Enabled(enabled)

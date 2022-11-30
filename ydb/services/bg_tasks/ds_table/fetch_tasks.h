@@ -18,7 +18,7 @@ protected:
 public:
     TFetchTasksActor(const std::set<TString>& currentTaskIds, const TString& executorId,
         TExecutorController::TPtr controller)
-        : TBase(controller->GetRequestConfig())
+        : TBase(controller->GetRequestConfig(), controller->GetUserToken())
         , CurrentTaskIds(currentTaskIds)
         , ExecutorId(executorId)
         , Controller(controller)

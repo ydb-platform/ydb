@@ -410,7 +410,7 @@ public:
     }
 
     std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureNotPrepare(ActionInfo, input->Pos(), SessionCtx->Query(), ctx)) {
+        if (!EnsureNotPrepare(ActionInfo + " " + kiObject.TypeId(), input->Pos(), SessionCtx->Query(), ctx)) {
             return SyncError();
         }
 
@@ -432,7 +432,7 @@ public:
                 Y_UNUSED(res);
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
-            }, "Executing " + ActionInfo);
+            }, "Executing " + ActionInfo + " " + kiObject.TypeId());
     }
 };
 

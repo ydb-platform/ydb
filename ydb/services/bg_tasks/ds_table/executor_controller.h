@@ -1,6 +1,7 @@
 #pragma once
 #include "config.h"
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/initializer/common.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -14,13 +15,19 @@ class TExecutorController: public NMetadataInitializer::IInitializerOutput {
 private:
     const NActors::TActorIdentity ExecutorActorId;
     YDB_READONLY_DEF(TConfig, Config);
+    const NACLib::TUserToken UserToken;
 public:
     using TPtr = std::shared_ptr<TExecutorController>;
     TExecutorController(const NActors::TActorIdentity& executorActorId, const TConfig& config)
         : ExecutorActorId(executorActorId)
         , Config(config)
+        , UserToken(NACLib::TSystemUsers::Metadata())
     {
 
+    }
+
+    const NACLib::TUserToken& GetUserToken() const {
+        return UserToken;
     }
 
     TString GetTableName() const {

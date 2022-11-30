@@ -16,7 +16,7 @@ protected:
     virtual std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
 public:
     TLockPingerActor(TExecutorController::TPtr executorController, const std::set<TString>& taskIds)
-        : TBase(executorController->GetRequestConfig())
+        : TBase(executorController->GetRequestConfig(), executorController->GetUserToken())
         , TaskIds(taskIds)
         , ExecutorController(executorController) {
         Y_VERIFY(TaskIds.size());

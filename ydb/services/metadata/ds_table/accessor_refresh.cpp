@@ -53,7 +53,7 @@ void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
     for (auto&& i : managers) {
         sb << "SELECT * FROM `" + EscapeC(i->GetTablePath()) + "`;";
     }
-    Register(new TYQLQuerySessionedActor(sb, Config.GetRequestConfig(), InternalController));
+    Register(new TYQLQuerySessionedActor(sb, NACLib::TSystemUsers::Metadata(), Config.GetRequestConfig(), InternalController));
 }
 
 TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotsFetcher::TPtr snapshotConstructor)

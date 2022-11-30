@@ -17,7 +17,8 @@ private:
     IModificationObjectsController::TPtr Controller;
     const TString SessionId;
     const TString TransactionId;
-    const TMaybe<NACLib::TUserToken> UserToken;
+    const NACLib::TUserToken SystemUserToken;
+    const std::optional<NACLib::TUserToken> UserToken;
     std::deque<NInternal::NRequest::TDialogYQLRequest::TRequest> Requests;
 protected:
     TTableRecords Objects;
@@ -49,7 +50,8 @@ protected:
 
     void Handle(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogYQLRequest>::TPtr& /*ev*/) {
         if (Requests.size()) {
-            TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogYQLRequest>(Requests.front(), TBase::SelfId()));
+            TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogYQLRequest>(
+                Requests.front(), SystemUserToken, TBase::SelfId()));
             Requests.pop_front();
         } else {
             Controller->ModificationFinished();
@@ -57,17 +59,19 @@ protected:
         }
     }
 
-    void Handle(NInternal::NRequest::TEvRequestFailed::TPtr& /*ev*/) {
+    void Handle(NInternal::NRequest::TEvRequestFailed::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        Controller->ModificationProblem("cannot execute yql request for upsert objects");
+        Controller->ModificationProblem("cannot execute yql request for " + GetModifyType() +
+            " objects: " + ev->Get()->GetErrorMessage());
     }
 
 public:
-    TModifyObjectsActor(TTableRecords&& objects, IModificationObjectsController::TPtr controller, const TString& sessionId,
-        const TString& transactionId, const TMaybe<NACLib::TUserToken>& userToken)
+    TModifyObjectsActor(TTableRecords&& objects, const NACLib::TUserToken& systemUserToken, IModificationObjectsController::TPtr controller, const TString& sessionId,
+        const TString& transactionId, const std::optional<NACLib::TUserToken>& userToken)
         : Controller(controller)
         , SessionId(sessionId)
         , TransactionId(transactionId)
+        , SystemUserToken(systemUserToken)
         , UserToken(userToken)
         , Objects(std::move(objects))
 
@@ -88,7 +92,8 @@ public:
         TBase::Become(&TModifyObjectsActor::StateMain);
         BuildRequestDirect();
         BuildRequestHistory();
-        TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogYQLRequest>(Requests.front(), TBase::SelfId()));
+        TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogYQLRequest>(
+            Requests.front(), SystemUserToken, TBase::SelfId()));
         Requests.pop_front();
     }
 };

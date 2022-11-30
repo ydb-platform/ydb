@@ -83,7 +83,7 @@ public:
 
     class TModificationContext {
     private:
-        YDB_ACCESSOR_DEF(TMaybe<NACLib::TUserToken>, UserToken);
+        YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
     public:
         TModificationContext() = default;

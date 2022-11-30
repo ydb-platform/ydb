@@ -17,7 +17,7 @@ protected:
 
 public:
     TAddTasksActor(TExecutorController::TPtr controller, const TTask& task, const TActorId resultWaiter)
-        : TBase(controller->GetRequestConfig())
+        : TBase(controller->GetRequestConfig(), controller->GetUserToken())
         , Controller(controller)
         , Task(task)
         , ResultWaiter(resultWaiter)

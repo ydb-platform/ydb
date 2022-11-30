@@ -31,7 +31,8 @@ private:
     YDB_READONLY_DEF(typename TDialogPolicy::TRequest, Request);
 protected:
     virtual bool DoExecute(const TActorId& resultCallbackId, const NInternal::NRequest::TConfig& config) const override {
-        TActivationContext::ActorSystem()->Register(new NInternal::NRequest::TYDBRequest<TDialogPolicy>(Request, resultCallbackId, config));
+        TActivationContext::ActorSystem()->Register(new NInternal::NRequest::TYDBRequest<TDialogPolicy>(Request,
+            NACLib::TSystemUsers::Metadata(), resultCallbackId, config));
         return true;
     }
 public:

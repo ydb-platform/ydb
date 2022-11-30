@@ -58,6 +58,7 @@ protected:
     const NMetadata::IOperationsManager::TModificationContext Context;
     std::vector<TTableRecord> Patches;
     TTableRecords RestoreObjectIds;
+    const NACLib::TUserToken UserToken = NACLib::TSystemUsers::Metadata();
     virtual bool PrepareRestoredObjects(std::vector<TObject>& objects) const = 0;
     virtual bool ProcessPreparedObjects(TTableRecords&& records) const = 0;
     virtual void InitState() = 0;
@@ -113,7 +114,7 @@ public:
         }
 
         TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogCreateSession>(
-            NInternal::NRequest::TDialogCreateSession::TRequest(), TBase::SelfId()));
+            NInternal::NRequest::TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
     }
 
     void Handle(typename NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogCreateSession>::TPtr& ev) {
@@ -124,7 +125,7 @@ public:
         Y_VERIFY(SessionId);
 
         InternalController = std::make_shared<TProcessingController<TObject>>(TBase::SelfId());
-        TBase::Register(new TRestoreObjectsActor<TObject>(RestoreObjectIds, InternalController, SessionId));
+        TBase::Register(new TRestoreObjectsActor<TObject>(RestoreObjectIds, UserToken, InternalController, SessionId));
     }
 
     void Handle(typename TEvRestoreFinished<TObject>::TPtr& ev) {
@@ -268,7 +269,7 @@ private:
     using TBase = TModificationActor<TObject>;
 protected:
     virtual bool ProcessPreparedObjects(TTableRecords&& records) const override {
-        TBase::Register(new TUpdateObjectsActor<TObject>(std::move(records),
+        TBase::Register(new TUpdateObjectsActor<TObject>(std::move(records), TBase::UserToken,
             TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
         return true;
     }
@@ -286,7 +287,7 @@ private:
     using TBase = TModificationActor<TObject>;
 protected:
     virtual bool ProcessPreparedObjects(TTableRecords&& records) const override {
-        TBase::Register(new TInsertObjectsActor<TObject>(std::move(records),
+        TBase::Register(new TInsertObjectsActor<TObject>(std::move(records), TBase::UserToken,
             TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
         return true;
     }
@@ -334,7 +335,7 @@ public:
     using TBase::TBase;
 
     virtual bool ProcessPreparedObjects(TTableRecords&& records) const override {
-        TBase::Register(new TDeleteObjectsActor<TObject>(std::move(records),
+        TBase::Register(new TDeleteObjectsActor<TObject>(std::move(records), TBase::UserToken,
             TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
         return true;
     }

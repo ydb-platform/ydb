@@ -16,6 +16,7 @@ private:
     typename IRestoreObjectsController::TPtr Controller;
     const TTableRecords ObjectIds;
     TString SessionId;
+    const NACLib::TUserToken UserToken;
 
     void Handle(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogSelect>::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
@@ -43,10 +44,11 @@ private:
     }
 
 public:
-    TRestoreObjectsActor(const TTableRecords& objectIds, typename IRestoreObjectsController::TPtr controller, const TString& sessionId)
+    TRestoreObjectsActor(const TTableRecords& objectIds, const NACLib::TUserToken& uToken, typename IRestoreObjectsController::TPtr controller, const TString& sessionId)
         : Controller(controller)
         , ObjectIds(objectIds)
         , SessionId(sessionId)
+        , UserToken(uToken)
     {
         Y_VERIFY(SessionId);
     }
@@ -69,7 +71,7 @@ public:
         request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
         request.set_session_id(SessionId);
         TBase::Become(&TRestoreObjectsActor::StateMain);
-        TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogSelect>(request, TBase::SelfId()));
+        TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogSelect>(request, UserToken, TBase::SelfId()));
     }
 };
 

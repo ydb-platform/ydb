@@ -40,7 +40,7 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
     };
 
     THolder<TIntermediate> IntermediateResult;
-    const TTabletStorageInfo *TabletInfo;
+    TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 TabletGeneration;
     TStackVec<TGetBatch, 1> Batches;
 
@@ -502,7 +502,7 @@ public:
     TKeyValueStorageReadRequest(THolder<TIntermediate> &&intermediate,
             const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
         : IntermediateResult(std::move(intermediate))
-        , TabletInfo(tabletInfo)
+        , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
     {}
 };

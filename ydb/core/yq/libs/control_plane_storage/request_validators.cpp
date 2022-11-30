@@ -133,4 +133,34 @@ NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobu
     return issues;
 }
 
+NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const TVector<TString>& partitionedBy) {
+    NYql::TIssues issues;
+    TMap<TString, Ydb::Type> types;
+    for (const auto& column: schema.column()) {
+        types[column.name()] = column.type();
+    }
+    static const TSet<Ydb::Type::PrimitiveTypeId> availableProjectionTypes {
+        Ydb::Type::STRING,
+        Ydb::Type::UTF8,
+        Ydb::Type::INT32,
+        Ydb::Type::INT64,
+        Ydb::Type::UINT32,
+        Ydb::Type::UINT64,
+        Ydb::Type::DATE
+    };
+    for (const auto& parititonedColumn: partitionedBy) {
+        auto it = types.find(parititonedColumn);
+        if (it == types.end()) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Column " << parititonedColumn << " from partitioned_by does not exist in the scheme. Please add such a column to your scheme"));
+            continue;
+        }
+        const auto& type = it->second;
+        const auto typeId = type.type_id();
+        if (!availableProjectionTypes.contains(typeId)) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Column " << parititonedColumn << " from partitioned_by does not support " << Ydb::Type::PrimitiveTypeId_Name(typeId) << " type"));
+        }
+    }
+    return issues;
+}
+
 } // namespace NYq

@@ -78,6 +78,8 @@ NYql::TIssues ValidateQuery(const T& ev, size_t maxSize)
 
 NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting);
 
+NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const TVector<TString>& partitionedBy);
+
 template<typename T>
 NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
 {
@@ -124,6 +126,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuer
                 if (subset.projection_size() || subset.partitioned_by_size()) {
                     try {
                         TVector<TString> partitionedBy{subset.partitioned_by().begin(), subset.partitioned_by().end()};
+                        issues.AddIssues(ValidateProjectionColumns(subset.schema(), partitionedBy));
                         TString projectionStr;
                         if (subset.projection_size()) {
                             NSc::TValue projection;

@@ -150,6 +150,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_kex.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_log.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_update.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_next_protocol.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ocsp_stapling.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_post_handshake.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_prf.c
@@ -180,7 +181,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_signature_algorithms.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_signature_scheme.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls12_encrypted_extensions.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_certificate_verify.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_handshake.c

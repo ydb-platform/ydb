@@ -62,7 +62,12 @@ static const s2n_extension_type *const client_hello_extensions[] = {
 
         &s2n_client_signature_algorithms_extension,
         &s2n_client_server_name_extension,
+
+        /* We MUST process the NPN extension after the ALPN extension
+         * because NPN is only negotiated if ALPN is not */
         &s2n_client_alpn_extension,
+        &s2n_client_npn_extension,
+
         &s2n_client_status_request_extension,
         &s2n_client_sct_list_extension,
         &s2n_client_max_frag_len_extension,
@@ -75,7 +80,6 @@ static const s2n_extension_type *const client_hello_extensions[] = {
         &s2n_psk_key_exchange_modes_extension,
         &s2n_client_early_data_indication_extension,
         &s2n_client_ems_extension,
-        &s2n_client_npn_extension,
         &s2n_client_psk_extension /* MUST be last */
 };
 
@@ -124,10 +128,6 @@ static const s2n_extension_type *const encrypted_extensions[] = {
         &s2n_server_early_data_indication_extension,
 };
 
-static const s2n_extension_type *const tls12_encrypted_extensions[] = {
-        &s2n_npn_encrypted_extension,
-};
-
 static const s2n_extension_type *const cert_req_extensions[] = {
         &s2n_server_signature_algorithms_extension,
 };
@@ -152,7 +152,6 @@ static s2n_extension_type_list extension_lists[] = {
         [S2N_EXTENSION_LIST_CERT_REQ] = S2N_EXTENSION_LIST(cert_req_extensions),
         [S2N_EXTENSION_LIST_CERTIFICATE] = S2N_EXTENSION_LIST(certificate_extensions),
         [S2N_EXTENSION_LIST_NST] = S2N_EXTENSION_LIST(nst_extensions),
-        [S2N_EXTENSION_LIST_ENCRYPTED_EXTENSIONS_TLS12] = S2N_EXTENSION_LIST(tls12_encrypted_extensions),
         [S2N_EXTENSION_LIST_EMPTY] = { .extension_types = NULL, .count = 0 },
 };
 

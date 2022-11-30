@@ -121,7 +121,9 @@ public:
 private:
     TEvTxProcessing::TEvReadSet::TPtr Ev;
     THolder<IEventHandle> Ack;
+    TMonotonic AckTs;
 
+    void DoExecute(TTransactionContext &txc, const TActorContext &ctx);
     THolder<IEventHandle> MakeAck(const TActorContext &ctx);
 };
 

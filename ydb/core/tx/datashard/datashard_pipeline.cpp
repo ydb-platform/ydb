@@ -618,7 +618,9 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
                    "Unexpected readset in state %" PRIu32 " for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    Self->State, step, txId, Self->TabletID());
-        DelayedAcks[TStepOrder(step, txId)] =  std::move(ack);
+        if (ack) {
+            DelayedAcks[TStepOrder(step, txId)] = std::move(ack);
+        }
         return false;
     }
 
@@ -626,9 +628,12 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     if (op) {
         // If input read sets are not loaded yet then
         // it will be added at load.
-        if (op->HasLoadedInRSFlag())
+        if (op->HasLoadedInRSFlag()) {
             op->AddInReadSet(rs.Record);
-        op->AddDelayedAck(THolder(ack.Release()));
+        }
+        if (ack) {
+            op->AddDelayedAck(THolder(ack.Release()));
+        }
         op->AddDelayedInReadSet(rs.Record);
 
         AddCandidateOp(op);

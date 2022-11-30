@@ -287,6 +287,24 @@ message TReadSetData {
 
 // tablet to tablet
 message TEvReadSet {
+    enum EFlags {
+        // The sender is not expecting an ack. This is used for temporary
+        // readsets that are non-persistent, e.g. when the transaction was
+        // aborted and transaction outcome is unknown.
+        FLAG_NO_ACK = 1;
+
+        // This readset does not have any data. This is used when sender needs
+        // to produce a readset, either because it was asked to, but the
+        // transaction aborted or expired, or when no data is expected, but
+        // the sender is expecting some data back.
+        FLAG_NO_DATA = 2;
+
+        // The sender is expecting a readset from destination shard. The
+        // receiver is expected to send a readset to the source shard, even
+        // when there is no data, in which case FLAG_NO_DATA should be used.
+        FLAG_EXPECT_READSET = 4;
+    }
+
     optional uint64 Step = 1;
     optional uint64 TxId = 2;
     optional uint64 TabletSource = 3;
@@ -295,6 +313,7 @@ message TEvReadSet {
     optional bytes ReadSet = 6;
     optional TBalanceTrackList BalanceTrackList = 7;
     optional uint64 Seqno = 8; // Key in outReadSet table to facilitate erasing on ACK
+    optional uint32 Flags = 9;
 }
 
 // tablet to tablet

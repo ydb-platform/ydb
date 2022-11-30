@@ -101,5 +101,15 @@ public:
     int Run(TConfig& config) override;
 };
 
+class TCommandImportFromParquet : public TCommandImportFileBase {
+public:
+    TCommandImportFromParquet(const TString& cmd = "parquet", const TString& cmdDescription = "Import data from Parquet file")
+        : TCommandImportFileBase(cmd, cmdDescription) 
+        {
+            InputFormat = EOutputFormat::Parquet;
+        }
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+};
 }
 }

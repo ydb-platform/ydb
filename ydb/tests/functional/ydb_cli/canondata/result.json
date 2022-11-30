@@ -8,6 +8,9 @@
     "test_ydb_impex.TestImpex.test_format_tsv": {
         "uri": "file://test_ydb_impex.TestImpex.test_format_tsv/result.output"
     },
+    "test_ydb_impex.TestImpex.test_format.parquet": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_parquet/result.output"
+    },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64/result.output"
     },

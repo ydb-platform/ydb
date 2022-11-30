@@ -16,6 +16,7 @@ enum class EOutputFormat {
     ProtoJsonBase64 /* "proto-json-base64" */,
     Csv /* "csv" */,
     Tsv /* "tsv" */,
+    Parquet /* "parquet" */,
 };
 
 // EMessagingFormat to be used in both input and output when working with files/pipes in operations related to messaging 

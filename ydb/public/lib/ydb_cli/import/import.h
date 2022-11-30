@@ -69,6 +69,9 @@ private:
     TStatus UpsertJson(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
     TAsyncStatus UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder);
     TType GetTableType(const NTable::TTableDescription& tableDescription);
+
+    TStatus UpsertParquet(const TString& filename, const TString& dbPath, const TImportFileSettings& settings);
+    TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
 };
 
 }

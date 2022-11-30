@@ -140,6 +140,7 @@ TCommandImportFromFile::TCommandImportFromFile()
     AddCommand(std::make_unique<TCommandImportFromCsv>());
     AddCommand(std::make_unique<TCommandImportFromTsv>());
     AddCommand(std::make_unique<TCommandImportFromJson>());
+    AddCommand(std::make_unique<TCommandImportFromParquet>());
 }
 
 /// Import File Shared Config
@@ -255,5 +256,21 @@ int TCommandImportFromJson::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
+/// Import Parquet 
+void TCommandImportFromParquet::Config(TConfig& config) {
+    TCommandImportFileBase::Config(config);
+}
+
+int TCommandImportFromParquet::Run(TConfig& config) {
+    TImportFileSettings settings; 
+    settings.Format(InputFormat);
+    settings.MaxInFlightRequests(MaxInFlightRequests);
+    settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
+
+    TImportFileClient client(CreateDriver(config));
+    ThrowOnError(client.Import(FilePath, Path, settings));
+
+    return EXIT_SUCCESS;
+}
 }
 }

@@ -15,7 +15,9 @@ target_link_libraries(lib-ydb_cli-import PUBLIC
   common
   cpp-client-ydb_proto
   public-lib-json_value
+  libs-apache-arrow
 )
 target_sources(lib-ydb_cli-import PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/import.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/cli_arrow_helpers.cpp
 )

@@ -4,12 +4,15 @@ from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 import ydb
 import logging
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pandas as pd
 
 
 logger = logging.getLogger(__name__)
 
 
-DATA_CSV = """key,id,value
+DATA_CSV = """key,id,valueo
 1,1111,"one"
 2,2222,"two"
 3,3333,"three"
@@ -26,6 +29,11 @@ DATA_JSON = """{"key":1,"id":1111,"value":"one"}
 {"key":5,"id":5555,"value":"five"}
 {"key":7,"id":7777,"value":"seven"}
 """
+
+
+DATAFRAME = pd.DataFrame({'key': [1, 2, 3, 5, 7], 'id': [1111, 2222, 3333, 5555, 7777], 'value': ["one", "two", "three", "five", "seven"]}).astype({'key': 'uint32', 'id': 'uint64', 'value': 'string'})
+SCHEMA = pa.schema([('key', pa.uint32()), ('id', pa.uint64()), ('value', pa.string())])
+DATA_PARQUET = pa.Table.from_pandas(DATAFRAME, schema=SCHEMA)
 
 
 def ydb_bin():
@@ -111,6 +119,13 @@ class TestImpex(BaseTestTableService):
         output = self.execute_ydb_cli_command(["import", "file", "json", "-p", self.table_path, "-i", "tempinput.dat"])
         return self.canonical_result(output)
 
+    def run_import_parquet(self, data):
+        self.clear_table()
+        with open("tempinput.dat", "w"):
+            pq.write_table(data, "tempinput.dat")
+        output = self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", "tempinput.dat"])
+        return self.canonical_result(output)
+
     def run_export(self, format):
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
         output = self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format])
@@ -127,3 +142,7 @@ class TestImpex(BaseTestTableService):
     def test_format_json(self):
         self.run_import_json(DATA_JSON)
         return self.run_export("json-unicode")
+
+    def test_format_parquet(self):
+        self.run_import_parquet(DATA_PARQUET)
+        return self.run_export("csv")

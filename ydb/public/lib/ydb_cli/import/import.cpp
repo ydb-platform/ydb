@@ -19,6 +19,15 @@
 
 #include <deque>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
+#include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
+#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
+#include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -87,6 +96,8 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
         case EOutputFormat::JsonUnicode:
         case EOutputFormat::JsonBase64:
             return UpsertJson(input, dbPath, settings);
+        case EOutputFormat::Parquet:
+            return UpsertParquet(filePath, dbPath, settings);
         default: ;
     }
     return MakeStatus(EStatus::BAD_REQUEST,
@@ -252,6 +263,121 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
     }
 
     return WaitForQueue(inFlightRequests, 0);
+}
+
+TStatus TImportFileClient::UpsertParquet([[maybe_unused]]const TString& filename, [[maybe_unused]]const TString& dbPath, [[maybe_unused]]const TImportFileSettings& settings) {
+    #if defined (_WIN64) || defined (_WIN32) || defined (__WIN32__)
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
+    #else 
+    std::shared_ptr<arrow::io::ReadableFile> infile;
+    arrow::Result<std::shared_ptr<arrow::io::ReadableFile>> fileResult = arrow::io::ReadableFile::Open(filename);
+    if (!fileResult.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Unable to open parquet file:" << fileResult.status().ToString());
+    }
+    std::shared_ptr<arrow::io::ReadableFile> readableFile = fileResult.ValueOrDie();
+
+    std::unique_ptr<parquet::arrow::FileReader> fileReader;
+    arrow::MemoryPool *pool = arrow::default_memory_pool();
+
+    arrow::Status st;
+    st = parquet::arrow::OpenFile(readableFile, pool, &fileReader);
+    if (!st.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while initializing arrow FileReader: " << st.ToString());
+    }
+
+    std::shared_ptr<parquet::FileMetaData> metaData = parquet::ReadMetaData(readableFile);
+
+    i64 numRowGroups = metaData->num_row_groups();
+
+    std::vector<int> row_group_indices(numRowGroups);
+    for (i64 i = 0; i < numRowGroups; i++) {
+        row_group_indices[i] = i;
+    }
+
+    std::shared_ptr<arrow::RecordBatchReader> reader;
+
+    st = fileReader->GetRecordBatchReader(row_group_indices, &reader);
+    if (!st.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while getting RecordBatchReader: " << st.ToString());
+    }
+
+    std::deque<TAsyncStatus> inFlightRequests;
+    
+    auto splitUpsertBatch = [this, &inFlightRequests, dbPath, settings](const std::shared_ptr<arrow::RecordBatch> &recordBatch){
+        std::vector<std::shared_ptr<arrow::RecordBatch>> slicedRecordBatches;
+        std::deque<std::shared_ptr<arrow::RecordBatch>> batchesDeque;
+        size_t totalSize = NYdb_cli::NArrow::GetBatchDataSize(recordBatch);
+
+        size_t sliceCnt = totalSize / (size_t)settings.BytesPerRequest_;
+        if (totalSize % settings.BytesPerRequest_ != 0) {
+            sliceCnt++;
+        }
+        int64_t rowsInSlice = recordBatch->num_rows() / sliceCnt;
+
+        for (int64_t currentRow = 0; currentRow < recordBatch->num_rows(); currentRow += rowsInSlice) {
+            auto nextSlice = (currentRow + rowsInSlice < recordBatch->num_rows()) ? recordBatch->Slice(currentRow, rowsInSlice) : recordBatch->Slice(currentRow);
+            batchesDeque.push_back(nextSlice);
+        }
+
+        while (!batchesDeque.empty()) {
+            std::shared_ptr<arrow::RecordBatch> nextBatch = batchesDeque.front();
+            batchesDeque.pop_front();
+            if (NYdb_cli::NArrow::GetBatchDataSize(nextBatch) < settings.BytesPerRequest_) {
+                slicedRecordBatches.push_back(nextBatch);
+            }
+            else {
+                std::shared_ptr<arrow::RecordBatch> left = nextBatch->Slice(0, nextBatch->num_rows() / 2);
+                std::shared_ptr<arrow::RecordBatch> right = nextBatch->Slice(nextBatch->num_rows() / 2); 
+                batchesDeque.push_front(right);
+                batchesDeque.push_front(left);
+            }
+        }
+        auto schema = recordBatch->schema(); 
+        TString strSchema = NYdb_cli::NArrow::SerializeSchema(*schema);
+        for (size_t i = 0; i < slicedRecordBatches.size(); i++) {
+            TString buffer = NYdb_cli::NArrow::SerializeBatchNoCompression(slicedRecordBatches[i]);
+            auto status = WaitForQueue(inFlightRequests, settings.MaxInFlightRequests_);
+            if (!status.IsSuccess()) {
+                return status;
+            }
+
+            inFlightRequests.push_back(UpsertParquetBuffer(dbPath, buffer, strSchema));
+        }
+
+        return MakeStatus(EStatus::SUCCESS);
+    };
+
+    std::shared_ptr<arrow::RecordBatch> currentBatch;
+    st = reader->ReadNext(&currentBatch);
+    if (!st.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while reading next RecordBatch" << st.ToString());
+    }
+
+    while(currentBatch) {
+        TStatus upsertStatus = splitUpsertBatch(currentBatch);
+        if (!upsertStatus.IsSuccess()) {
+            return upsertStatus;
+        }
+        st = reader->ReadNext(&currentBatch);
+        if (!st.ok()) {
+            return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while reading next RecordBatch" << st.ToString());
+        }
+    }
+
+    return WaitForQueue(inFlightRequests, 0);
+    #endif
+}
+
+inline 
+TAsyncStatus TImportFileClient::UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema) {
+    auto upsert = [this, dbPath, buffer, strSchema](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
+        return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::ApacheArrow, buffer, strSchema, UpsertSettings)
+            .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
+                NYdb::TStatus status = bulkUpsertResult.GetValueSync();
+                return NThreading::MakeFuture(status);
+            });
+        };
+    return TableClient->RetryOperation(upsert, RetrySettings);
 }
 
 TType TImportFileClient::GetTableType(const NTable::TTableDescription& tableDescription) {

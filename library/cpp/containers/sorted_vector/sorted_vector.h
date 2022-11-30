@@ -238,6 +238,11 @@ namespace NSorted {
         }
 
         template<class K>
+        Y_FORCE_INLINE bool contains(const K& key) const {
+            return this->Has(key);
+        }
+
+        template<class K>
         Y_FORCE_INLINE iterator LowerBound(const K& key) {
             return ::LowerBound(TBase::begin(), TBase::end(), key, TKeyCompare());
         }

@@ -60,16 +60,11 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
-#define LOG_W(stream) \
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
-#define LOG_T(stream) \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
+#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
+#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
 
 namespace NYq {
 

@@ -21,14 +21,10 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/private_client/internal_service.h>
 
-#define LOG_E(stream)                                                        \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
-#define LOG_I(stream)                                                        \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
-#define LOG_D(stream)                                                        \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
-#define LOG_T(stream)                                                        \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
+#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
 
 namespace NYq {
 

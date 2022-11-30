@@ -313,6 +313,15 @@ enum EServiceKikimr {
     PUBLIC_HTTP = 1157;
     FQ_CONTROL_PLANE_CONFIG = 1158;
 
+    FQ_RUN_ACTOR         = 1159;
+    FQ_DATABASE_RESOLVER = 1160;
+    FQ_PENDING_FETCHER   = 1161;
+    FQ_PINGER            = 1162;
+    FQ_RESULT_WRITER     = 1163;
+    FQ_LOG_UPDATER       = 1164;
+
+    DQ_TASK_RUNNER       = 1165;
+
     // 1024 - 1099 is reserved for nbs
 
     // Change exchange (async indexes & CDC)

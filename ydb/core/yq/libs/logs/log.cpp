@@ -7,14 +7,9 @@
 
 #include <library/cpp/actors/core/log.h>
 
-#define LOG_C(stream) \
-    LOG_CRIT_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQL_PROXY, stream)
-
-#define LOG_E(stream) \
-    LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQL_PROXY, stream)
-
-#define LOG_D(stream) \
-    LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQL_PROXY, stream)
+#define LOG_C(stream) LOG_CRIT_S (::NActors::TActivationContext::AsActorContext(), NKikimrServices::FQ_LOG_UPDATER, stream)
+#define LOG_E(stream) LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::FQ_LOG_UPDATER, stream)
+#define LOG_D(stream) LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::FQ_LOG_UPDATER, stream)
 
 namespace NKikimr {
 

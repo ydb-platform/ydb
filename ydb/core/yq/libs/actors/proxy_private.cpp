@@ -16,12 +16,9 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
+#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
 
 namespace NYq {
 

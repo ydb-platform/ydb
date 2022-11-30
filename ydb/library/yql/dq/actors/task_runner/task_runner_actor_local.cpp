@@ -19,11 +19,12 @@
 
 #include <util/generic/queue.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+
 using namespace NActors;
 
 namespace NYql::NDq {

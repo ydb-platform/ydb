@@ -10,12 +10,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/protos/services.pb.h>
 
-
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "DatabaseResolver - TraceId: " << TraceId << ": " << stream)
-
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "DatabaseResolver - TraceId: " << TraceId << ": " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
 
 namespace NYq {
 

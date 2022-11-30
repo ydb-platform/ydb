@@ -17,17 +17,10 @@
 
 #include <deque>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-
-#define LOG_W(stream) \
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-
-#define LOG_T(stream) \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
+#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
 
 namespace NYq {
 

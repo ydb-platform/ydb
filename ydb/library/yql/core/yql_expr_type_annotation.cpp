@@ -1624,6 +1624,13 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, TExprContext
     return nullptr;
 }
 
+const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx) {
+    if (const auto dry = DryType(primary, ctx))
+        if (!((NUdf::ECastOptions::AnywayLoseData | NUdf::ECastOptions::Impossible) & CastResult<true>(secondary, dry)))
+            return dry;
+    return nullptr;
+}
+
 const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, bool& hasOptional, TExprContext& ctx) {
     if (const auto dry = DryType(primary, hasOptional, ctx))
         if (!((NUdf::ECastOptions::AnywayLoseData | NUdf::ECastOptions::Impossible) & CastResult<true>(secondary, dry)))

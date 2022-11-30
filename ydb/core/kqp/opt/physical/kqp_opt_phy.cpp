@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 
 namespace NKikimr::NKqp::NOpt {

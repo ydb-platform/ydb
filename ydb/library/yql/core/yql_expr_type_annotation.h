@@ -191,6 +191,7 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, TExprContext
 const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, bool& hasOptional, TExprContext& ctx);
 
 // Key type for left or right join.
+const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx);
 const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, bool& hasOptional, TExprContext& ctx);
 
 template <bool Strict> // Strict + DryType before - common type for join key.

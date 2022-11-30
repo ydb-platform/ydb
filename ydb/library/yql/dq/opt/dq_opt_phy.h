@@ -11,12 +11,12 @@
 namespace NYql::NDq {
 
 NNodes::TMaybeNode<NNodes::TDqStage> DqPushLambdaToStage(const NNodes::TDqStage &stage,
-    const NNodes::TCoAtom& outputIndex, NNodes::TCoLambda& lambda,
+    const NNodes::TCoAtom& outputIndex, const NNodes::TCoLambda& lambda,
     const TVector<NNodes::TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx);
 
 TExprNode::TPtr DqBuildPushableStage(const NNodes::TDqConnection& connection, TExprContext& ctx);
 
-NNodes::TMaybeNode<NNodes::TDqConnection> DqPushLambdaToStageUnionAll(const NNodes::TDqConnection& connection, NNodes::TCoLambda& lambda,
+NNodes::TMaybeNode<NNodes::TDqConnection> DqPushLambdaToStageUnionAll(const NNodes::TDqConnection& connection, const NNodes::TCoLambda& lambda,
     const TVector<NNodes::TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx);
 
 NNodes::TExprBase DqPushSkipNullMembersToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
@@ -75,22 +75,11 @@ NNodes::TExprBase DqRewriteRightJoinToLeft(const NNodes::TExprBase node, TExprCo
 NNodes::TExprBase DqRewriteLeftPureJoin(const NNodes::TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
-NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx,
-    IOptimizationContext& optCtx);
-
-NNodes::TExprBase DqBuildJoin(const NNodes::TExprBase& node, TExprContext& ctx,
-    IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, bool useGraceJoin = false);
-
-NNodes::TExprBase DqBuildGraceJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
-
-
 bool DqValidateJoinInputs(
     const NNodes::TExprBase& left, const NNodes::TExprBase& right, const TParentsMap& parentsMap,
     bool allowStageMultiUsage);
 
 NNodes::TMaybeNode<NNodes::TDqJoin> DqFlipJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
-
-NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx);
 
 TMaybe<std::pair<NNodes::TExprBase, NNodes::TDqConnection>>  ExtractPureExprStage(TExprNode::TPtr input,
     TExprContext& ctx);

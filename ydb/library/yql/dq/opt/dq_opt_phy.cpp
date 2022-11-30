@@ -1,4 +1,5 @@
 #include "dq_opt_phy.h"
+#include "dq_opt_join.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
@@ -426,7 +427,7 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
 
 } // namespace
 
-TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, TCoLambda& lambda,
+TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, const TCoLambda& lambda,
     const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
 {
     YQL_CLOG(TRACE, CoreDq) << "stage #" << stage.Ref().UniqueId() << ": " << PrintDqStageOnly(stage, ctx)
@@ -536,7 +537,7 @@ TExprNode::TPtr DqBuildPushableStage(const NNodes::TDqConnection& connection, TE
     return ctx.ChangeChild(connection.Ref(), TDqConnection::idx_Output, output.Ptr());
 }
 
-TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& connection, TCoLambda& lambda,
+TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& connection, const TCoLambda& lambda,
     const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
 {
     auto stage = connection.Output().Stage().Cast<TDqStage>();
@@ -2278,7 +2279,7 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, bool useGraceJoin)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2289,23 +2290,22 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
     } else if (DqValidateJoinInputs(join.RightInput(), join.LeftInput(), parentsMap, allowStageMultiUsage)) {
-        auto maybeFlipJoin = DqFlipJoin(join, ctx);
-        if (!maybeFlipJoin) {
-            return node;
+        if (EHashJoinMode::Off == hashJoin) {
+            if (const auto maybeFlipJoin = DqFlipJoin(join, ctx)) {
+                join = maybeFlipJoin.Cast();
+            } else {
+                return node;
+            }
         }
-        join = maybeFlipJoin.Cast();
     } else {
         return node;
     }
 
-    auto joinType = join.JoinType().Value();
-    bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
-    bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
-
-
-
-    if (useGraceJoin && joinType != "Cross"sv && leftIsUnionAll && rightIsUnionAll) {
-        return DqBuildGraceJoin(join, ctx);
+    const auto joinType = join.JoinType().Value();
+    const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
+    const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
+    if (EHashJoinMode::Off != hashJoin && join.JoinType().Value() != "Cross"sv && leftIsUnionAll && rightIsUnionAll) {
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

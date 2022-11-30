@@ -81,6 +81,13 @@ struct TBaseDqDataEvents {
     };
 };
 
+enum class EHashJoinMode {
+    Off         /* "off" */,
+    Map         /* "map" */,
+    Dict        /* "dict" */,
+    Grace       /* "grace" */,
+};
+
 } // namespace NYql::NDq
 
 IOutputStream& operator<<(IOutputStream& stream, const NYql::NDq::TTxId& txId);

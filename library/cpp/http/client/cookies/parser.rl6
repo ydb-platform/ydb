@@ -1,0 +1,121 @@
+#include <library/cpp/http/client/cookies/cookie.h>
+
+#include <util/datetime/parser.h>
+
+namespace NHttp {
+namespace {
+%%{
+machine http_cookie_parser;
+
+include HttpDateTimeParser "../../../../../util/datetime/parser.rl6";
+
+alphtype unsigned char;
+
+################# Actions #################
+action set_name {
+    result.Name = TString((const char*)S_, p - S_);
+}
+
+action set_value {
+    valueSet = true;
+    result.Value = TString((const char*)S_, p - S_);
+}
+
+action set_expires {
+    // TODO take care about server's date ?
+    result.Expires = TString((const char*)S_, p - S_);
+}
+
+action set_max_age {
+    // TODO take care about server's date ?
+    result.MaxAge = I;
+}
+
+action set_domain {
+    result.Domain = TString((const char*)S_, p - S_);
+    result.Domain.to_lower();
+}
+
+action set_path {
+    result.Path = TString((const char*)S_, p - S_);
+}
+
+action set_secure {
+    result.IsSecure = true;
+
+}
+action set_httponly {
+    result.IsHttpOnly = true;
+}
+
+################# Basic Rules #################
+ws                = [ \t];
+
+separators        = '(' | ')' | '<' | '>' | '@' | ',' | ';' | ':' | '\\' |
+                    '"' | '/' | '[' | ']' | '?' | '=' | '{' | '}' | 32 | 9;
+
+token_octet       = 32..126 - separators;
+token             = token_octet+;
+
+other_octet       = 32..126 - ';';
+other             = other_octet+;
+
+cookie_name_octet = other_octet - '=';
+
+############ Set-Cookie line #################
+# See https://tools.ietf.org/html/rfc6265
+cookie_name       = cookie_name_octet+ > { S_ = p; } %set_name;
+cookie_value      = other_octet* > { S_ = p; } %set_value;
+cookie_pair       = cookie_name "=" cookie_value;
+
+expires_av        = "expires="i other > { S_ = p; } %set_expires;
+max_age_av        = "max-age="i int %set_max_age;
+domain_av         = "domain="i "."? other > { S_ = p; } %set_domain;
+path_av           = "path="i other > { S_ = p; } %set_path;
+secure_av         = "secure"i %set_secure;
+httponly_av       = "httponly"i %set_httponly;
+extension_av      = other;
+
+cookie_av         = extension_av | expires_av | max_age_av | domain_av |
+                    path_av | secure_av | httponly_av;
+
+set_cookie_string = cookie_pair ( ";" ws* cookie_av )*;
+
+################# main ############################
+main := set_cookie_string;
+
+}%%
+
+%% write data;
+
+} // namespace
+
+///////////////////////////////////////////////////////////////////////////////
+
+TCookie TCookie::Parse(const TString& data) {
+    TCookie result;
+    {
+        const unsigned char* S_ = nullptr;
+        long I = -1;
+        int Dc;
+        int cs;
+
+        const unsigned char *p = (const unsigned char*)data.data();
+        const unsigned char *pe = p + data.size();
+        const unsigned char* eof = pe;
+        bool valueSet = false;
+        %% write init;
+        %% write exec;
+        if (cs == %%{ write error; }%%) {
+            throw yexception() << "Cookie parse error";
+        }
+        if (!valueSet) {
+            throw yexception() << "Cookie value not set";
+        }
+    }
+    return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+} // namespace NHttp

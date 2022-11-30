@@ -6,7 +6,7 @@ import ydb
 from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_item, has_items
 import os
 import logging
-
+import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def upsert_simple(session, full_path):
 
 def output_path(*args):
     path = os.path.join(yatest_common.output_path(), *args)
-    os.makedirs(path)
+    os.makedirs(path, exist_ok=False)
     return path
 
 
@@ -153,10 +153,15 @@ class BaseTestBackupInFiles(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
+    @pytest.fixture(autouse=True, scope='class')
+    @classmethod
+    def set_test_name(cls, request):
+        cls.test_name = request.node.name
+
     @classmethod
     def create_backup(cls, path, expected_dirs, check_data, additional_args=[]):
         _, name = os.path.split(path)
-        backup_files_dir = output_path("backup_files_dir_" + path.replace("/", "_"))
+        backup_files_dir = output_path(cls.test_name, "backup_files_dir_" + path.replace("/", "_"))
         execution = yatest_common.execute(
             [
                 backup_bin(),
@@ -383,7 +388,7 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
         create_table_with_data(session, "folder/table")
 
         # Backup table
-        backup_files_dir = output_path('test_single_table_with_data_backup_restore' + postfix, "backup_files_dir")
+        backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore' + postfix, "backup_files_dir")
         yatest_common.execute(
             [
                 backup_bin(),
@@ -446,7 +451,7 @@ class TestBackupRestoreInRoot(BaseTestBackupInFiles):
         create_table_with_data(session, "folder/table")
 
         # Backup table
-        backup_files_dir = output_path('test_single_table_with_data_backup_restore', "backup_files_dir")
+        backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
         yatest_common.execute(
             [
                 backup_bin(),
@@ -501,7 +506,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         create_table_with_data(session, "folder/table")
 
         # Backup table
-        backup_files_dir = output_path('test_single_table_with_data_backup_restore', "backup_files_dir")
+        backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
         yatest_common.execute(
             [
                 backup_bin(),
@@ -556,7 +561,7 @@ class TestIncompleteBackup(BaseTestBackupInFiles):
         create_table_with_data(session, "folder/table")
 
         # Backup table
-        backup_files_dir = output_path("backup_files_dir")
+        backup_files_dir = output_path(self.test_name, "backup_files_dir")
         yatest_common.execute(
             [
                 backup_bin(),
@@ -672,7 +677,7 @@ class TestAlterBackupRestore(BaseTestBackupInFiles):
         )
 
         # Backup table
-        backup_files_dir = output_path('test_single_table_with_data_backup_restore', "backup_files_dir")
+        backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
         yatest_common.execute(
             [
                 backup_bin(),

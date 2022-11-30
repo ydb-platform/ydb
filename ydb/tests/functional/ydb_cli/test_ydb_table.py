@@ -2,6 +2,8 @@
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.oss_canonical import set_canondata_root
+
 import ydb
 import os
 import logging
@@ -45,6 +47,8 @@ def create_table_with_data(session, path):
 class BaseTestTableService(object):
     @classmethod
     def setup_class(cls):
+        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
+
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
         cls.root_dir = "/Root"

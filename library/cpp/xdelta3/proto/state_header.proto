@@ -1,0 +1,37 @@
+syntax = "proto2";
+
+package NXdeltaAggregateColumn;
+
+option cc_enable_arenas = true;
+
+// update ArenaMaxSize with reasonable constant after Header modification
+// note! not using strings here to avoid heap allocations
+
+message TStateHeader {
+    enum EType {
+        NONE_TYPE = 0;
+        BASE = 1;
+        PATCH = 2;
+    };
+
+    enum EErrorCode {
+        NO_ERROR = 0;
+        HEADER_PARSE_ERROR = 1;
+        BASE_HASH_ERROR = 2;
+        STATE_HASH_ERROR = 3;
+        MERGE_PATCHES_ERROR = 4;
+        APPLY_PATCH_ERROR = 5;
+        YT_MERGE_ERROR = 6;
+        MISSING_REQUIRED_FIELD_ERROR = 7;
+        WRONG_DATA_SIZE = 8;
+        STATE_SIZE_ERROR = 9;
+        PROTOBUF_ERROR = 10;
+    };
+
+    optional EType type = 1;        // base or patch
+    optional uint32 base_hash = 2;  // applicable for patch - hash of base to apply on
+    optional uint32 state_hash = 3; // applicable for patch - hash of target state 
+    optional uint32 state_size = 4; // applicable for patch - target state size - remove it?
+    optional uint32 data_size = 5;  // base or patch payload size
+    optional EErrorCode error_code = 6;
+};

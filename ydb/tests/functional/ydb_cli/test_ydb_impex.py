@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.oss_canonical import set_canondata_root
+
 import ydb
 import logging
 import pyarrow as pa
@@ -54,6 +55,8 @@ def create_table(session, path):
 class BaseTestTableService(object):
     @classmethod
     def setup_class(cls):
+        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
+
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
         cls.root_dir = "/Root"
@@ -109,15 +112,13 @@ class TestImpex(BaseTestTableService):
         self.clear_table()
         with open("tempinput.dat", "w") as f:
             f.writelines(data)
-        output = self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", "tempinput.dat", "--header"])
-        return self.canonical_result(output)
+        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", "tempinput.dat", "--header"])
 
     def run_import_json(self, data):
         self.clear_table()
         with open("tempinput.dat", "w") as f:
             f.writelines(data)
-        output = self.execute_ydb_cli_command(["import", "file", "json", "-p", self.table_path, "-i", "tempinput.dat"])
-        return self.canonical_result(output)
+        self.execute_ydb_cli_command(["import", "file", "json", "-p", self.table_path, "-i", "tempinput.dat"])
 
     def run_import_parquet(self, data):
         self.clear_table()

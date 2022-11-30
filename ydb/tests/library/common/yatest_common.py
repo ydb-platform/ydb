@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
+import os
+
 import yatest.common as ya_common
 import yatest.common.network as ya_common_network
-
+import ydb.tests.oss_canonical as oss_canonical
 """
 For yatest.common package see file
 library/python/testing/yatest_common/yatest/common/__init__.py
 """
+
+PortManager = ya_common_network.PortManager
 
 
 def wrap(func, alternative):
@@ -19,9 +23,17 @@ def wrap(func, alternative):
     return wrapped
 
 
-PortManager = ya_common_network.PortManager
+def canonical_file(*args, **kwargs):
+    if oss_canonical.is_oss:
+        assert kwargs['local']
+        path = kwargs.get('path', args[0] if len(args) else None)
+        path = os.path.abspath(path)
+        with open(path, 'r') as test_file, open(oss_canonical.canondata_filepath(path), 'r') as canon_file:
+            assert canon_file.read() == test_file.read()
+    else:
+        return ya_common.canonical_file(*args, **kwargs)
 
-canonical_file = wrap(ya_common.canonical_file, lambda x: x)
+
 source_path = wrap(ya_common.source_path, lambda x: x)
 build_path = wrap(ya_common.build_path, lambda x: x)
 binary_path = wrap(ya_common.binary_path, lambda x: x)

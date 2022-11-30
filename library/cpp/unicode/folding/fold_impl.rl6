@@ -1,0 +1,635 @@
+#if defined(__GNUC__)
+#   pragma GCC diagnostic ignored "-Wsign-compare"
+#endif
+
+#include <library/cpp/unicode/folding/fold.h>
+
+namespace NUF {
+
+void TNormalizer::DoNormalize() {
+#if 0
+%%{
+machine Normalizer;
+alphtype unsigned short;
+
+action H { Hold(); }
+action R { Ret();  }
+
+dia = 0x300 .. 0x36F;
+
+main := |*
+
+############################
+## cyr -> lat renyxization
+############################
+
+## і
+0x456 { EmitRenyxa('i'); };
+0x406 { EmitRenyxa('I'); };
+
+## ј
+0x458 { EmitRenyxa('j'); };
+0x408 { EmitRenyxa('J'); };
+
+## с
+0x441 { EmitRenyxa('c'); };
+0x421 { EmitRenyxa('C'); };
+
+##
+
+############################
+## cyr simplification
+############################
+
+## ә -> а
+0x4D9 { EmitSimpleCyr(0x430); };
+0x4D8 { EmitSimpleCyr(0x410); };
+
+## Һ -> х
+0x4BB { EmitSimpleCyr(0x445); };
+0x4BA { EmitSimpleCyr(0x425); };
+
+## Ԧ -> Һ / х
+0x0527 {
+    if (DoSimpleCyr)
+        EmitSimpleCyr(0x445);
+    else
+        Emit(0x04bb);
+};
+
+0x0526 {
+    if (DoSimpleCyr)
+        EmitSimpleCyr(0x420);
+    else
+        EmitUpper(0x04ba);
+};
+
+## є -> е
+0x454 { EmitSimpleCyr(0x435); };
+0x404 { EmitSimpleCyr(0x415); };
+
+## э -> е
+0x44d {
+    if (Is(LANG_BEL))
+        Emit(0x435);
+    else
+        Emit(0x44d);
+};
+0x42d {
+    if (Is(LANG_BEL))
+        EmitUpper(0x415);
+    else
+        EmitUpper(0x42d);
+};
+
+## ун -> вн
+0x443 dia* 0x43d {
+    if (Is(LANG_BEL) || Is(LANG_UKR))
+        Emit(0x432);
+    else
+        Emit(0x443);
+
+    Emit(0x43d, te - ts - 1);
+};
+0x423 dia* 0x43d {
+    if (Is(LANG_BEL) || Is(LANG_UKR))
+        EmitUpper(0x412);
+    else
+        EmitUpper(0x423);
+
+    Emit(0x43d, te - ts - 1);
+};
+
+## сьн -> сн
+(0x441 | 'c') 0x44c 0x43d {
+    if (DoRenyxa)
+        Emit('c');
+    else
+        Emit(0x441);
+    if (!Is(LANG_BEL))
+        Emit(0x44c);
+    Emit(0x43d, te - ts - 1);
+};
+(0x421 | 'C') 0x44c 0x43d {
+    if (DoRenyxa)
+        EmitUpper('C');
+    else
+        EmitUpper(0x421);
+    if (!Is(LANG_BEL))
+        Emit(0x44c);
+    Emit(0x43d, te - ts - 1);
+};
+
+############################
+## cyr diacritic fix
+############################
+
+## ҿ, ҽ -> е
+0x04bf | 0x04bd { Emit(0x435); };
+0x04be | 0x04bc { EmitUpper(0x415); };
+
+## ґ, ғ, ҕ, ӷ, ӻ -> г
+0x491 | 0x493 | 0x0495 | 0x04f7 | 0x04fb { Emit(0x433); };
+0x490 | 0x492 | 0x0494 | 0x04f6 | 0x04fa { EmitUpper(0x413); };
+
+## җ -> ж
+0x497 { Emit(0x436); };
+0x496 { EmitUpper(0x416); };
+
+## ҙ -> з
+0x0499 { Emit(0x0437); };
+0x0498 { Emit(0x0417); };
+
+## ӣ, й, ӥ, ҋ, ї -> й
+0x438 (0x304 | 0x306 | 0x308) | 0x456 0x308 | 0x048b { Emit(0x439); };
+0x418 (0x304 | 0x306 | 0x308) | 0x406 0x308 | 0x048a { EmitUpper(0x419); };
+
+## қ, ҝ, ҟ, ҡ, ӄ, ԟ -> к
+0x49B | 0x049d | 0x049f | 0x04a1 | 0x04c4 | 0x051f { Emit(0x43A); };
+0x49A | 0x049c | 0x049e | 0x04a0 | 0x04c3 | 0x051e { EmitUpper(0x41A); };
+
+## ӆ, ԓ, ԡ -> л
+0x04c6 | 0x0513 | 0x0521 { Emit(0x043b); };
+0x04c5 | 0x0512 | 0x0520 { EmitUpper(0x041b); };
+
+## ӎ -> м
+0x04ce { Emit(0x043c); };
+0x04cd { EmitUpper(0x041c); };
+
+## ң, ӈ, ӊ, ԣ -> н
+0x4A3 | 0x04c8 | 0x04ca | 0x0523 { Emit(0x43D); };
+0x4A2 | 0x04c7 | 0x04c9 | 0x0522 { EmitUpper(0x41D); };
+
+## ө -> о
+0x4E9 { Emit(0x43E); };
+0x4E8 { EmitUpper(0x41E); };
+
+## ҧ, ԥ -> п
+0x04a7 | 0x0525 { Emit(0x043f); };
+0x04a6 | 0x0524 { EmitUpper(0x041f); };
+
+## ҏ
+0x048f { Emit(0x0440); };
+0x048e { EmitUpper(0x0420); };
+
+## ҫ
+0x04ab { Emit(0x0441); };
+0x04aa { EmitUpper(0x0421); };
+
+## ҭ
+0x04ad { Emit(0x0442); };
+0x04ac { EmitUpper(0x0422); };
+
+## ұ, ү -> у
+0x4B1 | 0x4AF { Emit(0x443); };
+0x4B0 | 0x4AE { EmitUpper(0x423); };
+
+## ҳ, ӽ, ӿ -> х
+0x04b3 | 0x04fd | 0x04ff { Emit(0x0445); };
+0x04b2 | 0x04fc | 0x04fe { EmitUpper(0x0425); };
+
+## ҷ, ҹ, ӌ -> ч
+0x04b7 | 0x04b9 | 0x04cc { Emit(0x0447); };
+0x04b6 | 0x04b8 | 0x04cb { EmitUpper(0x0427); };
+
+## ҍ -> ь
+0x048d { Emit(0x044c); };
+0x048c { EmitUpper(0x042c); };
+
+############################
+## lat diacritic fix
+############################
+
+## Ⱥ, ɑ
+0x0251 { Emit('a'); };
+0x023a { EmitUpper('A'); };
+
+## ƀ, ƃ, ɓ
+0x0180 | 0x183 | 0x0253 { Emit('b'); };
+0x0181 | 0x182 | 0x0243 { EmitUpper('B'); };
+
+## ƈ, ȼ, ɕ
+0x188 | 0x023c | 0x0255 { Emit('c'); };
+0x187 | 0x023b { EmitUpper('C'); };
+
+## ð, đ, ƌ, Ɖ, Ɗ, ȡ, ɖ, ɗ
+0x00f0 | 0x0111 | 0x18c | 0x221 | 0x256 | 0x257 { Emit('d'); };
+0x00d0 | 0x0110 | 0x189 | 0x18a | 0x18b { EmitUpper('D'); };
+
+## ɛ, ɇ, ə, ɚ
+0x0259 | 0x025a | 0x25b | 0x0247 { Emit('e'); };
+0x0190 | 0x0246 { EmitUpper('E'); };
+
+## ƒ
+0x192 { Emit('f'); };
+0x191 { EmitUpper('F'); };
+
+## ǥ, ɠ
+0x01e5 | 0x0260 | 0x0261 { Emit('g'); };
+0x01e4 | 0x0193 { EmitUpper('G'); };
+
+## ħ, ɦ, ꜧ, ɧ
+0x0127 | 0x0266 | 0x0267 | 0xa727 { Emit('h'); };
+0x0126 { EmitUpper('H'); };
+
+## ɨ
+0x0268 { Emit('i'); };
+0x0197 { EmitUpper('I'); };
+
+## ɉ, ȷ
+0x0249 | 0x0237 | 0x025f | 0x0284 | 0x029d { Emit('j'); };
+0x0248 { EmitUpper('J'); };
+
+## ƙ
+0x199 { Emit('k'); };
+0x198 { EmitUpper('K'); };
+
+## ł, ƚ, ɫ, ɬ, ɭ, ȴ
+0x0142 | 0x019a | 0x234 | 0x026b | 0x026c | 0x026d { Emit('l'); };
+0x0141 | 0x023d { EmitUpper('L'); };
+
+## ɱ
+0x0271 { Emit('m'); };
+
+## ƞ, ȵ, ɲ, ɳ
+0x019e | 0x0220 | 0x0272 | 0x0273 { Emit('n'); };
+0x019d | 0x0235 { EmitUpper('N'); };
+
+## ɵ
+0x0275 { Emit('o'); };
+0x019f { EmitUpper('O'); };
+
+## ƥ
+0x01a5 { Emit('p'); };
+0x01a4 { EmitUpper('P'); };
+
+## ɋ, ʠ
+0x024b | 0x02a0 { Emit('q'); };
+
+## ɍ, ɼ, ɽ, ɾ
+0x024d | 0x027c | 0x027d | 0x027e { Emit('r'); };
+0x024c { EmitUpper('R'); };
+
+## ȿ, ʂ, ʆ, ʃ
+0x023f | 0x0282 | 0x0283 | 0x0286 { Emit('s'); };
+
+## ŧ, ƫ, ƭ, ȶ, ʈ, Ⱦ
+0x0167 | 0x01ab | 0x01ad | 0x0236 | 0x0288 { Emit('t'); };
+0x0166 | 0x01ac | 0x01ae | 0x023e { EmitUpper('T'); };
+
+## ʉ
+0x0289 { Emit('u'); };
+0x0244 { EmitUpper('U'); };
+
+## ʋ
+0x028b { Emit('v'); };
+0x01b2 { EmitUpper('V'); };
+
+## ƴ, ɏ
+0x01b4 | 0x024f { Emit('y'); };
+0x01b3 | 0x024e { EmitUpper('Y'); };
+
+## ƶ, ɀ, ʐ, ʓ, ʒ
+0x01ba | 0x01b6 | 0x225 | 0x0240 | 0x0290 | 0x0291 | 0x0292 | 0x0293 { Emit('z'); };
+0x01b5 | 0x224 { EmitUpper('Z'); };
+
+## İ
+'I' 0x307 {
+    if (DoRenyxa) {
+        EmitUpper('I');
+    } else if (Is(LANG_TUR)) {
+        if (DoLowerCase)
+            Emit(0x131);
+        else
+            Emit(0x130);
+    } else {
+        EmitUpper('I');
+    }
+};
+
+## ı
+0x131 {
+    if (Is(LANG_TUR))
+        EmitRenyxa('i');
+    else
+        Emit('i');
+};
+
+## ø
+0xf8 {
+    Emit('o');
+    if (Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+0xd8 {
+    EmitUpper('O');
+    if (Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+## å
+'a' 0x30A {
+    Emit('a');
+    if (Is(LANG_DAN) || Is(LANG_NOR))
+        Emit('a', 1);
+};
+
+'A' 0x30A {
+    EmitUpper('A');
+    if (Is(LANG_DAN) || Is(LANG_NOR))
+        Emit('a', 1);
+};
+
+## ä
+'a' 0x308 {
+    Emit('a');
+    if (Is(LANG_GER) || Is(LANG_HUN) || Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+'A' 0x308 {
+    EmitUpper('A');
+    if (Is(LANG_GER) || Is(LANG_HUN) || Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+## ö
+'o' 0x308 {
+    Emit('o');
+    if (Is(LANG_GER) || Is(LANG_HUN) || Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+'O' 0x308 {
+    EmitUpper('O');
+    if (Is(LANG_GER) || Is(LANG_HUN) || Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+## ü
+'u' 0x308 {
+    Emit('u');
+    if (Is(LANG_GER) || Is(LANG_HUN) || Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+'U' 0x308 {
+    EmitUpper('U');
+    if (Is(LANG_GER) || Is(LANG_HUN) || Is(LANG_NOR))
+        Emit('e', 1);
+};
+
+############################
+## cyr ligature fix
+############################
+
+## ӕ
+0x4D5 { Emit(0x430); Emit(0x435); };
+0x4D4 { EmitUpper(0x410); EmitUpper(0x415); };
+
+## ԕ
+0x0515 { Emit(0x043b); Emit(0x0445); };
+0x0514 { EmitUpper(0x041b); EmitUpper(0x0425); };
+
+## љ
+0x0459 { Emit(0x043b); Emit(0x044c); };
+0x0409 { EmitUpper(0x041b); EmitUpper(0x042c); };
+
+## ҥ
+0x04a5 { Emit(0x043d); Emit(0x0433); };
+0x04a4 { EmitUpper(0x041d); EmitUpper(0x0413); };
+
+## њ
+0x045a { Emit(0x043d); Emit(0x044c); };
+0x040a { EmitUpper(0x041d); EmitUpper(0x042c); };
+
+## ԗ
+0x0517 { Emit(0x0440); Emit(0x0445); };
+0x0516 { EmitUpper(0x0420); EmitUpper(0x0425); };
+
+## ҵ
+0x04b5 { Emit(0x0442); Emit(0x0446); };
+0x04b4 { EmitUpper(0x0422); EmitUpper(0x0426); };
+
+## ԙ
+0x0519 { Emit(0x044f); Emit(0x0435); };
+0x0518 { EmitUpper(0x042f); EmitUpper(0x0415); };
+
+## ѹ
+0x0478 { EmitUpper(0x41e); Emit(0x443); };
+0x0479 { Emit(0x43e); Emit(0x443); };
+
+############################
+## lat ligature fix
+############################
+
+## ꜳ
+0xa733 { Emit('a'); Emit('a'); };
+0xa732 { EmitUpper('A'); EmitUpper('A'); };
+
+## æ
+0xe6 { Emit('a'); Emit('e'); };
+0xc6 { EmitUpper('A'); EmitUpper('E'); };
+
+## ꜵ
+0xa735 { Emit('a'); Emit('o'); };
+0xa734 { EmitUpper('A'); EmitUpper('O'); };
+
+## ꜷ
+0xa737 { Emit('a'); Emit('u'); };
+0xa736 { EmitUpper('A'); EmitUpper('U'); };
+
+## ꜹ, ꜻ
+0xa739 | 0xa73b { Emit('a'); Emit('v'); };
+0xa738 | 0xa73a { EmitUpper('A'); EmitUpper('V'); };
+
+## ꜽ
+0xa73d { Emit('a'); Emit('y'); };
+0xa73c { EmitUpper('A'); EmitUpper('Y'); };
+
+## ȸ
+0x238 { Emit('d'); Emit('b'); };
+
+## dz, dž, ʤ, ʥ
+0x1F1 | 0x1C4 { EmitUpper('D'); EmitUpper('Z'); };
+0x1F2 | 0x1C5 { EmitUpper('D'); Emit('z'); };
+0x1F3 | 0x1C6 | 0x02a4 | 0x2a5 { Emit('d'); Emit('z'); };
+
+## ﬀ
+0xfb00 { Emit('f'); Emit('f'); };
+
+## ﬁ
+0xfb01 { Emit('f'); Emit('i'); };
+
+## ﬂ
+0xfb02 { Emit('f'); Emit('l'); };
+
+## ʩ
+0x02a9 { Emit('f'); Emit('n'); Emit('g'); };
+
+## ƕ
+0x0195 { Emit('h'); Emit('v'); };
+
+## ĳ
+0x133 { Emit('i'); Emit('j'); };
+0x132 { Emit('I'); Emit('J'); };
+
+## lj
+0x1C7 { EmitUpper('L'); EmitUpper('J'); };
+0x1C8 { EmitUpper('L'); Emit('j'); };
+0x1C9 { Emit('l'); Emit('j'); };
+
+## ʪ
+0x02aa { Emit('l'); Emit('s'); };
+
+## ʫ, ɮ
+0x02ab | 0x026e { Emit('l'); Emit('z'); };
+
+## nj
+0x1CA { EmitUpper('N'); EmitUpper('J'); };
+0x1CB { EmitUpper('N'); Emit('j'); };
+0x1CC { Emit('n'); Emit('j'); };
+
+## ŋ
+0x14b { Emit('n'); Emit('g'); };
+0x14a { EmitUpper('N'); EmitUpper('G'); };
+
+## œ
+0x153 { Emit('o'); Emit('e'); };
+0x152 { EmitUpper('O'); EmitUpper('E'); };
+
+## ƣ
+0x1a3 { Emit('o'); Emit('i'); };
+0x1a2 { EmitUpper('O'); EmitUpper('I'); };
+
+## ꝏ
+0xa74f { Emit('o'); Emit('o'); };
+0xa74e { EmitUpper('O'); EmitUpper('O'); };
+
+## ȹ
+0x239 { Emit('q'); Emit('p'); };
+
+## ß
+0xdf { Emit('s'); Emit('s'); };
+0x1e9e { EmitUpper('S'); EmitUpper('S'); };
+
+## ﬆ
+0xfb06 { Emit('s'); Emit('t'); };
+
+## ʦ, ʧ
+0x02a6 | 0x02a7 { Emit('t'); Emit('s'); };
+
+## ᵫ
+0x1d6b { Emit('u'); Emit('e'); };
+
+## ﬃ
+0xfb03 { Emit('f'); Emit('f'); Emit('i'); };
+
+## ﬄ
+0xfb04 { Emit('f'); Emit('f'); Emit('l'); };
+
+## ʨ
+0x2a8 { Emit('t'); Emit('c'); };
+
+## ᵺ
+0x1d7a { Emit('t'); Emit('h'); };
+
+############################
+## other symbols
+############################
+# todo: check which letters need disambiguating accents and rewrite this
+
+## w
+'w' {
+    if (Is(LANG_SWE))
+        Emit('v');
+    else
+        Emit('w');
+};
+
+'W' {
+    if (Is(LANG_SWE))
+        EmitUpper('V');
+    else
+        EmitUpper('W');
+};
+
+## disambiguating acute accent
+## 0x301 {
+## //    if (Is(LANG_DAN) || Is(LANG_NOR) || Is(LANG_SPA) || Is(LANG_GRE))
+## //        Emit(0x301);
+## };
+
+## disambiguating grave accent
+## 0x300 {
+## //    if (Is(LANG_FRE) || Is(LANG_ITA) || Is(LANG_NOR) || Is(LANG_RUM) || Is(LANG_CAT))
+## //        Emit(0x300);
+## };
+
+## disambiguating circumflex accent
+## 0x302 {
+## //    if (Is(LANG_NOR))
+## //        Emit(0x302);
+## };
+
+## single quotes and apostrophes
+0x2b9 | 0x2bb | 0x2bc | 0x2c8 | 0x55A | 0x2018 | 0x2019 | 0x201b | 0x2032 | '`' {
+    Emit('\'');
+};
+
+## slashes ⁄ ∕
+0x2044 | 0x2215 {
+    Emit('/');
+};
+
+## left chevrons
+0xab | 0x226a | 0x300a {
+    Emit('<'); Emit('<');
+};
+
+## right chevrons
+0xbb | 0x226b | 0x300b {
+    Emit('>'); Emit('>');
+};
+
+## left angles
+0x3c | 0x2039 | 0x2329 | 0x27e8 | 0x3008 {
+    Emit('<');
+};
+
+## right angles
+0x3e | 0x203a | 0x232a | 0x27e9 | 0x3009 {
+    Emit('>');
+};
+
+## other symbols
+any {
+    if(IsNothing()) {
+        // nothing
+    } else if (IsSpace()) {
+        if (' ' != Last())
+            Emit(' ');
+    } else if (IsDash()) {
+        Emit('-');
+    } else {
+        EmitUpper(*ts);
+    }
+};
+
+*|;
+
+}%%
+#endif
+
+%% write data noerror nofinal;
+%% write init;
+%% write exec;
+
+Y_UNUSED(Normalizer_en_main);
+    TmpBuf.swap(OutBuf);
+    OutBuf.clear();
+    Recomposer.Normalize(TmpBuf.data(), TmpBuf.size(), OutBuf);
+}
+
+}

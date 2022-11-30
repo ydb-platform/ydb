@@ -1,0 +1,46 @@
+{
+    "meta" : {
+        "name" : "libtvmauth",
+        "maintainer" : "passport-dev@yandex-team.ru",
+        "description" : "tvmauth (ex ticket_parser2) library provides TVM scenerios",
+        "version" : "{changelog_version}",
+        "homepage": "https://a.yandex-team.ru/arc/trunk/arcadia/library/c/tvmauth/README.md"
+    },
+    "build" : {
+        "targets" :  [
+            "library/cpp/tvmauth/",
+            "library/c/tvmauth/src/ut",
+            "library/c/tvmauth/src/ut_export",
+            "library/c/tvmauth/so"
+        ],
+        "flags" : [
+            {
+                "name" : "ALLOCATOR",
+                "value" : "SYSTEM"
+            }
+        ]
+    },
+    "data" : [
+        {
+            "source" : {
+                "type" : "BUILD_OUTPUT",
+                "path" : "library/c/tvmauth/so",
+                "files": [
+                    "libtvmauth.so.3"
+                ]
+            },
+            "destination" : {
+                "path" : "/usr/lib/"
+            }
+        },
+        {
+            "source" : {
+                "type" : "SYMLINK"
+            },
+            "destination" : {
+                "path" : "/usr/lib/libtvmauth.so",
+                "target": "/usr/lib/libtvmauth.so.3"
+            }
+        }
+    ]
+}

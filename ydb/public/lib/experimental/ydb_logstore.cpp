@@ -155,18 +155,14 @@ TLogTableSharding::TLogTableSharding(const Ydb::LogStore::DescribeLogTableResult
     }
 }
 
-TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding,
-    const TMaybe<TTtlSettings>& ttlSettings)
+TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding)
     : SchemaPresetName(schemaPresetName)
     , Sharding(sharding)
-    , TtlSettings(ttlSettings)
 {}
 
-TLogTableDescription::TLogTableDescription(const TSchema& schema, const TLogTableSharding& sharding,
-    const TMaybe<TTtlSettings>& ttlSettings)
+TLogTableDescription::TLogTableDescription(const TSchema& schema, const TLogTableSharding& sharding)
     : Schema(schema)
     , Sharding(sharding)
-    , TtlSettings(ttlSettings)
 {}
 
 TLogTableDescription::TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc,
@@ -203,6 +199,8 @@ void TLogTableDescription::SerializeTo(Ydb::LogStore::CreateLogTableRequest& req
 
     if (TtlSettings) {
         TtlSettings->SerializeTo(*request.mutable_ttl_settings());
+    } else if (TieringSettings) {
+        TieringSettings->SerializeTo(*request.mutable_tiering_settings());
     }
 }
 

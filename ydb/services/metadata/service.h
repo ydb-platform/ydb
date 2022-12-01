@@ -5,11 +5,11 @@
 
 namespace NKikimr::NMetadataProvider {
 
-class TEvAlterObjects: public NActors::TEventLocal<TEvAlterObjects, EEvSubscribe::EvAlterObjects> {
+class TEvObjectsOperation: public NActors::TEventLocal<TEvObjectsOperation, EEvSubscribe::EvAlterObjects> {
 private:
     YDB_READONLY_DEF(NMetadata::IAlterCommand::TPtr, Command);
 public:
-    TEvAlterObjects(NMetadata::IAlterCommand::TPtr command)
+    TEvObjectsOperation(NMetadata::IAlterCommand::TPtr command)
         : Command(command) {
 
     }

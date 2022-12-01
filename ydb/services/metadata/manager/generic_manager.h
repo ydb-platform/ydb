@@ -41,7 +41,7 @@ protected:
         auto c = std::make_shared<TOperationsController>(std::move(promise));
         auto command = std::make_shared<NMetadataManager::TCreateCommand<T>>(patch.GetRecord(), manager, c, context);
         TActivationContext::Send(new IEventHandle(NMetadataProvider::MakeServiceId(nodeId), {},
-            new NMetadataProvider::TEvAlterObjects(command)));
+            new NMetadataProvider::TEvObjectsOperation(command)));
         return result;
     }
     virtual NThreading::TFuture<NMetadata::TObjectOperatorResult> DoAlterObject(
@@ -57,7 +57,7 @@ protected:
         auto c = std::make_shared<TOperationsController>(std::move(promise));
         auto command = std::make_shared<NMetadataManager::TAlterCommand<T>>(patch.GetRecord(), manager, c, context);
         TActivationContext::Send(new IEventHandle(NMetadataProvider::MakeServiceId(nodeId), {},
-            new NMetadataProvider::TEvAlterObjects(command)));
+            new NMetadataProvider::TEvObjectsOperation(command)));
         return result;
     }
     virtual NThreading::TFuture<NMetadata::TObjectOperatorResult> DoDropObject(
@@ -73,7 +73,7 @@ protected:
         auto c = std::make_shared<TOperationsController>(std::move(promise));
         auto command = std::make_shared<NMetadataManager::TDropCommand<T>>(patch.GetRecord(), manager, c, context);
         TActivationContext::Send(new IEventHandle(NMetadataProvider::MakeServiceId(nodeId), {},
-            new NMetadataProvider::TEvAlterObjects(command)));
+            new NMetadataProvider::TEvObjectsOperation(command)));
         return result;
     }
 public:

@@ -1,4 +1,5 @@
 #pragma once
+#include "accessor_subscribe.h"
 #include "config.h"
 
 #include <ydb/services/metadata/service.h>
@@ -109,15 +110,36 @@ private:
     void Handle(TEvAskSnapshot::TPtr& ev);
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
-    void Handle(TEvAlterObjects::TPtr& ev);
+    void Handle(TEvObjectsOperation::TPtr& ev);
     void PrepareManagers(std::vector<NMetadata::IOperationsManager::TPtr> manager, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
+
+    template <class TEventPtr, class TAction>
+    void ProcessEventWithFetcher(TEventPtr& ev, TAction action) {
+        std::vector<NMetadata::IOperationsManager::TPtr> needManagers;
+        for (auto&& i : ev->Get()->GetFetcher()->GetManagers()) {
+            if (!RegisteredManagers.contains(i->GetTypeId())) {
+                needManagers.emplace_back(i);
+            }
+        }
+        if (needManagers.empty()) {
+            auto it = Accessors.find(ev->Get()->GetFetcher()->GetComponentId());
+            if (it == Accessors.end()) {
+                THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetFetcher());
+                it = Accessors.emplace(ev->Get()->GetFetcher()->GetComponentId(), Register(actor.Release())).first;
+            }
+            action(it->second);
+        } else {
+            PrepareManagers(needManagers, ev->ReleaseBase(), ev->Sender);
+        }
+    }
+
 public:
 
     void Bootstrap(const NActors::TActorContext& /*ctx*/);
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvAlterObjects, Handle);
+            hFunc(TEvObjectsOperation, Handle);
             hFunc(TEvRefreshSubscriberData, Handle);
             hFunc(TEvAskSnapshot, Handle);
             hFunc(TEvSubscribeExternal, Handle);

@@ -61,7 +61,7 @@ void TDSAccessorInitialized::Handle(NInternal::NRequest::TEvRequestFinished::TPt
         auto manager = std::make_shared<NMetadataInitializer::TManager>();
         auto alterCommand = std::make_shared<NMetadataManager::TCreateCommand<TDBInitialization>>(
             dbInit.SerializeToRecord(), manager, InternalController, NMetadata::IOperationsManager::TModificationContext());
-        Sender<NMetadataProvider::TEvAlterObjects>(alterCommand)
+        Sender<NMetadataProvider::TEvObjectsOperation>(alterCommand)
             .SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
     } else {
         DoNextModifier();

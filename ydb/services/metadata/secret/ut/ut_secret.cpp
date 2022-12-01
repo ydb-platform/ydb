@@ -37,8 +37,7 @@ Y_UNIT_TEST_SUITE(Secret) {
     public:
         TJsonChecker(const TString& path, const TString& expectation)
             : Path(path)
-            , Expectation(expectation)
-        {
+            , Expectation(expectation) {
 
         }
         bool Check(const NJson::TJsonValue& jsonInfo) const {
@@ -197,8 +196,8 @@ Y_UNIT_TEST_SUITE(Secret) {
                 Y_VERIFY(emulator->IsFound());
             }
 
-            lHelper.StartSchemaRequest("DROP OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS) WITH ownerUserId = `root@root`");
-            lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET) WITH ownerUserId = `root@root`");
+            lHelper.StartSchemaRequest("DROP OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)");
 
             emulator->SetExpectedSecretsCount(0).SetExpectedAccessCount(0);
             {

@@ -69,46 +69,21 @@ void TService::Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev)
         EventsWaiting.emplace(i.first, std::move(i.second));
     }
 }
-
 void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
-    std::vector<NMetadata::IOperationsManager::TPtr> needManagers;
-    for (auto&& i : ev->Get()->GetFetcher()->GetManagers()) {
-        if (!RegisteredManagers.contains(i->GetTypeId())) {
-            needManagers.emplace_back(i);
-        }
-    }
-    if (needManagers.empty()) {
-        auto it = Accessors.find(ev->Get()->GetFetcher()->GetComponentId());
-        if (it == Accessors.end()) {
-            THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetFetcher());
-            it = Accessors.emplace(ev->Get()->GetFetcher()->GetComponentId(), Register(actor.Release())).first;
-        }
-        Send<TEvSubscribe>(it->second, ev->Sender);
-    } else {
-        PrepareManagers(needManagers, ev->ReleaseBase(), ev->Sender);
-    }
+    const TActorId senderId = ev->Sender;
+    ProcessEventWithFetcher(ev, [this, senderId](const TActorId& actorId) {
+        Send<TEvSubscribe>(actorId, senderId);
+        });
 }
 
 void TService::Handle(TEvAskSnapshot::TPtr& ev) {
-    std::vector<NMetadata::IOperationsManager::TPtr> needManagers;
-    for (auto&& i : ev->Get()->GetFetcher()->GetManagers()) {
-        if (!RegisteredManagers.contains(i->GetTypeId())) {
-            needManagers.emplace_back(i);
-        }
-    }
-    if (needManagers.empty()) {
-        auto it = Accessors.find(ev->Get()->GetFetcher()->GetComponentId());
-        if (it == Accessors.end()) {
-            THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetFetcher());
-            it = Accessors.emplace(ev->Get()->GetFetcher()->GetComponentId(), Register(actor.Release())).first;
-        }
-        Send<TEvAsk>(it->second, ev->Sender);
-    } else {
-        PrepareManagers(needManagers, ev->ReleaseBase(), ev->Sender);
-    }
+    const TActorId senderId = ev->Sender;
+    ProcessEventWithFetcher(ev, [this, senderId](const TActorId& actorId) {
+        Send<TEvAsk>(actorId, senderId);
+        });
 }
 
-void TService::Handle(TEvAlterObjects::TPtr& ev) {
+void TService::Handle(TEvObjectsOperation::TPtr& ev) {
     auto it = RegisteredManagers.find(ev->Get()->GetCommand()->GetManager()->GetTypeId());
     if (it != RegisteredManagers.end()) {
         ev->Get()->GetCommand()->Execute();

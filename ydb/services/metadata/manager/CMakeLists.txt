@@ -22,6 +22,7 @@ target_link_libraries(services-metadata-manager PUBLIC
 )
 target_sources(services-metadata-manager PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/alter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/alter_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/table_record.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/restore.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/modification.cpp

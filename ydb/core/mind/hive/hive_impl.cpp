@@ -1709,6 +1709,8 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
             it->second.ActualizeTabletStatistics(now);
             FillTabletInfo(response->Record, it->first, &it->second, record);
         }
+        response->Record.set_starttimetimestamp(StartTime().MilliSeconds());
+        response->Record.set_responsetimestamp(TAppData::TimeProvider->Now().MilliSeconds());
     }
 
     Send(ev->Sender, response.Release(), 0, ev->Cookie);

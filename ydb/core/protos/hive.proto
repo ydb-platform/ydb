@@ -270,6 +270,8 @@ message TEvRequestHiveInfo {
 message TEvResponseHiveInfo {
     repeated TTabletInfo Tablets = 1;
     optional TForwardRequest ForwardRequest = 2;
+    optional uint64 StartTimeTimestamp = 3;
+    optional uint64 ResponseTimestamp = 4;
 }
 
 message TEvRequestHiveDomainStats {

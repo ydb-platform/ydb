@@ -126,6 +126,7 @@ public:
             ui32 MaxRestartsPerPeriod = 30; // per hour
             ui32 MaxTabletIdsStored = 10;
             bool ReportGoodTabletsIds = false;
+            bool IsHiveSynchronizationPeriod = false;
         };
 
         enum class ETabletState {
@@ -147,7 +148,8 @@ public:
                 Leader = info.followerid() == 0;
                 if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_STOPPED) {
                     State = ETabletState::Stopped;
-                } else if (info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
+                } else if (!settings.IsHiveSynchronizationPeriod
+                            && info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
                             && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier
                             && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
                     State = ETabletState::Dead;
@@ -1017,11 +1019,19 @@ public:
         }
     }
 
+    static const int HIVE_SYNCHRONIZATION_PERIOD_MS = 10000;
+
+    bool IsHiveSynchronizationPeriod(NKikimrHive::TEvResponseHiveInfo& hiveInfo) {
+        auto hiveUptime = hiveInfo.GetStartTimeTimestamp() - hiveInfo.GetResponseTimestamp();
+        return hiveUptime > HIVE_SYNCHRONIZATION_PERIOD_MS;
+    }
+
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
         settings.AliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
             if (hiveResponse) {
+                settings.IsHiveSynchronizationPeriod = IsHiveSynchronizationPeriod(hiveResponse->Record);
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);

@@ -39,12 +39,14 @@ enum EAccessRights : ui32 { // bitmask
     ReadStream = 0x00010000, // reading streams
     WriteStream = 0x00020000, // writing streams
     ReadTopic = 0x00040000, // reading topics
-    WritTopic = 0x00080000, // writing topics
+    WriteTopic = 0x00080000, // writing topics
 
     GenericRead = SelectRow | ReadAttributes | DescribeSchema,
     GenericWrite = UpdateRow | EraseRow | WriteAttributes | CreateDirectory | CreateTable | CreateQueue | RemoveSchema | AlterSchema | WriteUserAttributes,
-    GenericUse = GenericRead | GenericWrite | GrantAccessRights,
+    GenericUseLegacy = GenericRead | GenericWrite | GrantAccessRights,
+    GenericUse = GenericUseLegacy | ConnectDatabase,
     GenericManage = CreateDatabase | DropDatabase,
+    GenericFullLegacy = GenericUseLegacy | GenericManage,
     GenericFull = GenericUse | GenericManage,
 };
 

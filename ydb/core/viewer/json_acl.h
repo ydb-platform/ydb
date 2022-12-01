@@ -125,7 +125,7 @@ public:
                             {NACLib::EAccessRights::ReadStream, "ReadStream"},
                             {NACLib::EAccessRights::WriteStream, "WriteStream"},
                             {NACLib::EAccessRights::ReadTopic, "ReadTopic"},
-                            {NACLib::EAccessRights::WritTopic, "WriteTopic"}
+                            {NACLib::EAccessRights::WriteTopic, "WriteTopic"}
                         };
                         auto ar = ace.GetAccessRight();
                         int shift = 0;

@@ -422,11 +422,17 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
         case EAccessRights::GenericWrite:
             str << 'W';
             break;
+        case EAccessRights::GenericFullLegacy:
+            str << "FL";
+            break;
         case EAccessRights::GenericFull:
             str << 'F';
             break;
         case EAccessRights::GenericManage:
             str << 'M';
+            break;
+        case EAccessRights::GenericUseLegacy:
+            str << "UL";
             break;
         case EAccessRights::GenericUse:
             str << 'U';
@@ -583,13 +589,25 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
             ace.SetAccessRight(EAccessRights::GenericWrite);
             break;
         case 'F':
-            ace.SetAccessRight(EAccessRights::GenericFull);
+            ++it;
+            if (it != string.end() && *it == 'L') {
+                ace.SetAccessRight(EAccessRights::GenericFullLegacy);
+            } else {
+                ace.SetAccessRight(EAccessRights::GenericFull);
+                --it;
+            }
             break;
         case 'M':
             ace.SetAccessRight(EAccessRights::GenericManage);
             break;
         case 'U':
-            ace.SetAccessRight(EAccessRights::GenericUse);
+            ++it;
+            if (it != string.end() && *it == 'L') {
+                ace.SetAccessRight(EAccessRights::GenericUseLegacy);
+            } else {
+                ace.SetAccessRight(EAccessRights::GenericUse);
+                --it;
+            }
             break;
         case '(': {
             ++it;
@@ -711,10 +729,12 @@ void TDiffACL::ClearAccessForSid(const NACLib::TSID& sid) {
 
 TString AccessRightsToString(ui32 accessRights) {
     switch (accessRights) {
+    case EAccessRights::GenericFullLegacy: return "FullLegacy";
     case EAccessRights::GenericFull: return "Full";
     case EAccessRights::GenericWrite: return "Write";
     case EAccessRights::GenericRead: return "Read";
     case EAccessRights::GenericManage: return "Manage";
+    case EAccessRights::GenericUseLegacy: return "UseLegacy";
     case EAccessRights::GenericUse: return "Use";
     }
     TVector<TStringBuf> rights;

@@ -580,6 +580,9 @@ public:
                         if (ar == NACLib::EAccessRights::GenericFull) {
                             pbAce.SetAccessRule("Full");
                         }
+                        if (ar == NACLib::EAccessRights::GenericFullLegacy) {
+                            pbAce.SetAccessRule("FullLegacy");
+                        }
                         pbAce.SetSubject(ace.GetSID());
                         auto inht = ace.GetInheritanceType();
                         if ((inht & NACLib::EInheritanceType::InheritObject) != 0) {

@@ -1,6 +1,6 @@
-# Нагрузка для KV-таблетки
+# Key-Value нагрузка
 
-## Описание
+## Структура {#proto}
 
 ```proto
 message TKeyValueLoadStart {
@@ -17,3 +17,5 @@ message TKeyValueLoadStart {
     repeated TWorkerConfig Workers = 7;
 }
 ```
+
+{% include notitle [addition](../_includes/addition.md) %}

@@ -27,7 +27,7 @@ items:
     items:
     - name: Тестирование с помощью нагружающих акторов
       href: development/testing-load-actor.md
-    - name: key-value нагрузка
+    - name: KV нагрузка
       href: development/key-value-load-start.md
     - name: KQP нагрузка
       href: development/kqp-load-start.md
@@ -35,7 +35,7 @@ items:
       href: development/load-start.md
     - name: Остановка нагрузки
       href: development/load-stop.md
-    - name: Нагрузка, проверяющая память
+    - name: Проверка производительности памяти
       href: development/memory-load-start.md
     - name: PDisk нагрузка на запись
       href: development/pdisk-load-start.md

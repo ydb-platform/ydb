@@ -1,29 +1,32 @@
-# Нагрузка, пишущая в лог PDisk
+# PDisk нагрузка, пишущая в лог
 
-## Описание
+## Структура {#proto}
+
 ```proto
-    message TPDiskLogLoadStart {
-        message TWorkerConfig {
-            optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
-            optional uint32 MaxInFlight = 2;
+message TPDiskLogLoadStart {
+    message TWorkerConfig {
+        optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
+        optional uint32 MaxInFlight = 2;
 
-            // Measurement units of all parameters is bytes
-            optional uint32 SizeIntervalMin = 3;
-            optional uint32 SizeIntervalMax = 4;
-            optional uint64 BurstInterval = 5;
-            optional uint64 BurstSize = 6;
-            optional uint64 StorageDuration = 7;
+        // Measurement units of all parameters is bytes
+        optional uint32 SizeIntervalMin = 3;
+        optional uint32 SizeIntervalMax = 4;
+        optional uint64 BurstInterval = 5;
+        optional uint64 BurstSize = 6;
+        optional uint64 StorageDuration = 7;
 
-            optional uint64 MaxTotalBytesWritten = 8;
-        }
-
-        optional uint64 Tag = 1;
-        optional uint32 PDiskId = 2;
-        optional uint64 PDiskGuid = 3;
-
-        optional uint32 DurationSeconds = 5;
-        repeated TWorkerConfig Workers = 7;
-
-        optional bool IsWardenlessTest = 8 [default = false];
+        optional uint64 MaxTotalBytesWritten = 8;
     }
+
+    optional uint64 Tag = 1;
+    optional uint32 PDiskId = 2;
+    optional uint64 PDiskGuid = 3;
+
+    optional uint32 DurationSeconds = 5;
+    repeated TWorkerConfig Workers = 7;
+
+    optional bool IsWardenlessTest = 8 [default = false];
+}
 ```
+
+{% include notitle [addition](../_includes/addition.md) %}

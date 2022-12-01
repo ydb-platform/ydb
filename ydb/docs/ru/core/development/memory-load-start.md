@@ -1,6 +1,6 @@
-# Проверка производительности работы памяти
+# Проверка производительности памяти
 
-## Описание
+## Структура {#proto}
 
 ```proto
 message TMemoryLoadStart {
@@ -10,14 +10,28 @@ message TMemoryLoadStart {
     optional uint64 IntervalUs = 4;
 }
 ```
+<!-- 
+## Параметры {#options}
 
-## Примеры
+### MemoryLoadStart
+
+Параметр | Описание
+--- | ---
+`Tag` | Тип: `uint64`.
+`DurationSeconds` | Тип: `uint32`.
+`BlockSize` | Тип: `uint64`.
+`IntervalUs` | Тип: `uint64`.
+-->
+
+## Примеры {#examples}
 
 ```proto
-NodeId: 3
+NodeId: 1
 Event: { MemoryLoadStart: {
     DurationSeconds: 120
-    IntervalUs: 1000
     BlockSize: 4096
+    IntervalUs: 1000
 }}
 ```
+
+{% include notitle [addition](../_includes/addition.md) %}

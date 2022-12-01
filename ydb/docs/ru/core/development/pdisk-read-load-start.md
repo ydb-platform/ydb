@@ -1,7 +1,7 @@
-# Читающая нагрузка на PDisk
+# PDisk нагрузка на чтение
 
+## Структура {#proto}
 
-## Описание
 ```proto
 message TPDiskReadLoadStart {
     message TChunkInfo {
@@ -23,3 +23,5 @@ message TPDiskReadLoadStart {
     optional bool IsWardenlessTest = 13 [default = false];
 }
 ```
+
+{% include notitle [addition](../_includes/addition.md) %}

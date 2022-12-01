@@ -1,6 +1,7 @@
-# Нагрузка на VDisk
+# VDisk нагрузка
 
-## Описание
+## Структура {#proto}
+
 ```proto
 message TVDiskLoadStart {
     optional uint64 Tag = 1;
@@ -42,3 +43,5 @@ message TVDiskLoadStart {
     optional uint32 StepDistance = 15;
 }
 ```
+
+{% include notitle [addition](../_includes/addition.md) %}

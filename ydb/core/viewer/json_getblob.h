@@ -18,7 +18,7 @@ struct TJsonVDiskRequestHelper<TEvGetLogoBlobRequest, TEvGetLogoBlobResponse>  {
     static std::unique_ptr<TEvGetLogoBlobRequest> MakeRequest(NMon::TEvHttpInfo::TPtr &ev, TString *error) {
         const TCgiParameters& cgi = ev->Get()->Request.GetParams();
 
-        bool internals = static_cast<bool>(cgi.Get("internals"));
+        bool internals = cgi.Has("internals");
         TString from = cgi.Get("from");
         TString to = cgi.Get("to");
 

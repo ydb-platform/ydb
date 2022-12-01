@@ -318,10 +318,10 @@ namespace NKikimr {
             TSkeletonFrontMonLogoBlobsQueryParams params{
                 .DbName = cgi.Get("dbname"),
                 .Form = cgi.Get("form"),
-                .IndexOnly = static_cast<bool>(cgi.Get("IndexOnly")),
-                .ShowInternals = static_cast<bool>(cgi.Get("Internals")),
-                .SubmitButton = static_cast<bool>(cgi.Get("submit")),
-                .AllButton = static_cast<bool>(cgi.Get("all")),
+                .IndexOnly = cgi.Has("IndexOnly"),
+                .ShowInternals = cgi.Has("Internals"),
+                .SubmitButton = cgi.Has("submit"),
+                .AllButton = cgi.Has("all"),
             };
 
             if (!params.AllButton) {
@@ -401,6 +401,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             auto params = TSkeletonFrontMonLogoBlobsQueryParams::PullOut(Ev);
+            ShowInternals = params.ShowInternals;
 
             if constexpr (IsHttpInfo) {
                 if (params.Form != TString()) {
@@ -410,13 +411,7 @@ namespace NKikimr {
             }
 
             if (params.ErrorMsg) {
-                if constexpr (IsHttpInfo) {
-                    Finish(ctx, NMonUtil::PrepareError(params.ErrorMsg));
-                } else {
-                    auto res = std::make_unique<TEvGetLogoBlobResponse>();
-                    res->Record.set_error_msg(params.ErrorMsg);
-                    Finish(ctx, res.release());
-                }
+                HandleErrorAndDie(ctx, params.ErrorMsg);
                 return;
             }
 
@@ -452,7 +447,8 @@ namespace NKikimr {
                 req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
                         NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 1000);
             } else {
-                Y_FAIL("Unknown button");
+                HandleErrorAndDie(ctx, "Unknown button");
+                return;
             }
 
             if (req) {
@@ -532,17 +528,20 @@ namespace NKikimr {
             }
         }
 
-
-        void HandleWakeup(const TActorContext &ctx) {
+        void HandleErrorAndDie(const TActorContext &ctx, TString error) {
             if constexpr (IsHttpInfo) {
                 TStringStream str;
-                str << "<strong><strong>Timeout</strong></strong>";
+                str << "<strong><strong>" << error << "</strong></strong>";
                 Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
             } else {
                 auto res = std::make_unique<TEvGetLogoBlobResponse>();
-                res->Record.set_error_msg("Timeout");
+                res->Record.set_error_msg(error);
                 Finish(ctx, res.release());
             }
+        }
+
+        void HandleWakeup(const TActorContext &ctx) {
+            HandleErrorAndDie(ctx, "Timeout");
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
@@ -1120,4 +1119,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

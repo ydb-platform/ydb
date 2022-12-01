@@ -59,7 +59,7 @@ void TDSAccessorInitialized::Handle(NInternal::NRequest::TEvRequestFinished::TPt
     if (NMetadataProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
         auto manager = std::make_shared<NMetadataInitializer::TManager>();
-        auto alterCommand = std::make_shared<NMetadataManager::TAlterCommand<TDBInitialization>>(
+        auto alterCommand = std::make_shared<NMetadataManager::TCreateCommand<TDBInitialization>>(
             dbInit.SerializeToRecord(), manager, InternalController, NMetadata::IOperationsManager::TModificationContext());
         Sender<NMetadataProvider::TEvAlterObjects>(alterCommand)
             .SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));

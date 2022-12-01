@@ -44,7 +44,6 @@ protected:
         Ydb::Table::ExecuteDataQueryRequest request = Objects.BuildInsertQuery(TObject::GetStorageHistoryTablePath());
         request.set_session_id(SessionId);
         request.mutable_tx_control()->set_tx_id(TransactionId);
-        request.mutable_tx_control()->set_commit_tx(true);
         Requests.emplace_back(std::move(request));
     }
 
@@ -92,6 +91,9 @@ public:
         TBase::Become(&TModifyObjectsActor::StateMain);
         BuildRequestDirect();
         BuildRequestHistory();
+        Y_VERIFY(Requests.size());
+        Requests.back().mutable_tx_control()->set_commit_tx(true);
+
         TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogYQLRequest>(
             Requests.front(), SystemUserToken, TBase::SelfId()));
         Requests.pop_front();

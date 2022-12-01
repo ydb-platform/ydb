@@ -27,6 +27,15 @@ void TInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr contr
         }
         result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
     }
+    {
+        Ydb::Scheme::ModifyPermissionsRequest request;
+        request.set_path(TDBInitialization::GetStorageTablePath());
+        request.set_clear_permissions(true);
+        auto* permission = request.add_actions();
+        permission->mutable_grant()->set_subject("*");
+        permission->mutable_grant()->add_permission_names("ydb.tables.read");
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogModifyPermissions>(request, "acl"));
+    }
     controller->PreparationFinished(result);
 }
 

@@ -315,7 +315,7 @@ protected:
             TBase::ExternalController->AlterProblem("no pk columns in patch");
             return false;
         }
-        if (!columns.size()) {
+        if (columns.size() != TObject::TDecoder::GetPKColumns().size()) {
             TBase::ExternalController->AlterProblem("no columns for pk detection");
             return false;
         }

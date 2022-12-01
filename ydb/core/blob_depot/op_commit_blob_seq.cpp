@@ -83,7 +83,7 @@ namespace NKikimr::NBlobDepot {
                             responseItem->SetStatus(NKikimrProto::RACE);
                         }
                     } else {
-                        Self->Data->UpdateKey(key, item, item.GetUncertainWrite(), txc, this);
+                        Self->Data->UpdateKey(key, item, txc, this);
                         if (blobSeqId.Generation == generation) {
                             // mark given blob as committed only when it was issued in current generation -- only for this
                             // generation we have correct GivenIdRanges; and we can do this only after updating key as the

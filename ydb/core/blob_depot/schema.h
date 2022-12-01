@@ -75,7 +75,7 @@ namespace NKikimr::NBlobDepot {
         struct Data : Table<4> {
             struct Key : Column<1, NScheme::NTypeIds::String> {};
             struct Value : Column<2, NScheme::NTypeIds::String> {};
-            struct UncertainWrite : Column<3, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
+            struct UncertainWrite : Column<3, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
             using TKey = TableKey<Key>;
             using TColumns = TableColumns<

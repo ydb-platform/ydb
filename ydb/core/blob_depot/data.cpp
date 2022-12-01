@@ -89,6 +89,7 @@ namespace NKikimr::NBlobDepot {
 
             std::vector<TLogoBlobID> deleteQ;
             const bool uncertainWriteBefore = value.UncertainWrite;
+            const bool wasUncertain = value.IsWrittenUncertainly();
 
             if (!inserted) {
                 EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
@@ -166,7 +167,7 @@ namespace NKikimr::NBlobDepot {
                             row.template UpdateToNull<Schema::Data::UncertainWrite>();
                         }
                     }
-                    if (uncertainWriteBefore && !value.UncertainWrite) {
+                    if (wasUncertain && !value.IsWrittenUncertainly()) {
                         UncertaintyResolver->MakeKeyCertain(key);
                     }
                     return true;
@@ -182,13 +183,14 @@ namespace NKikimr::NBlobDepot {
         return it != Data.end() ? &it->second : nullptr;
     }
 
-    void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item, bool uncertainWrite,
+    void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Item, item));
         UpdateKey(key, txc, cookie, "UpdateKey", [&](TValue& value, bool inserted) {
             if (!inserted) { // update value items
                 value.Meta = item.GetMeta();
                 value.Public = false;
+                value.UncertainWrite = item.GetUncertainWrite();
 
                 // update it to keep new blob locator
                 value.ValueChain.Clear();
@@ -200,9 +202,8 @@ namespace NKikimr::NBlobDepot {
                 value.OriginalBlobId.reset();
             }
 
-            value.UncertainWrite = uncertainWrite;
             return EUpdateOutcome::CHANGE;
-        }, item, uncertainWrite);
+        }, item);
     }
 
     void TData::MakeKeyCertain(const TKey& key) {
@@ -210,13 +211,15 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(it != Data.end());
         TValue& value = it->second;
         value.UncertainWrite = false;
-        UncertaintyResolver->MakeKeyCertain(key);
         KeysMadeCertain.push_back(key);
         if (!CommitCertainKeysScheduled) {
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvCommitCertainKeys, 0,
                 Self->SelfId(), {}, nullptr, 0));
             CommitCertainKeysScheduled = true;
         }
+
+        // do this in the end as the 'key' reference may perish
+        UncertaintyResolver->MakeKeyCertain(key);
     }
 
     void TData::HandleCommitCertainKeys() {

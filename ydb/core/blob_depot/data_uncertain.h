@@ -34,18 +34,17 @@ namespace NKikimr::NBlobDepot {
             std::vector<TIntrusivePtr<TResolveOnHold>> DependentRequests;
 
             // blob queries issued and replied
-            std::unordered_map<TLogoBlobID, std::tuple<EKeyBlobState, TString>> BlobState;
+            THashMap<TLogoBlobID, std::tuple<EKeyBlobState, TString>> BlobState;
         };
 
-        using TKeys = std::map<TKey, TKeyContext>;
+        using TKeys = THashMap<TKey, TKeyContext>;
 
         struct TBlobContext {
-            // keys referring to this blob
-            std::unordered_set<TKeys::value_type*> ReferringKeys;
+            THashSet<TKeys::value_type*> KeysWaitingForThisBlob;
         };
 
         TKeys Keys;
-        std::unordered_map<TLogoBlobID, TBlobContext> Blobs;
+        THashMap<TLogoBlobID, TBlobContext> Blobs;
 
         ui64 NumKeysQueried = 0;
         ui64 NumGetsIssued = 0;

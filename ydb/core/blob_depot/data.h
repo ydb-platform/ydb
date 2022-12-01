@@ -244,10 +244,10 @@ namespace NKikimr::NBlobDepot {
                 , UncertainWrite(uncertainWrite)
             {}
 
-            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item, bool uncertainWrite)
+            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item)
                 : Meta(item.GetMeta())
                 , Public(false)
-                , UncertainWrite(uncertainWrite)
+                , UncertainWrite(item.GetUncertainWrite())
             {
                 auto *chain = ValueChain.Add();
                 auto *locator = chain->MutableLocator();
@@ -257,8 +257,12 @@ namespace NKikimr::NBlobDepot {
             explicit TValue(EKeepState keepState)
                 : KeepState(keepState)
                 , Public(false)
-                , UncertainWrite(true)
+                , UncertainWrite(false)
             {}
+
+            bool IsWrittenUncertainly() const {
+                return UncertainWrite && !ValueChain.empty();
+            }
 
             void SerializeToProto(NKikimrBlobDepot::TValue *proto) const {
                 if (Meta) {
@@ -432,7 +436,7 @@ namespace NKikimr::NBlobDepot {
         bool UpdateKey(TKey key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie, const char *reason,
             T&& callback, TArgs&&... args);
 
-        void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item, bool uncertainWrite,
+        void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
         void MakeKeyCertain(const TKey& key);

@@ -333,7 +333,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             Result.AddItem(std::move(item), Self->Config);
-            if (value.UncertainWrite && !value.ValueChain.empty()) {
+            if (value.IsWrittenUncertainly()) {
                 Uncertainties.push_back(key);
             }
         }

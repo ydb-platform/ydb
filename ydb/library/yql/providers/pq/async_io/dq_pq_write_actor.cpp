@@ -37,22 +37,32 @@ namespace NKikimrServices {
     constexpr ui32 KQP_COMPUTE = 535;
 };
 
-#define SINK_LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG(prio, s) \
-    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define LOG_T(s) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_D(s) \
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_I(s) \
+    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
+#define LOG_W(s) \
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_N(s) \
+    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_E(s) \
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_C(s) \
+    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
+#define LOG_PRIO(prio, s) \
+    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, s)
+
+
+#define SINK_LOG_T(s) LOG_T(LogPrefix << s)
+#define SINK_LOG_D(s) LOG_D(LogPrefix << s)
+#define SINK_LOG_I(s) LOG_I(LogPrefix << s)
+#define SINK_LOG_W(s) LOG_W(LogPrefix << s)
+#define SINK_LOG_N(s) LOG_N(LogPrefix << s)
+#define SINK_LOG_E(s) LOG_E(LogPrefix << s)
+#define SINK_LOG_C(s) LOG_C(LogPrefix << s)
+#define SINK_LOG_PRIO(prio, s) LOG_PRIO(prio, LogPrefix << s)
 
 namespace NYql::NDq {
 
@@ -117,6 +127,9 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
+        SINK_LOG_T("SendData. Batch: " << batch.size()
+            << ". Checkpoint: " << checkpoint.Defined()
+            << ". Finished: " << finished);
         Y_UNUSED(dataSize);
 
         if (finished) {
@@ -155,8 +168,8 @@ public:
         }
 
         if (checkpoint) {
-            if (Buffer.empty()) {
-                Callbacks->OnAsyncOutputStateSaved(BuildState(), OutputIndex, *checkpoint);
+            if (Buffer.empty() && WaitingAcks.empty()) {
+                Callbacks->OnAsyncOutputStateSaved(BuildState(*checkpoint), OutputIndex, *checkpoint);
             } else {
                 DeferredCheckpoints.emplace(NextSeqNo + Buffer.size() - 1, *checkpoint);
             }
@@ -180,6 +193,7 @@ public:
         if (data.GetVersion() == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
             YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
+            SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;
@@ -289,7 +303,7 @@ private:
         return !events.empty();
     }
 
-    NDqProto::TSinkState BuildState() {
+    NDqProto::TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
@@ -300,10 +314,12 @@ private:
         auto* data = sinkState.MutableData()->MutableStateData();
         data->SetVersion(StateVersion);
         data->SetBlob(serializedState);
+        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto << ". Sink state: " << sinkState);
         return sinkState;
     }
 
     void WriteNextMessage(NYdb::NPersQueue::TContinuationToken&& token) {
+        SINK_LOG_T("Write data: \"" << Buffer.front() << "\" with seq no " << NextSeqNo);
         WriteSession->Write(std::move(token), Buffer.front(), NextSeqNo++);
         WaitingAcks.push(GetItemSize(Buffer.front()));
         Buffer.pop();
@@ -331,7 +347,7 @@ private:
 
             for (auto it = ev.Acks.begin(); it != ev.Acks.end(); ++it) {
                 //Y_VERIFY(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
-
+                LOG_T(Self.LogPrefix << "Ack seq no " << it->SeqNo);
                 if (it->State == NYdb::NPersQueue::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
                     TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded");
@@ -343,7 +359,8 @@ private:
 
                 if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == it->SeqNo) {
                     Self.ConfirmedSeqNo = it->SeqNo;
-                    Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(), Self.OutputIndex, std::get<1>(Self.DeferredCheckpoints.front()));
+                    const auto& checkpoint = std::get<1>(Self.DeferredCheckpoints.front());
+                    Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(checkpoint), Self.OutputIndex, checkpoint);
                     Self.DeferredCheckpoints.pop();
                 }
             }

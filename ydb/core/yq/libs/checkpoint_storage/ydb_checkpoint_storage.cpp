@@ -372,7 +372,7 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
             {join}
         WHERE metadata.graph_id = $graph_id
             {statuses_condition}
-        ORDER BY coordinator_generation, seq_no DESC
+        ORDER BY coordinator_generation DESC, seq_no DESC
         {limit_condition};
     )sql",
     "table_path_prefix"_a = context->TablePathPrefix,

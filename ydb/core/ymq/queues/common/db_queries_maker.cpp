@@ -27,7 +27,7 @@ namespace NKikimr::NSQS {
     }
 
     const char* TDbQueriesMaker::GetDlqStateKeys() const {
-        if (TablesFormat_ == 0) {
+        if (DlqTablesFormat_ == 0) {
             return IsFifo_ ? "'('State (Uint64 '0))" : "'('State dlqShard)";
         }
         return IsFifo_ ? GetDlqIdKeys() : DLQ_STD_STATE_KEYS;

@@ -104,7 +104,7 @@ private:
         return TablesFormat_ == 1 ? QUEUE_ID_AND_SHARD_KEYS : "";
     }
     const char* GetDlqIdAndShardKeys() const {
-        return TablesFormat_ == 1 ? DLQ_ID_AND_SHARD_KEYS : "";
+        return DlqTablesFormat_ == 1 ? DLQ_ID_AND_SHARD_KEYS : "";
     }
     const char* GetShardColumnName() const {
         return TablesFormat_ == 1 ? "Shard" : "State";

@@ -3,6 +3,7 @@
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_utils.h"
 #include "yql_expr_optimize.h"
+#include "yql_type_helpers.h"
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/dom/json.h>
@@ -4752,64 +4753,177 @@ bool IsEmptyList(const TTypeAnnotationNode& type) {
     return type.GetKind() == ETypeAnnotationKind::EmptyList;
 }
 
-static TString GetStructDiff(const TStructExprType& left, const TStructExprType& right) {
+namespace {
+
+using TIndentPrinter = std::function<void(TStringBuilder& res, size_t)>;
+void PrintTypeDiff(TStringBuilder& res, size_t level, const TIndentPrinter& indent, const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
+
+void PrintStructDiff(TStringBuilder& res, size_t level, const TIndentPrinter& indent, const TStructExprType& left, const TStructExprType& right) {
     THashMap<TStringBuf, const TItemExprType*> rightItems;
     for (auto item: right.GetItems()) {
         rightItems.insert({item->GetName(), item});
     }
-    TStringBuilder res;
+    bool diff = false;
     for (auto item: left.GetItems()) {
         if (auto rightItem = rightItems.Value(item->GetName(), nullptr)) {
             if (!IsSameAnnotation(*item, *rightItem)) {
-                res << item->GetName() << '(' << GetTypeDiff(*item->GetItemType(), *rightItem->GetItemType()) << TStringBuf("),");
+                indent(res, level);
+                res << item->GetName() << ':';
+                PrintTypeDiff(res, level, indent, *item->GetItemType(), *rightItem->GetItemType());
+                res << ',';
+                diff = true;
             }
             rightItems.erase(item->GetName());
         } else {
-            res << '-' << item->GetName() << '(' << *item->GetItemType() << TStringBuf("),");
+            diff = true;
+            indent(res, level);
+            res << '-' << item->GetName() << ':' << *item->GetItemType() << ',';
         }
     }
     for (auto& item: rightItems) {
-        res << '+' << item.first << '(' << *item.second->GetItemType() << TStringBuf("),");
+        diff = true;
+        indent(res, level);
+        res << '+' << item.first << ':' << *item.second->GetItemType() << ',';
     }
-    if (!res.empty()) {
-        return res.pop_back(); // remove trailing comma
+    if (diff) {
+        res.pop_back(); // remove trailing comma
+    } else {
+        indent(res, level);
+        res << "no diff";
     }
-    return "no diff";
 }
 
-TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
-    if (&left == &right) {
-        return "no diff";
+void PrintTupleDiff(TStringBuilder& res, size_t level, const TIndentPrinter& indent, const TTupleExprType& left, const TTupleExprType& right) {
+    const size_t minSize = Min(left.GetSize(), right.GetSize());
+    bool diff = false;
+    for (size_t i = 0; i < minSize; ++i) {
+        if (!IsSameAnnotation(*left.GetItems()[i], *right.GetItems()[i])) {
+            indent(res, level);
+            res << i << ':';
+            PrintTypeDiff(res, level, indent, *left.GetItems()[i], *right.GetItems()[i]);
+            res << ',';
+            diff = true;
+        }
     }
-    TStringBuilder res;
+    if (left.GetSize() > minSize) {
+        for (size_t i = minSize; i < left.GetSize(); ++i) {
+            indent(res, level);
+            res << '-' << *left.GetItems()[i] << ',';
+        }
+        diff = true;
+    }
+    if (right.GetSize() > minSize) {
+        for (size_t i = minSize; i < right.GetSize(); ++i) {
+            indent(res, level);
+            res << '+' << *right.GetItems()[i] << ',';
+        }
+        diff = true;
+    }
+    if (diff) {
+        res.pop_back();
+    } else {
+        indent(res, level);
+        res << "no diff";
+    }
+}
+
+static void PrintTypeDiff(TStringBuilder& res, size_t level, const TIndentPrinter& indent, const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
+    if (&left == &right) {
+        res << "no diff";
+        return;
+    }
     if (left.GetKind() == right.GetKind()) {
         switch (left.GetKind()) {
         case ETypeAnnotationKind::List:
-            res << TStringBuf("List<")
-                << GetTypeDiff(*left.Cast<TListExprType>()->GetItemType(), *right.Cast<TListExprType>()->GetItemType())
-                << '>';
-            return res;
+        case ETypeAnnotationKind::Optional:
         case ETypeAnnotationKind::Stream:
-            res << TStringBuf("Stream<")
-                << GetTypeDiff(*left.Cast<TStreamExprType>()->GetItemType(), *right.Cast<TStreamExprType>()->GetItemType())
-                << '>';
-                return res;
-        case ETypeAnnotationKind::Struct:
-            res << TStringBuf("Struct<")
-                << GetStructDiff(*left.Cast<TStructExprType>(), *right.Cast<TStructExprType>())
-                << '>';
-            return res;
         case ETypeAnnotationKind::Flow:
-            res << TStringBuf("Flow<")
-                << GetTypeDiff(*left.Cast<TFlowExprType>()->GetItemType(), *right.Cast<TFlowExprType>()->GetItemType())
-                << '>';
-                return res;
-        default:
-            res << left << TStringBuf("!=") << right;
-            return res;
+            res << left.GetKind() << '<';
+            indent(res, level + 1);
+            PrintTypeDiff(res, level + 1, indent, *GetItemType(left), *GetItemType(right));
+            indent(res, level);
+            res << '>';
+            break;
+        case ETypeAnnotationKind::Struct:
+            res << left.GetKind() << '<';
+            PrintStructDiff(res, level + 1, indent, *left.Cast<TStructExprType>(), *right.Cast<TStructExprType>());
+            indent(res, level);
+            res << '>';
+            break;
+        case ETypeAnnotationKind::Variant:
+            res << left.GetKind() << '<';
+            if (left.Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == right.Cast<TVariantExprType>()->GetUnderlyingType()->GetKind()) {
+                if (left.Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct) {
+                    PrintStructDiff(res, level + 1, indent, *left.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TStructExprType>(), *right.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TStructExprType>());
+                } else {
+                    YQL_ENSURE(left.Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple);
+                    PrintTupleDiff(res, level + 1, indent, *left.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>(), *right.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>());
+                }
+            } else {
+                res << left.Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() << "!=" << right.Cast<TVariantExprType>()->GetUnderlyingType()->GetKind();
+            }
+            indent(res, level);
+            res << '>';
+            break;
+        case ETypeAnnotationKind::Tagged:
+            res << left.GetKind() << "<\"" << left.Cast<TTaggedExprType>()->GetTag() << '"';
+            if (left.Cast<TTaggedExprType>()->GetTag() != right.Cast<TTaggedExprType>()->GetTag()) {
+                res << "!=\"" << right.Cast<TTaggedExprType>()->GetTag() << '"';
+            }
+            res << ',';
+            PrintTypeDiff(res, level + 1, indent, *left.Cast<TTaggedExprType>()->GetBaseType(), *right.Cast<TTaggedExprType>()->GetBaseType());
+            indent(res, level);
+            res << '>';
+            break;
+        case ETypeAnnotationKind::Dict: {
+            res << left.GetKind() << '<';
+            bool keyDiff = false;
+            if (!IsSameAnnotation(*left.Cast<TDictExprType>()->GetKeyType(), *right.Cast<TDictExprType>()->GetKeyType())) {
+                res << "key:";
+                PrintTypeDiff(res, level + 1, indent, *left.Cast<TDictExprType>()->GetKeyType(), *right.Cast<TDictExprType>()->GetKeyType());
+                keyDiff = true;
+            }
+            if (!IsSameAnnotation(*left.Cast<TDictExprType>()->GetPayloadType(), *right.Cast<TDictExprType>()->GetPayloadType())) {
+                if (keyDiff) {
+                    res << ',';
+                }
+                res << "payload:";
+                PrintTypeDiff(res, level + 1, indent, *left.Cast<TDictExprType>()->GetPayloadType(), *right.Cast<TDictExprType>()->GetPayloadType());
+            }
+            indent(res, level);
+            res << '>';
+            break;
         }
+        case ETypeAnnotationKind::Tuple:
+            res << left.GetKind() << '<';
+            PrintTupleDiff(res, level + 1, indent, *left.Cast<TTupleExprType>(), *right.Cast<TTupleExprType>());
+            indent(res, level);
+            res << '>';
+            break;
+        default:
+            res << left << "!=" << right;
+        }
+    } else {
+        res << left << "!=" << right;
     }
-    res << left.GetKind() << TStringBuf("!=") << right.GetKind();
+}
+
+}
+
+TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
+    TStringBuilder res;
+    PrintTypeDiff(res, 0, [](TStringBuilder&, size_t) {}, left, right);
+    return res;
+}
+
+TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
+    TStringBuilder res;
+    PrintTypeDiff(res, 0, [](TStringBuilder& res, size_t level) {
+        res << '\n';
+        for (size_t i = 0; i < level; ++i) {
+            res << ' ';
+        }
+    }, left, right);
     return res;
 }
 

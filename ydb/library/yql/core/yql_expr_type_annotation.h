@@ -277,6 +277,7 @@ bool IsEmptyList(const TTypeAnnotationNode& type);
 bool IsInstantEqual(const TTypeAnnotationNode& type);
 
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
+TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 
 bool IsSystemMember(const TStringBuf& memberName);

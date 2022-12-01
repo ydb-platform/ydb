@@ -7380,7 +7380,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
                 else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(i)->Pos()), TStringBuilder() << "Mismatch type argument #" << i
-                        << ", source type: " << *srcType << ", target type: " << *arg.Type));
+                        << ", type diff: " << GetTypeDiff(*arg.Type, *srcType)));
                 }
                 return IGraphTransformer::TStatus::Error;
             }

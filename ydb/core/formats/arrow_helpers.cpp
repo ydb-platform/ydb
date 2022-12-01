@@ -1214,6 +1214,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             auto& curCell = cells[0][col];
             if (column->IsNull(row)) {
                 curCell = TCell();
+                ++col;
                 continue;
             }
 

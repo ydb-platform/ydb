@@ -23,17 +23,27 @@ public:
 
     /// If header is true read column names from first line after skipRows. Parse columns as strings in this case.
     /// @note It's possible to skip header with skipRows and use typed columns instead.
-    TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
-              ui32 skipRows = 0, bool header = false, ui32 blockSize = DEFAULT_BLOCK_SIZE);
+    TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header = false);
 
     std::shared_ptr<arrow::RecordBatch> ReadNext(const TString& csv, TString& errString);
+    std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, TString& errString);
 
     void Reset() {
         Reader = {};
     }
 
-    void SetDelimiter(char delimiter = ',') {
-        ParseOptions.delimiter = delimiter;
+    void SetSkipRows(ui32 skipRows) {
+        ReadOptions.skip_rows = skipRows;
+    }
+
+    void SetBlockSize(ui32 blockSize = DEFAULT_BLOCK_SIZE) {
+        ReadOptions.block_size = blockSize;
+    }
+
+    void SetDelimiter(std::optional<char> delimiter) {
+        if (delimiter) {
+            ParseOptions.delimiter = *delimiter;
+        }
     }
 
     void SetQuoting(bool quoting = true, char quoteChar = '"', bool doubleQuote = true) {
@@ -47,16 +57,10 @@ public:
         ParseOptions.escape_char = escapeChar;
     }
 
-    void SetNullValue(const TString& null) {
-        if (!null.empty()) {
-            ConvertOptions.null_values = { std::string(null.data(), null.size()) };
-            ConvertOptions.strings_can_be_null = true;
-            ConvertOptions.quoted_strings_can_be_null = true;
-        } else {
-            ConvertOptions.null_values.clear();
-            ConvertOptions.strings_can_be_null = false;
-            ConvertOptions.quoted_strings_can_be_null = true;
-        }
+    void SetNullValue(const TString& null = "") {
+        ConvertOptions.null_values = { std::string(null.data(), null.size()) };
+        ConvertOptions.strings_can_be_null = true;
+        ConvertOptions.quoted_strings_can_be_null = false;
     }
 
 private:
@@ -65,6 +69,10 @@ private:
     arrow::csv::ConvertOptions ConvertOptions;
     std::shared_ptr<arrow::csv::StreamingReader> Reader;
     std::vector<TString> ResultColumns;
+
+    static TString ErrorPrefix() {
+        return "Cannot read CSV: ";
+    }
 };
 
 }

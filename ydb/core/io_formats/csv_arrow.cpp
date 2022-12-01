@@ -3,16 +3,14 @@
 
 namespace NKikimr::NFormats {
 
-TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui32 skipRows, bool header,
-                     ui32 blockSize)
+TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header)
     : ReadOptions(arrow::csv::ReadOptions::Defaults())
     , ParseOptions(arrow::csv::ParseOptions::Defaults())
     , ConvertOptions(arrow::csv::ConvertOptions::Defaults())
 {
     ConvertOptions.check_utf8 = false;
-    ReadOptions.block_size = blockSize;
+    ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
-    ReadOptions.skip_rows = skipRows;
     ReadOptions.autogenerate_column_names = false;
     if (header) {
         // !autogenerate + column_names.empty() => read from CSV
@@ -32,26 +30,35 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
             ReadOptions.column_names.push_back(columnName);
             ConvertOptions.column_types[columnName] = NArrow::GetArrowType(type);
         }
+#if 0
     } else {
         ReadOptions.autogenerate_column_names = true;
+#endif
     }
+
+    SetNullValue(); // set default null value
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TString& errString) {
-    if (!Reader && csv.Size()) {
+    if (!Reader) {
+        if (ConvertOptions.column_types.empty()) {
+            errString = ErrorPrefix() + "no columns specified";
+            return {};
+        }
+
         auto buffer = std::make_shared<NArrow::TBufferOverString>(csv);
         auto input = std::make_shared<arrow::io::BufferReader>(buffer);
         auto res = arrow::csv::StreamingReader::Make(arrow::io::default_io_context(), input,
                                                      ReadOptions, ParseOptions, ConvertOptions);
         if (!res.ok()) {
-            errString = TStringBuilder() << "Cannot read CSV: " << res.status().ToString();
+            errString = ErrorPrefix() + res.status().ToString();
             return {};
         }
         Reader = *res;
     }
 
     if (!Reader) {
-        errString = "Cannot read CSV: no reader";
+        errString = ErrorPrefix() + "cannot make reader";
         return {};
     }
 
@@ -61,8 +68,24 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
     if (batch && !ResultColumns.empty()) {
         batch = NArrow::ExtractColumns(batch, ResultColumns);
         if (!batch) {
-            errString = "Cannot read CSV: not all result columns present";
+            errString = ErrorPrefix() + "not all result columns present";
         }
+    }
+    return batch;
+}
+
+std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, TString& errString) {
+    auto batch = ReadNext(csv, errString);
+    if (!batch) {
+        if (errString.empty()) {
+            errString = ErrorPrefix();
+        }
+        return {};
+    }
+
+    if (ReadNext(csv, errString)) {
+        errString = ErrorPrefix() + "too big CSV data portion";
+        return {};
     }
     return batch;
 }

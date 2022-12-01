@@ -612,11 +612,6 @@ private:
             }
             case EUploadSource::CSV:
             {
-                if (SrcColumns.empty()) {
-                    errorMessage = "Cannot upsert CSV: no src columns";
-                    return false;
-                }
-
                 auto& data = GetSourceData();
                 auto& cvsSettings = GetCsvSettings();
                 ui32 skipRows = cvsSettings.skip_rows();
@@ -624,11 +619,8 @@ private:
                 auto& nullValue = cvsSettings.null_value();
                 bool withHeader = cvsSettings.header();
 
-                ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
-                if (data.size() >= blockSize) {
-                    blockSize *= data.size() / blockSize + 1;
-                }
-                NFormats::TArrowCSV reader(SrcColumns, skipRows, withHeader, blockSize);
+                NFormats::TArrowCSV reader(SrcColumns, withHeader);
+                reader.SetSkipRows(skipRows);
 
                 if (!delimiter.empty()) {
                     if (delimiter.size() != 1) {
@@ -643,16 +635,19 @@ private:
                     reader.SetNullValue(nullValue);
                 }
 
-                Batch = reader.ReadNext(data, errorMessage);
+                if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
+                    ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
+                    blockSize *= data.size() / blockSize + 1;
+                    reader.SetBlockSize(blockSize);
+                }
+
+                Batch = reader.ReadSingleBatch(data, errorMessage);
                 if (!Batch) {
-                    if (errorMessage.empty()) {
-                        errorMessage = "Cannot read CSV data";
-                    }
                     return false;
                 }
 
-                if (reader.ReadNext(data, errorMessage)) {
-                    errorMessage = "Too big CSV batch";
+                if (!Batch->num_rows()) {
+                    errorMessage = "No rows in CSV";
                     return false;
                 }
 

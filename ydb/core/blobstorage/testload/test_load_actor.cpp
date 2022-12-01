@@ -333,14 +333,16 @@ public:
                 "received protobuf: " << params.Get("protobuf") << " | "
                 "proto parse status: " << std::to_string(status)
             );
+            ui64 tag = 0;
             if (status) {
-                if (params.Has("run_all") && params.Get("run_all") == "true") {
+                if (params.Has("run_all") && params.Get("run_all") == "on") {
                     LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on all nodes");
                     RunRecordOnAllNodes(record, ctx);
+                    tag = NextTag; // may be datarace here
                 } else {
                     try {
                         LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on node: " << SelfId().NodeId());
-                        ProcessCmd(record, ctx);
+                        tag = ProcessCmd(record, ctx);
                     } catch (const TLoadActorException& ex) {
                         info.ErrorMessage = ex.what();
                     }
@@ -349,19 +351,21 @@ public:
                 info.ErrorMessage = "bad protobuf";
             }
 
-            GenerateHttpInfoRes(ctx, id);
+            GenerateJsonTagInfoRes(ctx, id, tag);
             return;
         } else if (params.Has("stop_request")) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
             NKikimrBlobStorage::TEvTestLoadRequest record;
             record.MutableLoadStop()->SetRemoveAllTags(true);
-            if (params.Has("stop_all_nodes") && params.Get("stop_all_nodes") == "true") {
+            if (params.Has("stop_all_nodes") && params.Get("stop_all_nodes") == "on") {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
                 RunRecordOnAllNodes(record, ctx);
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on node: " << SelfId().NodeId());
                 ProcessCmd(record, ctx);
             }
+            GenerateJsonTagInfoRes(ctx, id, 0);
+            return;
         } else if (params.Has("json_results")) {
             GenerateJsonInfoRes(ctx, id);
             return;
@@ -426,6 +430,25 @@ public:
         }
     }
 
+    void GenerateJsonTagInfoRes(const TActorContext& ctx, ui32 id, ui64 tag) {
+        auto it = InfoRequests.find(id);
+        Y_VERIFY(it != InfoRequests.end());
+        THttpInfoRequest& info = it->second;
+
+        TStringStream str;
+        str << NMonitoring::HTTPOKJSON;
+        NJson::TJsonValue value;
+        value["tag"] = tag;
+        value["status"] = "OK";
+        NJson::WriteJson(&str, &value);
+
+        auto result = std::make_unique<NMon::TEvHttpInfoRes>(str.Str(), info.SubRequestId,
+                NMon::IEvHttpInfoRes::EContentType::Custom);
+        ctx.Send(info.Origin, result.release());
+
+        InfoRequests.erase(it);
+    }
+
     void GenerateJsonInfoRes(const TActorContext& ctx, ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
@@ -470,17 +493,19 @@ public:
             COLLAPSED_BUTTON_CONTENT("start_load_info", "Start load") {
                 str << R"___(
                     <script>
-                        function sendStartRequest() {
+                        function sendStartRequest(button) {
                             $.ajax({
                                 url: "",
                                 data: {
-                                    protobuf: document.querySelector('textarea[name=protobuf]').value,
-                                    run_all: document.querySelector('input[id=runAllNodes]').checked
+                                    protobuf: $('#protobuf').val(),
+                                    run_all: $('#runAllNodes:checked').val()
                                 },
                                 method: "GET",
                                 dataType: "html",
                                 success: function(result) {
-                                    $("html").html(result);
+                                    $(button).prop('disabled', true);
+                                    $(button).text("started");
+                                    $("#protobuf").text(result);
                                 }
                             });
                         }
@@ -491,23 +516,24 @@ public:
                 str << "</textarea><br>";
                 str << R"(<input type="checkbox" id="runAllNodes" name="runAll"> )";
                 str << R"(<label for="runAllNodes"> Run on all nodes</label>)" << "<br><br>";
-                str << R"(<button onClick='sendStartRequest()' name='startNewLoad' class='btn btn-default'>Start new load</button>)" << "<br><br>";
+                str << R"(<button onClick='sendStartRequest(this)' name='startNewLoad' class='btn btn-default'>Start new load</button>)" << "<br><br>";
             }
 
             COLLAPSED_BUTTON_CONTENT("stop_load_info", "Stop load") {
                 str << R"___(
                     <script>
-                        function sendStopRequest() {
+                        function sendStopRequest(button) {
                             $.ajax({
                                 url: "",
                                 data: {
                                     stop_request: true,
-                                    stop_all_nodes: document.querySelector('input[id=stopAllNodes]').checked
+                                    stop_all_nodes: $('#stopAllNodes:checked').val()
                                 },
                                 method: "GET",
                                 dataType: "html",
                                 success: function(result) {
-                                    $("html").html(result);
+                                    $(button).prop('disabled', true);
+                                    $(button).text("stopped");
                                 }
                             });
                         }
@@ -515,7 +541,7 @@ public:
                 )___";
                 str << R"(<input type="checkbox" id="stopAllNodes" name="stopAll"> )";
                 str << R"(<label for="stopAllNodes"> Stop load on all nodes</label>)" << "<br><br>";
-                str << R"(<button onClick='sendStopRequest()' name='stopNewLoad' class='btn btn-default'>Stop load</button>)" << "<br><br>";
+                str << R"(<button onClick='sendStopRequest(this)' name='stopNewLoad' class='btn btn-default'>Stop load</button>)" << "<br><br>";
             }
 
             for (const auto& pair : info.ActorMap) {

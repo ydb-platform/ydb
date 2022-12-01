@@ -307,7 +307,7 @@ public:
         Y_UNUSED(index);
         VERIFY_PARAM(DurationSeconds);
 
-        google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
+        google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
 
         UniformPartitionsCount = cmd.GetUniformPartitionsCount();
         DeleteTableOnFinish = cmd.GetDeleteTableOnFinish();
@@ -486,10 +486,14 @@ private:
         value["duration_s"] = DurationSeconds;
         value["tx/s"] = Total->WindowHist.GetTotalCount() / (WindowDuration * std::max(ui64(1), Phase) * 1.0);
         value["errors"] = Total->WindowErrors;
-        value["p50_ms"] = Total->WindowHist.GetValueAtPercentile(50.0) / 1000.0;
-        value["p95_ms"] = Total->WindowHist.GetValueAtPercentile(95.0) / 1000.0;
-        value["p99_ms"] = Total->WindowHist.GetValueAtPercentile(99.0) / 1000.0;
-        value["p100_ms"] = Total->WindowHist.GetMax() / 1000.0;
+        {
+            auto& p = value["percentile"];
+            p["50"] = Total->WindowHist.GetValueAtPercentile(50.0) / 1000.0;
+            p["95"] = Total->WindowHist.GetValueAtPercentile(95.0) / 1000.0;
+            p["99"] = Total->WindowHist.GetValueAtPercentile(99.0) / 1000.0;
+            p["100"] = Total->WindowHist.GetMax() / 1000.0;
+        }
+        value["config"] = ConfigString;
         return value;
     }
 
@@ -703,7 +707,7 @@ private:
                 }
             }
             COLLAPSED_BUTTON_CONTENT(Sprintf("configProtobuf%" PRIu64, Tag), "Config") {
-                str << "<pre>" << ConfingString << "</pre>";
+                str << "<pre>" << ConfigString << "</pre>";
             }
         }
         return str.Str();
@@ -754,7 +758,7 @@ private:
     ui64 WindowCount;
     ui64 WindowDuration;
     std::vector<TActorId> Workers;
-    TString ConfingString;
+    TString ConfigString;
     ui64 UniformPartitionsCount;
     bool DeleteTableOnFinish;
     ui32 NumOfSessions;

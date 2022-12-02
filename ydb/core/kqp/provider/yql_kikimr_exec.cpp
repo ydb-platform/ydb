@@ -970,6 +970,12 @@ public:
                                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                         TStringBuilder() << name << " setting is not supported yet"));
                                     return SyncError();
+                                } else if (name == "virtual_timestamps") {
+                                    auto vt = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_virtual_timestamps(FromString<bool>(to_lower(vt)));
                                 } else if (name == "retention_period") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(

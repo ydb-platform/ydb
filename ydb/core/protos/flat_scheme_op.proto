@@ -718,6 +718,7 @@ message TCdcStreamDescription {
     optional string Name = 1;
     optional ECdcStreamMode Mode = 2;
     optional ECdcStreamFormat Format = 6;
+    optional bool VirtualTimestamps = 7;
     optional NKikimrProto.TPathID PathId = 3;
     optional ECdcStreamState State = 4;
     optional uint64 SchemaVersion = 5;

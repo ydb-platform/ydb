@@ -146,7 +146,7 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
     }
 }
 
-void TChangeRecord::SerializeTo(NJson::TJsonValue& json) const {
+void TChangeRecord::SerializeTo(NJson::TJsonValue& json, bool virtualTimestamps) const {
     switch (Kind) {
         case EKind::CdcDataChange: {
             Y_VERIFY(Schema);
@@ -183,6 +183,12 @@ void TChangeRecord::SerializeTo(NJson::TJsonValue& json) const {
                     break;
                 default:
                     Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+            }
+
+            if (virtualTimestamps) {
+                for (auto v : {Step, TxId}) {
+                    json["ts"].AppendValue(v);
+                }
             }
 
             break;

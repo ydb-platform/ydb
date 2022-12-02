@@ -5,7 +5,7 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
-    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing()) {
+    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false) {
         TTestWithReboots t;
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
@@ -25,6 +25,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             streamDesc.SetName("Stream");
             streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly);
             streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+            streamDesc.SetVirtualTimestamps(vt);
 
             if (state) {
                 streamDesc.SetState(*state);
@@ -43,6 +44,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
                 NLs::PathExist,
                 NLs::StreamState(state.GetOrElse(NKikimrSchemeOp::ECdcStreamStateReady)),
+                NLs::StreamVirtualTimestamps(vt),
             });
         });
     }
@@ -57,6 +59,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
     Y_UNIT_TEST(CreateStreamWithInitialScan) {
         CreateStream(NKikimrSchemeOp::ECdcStreamStateScan);
+    }
+
+    Y_UNIT_TEST(CreateStreamWithVirtualTimestamps) {
+        CreateStream({}, true);
     }
 
     Y_UNIT_TEST(AlterStream) {

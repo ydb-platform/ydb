@@ -795,27 +795,30 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool vt = false) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
             .Format = format,
+            .VirtualTimestamps = vt,
         };
     }
 
-    TCdcStream Updates(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream Updates(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool vt = false) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
             .Format = format,
+            .VirtualTimestamps = vt,
         };
     }
 
-    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool vt = false) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
             .Format = format,
+            .VirtualTimestamps = vt,
         };
     }
 
@@ -832,7 +835,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records)
+                const TVector<TString>& queries, const TVector<TString>& records, bool strict = true)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -866,8 +869,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        UNIT_ASSERT_VALUES_EQUAL(record, item.GetData());
-                        UNIT_ASSERT_VALUES_EQUAL(CalcPartitionKey(record), item.GetPartitionKey());
+                        if (strict) {
+                            UNIT_ASSERT_VALUES_EQUAL(item.GetData(), record);
+                            UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(record));
+                        } else {
+                            UNIT_ASSERT_STRING_CONTAINS(item.GetData(), record);
+                        }
                     }
                 } else if (auto* create = std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
                     pStream = create->GetPartitionStream();
@@ -917,7 +924,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records)
+                const TVector<TString>& queries, const TVector<TString>& records, bool strict = true)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
@@ -968,8 +975,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 for (ui32 i = 0; i < records.size(); ++i) {
                     const auto& actual = res.GetResult().records().at(i);
                     const auto& expected = records.at(i);
-                    UNIT_ASSERT_VALUES_EQUAL(actual.data(), expected);
-                    UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), CalcPartitionKey(expected));
+                    if (strict) {
+                        UNIT_ASSERT_VALUES_EQUAL(actual.data(), expected);
+                        UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), CalcPartitionKey(expected));
+                    } else {
+                        UNIT_ASSERT_STRING_CONTAINS(actual.data(), expected);
+                    }
                 }
             }
 
@@ -997,7 +1008,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct TopicRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records)
+                const TVector<TString>& queries, const TVector<TString>& records, bool strict = true)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1030,9 +1041,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        UNIT_ASSERT_VALUES_EQUAL(record, item.GetData());
-                        //TODO: check here partition key
-//                        UNIT_ASSERT_VALUES_EQUAL(CalcPartitionKey(record), item.GetPartitionKey());
+                        if (strict) {
+                            UNIT_ASSERT_VALUES_EQUAL(item.GetData(), record);
+                            // TODO: check here partition key
+                        } else {
+                            UNIT_ASSERT_STRING_CONTAINS(item.GetData(), record);
+                        }
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
                     pStream = create->GetPartitionSession();
@@ -1149,6 +1163,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST_TRIPLET(VirtualTimestamps, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream", true), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )"}, { 
+            R"({"update":{},"key":[1],"ts":[)",
+            R"({"update":{},"key":[2],"ts":[)",
+            R"({"update":{},"key":[3],"ts":[)",
+        }, false /* non-strict because of variadic timestamps */);
+    }
+
     Y_UNIT_TEST_TRIPLET(NaN, PqRunner, YdsRunner, TopicRunner) {
         const auto variants = std::vector<std::pair<const char*, const char*>>{
             {"Double", ""},
@@ -1175,18 +1202,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    TShardedTableOptions Utf8Table() {
-        return TShardedTableOptions()
+    Y_UNIT_TEST_TRIPLET(HugeKey, PqRunner, YdsRunner, TopicRunner) {
+        const auto key = TString(512_KB, 'A');
+        const auto table = TShardedTableOptions()
             .Columns({
                 {"key", "Utf8", true, false},
                 {"value", "Uint32", false, false},
             });
-    }
 
-    Y_UNIT_TEST_TRIPLET(HugeKey, PqRunner, YdsRunner, TopicRunner) {
-        const auto key = TString(512_KB, 'A');
-
-        TRunner::Read(Utf8Table(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {Sprintf(R"(
+        TRunner::Read(table, KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {Sprintf(R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             ("%s", 1);
         )", key.c_str())}, {
@@ -1252,7 +1276,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .BeginAlterAttributes().Add("key", "value").EndAlterAttributes()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
         }
-
     }
 
     // Pq specific

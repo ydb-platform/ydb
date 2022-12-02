@@ -2257,10 +2257,11 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
 
-    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, EState state)
+    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, EState state)
         : AlterVersion(version)
         , Mode(mode)
         , Format(format)
+        , VirtualTimestamps(vt)
         , State(state)
     {}
 
@@ -2274,12 +2275,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
-    static TPtr New(EMode mode, EFormat format) {
-        return new TCdcStreamInfo(0, mode, format, EState::ECdcStreamStateInvalid);
+    static TPtr New(EMode mode, EFormat format, bool vt) {
+        return new TCdcStreamInfo(0, mode, format, vt, EState::ECdcStreamStateInvalid);
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
-        TPtr result = New(desc.GetMode(), desc.GetFormat());
+        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps());
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2292,6 +2293,7 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     ui64 AlterVersion = 1;
     EMode Mode;
     EFormat Format;
+    bool VirtualTimestamps;
     EState State;
 
     TCdcStreamInfo::TPtr AlterData = nullptr;

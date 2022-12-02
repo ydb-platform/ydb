@@ -1,6 +1,7 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_sender_common_ops.h"
+#include "datashard_user_table.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -98,7 +99,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             NKikimrPQClient::TDataChunk data;
             data.SetCodec(0 /* CODEC_RAW */);
 
-            switch (Format) {
+            switch (Stream.Format) {
                 case NKikimrSchemeOp::ECdcStreamFormatProto: {
                     NKikimrChangeExchange::TChangeRecord protoRecord;
                     record.SerializeTo(protoRecord);
@@ -108,7 +109,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
                 case NKikimrSchemeOp::ECdcStreamFormatJson: {
                     NJson::TJsonValue json;
-                    record.SerializeTo(json);
+                    record.SerializeTo(json, Stream.VirtualTimestamps);
 
                     TStringStream str;
                     NJson::TJsonWriterConfig jsonConfig;
@@ -123,7 +124,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
                 default: {
                     LOG_E("Unknown format"
-                        << ": format# " << static_cast<int>(Format));
+                        << ": format# " << static_cast<int>(Stream.Format));
                     return Leave();
                 }
             }
@@ -225,12 +226,12 @@ public:
             const TDataShardId& dataShard,
             ui32 partitionId,
             ui64 shardId,
-            NKikimrSchemeOp::ECdcStreamFormat format)
+            const TUserTable::TCdcStream& stream)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
-        , Format(format)
+        , Stream(stream)
         , SourceId(ToString(DataShard.TabletId))
     {
     }
@@ -255,7 +256,7 @@ private:
     const TDataShardId DataShard;
     const ui32 PartitionId;
     const ui64 ShardId;
-    const NKikimrSchemeOp::ECdcStreamFormat Format;
+    const TUserTable::TCdcStream Stream;
     const TString SourceId;
     mutable TMaybe<TString> LogPrefix;
 
@@ -487,7 +488,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
             return;
         }
 
-        Format = entry.CdcStreamInfo->Description.GetFormat();
+        Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
 
         Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -624,7 +625,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         Y_VERIFY(KeyDesc);
         Y_VERIFY(KeyDesc->Partitions);
 
-        switch (Format) {
+        switch (Stream.Format) {
             case NKikimrSchemeOp::ECdcStreamFormatProto: {
                 const auto range = TTableRange(record.GetKey());
                 Y_VERIFY(range.Point);
@@ -654,7 +655,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
 
             default: {
                 Y_FAIL_S("Unknown format"
-                    << ": format# " << static_cast<int>(Format));
+                    << ": format# " << static_cast<int>(Stream.Format));
             }
         }
     }
@@ -662,7 +663,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
     IActor* CreateSender(ui64 partitionId) override {
         Y_VERIFY(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Format);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
     }
 
     void Handle(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -733,7 +734,7 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
 
-    NKikimrSchemeOp::ECdcStreamFormat Format;
+    TUserTable::TCdcStream Stream;
     TPathId TopicPathId;
     THolder<TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;

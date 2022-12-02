@@ -119,6 +119,7 @@ namespace NLs {
     TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode);
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
+    TCheckFunc StreamVirtualTimestamps(bool value);
     TCheckFunc RetentionPeriod(const TDuration& value);
 
     TCheckFunc HasBackupInFly(ui64 txId);

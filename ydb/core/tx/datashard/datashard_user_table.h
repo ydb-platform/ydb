@@ -292,6 +292,7 @@ struct TUserTable : public TThrRefBase {
         EMode Mode;
         EFormat Format;
         EState State;
+        bool VirtualTimestamps = false;
 
         TCdcStream() = default;
 
@@ -300,6 +301,7 @@ struct TUserTable : public TThrRefBase {
             , Mode(streamDesc.GetMode())
             , Format(streamDesc.GetFormat())
             , State(streamDesc.GetState())
+            , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
         {
         }
     };

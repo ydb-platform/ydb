@@ -43,7 +43,7 @@ public:
     ui64 GetSchemaVersion() const { return SchemaVersion; }
 
     void SerializeTo(NKikimrChangeExchange::TChangeRecord& record) const;
-    void SerializeTo(NJson::TJsonValue& json) const;
+    void SerializeTo(NJson::TJsonValue& json, bool virtualTimestamps) const;
 
     TConstArrayRef<TCell> GetKey() const;
     i64 GetSeqNo() const;

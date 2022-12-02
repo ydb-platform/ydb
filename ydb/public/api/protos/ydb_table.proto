@@ -150,6 +150,8 @@ message Changefeed {
     ChangefeedFormat.Format format = 3;
     // How long data in changefeed's underlying topic should be stored
     google.protobuf.Duration retention_period = 4;
+    // Emit virtual timestamps of changes along with data or not
+    bool virtual_timestamps = 5;
 }
 
 message ChangefeedDescription {
@@ -167,6 +169,8 @@ message ChangefeedDescription {
     ChangefeedFormat.Format format = 3;
     // State of the feed
     State state = 4;
+    // State of emitting of virtual timestamps along with data
+    bool virtual_timestamps = 5;
 }
 
 message StoragePool {

@@ -1061,6 +1061,7 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetName(name);
     desc.SetMode(info->Mode);
     desc.SetFormat(info->Format);
+    desc.SetVirtualTimestamps(info->VirtualTimestamps);
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);

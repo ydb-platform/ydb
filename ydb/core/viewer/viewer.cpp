@@ -336,12 +336,12 @@ private:
             } else if (filename.StartsWith("vdisk")) {
                 filename.erase(0, 5);
             }
-            if (IsMatchesWildcard(filename, "monitoring*/resources/js/*")
-            || IsMatchesWildcard(filename, "monitoring*/resources/css/*")
-            || IsMatchesWildcard(filename, "monitoring*/resources/media/*")
-            || IsMatchesWildcard(filename, "monitoring*/resources/assets/fonts/*")
-            || IsMatchesWildcard(filename, "monitoring*/resources/favicon.png")) {
-                auto resPos = filename.find("/resources/");
+            if (IsMatchesWildcard(filename, "monitoring*/static/js/*")
+            || IsMatchesWildcard(filename, "monitoring*/static/css/*")
+            || IsMatchesWildcard(filename, "monitoring*/static/media/*")
+            || IsMatchesWildcard(filename, "monitoring*/static/assets/fonts/*")
+            || IsMatchesWildcard(filename, "monitoring*/static/favicon.png")) {
+                auto resPos = filename.find("/static/");
                 if (resPos != TString::npos) {
                     filename = "monitoring" + filename.substr(resPos);
                 }

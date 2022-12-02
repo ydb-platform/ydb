@@ -50,8 +50,7 @@ namespace NYdb::NDataStreams::V1 {
                     grpcCall,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
+                    TRpcRequestSettings::Make(settings));
 
             return future;
 

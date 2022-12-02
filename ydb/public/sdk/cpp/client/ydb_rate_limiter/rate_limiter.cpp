@@ -78,8 +78,7 @@ public:
         return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::CreateResourceRequest, Ydb::RateLimiter::CreateResourceResponse>(
             std::move(request),
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncCreateResource,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterResource(const TString& coordinationNodePath, const TString& resourcePath, const TAlterResourceSettings& settings) {
@@ -88,8 +87,7 @@ public:
         return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::AlterResourceRequest, Ydb::RateLimiter::AlterResourceResponse>(
             std::move(request),
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAlterResource,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus DropResource(const TString& coordinationNodePath, const TString& resourcePath, const TDropResourceSettings& settings) {
@@ -100,8 +98,7 @@ public:
         return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::DropResourceRequest, Ydb::RateLimiter::DropResourceResponse>(
             std::move(request),
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncDropResource,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncListResourcesResult ListResources(const TString& coordinationNodePath, const TString& resourcePath, const TListResourcesSettings& settings) {
@@ -134,8 +131,7 @@ public:
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncListResources,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -164,8 +160,7 @@ public:
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncDescribeResource,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -184,8 +179,7 @@ public:
         return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::AcquireResourceRequest, Ydb::RateLimiter::AcquireResourceResponse>(
             std::move(request),
             &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAcquireResource,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 };
 

@@ -92,8 +92,7 @@ public:
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncCreateTopic,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
 
@@ -154,8 +153,7 @@ public:
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncAlterTopic,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
 
@@ -166,8 +164,7 @@ public:
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::DropTopicRequest, Ydb::Topic::DropTopicResponse>(
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncDropTopic,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
@@ -193,8 +190,7 @@ public:
             &Ydb::Topic::V1::TopicService::Stub::AsyncDescribeTopic,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

@@ -113,8 +113,7 @@ public:
         return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
             std::move(request),
             &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncCreateTopic,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterTopic(const TString& path, const TAlterTopicSettings& settings) {
@@ -123,8 +122,7 @@ public:
         return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::AlterTopicRequest, Ydb::PersQueue::V1::AlterTopicResponse>(
             std::move(request),
             &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncAlterTopic,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
 
@@ -135,8 +133,7 @@ public:
         return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::DropTopicRequest, Ydb::PersQueue::V1::DropTopicResponse>(
             std::move(request),
             &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncDropTopic,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AddReadRule(const TString& path, const TAddReadRuleSettings& settings) {
@@ -146,8 +143,7 @@ public:
         return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::AddReadRuleRequest, Ydb::PersQueue::V1::AddReadRuleResponse>(
                 std::move(request),
                 &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncAddReadRule,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& settings) {
@@ -158,8 +154,7 @@ public:
         return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::RemoveReadRuleRequest, Ydb::PersQueue::V1::RemoveReadRuleResponse>(
                 std::move(request),
                 &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncRemoveReadRule,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
     }
 
 
@@ -186,8 +181,7 @@ public:
             &Ydb::PersQueue::V1::PersQueueService::Stub::AsyncDescribeTopic,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

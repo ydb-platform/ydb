@@ -109,7 +109,6 @@ public:
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
                     TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_,
                     TEndpointKey(settings.Endpoint_, 0));
 
         return promise.GetFuture();
@@ -375,8 +374,7 @@ public:
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncGetShardLocations,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
+                    TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -411,8 +409,7 @@ public:
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncDescribeTable,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
+                    TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -462,8 +459,7 @@ public:
                 &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncCreateSnapshot,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -498,8 +494,7 @@ public:
                 &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncRefreshSnapshot,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -534,8 +529,7 @@ public:
                 &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncDiscardSnapshot,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }

@@ -189,8 +189,7 @@ public:
                 &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExecuteYql,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -290,8 +289,7 @@ public:
                     &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExplainYql,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
+                    TRpcRequestSettings::Make(settings));
 
             return promise.GetFuture();
     }

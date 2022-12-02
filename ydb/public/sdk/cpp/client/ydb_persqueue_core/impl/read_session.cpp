@@ -132,6 +132,8 @@ void TReadSession::StartClusterDiscovery() {
         selfShared->OnClusterDiscovery(st, result);
     };
 
+    auto rpcSettings = TRpcRequestSettings::Make(Settings);
+    rpcSettings.ClientTimeout = TDuration::Seconds(5); // TODO: make client timeout setting
     Connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
@@ -140,8 +142,7 @@ void TReadSession::StartClusterDiscovery() {
         &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
         DbDriverState,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(Settings),
-        /*ClientTimeout_*/TDuration::Seconds(5)); // TODO: make client timeout setting
+        rpcSettings); // TODO: make client timeout setting
 }
 
 

@@ -75,8 +75,7 @@ public:
             &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncSelfCheck,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            requestSettings,
-            settings.ClientTimeout_);
+            requestSettings);
 
         return promise.GetFuture();
     }

@@ -87,8 +87,7 @@ public:
             &Ydb::S3Internal::V1::S3InternalService::Stub::AsyncS3Listing,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

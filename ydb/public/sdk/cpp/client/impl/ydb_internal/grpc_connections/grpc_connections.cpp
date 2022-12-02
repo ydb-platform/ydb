@@ -327,14 +327,16 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
             promise.SetValue(std::move(val));
         };
 
+    TRpcRequestSettings rpcSettings;
+    rpcSettings.ClientTimeout = GET_ENDPOINTS_TIMEOUT;
+
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
         std::move(request),
         extractor,
         &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
         dbState->shared_from_this(),
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings(),
-        GET_ENDPOINTS_TIMEOUT);
+        rpcSettings);
 
     std::weak_ptr<TDbDriverState> weakState = dbState;
 

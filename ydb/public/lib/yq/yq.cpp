@@ -54,8 +54,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncCreateQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -82,8 +81,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncListQueries,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -110,8 +108,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDescribeQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -138,8 +135,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncGetQueryStatus,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -166,8 +162,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncModifyQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -194,8 +189,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDeleteQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -222,8 +216,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncControlQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -250,8 +243,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncGetResultData,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -278,8 +270,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncListJobs,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -306,8 +297,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDescribeJob,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -334,8 +324,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncCreateConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -362,8 +351,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncListConnections,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -390,8 +378,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDescribeConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -418,8 +405,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncModifyConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -446,8 +432,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDeleteConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -474,8 +459,7 @@ public:
                     &YandexQuery::V1::YandexQueryService::Stub::AsyncTestConnection,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
+                    TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -502,8 +486,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncCreateBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -530,8 +513,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncListBindings,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -558,8 +540,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDescribeBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -586,8 +567,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncModifyBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -614,8 +594,7 @@ public:
                 &YandexQuery::V1::YandexQueryService::Stub::AsyncDeleteBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }

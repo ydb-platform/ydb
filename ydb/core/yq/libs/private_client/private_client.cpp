@@ -62,8 +62,7 @@ public:
                 &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncPingTask,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -87,8 +86,7 @@ public:
                 &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncGetTask,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -112,8 +110,7 @@ public:
                 &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncWriteTaskResult,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -137,8 +134,7 @@ public:
                 &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncNodesHealthCheck,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -163,8 +159,7 @@ public:
                 &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncCreateRateLimiterResource,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -189,8 +184,7 @@ public:
                 &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncDeleteRateLimiterResource,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }

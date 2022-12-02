@@ -60,7 +60,6 @@ protected:
         TRequest&& request,
         TAsyncRequest<TService, TRequest, TResponse> rpc,
         const TRpcRequestSettings& requestSettings = {},
-        TDuration timeout = TDuration::Zero(),
         const TEndpointKey& preferredEndpoint = TEndpointKey())
     {
         auto promise = NThreading::NewPromise<TStatus>();
@@ -78,7 +77,6 @@ protected:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             requestSettings,
-            timeout,
             preferredEndpoint);
 
         return promise.GetFuture();
@@ -88,8 +86,7 @@ protected:
     NThreading::TFuture<TOp> RunOperation(
         TRequest&& request,
         TAsyncRequest<TService, TRequest, TResponse> rpc,
-        const TRpcRequestSettings& requestSettings = {},
-        TDuration timeout = TDuration::Zero())
+        const TRpcRequestSettings& requestSettings = {})
     {
         auto promise = NThreading::NewPromise<TOp>();
 
@@ -109,8 +106,7 @@ protected:
             rpc,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            requestSettings,
-            timeout);
+            requestSettings);
 
         return promise.GetFuture();
     }

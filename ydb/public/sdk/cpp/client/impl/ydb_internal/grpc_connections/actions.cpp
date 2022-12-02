@@ -51,7 +51,6 @@ void TDeferredAction::OnAlarm() {
         DbDriverState_,
         NextDelay_,
         {},
-        TDuration::Zero(),
         true,
         TEndpointKey(Endpoint_, 0),
         std::move(Context_));

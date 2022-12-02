@@ -43,13 +43,15 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
                 }
             };
 
+        TRpcRequestSettings rpcSettings;
+        rpcSettings.ClientTimeout = OPERATION_CLIENT_TIMEOUT;
+
         Connections_->Run<V1::OperationService, TRequest, TResponse>(
             std::move(request),
             extractor,
             rpc,
             DbDriverState_,
-            TRpcRequestSettings(),
-            OPERATION_CLIENT_TIMEOUT,
+            rpcSettings,
             TEndpointKey());
 
         return promise.GetFuture();
@@ -105,13 +107,15 @@ public:
                 }
             };
 
+        TRpcRequestSettings rpcSettings;
+        rpcSettings.ClientTimeout = OPERATION_CLIENT_TIMEOUT;
+
         Connections_->Run<V1::OperationService, ListOperationsRequest, ListOperationsResponse>(
             std::move(request),
             extractor,
             &V1::OperationService::Stub::AsyncListOperations,
             DbDriverState_,
-            TRpcRequestSettings(),
-            OPERATION_CLIENT_TIMEOUT,
+            rpcSettings,
             TEndpointKey());
 
         return promise.GetFuture();

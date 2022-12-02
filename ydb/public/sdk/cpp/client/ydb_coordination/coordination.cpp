@@ -1819,8 +1819,7 @@ public:
                         Ydb::Coordination::CreateNodeResponse>(
             std::move(request),
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncCreateNode,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterNode(
@@ -1832,8 +1831,7 @@ public:
                         Ydb::Coordination::AlterNodeResponse>(
             std::move(request),
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncAlterNode,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus DropNode(
@@ -1845,8 +1843,7 @@ public:
                         Ydb::Coordination::DropNodeResponse>(
             std::move(request),
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDropNode,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeNodeResult DescribeNode(
@@ -1875,8 +1872,7 @@ public:
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDescribeNode,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

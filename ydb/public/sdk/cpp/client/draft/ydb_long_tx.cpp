@@ -31,8 +31,7 @@ public:
                             Ydb::LongTx::BeginTransactionRequest, Ydb::LongTx::BeginTransactionResponse, TLongTxBeginResult>(
             std::move(request),
             &Ydb::LongTx::V1::LongTxService::Stub::AsyncBeginTx,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncCommitTxResult CommitTx(const TString& txId,
@@ -44,8 +43,7 @@ public:
                             Ydb::LongTx::CommitTransactionRequest, Ydb::LongTx::CommitTransactionResponse, TLongTxCommitResult>(
             std::move(request),
             &Ydb::LongTx::V1::LongTxService::Stub::AsyncCommitTx,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncRollbackTxResult RollbackTx(const TString& txId,
@@ -57,8 +55,7 @@ public:
                             Ydb::LongTx::RollbackTransactionRequest, Ydb::LongTx::RollbackTransactionResponse, TLongTxRollbackResult>(
             std::move(request),
             &Ydb::LongTx::V1::LongTxService::Stub::AsyncRollbackTx,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncWriteResult Write(const TString& txId, const TString& table, const TString& dedupId,
@@ -77,8 +74,7 @@ public:
                             Ydb::LongTx::WriteRequest, Ydb::LongTx::WriteResponse, TLongTxWriteResult>(
             std::move(request),
             &Ydb::LongTx::V1::LongTxService::Stub::AsyncWrite,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncReadResult Read(const TString& txId, const TString& table,
@@ -92,8 +88,7 @@ public:
                             Ydb::LongTx::ReadRequest, Ydb::LongTx::ReadResponse, TLongTxReadResult>(
             std::move(request),
             &Ydb::LongTx::V1::LongTxService::Stub::AsyncRead,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 };
 

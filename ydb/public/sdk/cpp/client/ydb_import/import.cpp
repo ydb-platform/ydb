@@ -89,8 +89,7 @@ public:
         return RunOperation<V1::ImportService, ImportFromS3Request, ImportFromS3Response, TImportFromS3Response>(
             std::move(request),
             &V1::ImportService::Stub::AsyncImportFromS3,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     template <typename TSettings>
@@ -109,8 +108,7 @@ public:
             &V1::ImportService::Stub::AsyncImportData,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

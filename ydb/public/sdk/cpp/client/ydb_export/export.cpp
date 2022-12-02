@@ -125,8 +125,7 @@ public:
         return RunOperation<V1::ExportService, ExportToYtRequest, ExportToYtResponse, TExportToYtResponse>(
             std::move(request),
             &V1::ExportService::Stub::AsyncExportToYt,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TFuture<TExportToS3Response> ExportToS3(ExportToS3Request&& request,
@@ -135,8 +134,7 @@ public:
         return RunOperation<V1::ExportService, ExportToS3Request, ExportToS3Response, TExportToS3Response>(
             std::move(request),
             &V1::ExportService::Stub::AsyncExportToS3,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
 };

@@ -17,6 +17,7 @@ struct TRequestSettings {
     FLUENT_SETTING(TString, TraceId);
     FLUENT_SETTING(TString, RequestType);
     FLUENT_SETTING(THeader, Header);
+    FLUENT_SETTING(TDuration, ClientTimeout);
 
     TRequestSettings() = default;
 
@@ -25,6 +26,7 @@ struct TRequestSettings {
         : TraceId_(other.TraceId_)
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
+        , ClientTimeout_(other.ClientTimeout_)
     {}
 };
 
@@ -32,14 +34,11 @@ template<typename TDerived>
 struct TSimpleRequestSettings : public TRequestSettings<TDerived> {
     using TSelf = TDerived;
 
-    FLUENT_SETTING(TDuration, ClientTimeout);
-
     TSimpleRequestSettings() = default;
 
     template <typename T>
     explicit TSimpleRequestSettings(const TSimpleRequestSettings<T>& other)
         : TRequestSettings<TDerived>(other)
-        , ClientTimeout_(other.ClientTimeout_)
     {}
 };
 

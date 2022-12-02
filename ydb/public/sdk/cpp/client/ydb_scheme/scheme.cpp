@@ -113,8 +113,7 @@ public:
         return RunSimple<Ydb::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
             std::move(request),
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveDirectory(const TString& path, const TRemoveDirectorySettings& settings) {
@@ -124,8 +123,7 @@ public:
         return RunSimple<Ydb::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
             std::move(request),
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribePathResult DescribePath(const TString& path, const TDescribePathSettings& settings) {
@@ -150,8 +148,7 @@ public:
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncDescribePath,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -183,8 +180,7 @@ public:
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncListDirectory,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
 
@@ -229,8 +225,7 @@ public:
         return RunSimple<Ydb::Scheme::V1::SchemeService, ModifyPermissionsRequest, ModifyPermissionsResponse>(
             std::move(request),
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
 };

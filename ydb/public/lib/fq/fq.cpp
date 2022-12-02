@@ -54,8 +54,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncCreateQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -82,8 +81,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncListQueries,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -110,8 +108,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDescribeQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -138,8 +135,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncGetQueryStatus,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -166,8 +162,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncModifyQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -194,8 +189,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDeleteQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -222,8 +216,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncControlQuery,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -250,8 +243,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncGetResultData,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -278,8 +270,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncListJobs,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -306,8 +297,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDescribeJob,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -334,8 +324,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncCreateConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -362,8 +351,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncListConnections,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -390,8 +378,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDescribeConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -418,8 +405,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncModifyConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -446,8 +432,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDeleteConnection,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -474,8 +459,7 @@ public:
                     &FederatedQuery::V1::FederatedQueryService::Stub::AsyncTestConnection,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
+                    TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -502,8 +486,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncCreateBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -530,8 +513,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncListBindings,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -558,8 +540,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDescribeBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -586,8 +567,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncModifyBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }
@@ -614,8 +594,7 @@ public:
                 &FederatedQuery::V1::FederatedQueryService::Stub::AsyncDeleteBinding,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings));
 
         return future;
     }

@@ -111,10 +111,12 @@ void TLoginCredentialsProvider::RequestToken() {
         Ydb::Auth::LoginRequest request;
         request.set_user(Params_.User);
         request.set_password(Params_.Password);
+        TRpcRequestSettings rpcSettings;
+        rpcSettings.ClientTimeout = TDuration::Seconds(60);
 
         TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
             strongFacility, std::move(request), std::move(responseCb), &Ydb::Auth::V1::AuthService::Stub::AsyncLogin,
-            TRpcRequestSettings(), /*TODO*/TDuration::Seconds(60));
+            rpcSettings);
     }
 }
 

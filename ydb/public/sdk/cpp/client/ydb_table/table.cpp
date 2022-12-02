@@ -1932,7 +1932,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             rpcSettings,
-            settings.ClientTimeout_,
             TEndpointKey(preferedLocation, 0));
 
         std::weak_ptr<TDbDriverState> state = DbDriverState_;
@@ -1976,7 +1975,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session->GetEndpointKey());
 
         return keepAliveResultPromise.GetFuture();
@@ -1987,8 +1985,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CreateTableRequest,Ydb::Table::CreateTableResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncCreateTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TFuture<TStatus> AlterTable(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
@@ -1996,8 +1993,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncAlterTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncOperation AlterTableLong(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
@@ -2008,8 +2004,7 @@ public:
         return RunOperation<TableService, AlterTableRequest, AlterTableResponse, TOperation>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncAlterTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TFuture<TStatus> CopyTable(const TString& sessionId, const TString& src, const TString& dst,
@@ -2023,8 +2018,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTableRequest, Ydb::Table::CopyTableResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncCopyTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TFuture<TStatus> CopyTables(Ydb::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings)
@@ -2032,8 +2026,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTablesRequest, Ydb::Table::CopyTablesResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncCopyTables,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings)
@@ -2041,8 +2034,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RenameTablesRequest, Ydb::Table::RenameTablesResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncRenameTables,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TFuture<TStatus> DropTable(const TString& sessionId, const TString& path, const TDropTableSettings& settings) {
@@ -2053,8 +2045,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncDropTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeTableResult DescribeTable(const TString& sessionId, const TString& path, const TDescribeTableSettings& settings) {
@@ -2092,8 +2083,7 @@ public:
             &Ydb::Table::V1::TableService::Stub::AsyncDescribeTable,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -2175,7 +2165,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
@@ -2191,8 +2180,7 @@ public:
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse>(
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncExecuteSchemeQuery,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncBeginTransactionResult BeginTransaction(const TSession& session, const TTxSettings& txSettings,
@@ -2225,7 +2213,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
@@ -2264,7 +2251,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
@@ -2281,7 +2267,6 @@ public:
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncRollbackTransaction,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session.SessionImpl_->GetEndpointKey());
     }
 
@@ -2316,7 +2301,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
@@ -2389,7 +2373,6 @@ public:
             std::move(request),
             &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             sessionImpl->GetEndpointKey());
     }
 
@@ -2504,8 +2487,7 @@ public:
             &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -2544,8 +2526,7 @@ public:
             &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -2759,7 +2740,6 @@ private:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_,
             session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();

@@ -14,6 +14,7 @@ struct TRpcRequestSettings {
         UseDiscoveryEndpoint // Use single discovery endpoint for request
     } EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
     bool UseAuth = true;
+    TDuration ClientTimeout;
 
     template<typename TRequestSettings>
     static TRpcRequestSettings Make(const TRequestSettings& settings) {
@@ -23,6 +24,7 @@ struct TRpcRequestSettings {
         rpcSettings.Header = settings.Header_;
         rpcSettings.EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
         rpcSettings.UseAuth = true;
+        rpcSettings.ClientTimeout = settings.ClientTimeout_;
         return rpcSettings;
     }
 };

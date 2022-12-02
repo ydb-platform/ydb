@@ -37,9 +37,12 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
                 request.set_copy(true);
                 request.set_payload("abc");
 
+                TRpcRequestSettings rpcSettings;
+                rpcSettings.ClientTimeout = TDuration::Seconds(1);
+
                 TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Draft::Dummy::DummyService, Draft::Dummy::PingRequest, Draft::Dummy::PingResponse>(
                     strong, std::move(request), std::move(responseCb), &Draft::Dummy::DummyService::Stub::AsyncPing,
-                    TRpcRequestSettings(), TDuration::Seconds(1));
+                    rpcSettings);
                 return true;
             };
             return periodicCb;

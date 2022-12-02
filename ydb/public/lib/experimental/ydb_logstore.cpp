@@ -228,8 +228,7 @@ public:
             Ydb::LogStore::CreateLogStoreResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncCreateLogStore,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeLogStoreResult DescribeLogStore(const TString& path, const TDescribeLogStoreSettings& settings) {
@@ -258,8 +257,7 @@ public:
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncDescribeLogStore,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -273,8 +271,7 @@ public:
             Ydb::LogStore::DropLogStoreResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncDropLogStore,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterLogStore(const TString& path, const TAlterLogStoreSettings& settings) {
@@ -289,8 +286,7 @@ public:
             Ydb::LogStore::AlterLogStoreResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncAlterLogStore,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus CreateLogTable(const TString& path, TLogTableDescription&& tableDesc,
@@ -305,8 +301,7 @@ public:
             Ydb::LogStore::CreateLogTableResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncCreateLogTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeLogTableResult DescribeLogTable(const TString& path, const TDescribeLogTableSettings& settings) {
@@ -335,8 +330,7 @@ public:
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncDescribeLogTable,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -350,8 +344,7 @@ public:
             Ydb::LogStore::DropLogTableResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncDropLogTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AlterLogTable(const TString& path, const TAlterLogTableSettings& settings) {
@@ -373,8 +366,7 @@ public:
             Ydb::LogStore::AlterLogTableResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncAlterLogTable,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
     }
 };
 

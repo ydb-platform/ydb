@@ -168,8 +168,7 @@ void TWriteSession::DoCdsRequest(TDuration delay) {
                 &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
                 dbState,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ConnectTimeout_); // TODO: make client timeout setting
+                TRpcRequestSettings::Make(settings)); // TODO: make client timeout setting
         }
     };
     Connections->ScheduleOneTimeTask(std::move(cdsRequestCall), delay);

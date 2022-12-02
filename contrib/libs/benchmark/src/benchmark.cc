@@ -19,7 +19,7 @@
 #include "internal_macros.h"
 
 #ifndef BENCHMARK_OS_WINDOWS
-#ifndef BENCHMARK_OS_FUCHSIA
+#if !defined(BENCHMARK_OS_FUCHSIA) && !defined(BENCHMARK_OS_QURT)
 #include <sys/resource.h>
 #endif
 #include <sys/time.h>
@@ -137,7 +137,11 @@ BM_DEFINE_int32(v, 0);
 
 namespace internal {
 
-BENCHMARK_EXPORT std::map<std::string, std::string>* global_context = nullptr;
+std::map<std::string, std::string>* global_context = nullptr;
+
+BENCHMARK_EXPORT std::map<std::string, std::string>*& GetGlobalContext() {
+  return global_context;
+}
 
 // FIXME: wouldn't LTO mess this up?
 void UseCharPointer(char const volatile*) {}
@@ -178,7 +182,7 @@ State::State(IterationCount max_iters, const std::vector<int64_t>& ranges,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #endif
-#if defined(__CUDACC__)
+#if defined(__NVCC__)
 #pragma nv_diagnostic push
 #pragma nv_diag_suppress 1427
 #endif
@@ -192,7 +196,7 @@ State::State(IterationCount max_iters, const std::vector<int64_t>& ranges,
 #elif defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-#if defined(__CUDACC__)
+#if defined(__NVCC__)
 #pragma nv_diagnostic pop
 #endif
 }
@@ -678,9 +682,9 @@ void PrintDefaultHelp() {
 }
 
 void Initialize(int* argc, char** argv, void (*HelperPrintf)()) {
+  internal::HelperPrintf = HelperPrintf;
   internal::ParseCommandLineFlags(argc, argv);
   internal::LogLevel() = FLAGS_v;
-  internal::HelperPrintf = HelperPrintf;
 }
 
 void Shutdown() { delete internal::global_context; }

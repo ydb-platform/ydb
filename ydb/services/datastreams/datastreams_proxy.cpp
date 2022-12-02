@@ -1465,6 +1465,9 @@ namespace NKikimr::NDataStreams::V1 {
                 record.set_encryption(Ydb::DataStreams::V1::EncryptionType::NONE);
                 record.set_partition_key(r.GetPartitionKey());
                 record.set_sequence_number(std::to_string(r.GetOffset()).c_str());
+                if (proto.GetCodec() > 0) {
+                    record.set_codec(proto.GetCodec() + 1);
+                }
                 records.push_back(record);
             }
             millisBehindLatestMs = records.size() > 0

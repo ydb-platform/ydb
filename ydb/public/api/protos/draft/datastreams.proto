@@ -75,6 +75,8 @@ message Record {
     string partition_key = 4;
     // Unique id of the record within shard
     string sequence_number = 5;
+    // Codec id from ydb_topic.proto if data is coded
+    int32 codec = 6;
 }
 
 // Represents the stream description

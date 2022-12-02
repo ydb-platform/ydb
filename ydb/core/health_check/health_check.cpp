@@ -1614,10 +1614,12 @@ public:
                 break;
             case NKikimrWhiteboard::EVDiskState::Initial:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecovery:
+                context.IssueRecords.clear();
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
                                      TStringBuilder() << "VDisk state is " << NKikimrWhiteboard::EVDiskState_Name(vDiskInfo.GetVDiskState()),
                                      ETags::VDiskState);
-                break;
+                storageVDiskStatus.set_overall(context.GetOverallStatus());
+                return;
             case NKikimrWhiteboard::EVDiskState::LocalRecoveryError:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecoveryError:
             case NKikimrWhiteboard::EVDiskState::PDiskError:
@@ -1625,20 +1627,34 @@ public:
                                      TStringBuilder() << "VDisk state is " << NKikimrWhiteboard::EVDiskState_Name(vDiskInfo.GetVDiskState()),
                                      ETags::VDiskState,
                                      {ETags::PDiskState});
-                break;
+                storageVDiskStatus.set_overall(context.GetOverallStatus());
+                return;
+        }
+
+        if (!vDiskInfo.GetReplicated()) {
+            context.IssueRecords.clear();
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
+            return;
         }
 
         if (vDiskInfo.HasDiskSpace()) {
             switch(vDiskInfo.GetDiskSpace()) {
                 case NKikimrWhiteboard::EFlag::Green:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    if (context.IssueRecords.size() == 0) {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    } else {
+                        context.ReportStatus(context.IssueRecords.begin()->IssueLog.status(),
+                                            TStringBuilder() << "VDisk is degraded",
+                                            ETags::VDiskState,
+                                            {ETags::PDiskSpace});
+                    }
                     break;
                 case NKikimrWhiteboard::EFlag::Red:
-                    break;
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
                                          ETags::VDiskState,
                                          {ETags::PDiskSpace});
+                    break;
                 default:
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
@@ -1646,10 +1662,6 @@ public:
                                          {ETags::PDiskSpace});
                     break;
             }
-        }
-
-        if (context.GetOverallStatus() == Ydb::Monitoring::StatusFlag::GREEN && !vDiskInfo.GetReplicated()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
         }
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2032,14 +2044,14 @@ public:
             FillVDiskStatus(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, {&context, "VDISK"});
             ++disksColors[vDiskStatus.overall()];
             switch (vDiskStatus.overall()) {
-            case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
-            case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
-            case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
-                IncrementFor(failedRealms, protoVDiskId.ring());
-                ++failedDisks;
-                break;
-            default:
-                break;
+                case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
+                case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
+                case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
+                    IncrementFor(failedRealms, protoVDiskId.ring());
+                    ++failedDisks;
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -2049,6 +2061,8 @@ public:
         if (groupInfo.erasurespecies() == NONE) {
             if (failedDisks > 0) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+            } else if (disksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
             }
         } else if (groupInfo.erasurespecies() == BLOCK_4_2) {
             if (failedDisks > 2) {
@@ -2061,6 +2075,8 @@ public:
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
+            } else if (disksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
             }
         } else if (groupInfo.erasurespecies() == MIRROR_3_DC) {
             if (failedRealms.size() > 2 || (failedRealms.size() == 2 && failedRealms[0].second > 1 && failedRealms[1].second > 1)) {
@@ -2073,6 +2089,8 @@ public:
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
+            } else if (disksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
             }
         }
 

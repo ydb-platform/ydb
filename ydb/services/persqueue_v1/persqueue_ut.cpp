@@ -4166,8 +4166,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 res.Wait();
                 Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
                 UNIT_ASSERT(res.GetValue().IsSuccess());
+
                 auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
                 Cerr << res2 << "\n";
+
                 UNIT_ASSERT_VALUES_EQUAL(descrRes.DebugString(), res2.DebugString());
                 {
                     NYdb::NTopic::TCreateTopicSettings settings;
@@ -4284,6 +4286,24 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                     break;
                 }
             }
+        }
+
+        {
+            NYdb::TDriverConfig driverCfg;
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+            std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+            auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
+
+            auto res = topicClient.DescribeTopic("/Root/PQ/" + topic4, NYdb::NTopic::TDescribeTopicSettings{}.IncludeStats(true));
+            res.Wait();
+            Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+
+            auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
+            Cerr << res2 << "\n";
+            UNIT_ASSERT(res.GetValue().GetTopicDescription().GetPartitions().size() == 3);
+            UNIT_ASSERT(res.GetValue().GetTopicDescription().GetPartitions()[0].GetPartitionStats());
+            UNIT_ASSERT(res.GetValue().GetTopicDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset() > 0);
         }
 
         {
@@ -4406,9 +4426,24 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
         }
+        {
+            NYdb::TDriverConfig driverCfg;
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+            std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+            auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
 
+            auto res = topicClient.DescribeConsumer("/Root/PQ/" + topic4, "user", NYdb::NTopic::TDescribeConsumerSettings{}.IncludeStats(true));
+            res.Wait();
+            Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+            UNIT_ASSERT(res.GetValue().IsSuccess());
 
-
+            auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetConsumerDescription());
+            Cerr << res2 << "\n";
+            UNIT_ASSERT(res.GetValue().GetConsumerDescription().GetPartitions().size() == 3);
+            UNIT_ASSERT(res.GetValue().GetConsumerDescription().GetPartitions()[0].GetPartitionStats());
+            UNIT_ASSERT(res.GetValue().GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset() > 0);
+            UNIT_ASSERT(res.GetValue().GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats());
+        }
     }
 
     Y_UNIT_TEST(SchemeOperationFirstClassCitizen) {

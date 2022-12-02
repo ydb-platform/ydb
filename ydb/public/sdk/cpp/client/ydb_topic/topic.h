@@ -62,19 +62,46 @@ private:
     TVector<ECodec> SupportedCodecs_;
 };
 
+class TPartitionStats {
+public:
+    TPartitionStats(const Ydb::Topic::PartitionStats& partitionStats);
+
+    ui64 GetStartOffset() const;
+    ui64 GetEndOffset() const;
+private:
+    ui64 StartOffset_;
+    ui64 EndOffset_;
+};
+
+class TPartitionConsumerStats {
+public:
+    TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats);
+    ui64 GetCommittedOffset() const;
+
+private:
+    ui64 CommittedOffset_;
+};
+
 class TPartitionInfo {
 public:
     TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo);
+    TPartitionInfo(const Ydb::Topic::DescribeConsumerResult::PartitionInfo& partitionInfo);
+
     ui64 GetPartitionId() const;
     bool GetActive() const;
     const TVector<ui64> GetChildPartitionIds() const;
     const TVector<ui64> GetParentPartitionIds() const;
+
+    const TMaybe<TPartitionStats>& GetPartitionStats() const;
+    const TMaybe<TPartitionConsumerStats>& GetPartitionConsumerStats() const;
 
 private:
     ui64 PartitionId_;
     bool Active_;
     TVector<ui64> ChildPartitionIds_;
     TVector<ui64> ParentPartitionIds_;
+    TMaybe<TPartitionStats> PartitionStats_;
+    TMaybe<TPartitionConsumerStats> PartitionConsumerStats_;
 };
 
 
@@ -149,6 +176,27 @@ private:
 };
 
 
+class TConsumerDescription {
+    friend class NYdb::TProtoAccessor;
+
+public:
+    TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& desc);
+
+    const TVector<TPartitionInfo>& GetPartitions() const;
+
+    const TConsumer& GetConsumer() const;
+
+private:
+
+    const Ydb::Topic::DescribeConsumerResult& GetProto() const;
+
+
+    const Ydb::Topic::DescribeConsumerResult Proto_;
+    TVector<TPartitionInfo> Partitions_;
+    TConsumer Consumer_;
+};
+
+
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
     friend class NYdb::TProtoAccessor;
@@ -162,7 +210,22 @@ private:
     TTopicDescription TopicDescription_;
 };
 
+// Result for describe resource request.
+struct TDescribeConsumerResult : public TStatus {
+    friend class NYdb::TProtoAccessor;
+
+
+    TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result);
+
+    const TConsumerDescription& GetConsumerDescription() const;
+
+private:
+    TConsumerDescription ConsumerDescription_;
+};
+
+
 using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
+using TAsyncDescribeConsumerResult = NThreading::TFuture<TDescribeConsumerResult>;
 
 template <class TSettings>
 class TAlterAttributesBuilderImpl {
@@ -418,7 +481,14 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings> {};
 
 // Settings for describe resource request.
-struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {};
+struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {
+    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+};
+
+// Settings for describe resource request.
+struct TDescribeConsumerSettings : public TOperationRequestSettings<TDescribeConsumerSettings> {
+    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1464,6 +1534,9 @@ public:
 
     // Describe settings of topic.
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& = {});
+
+    // Describe settings of topic's consumer.
+    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& = {});
 
     //! Create read session.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);

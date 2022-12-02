@@ -5,6 +5,10 @@ namespace NYdb {
         return topicDescription.GetProto();
     }
 
+    const Ydb::Topic::DescribeConsumerResult& TProtoAccessor::GetProto(const NTopic::TConsumerDescription& consumerDescription) {
+        return consumerDescription.GetProto();
+    }
+
     Ydb::Topic::MeteringMode TProtoAccessor::GetProto(NTopic::EMeteringMode mode) {
         switch (mode) {
         case NTopic::EMeteringMode::Unspecified:

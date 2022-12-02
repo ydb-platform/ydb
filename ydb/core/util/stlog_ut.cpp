@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(StLog) {
             (Param16, &s));
         UNIT_ASSERT_VALUES_EQUAL(stream2.Str(), R"({"Marker":"MARKER2","File":"stlog_ut.cpp","Line":34,"Text":"hello, world",)"
             R"("Param1":1,"Param2":99,"Param3":1.1,"Param4":"abcdef","Param5":"abcdef","Param6":1,"Param7":2,"Param8":3,)"
-            R"("Param9":null,"Param10":null,"Param11":null,"Param12":true,"Param13":[1,2,3],"Param14":4,"Param15":)"
+            R"("Param9":null,"Param10":null,"Param11":null,"Param12":true,"Param13":[1,2,3],"Param14":"RACE","Param15":)"
             R"({"RawX1":"1","RawX2":"288230376185266176","RawX3":"216172807883587664"},"Param16":"yep"})");
     }
 

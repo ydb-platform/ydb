@@ -73,6 +73,19 @@ namespace NKikimr::NStLog {
 
 #define STLOG(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGX(*ctxp, __VA_ARGS__)
 
+#define STLOGJX(CTX, PRIO, COMP, ...) \
+    do { \
+        auto& ctx = (CTX); \
+        const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
+        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, component)) { \
+            STLOG_STREAM(__stream, 1, __VA_ARGS__); \
+            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
+        }; \
+    } while (false)
+
+#define STLOGJ(...) if (TActivationContext *ctxp = TlsActivationContext; !ctxp); else STLOGJX(*ctxp, __VA_ARGS__)
+
 #define STLOG_DEBUG_FAIL(COMP, ...) \
     do { \
         if (TActivationContext *ctxp = TlsActivationContext) { \
@@ -183,7 +196,14 @@ namespace NKikimr::NStLog {
         static void OutputParam(NJson::TJsonWriter& json, const TValue& value) {
             using Tx = std::decay_t<TValue>;
 
-            if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
+            if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
+                const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
+                if (const auto *val = e->FindValueByNumber(value)) {
+                    json.Write(val->name());
+                } else {
+                    json.Write(static_cast<int>(value));
+                }
+            } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
                 ProtobufToJson(value, json);
             } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
                 if (value) {

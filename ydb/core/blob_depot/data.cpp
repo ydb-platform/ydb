@@ -514,7 +514,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::EndCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId) {
-
         Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
         auto& channel = Self->Channels[blobSeqId.Channel];
 

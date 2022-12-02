@@ -335,6 +335,7 @@ enum EServiceKikimr {
     // Blob depot
     BLOB_DEPOT = 1300;
     BLOB_DEPOT_AGENT = 1301;
+    BLOB_DEPOT_EVENTS = 1302; // event flow for debugging purposes
 
     // DATASHARD section again
     DS_LOAD_TEST = 1400;

@@ -390,4 +390,7 @@ namespace NKikimr::NBlobDepot {
         float GetApproximateFreeSpaceShare() const;
     };
 
+#define BDEV_QUERY(MARKER, TEXT, ...) BDEV(MARKER, TEXT, (VG, Agent.VirtualGroupId), (BDT, Agent.TabletId), \
+                                      (G, Agent.BlobDepotGeneration), (Q, QueryId), __VA_ARGS__)
+
 } // NKikimr::NBlobDepot

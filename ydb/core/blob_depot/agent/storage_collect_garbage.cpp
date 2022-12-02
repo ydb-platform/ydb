@@ -19,6 +19,22 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
+                BDEV_QUERY(BDEV04, "TEvCollectGarbage_new", (U.TabletId, Request.TabletId),
+                    (U.Generation, Request.RecordGeneration), (U.PerGenerationCounter, Request.PerGenerationCounter),
+                    (U.Channel, Request.Channel), (U.Collect, Request.Collect), (U.Hard, Request.Hard),
+                    (U.CollectGeneration, Request.CollectGeneration), (U.CollectStep, Request.CollectStep));
+
+                if (Request.Keep) {
+                    for (const auto& id : *Request.Keep) {
+                        BDEV_QUERY(BDEV05, "TEvCollectGarbage_keep", (U.BlobId, id));
+                    }
+                }
+                if (Request.DoNotKeep) {
+                    for (const auto& id : *Request.DoNotKeep) {
+                        BDEV_QUERY(BDEV06, "TEvCollectGarbage_doNotKeep", (U.BlobId, id));
+                    }
+                }
+
                 NumKeep = Request.Keep ? Request.Keep->size() : 0;
                 NumDoNotKeep = Request.DoNotKeep ? Request.DoNotKeep->size() : 0;
 
@@ -94,11 +110,22 @@ namespace NKikimr::NBlobDepot {
                 } else if (const auto status = msg.GetStatus(); status != NKikimrProto::OK) {
                     EndWithError(status, msg.GetErrorReason());
                 } else if (IsLast) {
-                    EndWithSuccess(std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(NKikimrProto::OK,
-                        Request.TabletId, Request.RecordGeneration, Request.PerGenerationCounter, Request.Channel));
+                    EndWithSuccess();
                 } else {
                     IssueCollectGarbage();
                 }
+            }
+
+            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
+                BDEV_QUERY(BDEV07, "TEvCollectGarbage_end", (Status, status), (ErrorReason, errorReason));
+                TBlobStorageQuery::EndWithError(status, errorReason);
+            }
+
+            void EndWithSuccess() {
+                BDEV_QUERY(BDEV08, "TEvCollectGarbage_end", (Status, NKikimrProto::OK));
+                TBlobStorageQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(
+                    NKikimrProto::OK, Request.TabletId, Request.RecordGeneration, Request.PerGenerationCounter,
+                    Request.Channel));
             }
 
             ui64 GetTabletId() const override {

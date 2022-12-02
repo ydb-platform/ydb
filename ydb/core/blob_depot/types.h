@@ -207,4 +207,6 @@ namespace NKikimr::NBlobDepot {
         friend bool operator >=(const TGenStep& x, const TGenStep& y) { return x.Value >= y.Value; }
     };
 
+#define BDEV(...) STLOGJ(PRI_TRACE, BLOB_DEPOT_EVENTS, __VA_ARGS__)
+
 } // NKikimr::NBlobDepot

@@ -15,6 +15,8 @@ NTable::ECollectQueryStatsMode ParseQueryStatsMode(const TString& statsMode,
             return NTable::ECollectQueryStatsMode::Basic;
         } else if (statsMode == "full") {
             return NTable::ECollectQueryStatsMode::Full;
+        } else if (statsMode == "profile") {
+            return NTable::ECollectQueryStatsMode::Profile;
         } else {
             throw TMisuseException() << "Unknown stats collection mode.";
         }

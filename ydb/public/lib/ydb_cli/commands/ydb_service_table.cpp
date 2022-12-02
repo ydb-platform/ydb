@@ -539,7 +539,8 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
 
     if (fullStats) {
         Cout << Endl << "Full statistics:" << Endl;
-        TQueryPlanPrinter queryPlanPrinter(EOutputFormat::Pretty, /* analyzeMode */ true);
+
+        TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(*fullStats);
     }
 

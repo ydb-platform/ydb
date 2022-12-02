@@ -114,7 +114,7 @@ CURLcode Curl_quic_connect(struct Curl_easy *data,
                            socklen_t addrlen)
 {
   struct quicsocket *qs = &conn->hequic[sockindex];
-  bool unsecure = !conn->ssl_config.verifypeer;
+  bool insecure = !conn->ssl_config.verifypeer;
   memset(qs, 0, sizeof(*qs));
 
   (void)sockfd;
@@ -132,7 +132,7 @@ CURLcode Curl_quic_connect(struct Curl_easy *data,
   qs->conn = MsH3ConnectionOpen(qs->api,
                                 conn->host.name,
                                 (uint16_t)conn->remote_port,
-                                unsecure);
+                                insecure);
   if(!qs->conn) {
     failf(data, "can't create msh3 connection");
     if(qs->api) {
@@ -381,9 +381,6 @@ static void MSH3_CALL msh3_shutdown(MSH3_REQUEST *Request, void *IfContext)
   (void)stream;
 }
 
-static_assert(sizeof(MSH3_HEADER) == sizeof(struct h2h3pseudo),
-              "Sizes must match for cast below to work");
-
 static ssize_t msh3_stream_send(struct Curl_easy *data,
                                 int sockindex,
                                 const void *mem,
@@ -396,6 +393,9 @@ static ssize_t msh3_stream_send(struct Curl_easy *data,
   struct h2h3req *hreq;
 
   (void)sockindex;
+  /* Sizes must match for cast below to work" */
+  DEBUGASSERT(sizeof(MSH3_HEADER) == sizeof(struct h2h3pseudo));
+
   H3BUGF(infof(data, "msh3_stream_send %zu", len));
 
   if(!stream->req) {

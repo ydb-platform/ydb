@@ -54,6 +54,12 @@ struct gsasldata;
 #define GSS_ERROR(status) ((status) & 0x80000000)
 #endif
 
+/*
+ * Curl_auth_allowed_to_host() tells if authentication, cookies or other
+ * "sensitive data" can (still) be sent to this host.
+ */
+bool Curl_auth_allowed_to_host(struct Curl_easy *data);
+
 /* This is used to build a SPN string */
 #if !defined(USE_WINDOWS_SSPI)
 char *Curl_auth_build_spn(const char *service, const char *host,
@@ -224,7 +230,7 @@ CURLcode Curl_auth_decode_spnego_message(struct Curl_easy *data,
 CURLcode Curl_auth_create_spnego_message(struct negotiatedata *nego,
                                          char **outptr, size_t *outlen);
 
-/* This is used to clean up the SPNEGO specifiec data */
+/* This is used to clean up the SPNEGO specific data */
 void Curl_auth_cleanup_spnego(struct negotiatedata *nego);
 
 #endif /* USE_SPNEGO */

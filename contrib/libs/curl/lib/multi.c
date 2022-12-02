@@ -45,7 +45,6 @@
 #include "multihandle.h"
 #include "sigpipe.h"
 #include "vtls/vtls.h"
-#include "connect.h"
 #include "http_proxy.h"
 #include "http2.h"
 #include "socketpair.h"
@@ -417,7 +416,6 @@ struct Curl_multi *Curl_multi_handle(int hashsize, /* socket hash */
   /* -1 means it not set by user, use the default value */
   multi->maxconnects = -1;
   multi->max_concurrent_streams = 100;
-  multi->ipv6_works = Curl_ipv6works(NULL);
 
 #ifdef USE_WINSOCK
   multi->wsa_event = WSACreateEvent();
@@ -755,7 +753,7 @@ static int close_connect_only(struct Curl_easy *data,
   if(data->state.lastconnect_id != conn->connection_id)
     return 0;
 
-  if(!conn->bits.connect_only)
+  if(!conn->connect_only)
     return 1;
 
   connclose(conn, "Removing connect-only easy handle");
@@ -853,7 +851,7 @@ CURLMcode curl_multi_remove_handle(struct Curl_multi *multi,
   Curl_detach_connection(data);
 
   if(data->set.connect_only && !data->multi_easy) {
-    /* This removes a handle that was part the multi inteface that used
+    /* This removes a handle that was part the multi interface that used
        CONNECT_ONLY, that connection is now left alive but since this handle
        has bits.close set nothing can use that transfer anymore and it is
        forbidden from reuse. And this easy handle cannot find the connection
@@ -2146,7 +2144,7 @@ static CURLMcode multi_runsingle(struct Curl_multi *multi,
         }
       }
 
-      if(data->set.connect_only) {
+      if(data->set.connect_only == 1) {
         /* keep connection open for application to use the socket */
         connkeep(data->conn, "CONNECT_ONLY");
         multistate(data, MSTATE_DONE);

@@ -51,7 +51,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/content_encoding.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cookie.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_addrinfo.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_ctype.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_des.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_endian.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_fnmatch.c
@@ -70,7 +69,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_threads.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dict.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/doh.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dotdot.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dynbuf.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/easy.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/easygetopt.c
@@ -120,6 +118,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/multi.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/netrc.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/nonblock.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/noproxy.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/openldap.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/parsedate.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/pingpong.c
@@ -190,4 +189,5 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/x509asn1.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/warnless.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/wildcard.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/ws.c
 )

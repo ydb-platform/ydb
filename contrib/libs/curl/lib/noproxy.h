@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_DOTDOT_H
-#define HEADER_CURL_DOTDOT_H
+#ifndef HEADER_CURL_NOPROXY_H
+#define HEADER_CURL_NOPROXY_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -23,5 +23,22 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-char *Curl_dedotdotify(const char *input);
-#endif /* HEADER_CURL_DOTDOT_H */
+#include "curl_setup.h"
+
+#ifndef CURL_DISABLE_PROXY
+
+#ifdef DEBUGBUILD
+
+UNITTEST bool Curl_cidr4_match(const char *ipv4,    /* 1.2.3.4 address */
+                               const char *network, /* 1.2.3.4 address */
+                               unsigned int bits);
+UNITTEST bool Curl_cidr6_match(const char *ipv6,
+                               const char *network,
+                               unsigned int bits);
+#endif
+
+bool Curl_check_noproxy(const char *name, const char *no_proxy);
+
+#endif
+
+#endif /* HEADER_CURL_NOPROXY_H */

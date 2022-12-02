@@ -390,12 +390,6 @@
 /* Define to 1 if you have the `ssh2' library (-lssh2). */
 /* #undef HAVE_LIBSSH2 */
 
-/* Define to 1 if you have the <libssh2.h> header file. */
-/* #undef HAVE_LIBSSH2_H */
-
-/* Define to 1 if you have the <libssh/libssh.h> header file. */
-/* #undef HAVE_LIBSSH_LIBSSH_H */
-
 /* Define to 1 if you have the `ssl' library (-lssl). */
 #define HAVE_LIBSSL 1
 
@@ -568,6 +562,9 @@
 
 /* Define to 1 if you have the sigsetjmp function or macro. */
 #define HAVE_SIGSETJMP 1
+
+/* Define to 1 if you have the `snprintf' function. */
+#define HAVE_SNPRINTF 1
 
 /* Define to 1 if struct sockaddr_in6 has the sin6_scope_id member */
 #define HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID 1
@@ -746,9 +743,6 @@
 /* Define to 1 if you have the <x509.h> header file. */
 /* #undef HAVE_X509_H */
 
-/* if you have the zlib.h header file */
-#define HAVE_ZLIB_H 1
-
 /* if libzstd is in use */
 /* #undef HAVE_ZSTD */
 
@@ -799,54 +793,6 @@
 
 /* a suitable file to read random data from */
 #define RANDOM_FILE "/dev/urandom"
-
-/* Define to the type of arg 1 for recv. */
-#define RECV_TYPE_ARG1 int
-
-/* Define to the type of arg 2 for recv. */
-#define RECV_TYPE_ARG2 void *
-
-/* Define to the type of arg 3 for recv. */
-#define RECV_TYPE_ARG3 size_t
-
-/* Define to the type of arg 4 for recv. */
-#define RECV_TYPE_ARG4 int
-
-/* Define to the function return type for recv. */
-#define RECV_TYPE_RETV ssize_t
-
-/* Define to the type qualifier of arg 5 for select. */
-#define SELECT_QUAL_ARG5 
-
-/* Define to the type of arg 1 for select. */
-#define SELECT_TYPE_ARG1 int
-
-/* Define to the type of args 2, 3 and 4 for select. */
-#define SELECT_TYPE_ARG234 fd_set *
-
-/* Define to the type of arg 5 for select. */
-#define SELECT_TYPE_ARG5 struct timeval *
-
-/* Define to the function return type for select. */
-#define SELECT_TYPE_RETV int
-
-/* Define to the type qualifier of arg 2 for send. */
-#define SEND_QUAL_ARG2 const
-
-/* Define to the type of arg 1 for send. */
-#define SEND_TYPE_ARG1 int
-
-/* Define to the type of arg 2 for send. */
-#define SEND_TYPE_ARG2 void *
-
-/* Define to the type of arg 3 for send. */
-#define SEND_TYPE_ARG3 size_t
-
-/* Define to the type of arg 4 for send. */
-#define SEND_TYPE_ARG4 int
-
-/* Define to the function return type for send. */
-#define SEND_TYPE_RETV ssize_t
 
 /* Size of curl_off_t in number of bytes */
 #define SIZEOF_CURL_OFF_T 8
@@ -970,6 +916,9 @@
 
 /* Use Unix domain sockets */
 #define USE_UNIX_SOCKETS 1
+
+/* enable websockets support */
+/* #undef USE_WEBSOCKETS */
 
 /* Define to 1 if you are building a Windows target with crypto API support.
    */

@@ -227,8 +227,7 @@ public:
             &Ydb::Topic::V1::TopicService::Stub::AsyncDescribeConsumer,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

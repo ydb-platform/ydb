@@ -148,46 +148,116 @@ public:
         }
     }
 
-public:
-    STATEFN(WaitResolveState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
-                default:
-                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+    void CheckExecutionComplete() {
+        ui32 notFinished = 0;
+        for (auto& x : ShardStates) {
+            if (x.second.State != TShardState::EState::Finished) {
+                notFinished++;
+                LOG_D("Datashard " << x.first << " not finished yet: " << ToString(x.second.State));
             }
-        } catch (const yexception& e) {
-            InternalError(e.what());
         }
-        ReportEventElapsedTime();
-    }
-
-    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
-        auto& reply = *ev->Get();
-
-        auto resolveDuration = TInstant::Now() - StartResolveTime;
-        Counters->TxProxyMon->TxPrepareResolveHgram->Collect(resolveDuration.MicroSeconds());
-
-        KqpTableResolverId = {};
-        if (Stats) {
-            Stats->ExecuterCpuTime += reply.CpuTime;
-            Stats->ResolveCpuTime = reply.CpuTime;
-            Stats->ResolveWallTime = resolveDuration;
+        for (auto& x : TopicTabletStates) {
+            if (x.second.State != TShardState::EState::Finished) {
+                ++notFinished;
+                LOG_D("TopicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
+            }
         }
-
-        if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            Counters->TxProxyMon->ResolveKeySetWrongRequest->Inc();
-            ReplyErrorAndDie(reply.Status, reply.Issues);
+        if (notFinished == 0 && TBase::CheckExecutionComplete()) {
             return;
         }
 
-        if (ExecuterTableResolveSpan) {
-            ExecuterTableResolveSpan.End();
+        if (IsDebugLogEnabled()) {
+            auto sb = TStringBuilder() << "Waiting for " << PendingComputeActors.size() << " compute actor(s) and "
+                << notFinished << " datashard(s): ";
+            for (auto shardId : PendingComputeActors) {
+                sb << "CA " << shardId.first << ", ";
+            }
+            for (auto& [shardId, shardState] : ShardStates) {
+                if (shardState.State != TShardState::EState::Finished) {
+                    sb << "DS " << shardId << " (" << ToString(shardState.State) << "), ";
+                }
+            }
+            for (auto& [tabletId, tabletState] : TopicTabletStates) {
+                if (tabletState.State != TShardState::EState::Finished) {
+                    sb << "PQ " << tabletId << " (" << ToString(tabletState.State) << "), ";
+                }
+            }
+            LOG_D(sb);
+        }
+    }
+
+    void Finalize() {
+        if (LocksBroken) {
+            TString message = "Transaction locks invalidated.";
+
+            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
+                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
         }
 
-        Execute();
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        Counters->TxProxyMon->ReportStatusOK->Inc();
+
+        TKqpProtoBuilder protoBuilder(*AppData()->FunctionRegistry);
+        for (auto& result : Results) {
+            auto* protoResult = response.MutableResult()->AddResults();
+            if (result.IsStream) {
+                protoBuilder.BuildStream(result.Data, result.ItemType, result.ResultItemType.Get(), protoResult);
+            } else {
+                protoBuilder.BuildValue(result.Data, result.ItemType, protoResult);
+            }
+        }
+
+        if (!Locks.empty()) {
+            if (LockHandle) {
+                ResponseEv->LockHandle = std::move(LockHandle);
+            }
+            BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
+        }
+
+        if (Stats) {
+            ReportEventElapsedTime();
+
+            Stats->FinishTs = TInstant::Now();
+            Stats->ResultRows = response.GetResult().ResultsSize();
+            Stats->Finish();
+
+            if (CollectFullStats(Request.StatsMode)) {
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                }
+            }
+
+            Stats.reset();
+        }
+
+        auto resultSize = response.ByteSize();
+        if (resultSize > (int)ReplySizeLimit) {
+            TString message = TStringBuilder() << "Query result size limit exceeded. ("
+                << resultSize << " > " << ReplySizeLimit << ")";
+
+            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, message);
+            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
+            return;
+        }
+
+        LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, response.GetResult().ResultsSize(), response.ByteSize());
+
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.End();
+            ExecuterStateSpan = {};
+        }
+
+        if (ExecuterSpan) {
+            ExecuterSpan.EndOk();
+        }
+
+        LOG_D("Sending response to: " << Target << ", results: " << Results.size());
+        Send(Target, ResponseEv.release());
+        PassAway();
     }
 
 private:
@@ -301,7 +371,7 @@ private:
         if (ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FAILURE) {
             CancelProposal(0);
         }
-        HandleExecute(ev);
+        HandleComputeStats(ev);
     }
 
     void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -661,8 +731,11 @@ private:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleExecute);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleExecute);
+                hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
-                hFunc(TEvDqCompute::TEvState, HandleExecute);
+                hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvWakeup, HandleTimeout);
@@ -952,45 +1025,6 @@ private:
         }
     }
 
-    void HandleExecute(TEvDqCompute::TEvState::TPtr& ev) {
-        TActorId computeActor = ev->Sender;
-        auto& state = ev->Get()->Record;
-        ui64 taskId = state.GetTaskId();
-
-        LOG_D("Got execution state from compute actor: " << computeActor
-            << ", task: " << taskId
-            << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState()));
-
-        switch (state.GetState()) {
-            case NDqProto::COMPUTE_STATE_UNKNOWN: {
-                YQL_ENSURE(false, "unexpected state from " << computeActor << ", task: " << taskId);
-            }
-
-            case NDqProto::COMPUTE_STATE_FAILURE: {
-                ReplyErrorAndDie(DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
-                return;
-            }
-
-            case NDqProto::COMPUTE_STATE_EXECUTING: {
-                YQL_ENSURE(PendingComputeActors.contains(computeActor));
-                YQL_ENSURE(TasksGraph.GetTask(taskId).ComputeActorId == computeActor);
-                break;
-            }
-
-            case NDqProto::COMPUTE_STATE_FINISHED: {
-                if (Stats) {
-                    Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
-                }
-
-                if (PendingComputeActors.erase(computeActor) == 0) {
-                    LOG_W("Got execution state from unknown compute actor: " << computeActor << ", task: " << taskId);
-                }
-            }
-        }
-
-        CheckExecutionComplete();
-    }
-
     void HandleExecute(TEvDqCompute::TEvChannelData::TPtr& ev) {
         auto& record = ev->Get()->Record;
         auto& channelData = record.GetChannelData();
@@ -1021,45 +1055,6 @@ private:
             ackEv->Record.SetChannelId(channel.Id);
             ackEv->Record.SetFreeSpace(50_MB);
             Send(ev->Sender, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
-        }
-    }
-
-    void CheckExecutionComplete() {
-        ui32 notFinished = 0;
-        for (auto& x : ShardStates) {
-            if (x.second.State != TShardState::EState::Finished) {
-                notFinished++;
-                LOG_D("Datashard " << x.first << " not finished yet: " << ToString(x.second.State));
-            }
-        }
-        for (auto& x : TopicTabletStates) {
-            if (x.second.State != TShardState::EState::Finished) {
-                ++notFinished;
-                LOG_D("TopicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
-            }
-        }
-        if (notFinished == 0 && PendingComputeActors.empty()) {
-            Finalize();
-            return;
-        }
-
-        if (IsDebugLogEnabled()) {
-            auto sb = TStringBuilder() << "Waiting for " << PendingComputeActors.size() << " compute actor(s) and "
-                << notFinished << " datashard(s): ";
-            for (auto shardId : PendingComputeActors) {
-                sb << "CA " << shardId.first << ", ";
-            }
-            for (auto& [shardId, shardState] : ShardStates) {
-                if (shardState.State != TShardState::EState::Finished) {
-                    sb << "DS " << shardId << " (" << ToString(shardState.State) << "), ";
-                }
-            }
-            for (auto& [tabletId, tabletState] : TopicTabletStates) {
-                if (tabletState.State != TShardState::EState::Finished) {
-                    sb << "PQ " << tabletId << " (" << ToString(tabletState.State) << "), ";
-                }
-            }
-            LOG_D(sb);
         }
     }
 
@@ -1393,6 +1388,7 @@ private:
         YQL_ENSURE(result.second);
     }
 
+public:
     void Execute() {
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
@@ -1671,6 +1667,7 @@ private:
         ContinueExecute(computeTasks, datashardTxs, topicTxs);
     }
 
+private:
     STATEFN(WaitSnapshotState) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -1978,80 +1975,6 @@ private:
             auto result = TopicTabletStates.emplace(tabletId, std::move(state));
             YQL_ENSURE(result.second);
         }
-    }
-
-    void Finalize() {
-        if (LocksBroken) {
-            TString message = "Transaction locks invalidated.";
-
-            return ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message));
-        }
-
-        auto& response = *ResponseEv->Record.MutableResponse();
-
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
-        Counters->TxProxyMon->ReportStatusOK->Inc();
-
-        TKqpProtoBuilder protoBuilder(*AppData()->FunctionRegistry);
-        for (auto& result : Results) {
-            auto* protoResult = response.MutableResult()->AddResults();
-            if (result.IsStream) {
-                protoBuilder.BuildStream(result.Data, result.ItemType, result.ResultItemType.Get(), protoResult);
-            } else {
-                protoBuilder.BuildValue(result.Data, result.ItemType, protoResult);
-            }
-        }
-
-        if (!Locks.empty()) {
-            if (LockHandle) {
-                ResponseEv->LockHandle = std::move(LockHandle);
-            }
-            BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
-        }
-
-        if (Stats) {
-            ReportEventElapsedTime();
-
-            Stats->FinishTs = TInstant::Now();
-            Stats->ResultRows = response.GetResult().ResultsSize();
-            Stats->Finish();
-
-            if (CollectFullStats(Request.StatsMode)) {
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
-                }
-            }
-
-            Stats.reset();
-        }
-
-        auto resultSize = response.ByteSize();
-        if (resultSize > (int)ReplySizeLimit) {
-            TString message = TStringBuilder() << "Query result size limit exceeded. ("
-                << resultSize << " > " << ReplySizeLimit << ")";
-
-            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, message);
-            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
-            return;
-        }
-
-        LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, response.GetResult().ResultsSize(), response.ByteSize());
-
-        if (ExecuterStateSpan) {
-            ExecuterStateSpan.End();
-            ExecuterStateSpan = {};
-        }
-
-        if (ExecuterSpan) {
-            ExecuterSpan.EndOk();
-        }
-
-        LOG_D("Sending response to: " << Target << ", results: " << Results.size());
-        Send(Target, ResponseEv.release());
-        PassAway();
     }
 
     void PassAway() override {

@@ -70,108 +70,19 @@ public:
     }
 
 public:
-    TActorId KqpShardsResolverId;
-
-    STATEFN(WaitResolveState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-                hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
-                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
-                default:
-                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
-            }
-
-        } catch (const yexception& e) {
-            InternalError(e.what());
-        }
-        ReportEventElapsedTime();
-    }
-
-    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
-        auto& reply = *ev->Get();
-
-        KqpTableResolverId = {};
-
-        if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            TBase::ReplyErrorAndDie(reply.Status, reply.Issues);
-            return;
-        }
-
-        TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    shardIds.insert(partition.ShardId);
-                }
-            }
-        }
-
-        if (ExecuterTableResolveSpan) {
-            ExecuterTableResolveSpan.End();
-        }
-
-        if (shardIds.size() > 0) {
-            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-            auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), TxId, std::move(shardIds));
-            KqpShardsResolverId = RegisterWithSameMailbox(kqpShardsResolver);
-        } else {
-            Execute();
-        }
-    }
-
-    void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
-        auto& reply = *ev->Get();
-
-        KqpShardsResolverId = {};
-
-        // TODO: count resolve time in CpuTime
-
-        if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            LOG_W("Shards nodes resolve failed, status: " << Ydb::StatusIds_StatusCode_Name(reply.Status)
-                << ", issues: " << reply.Issues.ToString());
-            TBase::ReplyErrorAndDie(reply.Status, reply.Issues);
-            return;
-        }
-
-        LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
-
-        ShardIdToNodeId = std::move(reply.ShardNodes);
-        for (auto& [shardId, nodeId] : ShardIdToNodeId) {
-            ShardsOnNode[nodeId].push_back(shardId);
-        }
-
-        if (IsDebugLogEnabled()) {
-            TStringBuilder sb;
-            sb << "Shards on nodes: " << Endl;
-            for (auto& pair : ShardsOnNode) {
-                sb << "  node " << pair.first << ": [";
-                if (pair.second.size() <= 20) {
-                    sb << JoinSeq(", ", pair.second) << "]" << Endl;
-                } else {
-                    sb << JoinRange(", ", pair.second.begin(), std::next(pair.second.begin(), 20)) << ", ...] "
-                       << "(total " << pair.second.size() << ") " << Endl;
-                }
-            }
-            LOG_D(sb);
-        }
-
-        Execute();
-    }
 
 private:
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvDqCompute::TEvState, HandleExecute);
+                hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvWakeup, HandleTimeout);
-                hFunc(TEvents::TEvUndelivered, HandleExecute);
-                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleExecute);
+                hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 IgnoreFunc(TEvKqpNode::TEvCancelKqpTasksResponse);
-                hFunc(TEvInterconnect::TEvNodeDisconnected, HandleExecute);
+                hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -180,90 +91,6 @@ private:
             InternalError(e.what());
         }
         ReportEventElapsedTime();
-    }
-
-    void HandleExecute(TEvDqCompute::TEvState::TPtr& ev) {
-        TActorId computeActor = ev->Sender;
-        auto& state = ev->Get()->Record;
-        ui64 taskId = state.GetTaskId();
-
-        LOG_D("Got execution state from compute actor: " << computeActor
-            << ", task: " << taskId
-            << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState())
-            << ", stats: " << state.GetStats());
-
-        switch (state.GetState()) {
-            case NDqProto::COMPUTE_STATE_UNKNOWN: {
-                YQL_ENSURE(false, "unexpected state from " << computeActor << ", task: " << taskId);
-                return;
-            }
-
-            case NDqProto::COMPUTE_STATE_FAILURE: {
-                ReplyErrorAndDie(DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
-                return;
-            }
-
-            case NDqProto::COMPUTE_STATE_EXECUTING: {
-                // initial TEvState event from Compute Actor
-                // there can be race with RM answer
-                if (PendingComputeTasks.erase(taskId)) {
-                    auto it = PendingComputeActors.emplace(computeActor, TProgressStat());
-                    YQL_ENSURE(it.second);
-
-                    if (state.HasStats()) {
-                        it.first->second.Set(state.GetStats());
-                    }
-
-                    auto& task = TasksGraph.GetTask(taskId);
-                    task.ComputeActorId = computeActor;
-
-                    THashMap<TActorId, THashSet<ui64>> updates;
-                    CollectTaskChannelsUpdates(task, updates);
-                    PropagateChannelsUpdates(updates);
-                } else {
-                    auto it = PendingComputeActors.find(computeActor);
-                    if (it != PendingComputeActors.end()) {
-                        if (state.HasStats()) {
-                            it->second.Set(state.GetStats());
-                        }
-                    }
-                }
-                break;
-            }
-
-            case NDqProto::COMPUTE_STATE_FINISHED: {
-                if (Stats) {
-                    Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
-                }
-
-                LastTaskId = taskId;
-                LastComputeActorId = computeActor.ToString();
-
-                auto it = PendingComputeActors.find(computeActor);
-                if (it == PendingComputeActors.end()) {
-                    LOG_W("Got execution state for compute actor: " << computeActor
-                        << ", task: " << taskId
-                        << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState())
-                        << ", too early (waiting reply from RM)");
-
-                    if (PendingComputeTasks.erase(taskId)) {
-                        LOG_E("Got execution state for compute actor: " << computeActor
-                            << ", for unknown task: " << state.GetTaskId()
-                            << ", state: " << NDqProto::EComputeState_Name((NDqProto::EComputeState) state.GetState()));
-                        return;
-                    }
-                } else {
-                    if (state.HasStats()) {
-                        it->second.Set(state.GetStats());
-                    }
-                    LastStats.emplace_back(std::move(it->second));
-                    PendingComputeActors.erase(it);
-                    YQL_ENSURE(PendingComputeTasks.find(taskId) == PendingComputeTasks.end());
-                }
-            }
-        }
-
-        CheckExecutionComplete();
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
@@ -282,105 +109,6 @@ private:
         auto channelIt = ResultChannelProxies.begin();
         auto handle = ev->Forward(channelIt->second->SelfId());
         channelIt->second->Receive(handle, TlsActivationContext->AsActorContext());
-    }
-
-    void HandleExecute(TEvKqpNode::TEvStartKqpTasksResponse::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        YQL_ENSURE(record.GetTxId() == TxId);
-
-        if (record.NotStartedTasksSize() != 0) {
-            auto reason = record.GetNotStartedTasks()[0].GetReason();
-            auto& message = record.GetNotStartedTasks()[0].GetMessage();
-
-            LOG_E("Stop executing, reason: " << NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)
-                << ", message: " << message);
-
-            switch (reason) {
-                case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY: {
-                    TBase::ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                        YqlIssue({}, TIssuesIds::KIKIMR_OVERLOADED, "Not enough memory to execute query"));
-                    break;
-                }
-
-                case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS: {
-                    TBase::ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                        YqlIssue({}, TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
-                    break;
-                }
-
-                case NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED: {
-                    TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                        YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
-                    break;
-                }
-
-                case NKikimrKqp::TEvStartKqpTasksResponse::QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED: {
-                    TBase::ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                         YqlIssue({}, TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
-                    break;
-                }
-
-                case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {
-                    InternalError("KqpNode internal error");
-                    break;
-                }
-            }
-
-            return;
-        }
-
-        THashMap<TActorId, THashSet<ui64>> channelsUpdates;
-
-        for (auto& startedTask : record.GetStartedTasks()) {
-            auto taskId = startedTask.GetTaskId();
-            auto& task = TasksGraph.GetTask(taskId);
-
-            task.ComputeActorId = ActorIdFromProto(startedTask.GetActorId());
-
-            LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
-
-            if (PendingComputeTasks.erase(taskId) == 0) {
-                LOG_D("Executing task: " << taskId << ", compute actor: " << task.ComputeActorId << ", already finished");
-            } else {
-                auto result = PendingComputeActors.emplace(std::make_pair(task.ComputeActorId, TProgressStat()));
-                YQL_ENSURE(result.second);
-
-                CollectTaskChannelsUpdates(task, channelsUpdates);
-            }
-        }
-
-        PropagateChannelsUpdates(channelsUpdates);
-    }
-
-    void HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
-        ui32 eventType = ev->Get()->SourceType;
-        auto reason = ev->Get()->Reason;
-        switch (eventType) {
-            case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
-                return InternalError(TStringBuilder()
-                    << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
-            }
-            default: {
-                LOG_E("Event lost, type: " << eventType << ", reason: " << reason);
-            }
-        }
-    }
-
-    void HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        auto nodeId = ev->Get()->NodeId;
-        LOG_N("Disconnected node " << nodeId);
-
-        for (auto computeActor : PendingComputeActors) {
-            if (computeActor.first.NodeId() == nodeId) {
-                return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
-            }
-        }
-
-        for (auto& task : TasksGraph.GetTasks()) {
-            if (task.Meta.NodeId == nodeId && PendingComputeTasks.contains(task.Id)) {
-                return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
-            }
-        }
     }
 
 private:
@@ -737,6 +465,7 @@ private:
         }
     }
 
+public:
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
         auto& funcRegistry = *AppData()->FunctionRegistry;
@@ -967,26 +696,6 @@ private:
         }
     }
 
-    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) {
-        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), scanTasks.size());
-        LOG_D("Execute scan tx, computeTasks: " << computeTasks.size() << ", scanTasks: " << scanTasks.size());
-        for (const auto& [_, tasks]: scanTasks) {
-            for (const auto& task : tasks) {
-                PendingComputeTasks.insert(task.GetId());
-            }
-        }
-
-        for (auto& taskDesc : computeTasks) {
-            PendingComputeTasks.insert(taskDesc.GetId());
-        }
-
-        auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
-            std::move(scanTasks), Request.Snapshot,
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan.GetTraceId());
-        RegisterWithSameMailbox(planner);
-    }
-
     void Finalize() {
         auto& response = *ResponseEv->Record.MutableResponse();
 
@@ -1032,6 +741,27 @@ private:
     }
 
 private:
+    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) {
+        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), scanTasks.size());
+        LOG_D("Execute scan tx, computeTasks: " << computeTasks.size() << ", scanTasks: " << scanTasks.size());
+        for (const auto& [_, tasks]: scanTasks) {
+            for (const auto& task : tasks) {
+                PendingComputeTasks.insert(task.GetId());
+            }
+        }
+
+        for (auto& taskDesc : computeTasks) {
+            PendingComputeTasks.insert(taskDesc.GetId());
+        }
+
+        auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
+            std::move(scanTasks), Request.Snapshot,
+            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan.GetTraceId());
+        RegisterWithSameMailbox(planner);
+    }
+
+private:
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues) override
     {
@@ -1071,32 +801,6 @@ private:
 
         TBase::PassAway();
     }
-
-private:
-    bool CheckExecutionComplete() {
-        if (PendingComputeActors.empty() && PendingComputeTasks.empty()) {
-            Finalize();
-            UpdateResourcesUsage(true);
-            return true;
-        }
-
-        UpdateResourcesUsage(false);
-
-        if (IsDebugLogEnabled()) {
-            TStringBuilder sb;
-            sb << "Waiting for: ";
-            for (auto ct : PendingComputeTasks) {
-                sb << "CT " << ct << ", ";
-            }
-            for (auto ca : PendingComputeActors) {
-                sb << "CA " << ca.first << ", ";
-            }
-            LOG_D(sb);
-        }
-
-        return false;
-    }
-
 public:
     void FillEndpointDesc(NYql::NDqProto::TEndpoint& endpoint, const TTask& task) {
         if (task.ComputeActorId) {
@@ -1155,12 +859,6 @@ public:
 private:
     TVector<TKqpExecuterTxResult> Results;
     std::unordered_map<ui64, IActor*> ResultChannelProxies;
-    THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
-    TMap<ui64, ui64> ShardIdToNodeId;
-    TMap<ui64, TVector<ui64>> ShardsOnNode;
-
-    ui64 LastTaskId = 0;
-    TString LastComputeActorId = "";
 };
 
 } // namespace

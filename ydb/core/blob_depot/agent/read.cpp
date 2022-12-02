@@ -6,9 +6,9 @@ namespace NKikimr::NBlobDepot {
         TQuery *Query;
         const ui64 Tag;
         const ui64 Size;
-        THashMap<std::tuple<TLogoBlobID, ui32, ui32>, TStackVec<ui64, 1>> ReadOffsets;
         TString Buffer;
         bool Terminated = false;
+        ui32 NumPartsPending = 0;
 
         TReadContext(TQuery *query, ui64 tag, ui64 size)
             : Query(query)
@@ -24,6 +24,15 @@ namespace NKikimr::NBlobDepot {
         void EndWithSuccess() {
             Query->OnRead(Tag, NKikimrProto::OK, std::move(Buffer));
         }
+
+        struct TPartContext : TRequestContext {
+            std::shared_ptr<TReadContext> Read;
+            std::vector<ui64> Offsets;
+
+            TPartContext(std::shared_ptr<TReadContext> read)
+                : Read(std::move(read))
+            {}
+        };
     };
 
     bool TBlobDepotAgent::IssueRead(const TReadArg& arg, TString& error) {
@@ -38,9 +47,7 @@ namespace NKikimr::NBlobDepot {
         };
         std::vector<TReadItem> items;
 
-        const ui64 offsetOnEntry = arg.Offset;
         ui64 offset = arg.Offset;
-        const ui64 sizeOnEntry = arg.Size;
         ui64 size = arg.Size;
 
         for (const auto& value : arg.Values) {
@@ -84,68 +91,80 @@ namespace NKikimr::NBlobDepot {
         if (size) {
             error = "incorrect offset/size provided";
             STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
-                (Offset, offsetOnEntry), (Size, sizeOnEntry), (Values, FormatList(arg.Values)));
+                (Offset, arg.Offset), (Size, arg.Size), (Values, FormatList(arg.Values)));
             return false;
         }
 
         auto context = std::make_shared<TReadContext>(arg.Query, arg.Tag, outputOffset);
-        for (const TReadItem& item : items) {
-            auto key = std::make_tuple(item.Id, item.Offset, item.Size);
-            auto& v = context->ReadOffsets[key];
-            v.push_back(item.OutputOffset);
-            if (v.size() == 1) {
-                auto event = std::make_unique<TEvBlobStorage::TEvGet>(
-                    item.Id,
-                    item.Offset,
-                    item.Size,
-                    TInstant::Max(),
-                    arg.GetHandleClass,
-                    arg.MustRestoreFirst);
-                event->ReaderTabletData = arg.ReaderTabletData;
-                SendToProxy(item.GroupId, std::move(event), arg.Query, context);
-            }
+        if (!outputOffset) {
+            context->EndWithSuccess();
+            return true;
         }
+
+        THashMap<ui32, std::vector<std::tuple<ui64 /*offset*/, TEvBlobStorage::TEvGet::TQuery>>> queriesPerGroup;
+        for (const TReadItem& item : items) {
+            TEvBlobStorage::TEvGet::TQuery query;
+            query.Set(item.Id, item.Offset, item.Size);
+            queriesPerGroup[item.GroupId].emplace_back(item.OutputOffset, query);
+        }
+
+        for (const auto& [groupId, queries] : queriesPerGroup) {
+            const ui32 sz = queries.size();
+            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> q(new TEvBlobStorage::TEvGet::TQuery[sz]);
+            auto partContext = std::make_shared<TReadContext::TPartContext>(context);
+            for (ui32 i = 0; i < sz; ++i) {
+                ui64 outputOffset;
+                std::tie(outputOffset, q[i]) = queries[i];
+                partContext->Offsets.push_back(outputOffset);
+            }
+
+            auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), arg.GetHandleClass, arg.MustRestoreFirst);
+            event->ReaderTabletData = arg.ReaderTabletData;
+            SendToProxy(groupId, std::move(event), arg.Query, std::move(partContext));
+            ++context->NumPartsPending;
+        }
+
+        Y_VERIFY(context->NumPartsPending);
 
         return true;
     }
 
     void TBlobDepotAgent::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {
-        auto& readContext = context->Obtain<TReadContext>();
+        auto& partContext = context->Obtain<TReadContext::TPartContext>();
+        auto& readContext = *partContext.Read;
         if (readContext.Terminated) {
-            return;
+            return; // just ignore this read
         }
 
         if (msg.Status != NKikimrProto::OK) {
             readContext.EndWithError(msg.Status, std::move(msg.ErrorReason));
         } else {
+            Y_VERIFY(msg.ResponseSz == partContext.Offsets.size());
+
             for (ui32 i = 0; i < msg.ResponseSz; ++i) {
                 auto& blob = msg.Responses[i];
                 if (blob.Status != NKikimrProto::OK) {
                     return readContext.EndWithError(blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id);
                 }
 
-                const auto it = readContext.ReadOffsets.find(std::make_tuple(blob.Id, blob.Shift, blob.RequestedSize));
-                Y_VERIFY(it != readContext.ReadOffsets.end());
-                auto v = std::move(it->second);
-                readContext.ReadOffsets.erase(it);
+                auto& buffer = readContext.Buffer;
+                const ui64 offset = partContext.Offsets[i];
 
-                for (const ui64 offset : v) {
-                    Y_VERIFY_S(offset + blob.Buffer.size() <= readContext.Size, "offset# " << offset << " Buffer.size# "
-                        << blob.Buffer.size() << " Size# " << readContext.Size);
-                    if (!readContext.Buffer && !offset) {
-                        readContext.Buffer = std::move(blob.Buffer);
-                        readContext.Buffer.resize(readContext.Size);
-                    } else {
-                        if (!readContext.Buffer) {
-                            readContext.Buffer = TString::Uninitialized(readContext.Size);
-                        }
-                        memcpy(readContext.Buffer.Detach() + offset, blob.Buffer.data(), blob.Buffer.size());
+                Y_VERIFY(offset < readContext.Size && blob.Buffer.size() <= readContext.Size - offset);
+
+                if (!buffer && !offset) {
+                    buffer = std::move(blob.Buffer);
+                    buffer.resize(readContext.Size);
+                } else {
+                    if (!buffer) {
+                        buffer = TString::Uninitialized(readContext.Size);
                     }
+                    memcpy(buffer.Detach() + offset, blob.Buffer.data(), blob.Buffer.size());
                 }
+            }
 
-                if (readContext.ReadOffsets.empty()) {
-                    readContext.EndWithSuccess();
-                }
+            if (!--readContext.NumPartsPending) {
+                readContext.EndWithSuccess();
             }
         }
     }

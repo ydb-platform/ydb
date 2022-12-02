@@ -8,14 +8,10 @@ namespace NKikimr::NBlobDepot {
             std::unique_ptr<TEvBlobStorage::TEvRangeResult> Response;
             ui32 ReadsInFlight = 0;
             ui32 ResolvesInFlight = 0;
-
-            struct TExtraResolveContext : TRequestContext {
-                const size_t Index;
-
-                TExtraResolveContext(size_t index)
-                    : Index(index)
-                {}
-            };
+            std::map<TLogoBlobID, TString> FoundBlobs;
+            std::vector<TLogoBlobID> Reads;
+            bool Reverse = false;
+            bool Finished = false;
 
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
@@ -40,8 +36,8 @@ namespace NKikimr::NBlobDepot {
             void IssueResolve() {
                 TString from = Request.From.AsBinaryString();
                 TString to = Request.To.AsBinaryString();
-                const bool reverse = Request.To < Request.From;
-                if (reverse) {
+                Reverse = Request.To < Request.From;
+                if (Reverse) {
                     std::swap(from, to);
                 }
 
@@ -52,7 +48,7 @@ namespace NKikimr::NBlobDepot {
                 range->SetIncludeBeginning(true);
                 range->SetEndingKey(to);
                 range->SetIncludeEnding(true);
-                range->SetReverse(reverse);
+                range->SetReverse(Reverse);
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
 
@@ -60,14 +56,14 @@ namespace NKikimr::NBlobDepot {
                 ++ResolvesInFlight;
             }
 
-            void IssueResolve(TLogoBlobID id, size_t index) {
+            void IssueResolve(TLogoBlobID id) {
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
                 item->SetExactKey(id.AsBinaryString());
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
 
-                Agent.Issue(std::move(resolve), this, std::make_shared<TExtraResolveContext>(index));
+                Agent.Issue(std::move(resolve), this, nullptr);
                 ++ResolvesInFlight;
             }
 
@@ -94,13 +90,6 @@ namespace NKikimr::NBlobDepot {
                     const TString& blobId = key.GetKey();
                     auto id = TLogoBlobID::FromBinary(blobId);
 
-                    const size_t index = context
-                        ? context->Obtain<TExtraResolveContext>().Index
-                        : Response->Responses.size();
-                    if (!context) {
-                        Response->Responses.emplace_back(id, TString());
-                    }
-
                     if (key.HasErrorReason()) {
                         return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << id
                             << ": " << key.GetErrorReason());
@@ -112,58 +101,66 @@ namespace NKikimr::NBlobDepot {
                             this,
                             0,
                             0,
-                            index,
+                            Reads.size(),
                             {}};
+                        Reads.push_back(id);
+                        ++ReadsInFlight;
                         TString error;
                         if (!Agent.IssueRead(arg, error)) {
                             return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                 << error);
                         }
-                        ++ReadsInFlight;
                     } else if (Request.MustRestoreFirst) {
                         Y_FAIL("not implemented yet");
+                    } else {
+                        FoundBlobs.try_emplace(id);
                     }
                 }
 
                 if (msg.GetStatus() == NKikimrProto::OVERRUN) {
                     Agent.RegisterRequest(id, this, std::move(context), {}, true);
-                } else if (msg.GetStatus() == NKikimrProto::OK) {
-                    CheckAndFinish();
                 } else {
-                    Y_UNREACHABLE();
+                    CheckAndFinish();
                 }
             }
 
             void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
-                auto& item = Response->Responses[tag];
                 --ReadsInFlight;
 
                 switch (status) {
-                    case NKikimrProto::OK:
-                        item.Buffer = std::move(dataOrErrorReason);
+                    case NKikimrProto::OK: {
+                        const bool inserted = FoundBlobs.try_emplace(Reads[tag], std::move(dataOrErrorReason)).second;
+                        Y_VERIFY(inserted);
                         break;
+                    }
 
                     case NKikimrProto::NODATA:
-                        IssueResolve(item.Id, tag);
+                        IssueResolve(Reads[tag]);
                         break;
 
                     default:
                         return EndWithError(status, TStringBuilder() << "failed to retrieve BlobId# "
-                            << item.Id << " Error# " << dataOrErrorReason);
+                            << Reads[tag] << " Error# " << dataOrErrorReason);
                 }
 
                 CheckAndFinish();
             }
 
             void CheckAndFinish() {
-                if (!ReadsInFlight && !ResolvesInFlight) {
-                    if (!Request.IsIndexOnly) {
-                        for (const auto& response : Response->Responses) {
-                            Y_VERIFY_S(response.Buffer.size() == response.Id.BlobSize(), "Id# " << response.Id
-                                << " Buffer.size# " << response.Buffer.size());
+                if (!ReadsInFlight && !ResolvesInFlight && !Finished) {
+                    for (auto& [id, buffer] : FoundBlobs) {
+                        if (!Request.IsIndexOnly) {
+                            Y_VERIFY_S(buffer.size() == id.BlobSize(), "Id# " << id << " Buffer.size# " << buffer.size());
+                        }
+                        if (buffer || Request.IsIndexOnly) {
+                            Response->Responses.emplace_back(id, std::move(buffer));
                         }
                     }
+                    if (Reverse) {
+                        std::reverse(Response->Responses.begin(), Response->Responses.end());
+                    }
                     EndWithSuccess(std::move(Response));
+                    Finished = true;
                 }
             }
 

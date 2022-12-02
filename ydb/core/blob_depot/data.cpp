@@ -357,17 +357,17 @@ namespace NKikimr::NBlobDepot {
         }
         std::sort(writesInFlight.begin(), writesInFlight.end());
 
-        for (const auto& [channel, invalidatedStep] : items) {
-            const ui32 channel_ = channel;
-            auto& agentGivenIdRanges = agent.GivenIdRanges[channel];
-            auto& givenIdRanges = Self->Channels[channel].GivenIdRanges;
+        for (const auto& [channelIndex, invalidatedStep] : items) {
+            auto& channel = Self->Channels[channelIndex];
+            auto& agentGivenIdRanges = agent.GivenIdRanges[channelIndex];
+            auto& givenIdRanges = channel.GivenIdRanges;
 
-            auto begin = std::lower_bound(writesInFlight.begin(), writesInFlight.end(), TBlobSeqId{channel, 0, 0, 0});
+            auto begin = std::lower_bound(writesInFlight.begin(), writesInFlight.end(), TBlobSeqId{channelIndex, 0, 0, 0});
 
             auto makeWritesInFlight = [&] {
                 TStringStream s;
                 s << "[";
-                for (auto it = begin; it != writesInFlight.end() && it->Channel == channel_; ++it) {
+                for (auto it = begin; it != writesInFlight.end() && it->Channel == channel.Index; ++it) {
                     s << (it != begin ? " " : "") << it->ToString();
                 }
                 s << "]";
@@ -375,33 +375,30 @@ namespace NKikimr::NBlobDepot {
             };
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Id, ev->Cookie), (Channel, channel_), (InvalidatedStep, invalidatedStep),
-                (GivenIdRanges, Self->Channels[channel].GivenIdRanges),
-                (Agent.GivenIdRanges, agent.GivenIdRanges[channel]),
+                (Id, ev->Cookie), (Channel, channelIndex), (InvalidatedStep, invalidatedStep),
+                (GivenIdRanges, channel.GivenIdRanges),
+                (Agent.GivenIdRanges, agent.GivenIdRanges[channelIndex]),
                 (WritesInFlight, makeWritesInFlight()));
 
             // sanity check -- ensure that current writes in flight would be conserved when processing garbage
-            for (auto it = begin; it != writesInFlight.end() && it->Channel == channel; ++it) {
+            for (auto it = begin; it != writesInFlight.end() && it->Channel == channelIndex; ++it) {
                 Y_VERIFY_S(agentGivenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
                 Y_VERIFY_S(givenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
             }
 
-            const TBlobSeqId leastExpectedBlobIdBefore = Self->Channels[channel].GetLeastExpectedBlobId(generation);
+            const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
 
-            const TBlobSeqId trimmedBlobSeqId{channel, generation, invalidatedStep, TBlobSeqId::MaxIndex};
+            const TBlobSeqId trimmedBlobSeqId{channelIndex, generation, invalidatedStep, TBlobSeqId::MaxIndex};
             const ui64 validSince = trimmedBlobSeqId.ToSequentialNumber() + 1;
             givenIdRanges.Subtract(agentGivenIdRanges.Trim(validSince));
 
-            for (auto it = begin; it != writesInFlight.end() && it->Channel == channel; ++it) {
+            for (auto it = begin; it != writesInFlight.end() && it->Channel == channelIndex; ++it) {
                 agentGivenIdRanges.AddPoint(it->ToSequentialNumber());
                 givenIdRanges.AddPoint(it->ToSequentialNumber());
             }
 
-            const TBlobSeqId leastExpectedBlobIdAfter = Self->Channels[channel].GetLeastExpectedBlobId(generation);
-            Y_VERIFY(leastExpectedBlobIdBefore <= leastExpectedBlobIdAfter);
-
-            if (leastExpectedBlobIdBefore != leastExpectedBlobIdAfter) {
-                OnLeastExpectedBlobIdChange(channel);
+            if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
+                OnLeastExpectedBlobIdChange(channelIndex);
             }
         }
     }
@@ -448,7 +445,8 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    bool TData::CanBeCollected(ui32 groupId, TBlobSeqId id) const {
+    bool TData::CanBeCollected(TBlobSeqId id) const {
+        const ui32 groupId = Self->Info()->GroupFor(id.Channel, id.Generation);
         const auto it = RecordsPerChannelGroup.find(std::make_tuple(id.Channel, groupId));
         return it != RecordsPerChannelGroup.end() && TGenStep(id) <= it->second.IssuedGenStep;
     }
@@ -493,6 +491,47 @@ namespace NKikimr::NBlobDepot {
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
         if (!CollectGarbageRequestInFlight && !Trash.empty()) {
             self->HandleTrash(*this);
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    bool TData::BeginCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId) {
+        const ui32 generation = Self->Executor()->Generation();
+        if (blobSeqId.Generation != generation) {
+            return false;
+        }
+
+        Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
+        auto& channel = Self->Channels[blobSeqId.Channel];
+        const ui64 value = blobSeqId.ToSequentialNumber();
+        Y_VERIFY_S(agent.GivenIdRanges[blobSeqId.Channel].GetPoint(value), "BlobSeqId# " << blobSeqId.ToString() << " Id# " << Self->GetLogId());
+        Y_VERIFY_S(channel.GivenIdRanges.GetPoint(value), " BlobSeqId# " << blobSeqId.ToString() << " Id# " << Self->GetLogId());
+        const bool inserted = channel.SequenceNumbersInFlight.insert(value).second;
+        Y_VERIFY(inserted);
+
+        return true;
+    }
+
+    void TData::EndCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId) {
+
+        Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
+        auto& channel = Self->Channels[blobSeqId.Channel];
+
+        const ui32 generation = Self->Executor()->Generation();
+        const auto leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+
+        const size_t numErased = channel.SequenceNumbersInFlight.erase(blobSeqId.ToSequentialNumber());
+        Y_VERIFY(numErased == 1);
+
+        const ui64 value = blobSeqId.ToSequentialNumber();
+        if (channel.GivenIdRanges.GetPoint(value)) { // if not set, it must have been trimmed by the agent during transaction (or even reset)
+            agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
+            channel.GivenIdRanges.RemovePoint(value);
+        }
+
+        if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
+            OnLeastExpectedBlobIdChange(blobSeqId.Channel);
         }
     }
 

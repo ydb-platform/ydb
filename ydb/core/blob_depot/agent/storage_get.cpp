@@ -62,6 +62,8 @@ namespace NKikimr::NBlobDepot {
                             (QueryId, GetQueryId()), (QueryIdx, i), (BlobId, query.Id));
                     }
                 }
+
+                CheckAndFinish();
             }
 
             bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value, const std::optional<TString>& errorReason) {
@@ -69,6 +71,7 @@ namespace NKikimr::NBlobDepot {
                     (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Value, value), (ErrorReason, errorReason));
 
                 auto& r = Response->Responses[queryIdx];
+                Y_VERIFY(r.Status == NKikimrProto::UNKNOWN);
                 if (errorReason) {
                     r.Status = NKikimrProto::ERROR;
                     --AnswersRemain;
@@ -95,20 +98,33 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     }
                 }
-                if (!AnswersRemain) {
-                    EndWithSuccess(std::move(Response));
-                    return false;
-                }
                 return true;
             }
 
             void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString buffer) override {
                 auto& resp = Response->Responses[tag];
+                Y_VERIFY(resp.Status == NKikimrProto::UNKNOWN);
                 resp.Status = status;
                 if (status == NKikimrProto::OK) {
                     resp.Buffer = std::move(buffer);
                 }
-                if (!--AnswersRemain) {
+                --AnswersRemain;
+                CheckAndFinish();
+            }
+
+            void CheckAndFinish() {
+                if (!AnswersRemain) {
+                    if (!Request.IsIndexOnly) {
+                        for (size_t i = 0, count = Response->ResponseSz; i < count; ++i) {
+                            const auto& item = Response->Responses[i];
+                            if (item.Status == NKikimrProto::OK) {
+                                Y_VERIFY_S(item.Buffer.size() == item.RequestedSize ? Min(item.RequestedSize,
+                                    item.Id.BlobSize() - Min(item.Id.BlobSize(), item.Shift)) : item.Id.BlobSize(),
+                                    "Id# " << item.Id << " Shift# " << item.Shift << " RequestedSize# " << item.RequestedSize
+                                    << " Buffer.size# " << item.Buffer.size());
+                            }
+                        }
+                    }
                     EndWithSuccess(std::move(Response));
                 }
             }
@@ -116,14 +132,14 @@ namespace NKikimr::NBlobDepot {
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
                 if (auto *p = std::get_if<TKeyResolved>(&response)) {
                     ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, p->ValueChain, p->ErrorReason);
+                    CheckAndFinish();
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
                     Agent.HandleGetResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
                         Response->Responses[resolveContext->QueryIdx].Status = NKikimrProto::ERROR;
-                        if (!--AnswersRemain) {
-                            EndWithSuccess(std::move(Response));
-                        }
+                        --AnswersRemain;
+                        CheckAndFinish();
                     }
                 } else {
                     Y_FAIL();

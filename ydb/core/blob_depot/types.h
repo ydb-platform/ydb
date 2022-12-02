@@ -106,7 +106,7 @@ namespace NKikimr::NBlobDepot {
     public:
         void IssueNewRange(ui64 begin, ui64 end);
         void AddPoint(ui64 value);
-        void RemovePoint(ui64 value, bool *wasLeast);
+        void RemovePoint(ui64 value);
         bool GetPoint(ui64 value) const;
 
         bool IsEmpty() const;
@@ -122,6 +122,15 @@ namespace NKikimr::NBlobDepot {
 
         std::vector<bool> ToDebugArray(size_t numItems) const;
         void CheckConsistency() const;
+
+        template<typename T>
+        void ForEach(T&& callback) const {
+            for (const auto& [index, chunk] : Ranges) {
+                Y_FOR_EACH_BIT(offset, chunk) {
+                    callback(index * BitsPerChunk + offset);
+                }
+            }
+        }
     };
 
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;

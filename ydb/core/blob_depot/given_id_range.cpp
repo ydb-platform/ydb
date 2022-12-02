@@ -37,15 +37,12 @@ namespace NKikimr::NBlobDepot {
         ++NumAvailableItems;
     }
 
-    void TGivenIdRange::RemovePoint(ui64 value, bool *wasLeast) {
+    void TGivenIdRange::RemovePoint(ui64 value) {
         const ui64 key = value / BitsPerChunk;
         const auto it = Ranges.find(key);
         Y_VERIFY(it != Ranges.end());
         TChunk& chunk = it->second;
         const size_t offset = value % BitsPerChunk;
-        if (wasLeast) {
-            *wasLeast = it == Ranges.begin() && chunk.FirstNonZeroBit() == offset;
-        }
         chunk.Reset(offset);
         --NumAvailableItems;
         if (chunk.Empty()) {

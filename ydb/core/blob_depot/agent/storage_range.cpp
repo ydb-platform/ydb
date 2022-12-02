@@ -128,9 +128,7 @@ namespace NKikimr::NBlobDepot {
                 if (msg.GetStatus() == NKikimrProto::OVERRUN) {
                     Agent.RegisterRequest(id, this, std::move(context), {}, true);
                 } else if (msg.GetStatus() == NKikimrProto::OK) {
-                    if (!ReadsInFlight && !ResolvesInFlight) {
-                        EndWithSuccess(std::move(Response));
-                    }
+                    CheckAndFinish();
                 } else {
                     Y_UNREACHABLE();
                 }
@@ -154,7 +152,17 @@ namespace NKikimr::NBlobDepot {
                             << item.Id << " Error# " << dataOrErrorReason);
                 }
 
+                CheckAndFinish();
+            }
+
+            void CheckAndFinish() {
                 if (!ReadsInFlight && !ResolvesInFlight) {
+                    if (!Request.IsIndexOnly) {
+                        for (const auto& response : Response->Responses) {
+                            Y_VERIFY_S(response.Buffer.size() == response.Id.BlobSize(), "Id# " << response.Id
+                                << " Buffer.size# " << response.Buffer.size());
+                        }
+                    }
                     EndWithSuccess(std::move(Response));
                 }
             }

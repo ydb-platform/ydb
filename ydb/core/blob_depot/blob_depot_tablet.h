@@ -92,11 +92,24 @@ namespace NKikimr::NBlobDepot {
             TChannelKind *KindPtr;
             TGivenIdRange GivenIdRanges; // accumulated through all agents
             ui64 NextBlobSeqId = 0;
+            std::set<ui64> SequenceNumbersInFlight; // of blobs being committed
+            std::optional<TBlobSeqId> LastReportedLeastId;
 
-            // Obtain the least BlobSeqId that is not yet confirmed, but may be written by any agent
-            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) const {
-                return TBlobSeqId::FromSequentalNumber(Index, generation, GivenIdRanges.IsEmpty() ? NextBlobSeqId :
-                    GivenIdRanges.GetMinimumValue());
+            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
+            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
+                const auto result = TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
+                    GivenIdRanges.IsEmpty() ? Max<ui64>() : GivenIdRanges.GetMinimumValue(),
+                    SequenceNumbersInFlight.empty() ? Max<ui64>() : *SequenceNumbersInFlight.begin()));
+                // this value can't decrease, because it may lead to data loss
+                Y_VERIFY_S(!LastReportedLeastId || *LastReportedLeastId <= result,
+                    "decreasing LeastExpectedBlobId"
+                    << " LastReportedLeastId# " << LastReportedLeastId->ToString()
+                    << " result# " << result.ToString()
+                    << " NextBlobSeqId# " << NextBlobSeqId
+                    << " GivenIdRanges# " << GivenIdRanges.ToString()
+                    << " SequenceNumbersInFlight# " << FormatList(SequenceNumbersInFlight));
+                LastReportedLeastId.emplace(result);
+                return result;
             }
         };
         std::vector<TChannelInfo> Channels;

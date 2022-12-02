@@ -226,11 +226,14 @@ namespace NKikimr::NBlobDepot {
             }
 
             // calculate if this agent can be blocking garbage collection by holding least conserved blob sequence id
-            const bool unblock = Channels[channel].GivenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
+            auto& givenIdRanges = Channels[channel].GivenIdRanges;
+            const bool unblock = givenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Channel, int(channel)), (GivenIdRanges, Channels[channel].GivenIdRanges),
-                (Agent.GivenIdRanges, agentGivenIdRange), (Unblock, unblock));
+                (Channel, int(channel)), (GivenIdRanges, givenIdRanges), (Agent.GivenIdRanges, agentGivenIdRange),
+                (Unblock, unblock));
+
+            givenIdRanges.Subtract(std::exchange(agentGivenIdRange, {}));
 
             if (unblock) {
                 Data->OnLeastExpectedBlobIdChange(channel);
@@ -261,6 +264,8 @@ namespace NKikimr::NBlobDepot {
                         &p,
                         {},
                         TBlobSeqId{channel, generation, 1, 0}.ToSequentialNumber(),
+                        {},
+                        {},
                     });
                 } else {
                     Channels.push_back({
@@ -268,7 +273,9 @@ namespace NKikimr::NBlobDepot {
                         NKikimrBlobDepot::TChannelKind::System,
                         nullptr,
                         {},
-                        0
+                        0,
+                        {},
+                        {},
                     });
                 }
             }
@@ -276,32 +283,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
-        class TTxInvokeCallback : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-            const ui32 NodeId;
-            TEvBlobDepot::TEvPushNotifyResult::TPtr Ev;
-
-        public:
-            TTxInvokeCallback(TBlobDepot *self, ui32 nodeId, TEvBlobDepot::TEvPushNotifyResult::TPtr ev)
-                : TTransactionBase(self)
-                , NodeId(nodeId)
-                , Ev(ev)
-            {}
-
-            bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(NodeId);
-                if (const auto it = agent.PushCallbacks.find(Ev->Get()->Record.GetId()); it != agent.PushCallbacks.end()) {
-                    auto callback = std::move(it->second);
-                    agent.PushCallbacks.erase(it);
-                    callback(Ev);
-                }
-                return true;
-            }
-
-            void Complete(const TActorContext&) override {}
-        };
-
         TAgent& agent = GetAgent(ev->Recipient);
-        Execute(std::make_unique<TTxInvokeCallback>(this, agent.Connection->NodeId, ev));
+        if (const auto it = agent.PushCallbacks.find(ev->Get()->Record.GetId()); it != agent.PushCallbacks.end()) {
+            auto callback = std::move(it->second);
+            agent.PushCallbacks.erase(it);
+            callback(ev);
+        }
     }
 
     void TBlobDepot::ProcessRegisterAgentQ() {

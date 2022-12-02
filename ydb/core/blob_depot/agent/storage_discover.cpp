@@ -162,6 +162,7 @@ namespace NKikimr::NBlobDepot {
 
             void CheckIfDone() {
                 if (DoneWithBlockedGeneration && DoneWithData) {
+                    Y_VERIFY_S(!Id || !ReadBody || Buffer.size() == Id.BlobSize(), "Id# " << Id << " Buffer.size# " << Buffer.size());
                     EndWithSuccess(Id
                         ? std::make_unique<TEvBlobStorage::TEvDiscoverResult>(Id, MinGeneration, Buffer, BlockedGeneration)
                         : std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, MinGeneration, BlockedGeneration));

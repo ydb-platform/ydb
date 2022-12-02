@@ -463,7 +463,7 @@ namespace NKikimr::NBlobDepot {
         void AddFirstMentionedBlob(TLogoBlobID id);
         void AccountBlob(TLogoBlobID id, bool add);
 
-        bool CanBeCollected(ui32 groupId, TBlobSeqId id) const;
+        bool CanBeCollected(TBlobSeqId id) const;
 
         void OnLeastExpectedBlobIdChange(ui8 channel);
 
@@ -497,6 +497,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void RenderMainPage(IOutputStream& s);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        bool BeginCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId);
+        void EndCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId);
 
     private:
         void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,

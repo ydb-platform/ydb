@@ -1,9 +1,0 @@
-option go_package = "a.yandex-team.ru/library/cpp/eventlog/proto;extensions";
-
-package NEventLogInternal;
-
-message TUnknownEvent {
-};
-
-message TEndOfFrameEvent {
-};

@@ -5,7 +5,7 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-#include <aws/common/common.h>
+#include <aws/common/byte_buf.h>
 
 #ifndef _WIN32
 #    include <pthread.h>
@@ -52,6 +52,13 @@ enum aws_thread_join_strategy {
     AWS_TJS_MANAGED,
 };
 
+/**
+ * Thread names should be 15 characters or less.
+ * Longer names will not display on Linux.
+ * This length does not include a null terminator.
+ */
+#define AWS_THREAD_NAME_RECOMMENDED_STRLEN 15
+
 struct aws_thread_options {
     size_t stack_size;
     /* default is -1. If you set this to anything >= 0, and the platform supports it, the thread will be pinned to
@@ -67,6 +74,13 @@ struct aws_thread_options {
     int32_t cpu_id;
 
     enum aws_thread_join_strategy join_strategy;
+
+    /**
+     * Thread name, for debugging purpose.
+     * The length should not exceed AWS_THREAD_NAME_RECOMMENDED_STRLEN(15)
+     * if you want it to display properly on all platforms.
+     */
+    struct aws_byte_cursor name;
 };
 
 #ifdef _WIN32

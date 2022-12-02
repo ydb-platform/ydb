@@ -12,6 +12,7 @@
 #include <aws/common/logging.h>
 #include <aws/common/private/dlloads.h>
 #include <aws/common/private/thread_shared.h>
+#include <aws/common/string.h>
 #include <aws/common/thread.h>
 
 #include <dlfcn.h>
@@ -66,6 +67,7 @@ struct thread_wrapper {
     struct thread_atexit_callback *atexit;
     void (*call_once)(void *);
     void *once_arg;
+    struct aws_string *name;
 
     /*
      * The managed thread system does lazy joins on threads once finished via their wrapper.  For that to work
@@ -78,6 +80,15 @@ struct thread_wrapper {
 };
 
 static AWS_THREAD_LOCAL struct thread_wrapper *tl_wrapper = NULL;
+
+static void s_thread_wrapper_destroy(struct thread_wrapper *wrapper) {
+    if (!wrapper) {
+        return;
+    }
+
+    aws_string_destroy(wrapper->name);
+    aws_mem_release(wrapper->allocator, wrapper);
+}
 
 /*
  * thread_wrapper is platform-dependent so this function ends up being duplicated in each thread implementation
@@ -103,10 +114,26 @@ void aws_thread_join_and_free_wrapper_list(struct aws_linked_list *wrapper_list)
          */
         aws_thread_clean_up(&join_thread_wrapper->thread_copy);
 
-        aws_mem_release(join_thread_wrapper->allocator, join_thread_wrapper);
+        s_thread_wrapper_destroy(join_thread_wrapper);
 
         aws_thread_decrement_unjoined_count();
     }
+}
+
+/* This must be called from the thread itself.
+ * (only necessary for Apple, but we'll do it that way on every platform for consistency) */
+static void s_set_thread_name(pthread_t thread_id, const char *name) {
+#if defined(__APPLE__)
+    (void)thread_id;
+    pthread_setname_np(name);
+#elif defined(AWS_PTHREAD_SETNAME_TAKES_2ARGS)
+    pthread_setname_np(thread_id, name);
+#elif defined(AWS_PTHREAD_SETNAME_TAKES_3ARGS)
+    pthread_setname_np(thread_id, name, NULL);
+#else
+    (void)thread_id;
+    (void)name;
+#endif
 }
 
 static void *thread_fn(void *arg) {
@@ -116,6 +143,14 @@ static void *thread_fn(void *arg) {
      * Make sure the aws_thread copy has the right thread id stored in it.
      */
     wrapper_ptr->thread_copy.thread_id = aws_thread_current_thread_id();
+
+    /* If there's a name, set it.
+     * Then free the aws_string before we make copies of the wrapper struct */
+    if (wrapper_ptr->name) {
+        s_set_thread_name(wrapper_ptr->thread_copy.thread_id, aws_string_c_str(wrapper_ptr->name));
+        aws_string_destroy(wrapper_ptr->name);
+        wrapper_ptr->name = NULL;
+    }
 
     struct thread_wrapper wrapper = *wrapper_ptr;
     struct aws_allocator *allocator = wrapper.allocator;
@@ -142,7 +177,8 @@ static void *thread_fn(void *arg) {
      */
     bool is_managed_thread = wrapper.thread_copy.detach_state == AWS_THREAD_MANAGED;
     if (!is_managed_thread) {
-        aws_mem_release(allocator, arg);
+        s_thread_wrapper_destroy(wrapper_ptr);
+        wrapper_ptr = NULL;
     }
 
     struct thread_atexit_callback *exit_callback_data = wrapper.atexit;
@@ -213,7 +249,7 @@ int aws_thread_launch(
     pthread_attr_t attributes;
     pthread_attr_t *attributes_ptr = NULL;
     int attr_return = 0;
-    int allocation_failed = 0;
+    struct thread_wrapper *wrapper = NULL;
     bool is_managed_thread = options != NULL && options->join_strategy == AWS_TJS_MANAGED;
     if (is_managed_thread) {
         thread->detach_state = AWS_THREAD_MANAGED;
@@ -259,23 +295,22 @@ int aws_thread_launch(
                     AWS_LS_COMMON_THREAD,
                     "id=%p: pthread_attr_setaffinity_np() failed with %d.",
                     (void *)thread,
-                    errno);
+                    attr_return);
                 goto cleanup;
             }
         }
 #endif /* AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD_ATTR */
     }
 
-    struct thread_wrapper *wrapper =
-        (struct thread_wrapper *)aws_mem_calloc(thread->allocator, 1, sizeof(struct thread_wrapper));
+    wrapper = aws_mem_calloc(thread->allocator, 1, sizeof(struct thread_wrapper));
 
-    if (!wrapper) {
-        allocation_failed = 1;
-        goto cleanup;
-    }
-
-    if (options && options->cpu_id >= 0) {
-        wrapper->membind = true;
+    if (options) {
+        if (options->cpu_id >= 0) {
+            wrapper->membind = true;
+        }
+        if (options->name.len > 0) {
+            wrapper->name = aws_string_new_from_cursor(thread->allocator, &options->name);
+        }
     }
 
     wrapper->thread_copy = *thread;
@@ -293,6 +328,7 @@ int aws_thread_launch(
     attr_return = pthread_create(&thread->thread_id, attributes_ptr, thread_fn, (void *)wrapper);
 
     if (attr_return) {
+        AWS_LOGF_ERROR(AWS_LS_COMMON_THREAD, "id=%p: pthread_create() failed with %d", (void *)thread, attr_return);
         if (is_managed_thread) {
             aws_thread_decrement_unjoined_count();
         }
@@ -313,11 +349,14 @@ int aws_thread_launch(
         CPU_ZERO(&cpuset);
         CPU_SET((uint32_t)options->cpu_id, &cpuset);
 
-        attr_return = pthread_setaffinity_np(thread->thread_id, sizeof(cpuset), &cpuset);
-        if (attr_return) {
-            AWS_LOGF_ERROR(
-                AWS_LS_COMMON_THREAD, "id=%p: pthread_setaffinity_np() failed with %d.", (void *)thread, errno);
-            goto cleanup;
+        /* If this fails, just warn. We can't fail anymore, the thread has already launched. */
+        int setaffinity_return = pthread_setaffinity_np(thread->thread_id, sizeof(cpuset), &cpuset);
+        if (setaffinity_return) {
+            AWS_LOGF_WARN(
+                AWS_LS_COMMON_THREAD,
+                "id=%p: pthread_setaffinity_np() failed with %d. Running thread without CPU affinity.",
+                (void *)thread,
+                setaffinity_return);
         }
     }
 #endif /* AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD */
@@ -336,22 +375,22 @@ cleanup:
         pthread_attr_destroy(attributes_ptr);
     }
 
-    if (attr_return == EINVAL) {
-        return aws_raise_error(AWS_ERROR_THREAD_INVALID_SETTINGS);
-    }
+    if (attr_return) {
+        s_thread_wrapper_destroy(wrapper);
 
-    if (attr_return == EAGAIN) {
-        return aws_raise_error(AWS_ERROR_THREAD_INSUFFICIENT_RESOURCE);
+        switch (attr_return) {
+            case EINVAL:
+                return aws_raise_error(AWS_ERROR_THREAD_INVALID_SETTINGS);
+            case EAGAIN:
+                return aws_raise_error(AWS_ERROR_THREAD_INSUFFICIENT_RESOURCE);
+            case EPERM:
+                return aws_raise_error(AWS_ERROR_THREAD_NO_PERMISSIONS);
+            case ENOMEM:
+                return aws_raise_error(AWS_ERROR_OOM);
+            default:
+                return aws_raise_error(AWS_ERROR_UNKNOWN);
+        }
     }
-
-    if (attr_return == EPERM) {
-        return aws_raise_error(AWS_ERROR_THREAD_NO_PERMISSIONS);
-    }
-
-    if (allocation_failed || attr_return == ENOMEM) {
-        return aws_raise_error(AWS_ERROR_OOM);
-    }
-
     return AWS_OP_SUCCESS;
 }
 

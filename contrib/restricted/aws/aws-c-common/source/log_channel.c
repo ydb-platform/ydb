@@ -127,7 +127,19 @@ static bool s_background_wait(void *context) {
     return impl->finished || aws_array_list_length(&impl->pending_log_lines) > 0;
 }
 
-static void s_background_thread_writer(void *thread_data) {
+/**
+ * This is where the background thread spends 99.999% of its time.
+ * We broke this out into its own function so that the stacktrace clearly shows
+ * what this thread is doing. We've had a lot of cases where users think this
+ * thread is deadlocked because it's stuck here. We want it to be clear
+ * that it's doing nothing on purpose. It's waiting for log messages...
+ */
+AWS_NO_INLINE
+static void aws_background_logger_listen_for_messages(struct aws_log_background_channel *impl) {
+    aws_condition_variable_wait_pred(&impl->pending_line_signal, &impl->sync, s_background_wait, impl);
+}
+
+static void aws_background_logger_thread(void *thread_data) {
     (void)thread_data;
 
     struct aws_log_channel *channel = (struct aws_log_channel *)thread_data;
@@ -141,7 +153,8 @@ static void s_background_thread_writer(void *thread_data) {
 
     while (true) {
         aws_mutex_lock(&impl->sync);
-        aws_condition_variable_wait_pred(&impl->pending_line_signal, &impl->sync, s_background_wait, impl);
+
+        aws_background_logger_listen_for_messages(impl);
 
         size_t line_count = aws_array_list_length(&impl->pending_log_lines);
         bool finished = impl->finished;
@@ -217,9 +230,10 @@ int aws_log_channel_init_background(
     /*
      * Logging thread should need very little stack, but let's defer this to later
      */
-    struct aws_thread_options thread_options = {.stack_size = 0};
+    struct aws_thread_options thread_options = *aws_default_thread_options();
+    thread_options.name = aws_byte_cursor_from_c_str("AwsLogger"); /* 15 characters is max for Linux */
 
-    if (aws_thread_launch(&impl->background_thread, s_background_thread_writer, channel, &thread_options) ==
+    if (aws_thread_launch(&impl->background_thread, aws_background_logger_thread, channel, &thread_options) ==
         AWS_OP_SUCCESS) {
         return AWS_OP_SUCCESS;
     }

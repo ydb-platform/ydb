@@ -14,7 +14,6 @@
 #if _MSC_VER
 #    pragma warning(disable : 4221) /* aggregate initializer using local variable addresses */
 #    pragma warning(disable : 4204) /* non-constant aggregate initializer */
-#    pragma warning(disable : 4996) /* sprintf */
 #endif
 
 enum parser_state {
@@ -143,7 +142,7 @@ int aws_uri_init_from_builder_options(
     if (options->port) {
         aws_byte_buf_append(&uri->uri_str, &port_app);
         char port_arr[6] = {0};
-        sprintf(port_arr, "%" PRIu16, options->port);
+        snprintf(port_arr, sizeof(port_arr), "%" PRIu16, options->port);
         struct aws_byte_cursor port_csr = aws_byte_cursor_from_c_str(port_arr);
         aws_byte_buf_append(&uri->uri_str, &port_csr);
     }

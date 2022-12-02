@@ -56,7 +56,7 @@ struct aws_byte_cursor {
 #define AWS_BYTE_BUF_PRI(B) ((int)(B).len < 0 ? 0 : (int)(B).len), (const char *)(B).buffer
 
 /**
- * Helper Macro for inititilizing a byte cursor from a string literal
+ * Helper Macro for initializing a byte cursor from a string literal
  */
 #define AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(literal)                                                                 \
     { .ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1 }
@@ -229,15 +229,26 @@ AWS_COMMON_API
 bool aws_byte_buf_eq_c_str_ignore_case(const struct aws_byte_buf *const buf, const char *const c_str);
 
 /**
- * No copies, no buffer allocations. Iterates over input_str, and returns the next substring between split_on instances.
+ * No copies, no buffer allocations. Iterates over input_str, and returns the
+ * next substring between split_on instances relative to previous substr.
+ * Behaves similar to strtok with substr being used as state for next split.
+ *
+ * Returns true each time substr is set and false when there is no more splits
+ * (substr is set to empty in that case).
+ *
+ * Example usage.
+ * struct aws_byte_cursor substr = {0};
+ * while (aws_byte_cursor_next_split(&input_str, ';', &substr)) {
+ *   // ...use substr...
+ * }
+ *
+ * Note: It is the user's responsibility zero-initialize substr before the first call.
  *
  * Edge case rules are as follows:
- * If the input is an empty string, an empty cursor will be the one entry returned.
- * If the input begins with split_on, an empty cursor will be the first entry returned.
- * If the input has two adjacent split_on tokens, an empty cursor will be returned.
- * If the input ends with split_on, an empty cursor will be returned last.
- *
- * It is the user's responsibility zero-initialize substr before the first call.
+ * empty input will have single empty split. ex. "" splits into ""
+ * if input starts with split_on then first split is empty. ex ";A" splits into "", "A"
+ * adjacent split tokens result in empty split. ex "A;;B" splits into "A", "", "B"
+ * If the input ends with split_on, last split is empty. ex. "A;" splits into "A", ""
  *
  * It is the user's responsibility to make sure the input buffer stays in memory
  * long enough to use the results.

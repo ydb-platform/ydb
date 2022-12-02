@@ -23,7 +23,7 @@
 /* disables warning non const declared initializers for Microsoft compilers */
 #    pragma warning(disable : 4204)
 #    pragma warning(disable : 4706)
-/* sprintf warning (we already check the bounds in this case). */
+/* sscanf warning */
 #    pragma warning(disable : 4996)
 #endif
 
@@ -67,10 +67,12 @@ int aws_uuid_init_from_str(struct aws_uuid *uuid, const struct aws_byte_cursor *
 }
 
 int aws_uuid_to_str(const struct aws_uuid *uuid, struct aws_byte_buf *output) {
-    AWS_ERROR_PRECONDITION(output->capacity - output->len >= AWS_UUID_STR_LEN, AWS_ERROR_SHORT_BUFFER);
+    size_t space_remaining = output->capacity - output->len;
+    AWS_ERROR_PRECONDITION(space_remaining >= AWS_UUID_STR_LEN, AWS_ERROR_SHORT_BUFFER);
 
-    sprintf(
+    snprintf(
         (char *)(output->buffer + output->len),
+        space_remaining,
         UUID_FORMAT,
         uuid->uuid_data[0],
         uuid->uuid_data[1],

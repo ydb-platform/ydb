@@ -142,6 +142,4 @@
 |TTL Readtable|\+|?|\+|\-|\-||\-||
 |URL Shortener (serverless yandex function)|?|?|\+|?|\+||\-||
 |Topic reader|\+||\+||\-||\-||
-|CDC|\-||\+||\-||\-||
 |Topic writer|\-||\+||\-||\-||
-

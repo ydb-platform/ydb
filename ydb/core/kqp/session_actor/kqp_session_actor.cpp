@@ -705,6 +705,12 @@ public:
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
     }
 
+    void DiscardPersistentSnapshot(const IKqpGateway::TKqpSnapshotHandle& handle) {
+        if (handle.ManagingActor) { // persistent snapshot was acquired
+            Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot));
+        }
+    }
+
     void AcquireMvccSnapshot() {
         LOG_D("acquire mvcc snapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
@@ -1883,8 +1889,12 @@ public:
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || QueryState && !QueryState->KeepSession;
 
-        if (QueryState && QueryState->TxCtx && QueryState->TxCtx->IsInvalidated()) {
-            InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
+        if (QueryState && QueryState->TxCtx) {
+            auto& txCtx = QueryState->TxCtx;
+            if (txCtx->IsInvalidated()) {
+                InvalidateExplicitTransaction(QueryState->TxCtx, QueryState->TxId);
+            }
+            DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
 
         if (isFinal)

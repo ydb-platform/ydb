@@ -263,12 +263,15 @@ namespace NKikimr::NBlobDepot {
             virtual void OnUpdateBlock(bool /*success*/) {}
             virtual void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus /*status*/, TString /*dataOrErrorReason*/) {}
             virtual void OnIdAllocated() {}
-            virtual void OnDestroy(bool /*success*/);
+            virtual void OnDestroy(bool /*success*/) {}
 
         public:
             struct TDeleter {
                 static void Destroy(TQuery *query) { delete query; }
             };
+
+        private:
+            void DoDestroy();
         };
 
         template<typename TEvent>

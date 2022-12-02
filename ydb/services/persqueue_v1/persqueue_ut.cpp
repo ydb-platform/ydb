@@ -2658,6 +2658,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                                     const TString& clientDc, const TString& originDc,
                                     const TString& client, const TString& consumerPath) {
                 NJson::TJsonValue counters;
+
                 if (clientDc.empty() && originDc.empty()) {
                     counters = GetClientCountersLegacy(monPort, "pqproxy", session, client, consumerPath);
                 } else {

@@ -5,6 +5,7 @@
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
 #include "json_describe.h"
+#include "json_local_rpc.h"
 #include "json_hotkeys.h"
 #include "json_sysinfo.h"
 #include "json_tabletinfo.h"
@@ -44,6 +45,8 @@ void TViewerJsonHandlers::Init() {
     JsonHandlers["/json/vdiskinfo"] = new TJsonHandler<TJsonVDiskInfo>;
     JsonHandlers["/json/pdiskinfo"] = new TJsonHandler<TJsonPDiskInfo>;
     JsonHandlers["/json/describe"] = new TJsonHandler<TJsonDescribe>;
+    JsonHandlers["/json/describe_topic"] = new TJsonHandler<TJsonDescribeTopic>;
+    JsonHandlers["/json/describe_consumer"] = new TJsonHandler<TJsonDescribeConsumer>;
     JsonHandlers["/json/hotkeys"] = new TJsonHandler<TJsonHotkeys>;
     JsonHandlers["/json/sysinfo"] = new TJsonHandler<TJsonSysInfo>;
     JsonHandlers["/json/tabletinfo"] = new TJsonHandler<TJsonTabletInfo>;

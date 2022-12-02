@@ -443,11 +443,26 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopic
 {
 }
 
+TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
+    : TBase(ctx, dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->path())
+    , TDescribeTopicActorImpl("")
+{
+}
+
+
+
 TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
     , TDescribeTopicActorImpl(request->GetProtoRequest()->consumer())
 {
 }
+
+TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
+    : TBase(ctx, dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->path())
+    , TDescribeTopicActorImpl(dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->consumer())
+{
+}
+
 
 TDescribeTopicActorImpl::TDescribeTopicActorImpl(const TString& consumer)
     : Consumer(consumer)

@@ -117,6 +117,8 @@ using TTabletInfo = TDescribeTopicActorImpl::TTabletInfo;
 
 public:
      TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request);
+     TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * ctx);
+
     ~TDescribeTopicActor() = default;
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -142,6 +144,8 @@ using TTabletInfo = TDescribeTopicActorImpl::TTabletInfo;
 
 public:
      TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request);
+     TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOpCtx * ctx);
+
     ~TDescribeConsumerActor() = default;
 
     void Bootstrap(const NActors::TActorContext& ctx);

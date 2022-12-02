@@ -20,15 +20,18 @@ NJson::TJsonValue SendQuery(ui16 port, const TString& query, bool mayFail) {
     TString firstLine = input.FirstLine();
 
     const auto httpCode = ParseHttpRetCode(firstLine);
+    NJson::TJsonValue value;
+    bool res = NJson::ReadJsonTree(&input, &value);
+
+    Cerr << "counters: " << value.GetStringRobust() << "\n";
+
+    UNIT_ASSERT(res);
     if (mayFail && httpCode != 200u) {
         return {};
     } else {
         UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
     }
-    NJson::TJsonValue value;
-    UNIT_ASSERT(NJson::ReadJsonTree(&input, &value));
 
-    Cerr << "counters: " << value.GetStringRobust() << "\n";
     return value;
 }
 

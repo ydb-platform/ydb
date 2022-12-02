@@ -141,36 +141,38 @@ void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvDescribeConsumerRequest:
 
 }
 
+namespace NKikimr {
+namespace NGRpcService {
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDropTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvDropTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
@@ -178,10 +180,29 @@ void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEv
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
+void TGRpcRequestProxy::Handle(TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
+}
+
+
+#ifdef DECLARE_RPC
+#error DECLARE_RPC macro already defined
+#endif
+
+#define DECLARE_RPC(name) template<> IActor* TEv##name##Request::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { \
+    return new NKikimr::NGRpcProxy::V1::T##name##Actor(msg);\
+    }
+
+DECLARE_RPC(DescribeTopic);
+DECLARE_RPC(DescribeConsumer);
+
+#undef DECLARE_RPC
+
+
+
+}
 }

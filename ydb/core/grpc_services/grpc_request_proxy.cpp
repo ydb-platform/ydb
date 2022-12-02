@@ -480,6 +480,7 @@ void LogRequest(const TEvent& event) {
         ss << ", sdkBuildInfo# " << event->Get()->GetSdkBuildInfo().GetOrElse("undef");
         ss << ", state# " << event->Get()->GetAuthState().State;
         ss << ", database# " << event->Get()->GetDatabaseName().GetOrElse("undef");
+        ss << ", peer# " << event->Get()->GetPeerName();
         ss << ", grpcInfo# " << event->Get()->GetGrpcUserAgent().GetOrElse("undef");
         if (event->Get()->GetDeadline() == TInstant::Max()) {
             ss << ", timeout# undef";

@@ -1403,32 +1403,30 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = this->List->GetValue(ctx);
+        if (const auto elements = list.GetElements()) {
+            const auto size = list.GetListLength();
+            TUnboxedValueVector values(size);
 
-        if (!ResultContainerOpt) { // TODO temporary disable for list of streams.
-            if (const auto elements = list.GetElements()) {
-                const auto size = list.GetListLength();
-                TUnboxedValueVector values(size);
-
-                auto it = values.begin();
-                std::for_each(elements, elements + size, [&] (NUdf::TUnboxedValue item) {
-                    this->Item->SetValue(ctx, std::move(item));
-                    *it = this->NewItem->GetValue(ctx);
-                    if (IsMultiRowPerItem || *it) {
-                        auto value = it->GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>();
-                        *it++ = value;
-                    }
-                });
-
-                if constexpr (IsMultiRowPerItem) {
-                    return ctx.HolderFactory.ExtendList<ResultContainerOpt>(values.data(), values.size());
+            auto it = values.begin();
+            std::for_each(elements, elements + size, [&] (NUdf::TUnboxedValue item) {
+                this->Item->SetValue(ctx, std::move(item));
+                *it = this->NewItem->GetValue(ctx);
+                if (IsMultiRowPerItem || *it) {
+                    auto value = it->GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>();
+                    *it++ = value;
                 }
+            });
 
-                NUdf::TUnboxedValue* items = nullptr;
-                const auto result = ctx.HolderFactory.CreateDirectArrayHolder(std::distance(values.begin(), it), items);
-                std::move(values.begin(), it, items);
-                return result;
+            if constexpr (IsMultiRowPerItem) {
+                return ctx.HolderFactory.ExtendList<ResultContainerOpt>(values.data(), values.size());
             }
+
+            NUdf::TUnboxedValue* items = nullptr;
+            const auto result = ctx.HolderFactory.CreateDirectArrayHolder(std::distance(values.begin(), it), items);
+            std::move(values.begin(), it, items);
+            return result;
         }
+
 
         return ctx.HolderFactory.Create<std::conditional_t<IsMultiRowPerItem, TListValue<ResultContainerOpt>, TSimpleListValue<ResultContainerOpt>>>(ctx, std::move(list), this->Item, this->NewItem);
     }
@@ -1453,8 +1451,7 @@ public:
 
         const auto elementsType = PointerType::getUnqual(list->getType());
         const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(elementsType, list, ctx.Codegen, block);
-        const auto fill = ResultContainerOpt ? static_cast<Value*>(ConstantInt::getFalse(context)): // TODO temporary disable for list of streams.
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, elements, ConstantPointerNull::get(elementsType), "fill", block);
+        const auto fill = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, elements, ConstantPointerNull::get(elementsType), "fill", block);
 
         BranchInst::Create(hard, lazy, fill, block);
 

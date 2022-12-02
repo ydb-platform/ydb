@@ -1,5 +1,11 @@
 # utf8proc release history #
 
+## Version 2.8.0 ##
+
+2022-10-30
+
+ - Unicode 15 support ([#247]).
+
 ## Version 2.7.0 ##
 
 2021-12-16
@@ -429,3 +435,4 @@ Release of version 1.0.1
 [#205]: https://github.com/JuliaStrings/utf8proc/issues/205
 [#224]: https://github.com/JuliaStrings/utf8proc/issues/224
 [#233]: https://github.com/JuliaStrings/utf8proc/issues/233
+[#247]: https://github.com/JuliaStrings/utf8proc/issues/247

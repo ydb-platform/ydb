@@ -269,8 +269,8 @@ public:
 protected:
     TVector<TString> NamesStrings;
     TVector<const char*> Names;
-    TVector<TString> ServerlessNamesStrings;
-    TVector<const char*> ServerlessNames;
+    TVector<TString> SVNamesStrings;
+    TVector<const char*> SVNames;
     TVector<ui8> AggregateFuncs;
     TVector<ui8> Types;
     TVector<TString> GroupNamesStrings;
@@ -282,8 +282,8 @@ public:
         const NProtoBuf::EnumDescriptor* labeledCounterDesc = LabeledCountersDesc();
         NamesStrings.reserve(Size);
         Names.reserve(Size);
-        ServerlessNamesStrings.reserve(Size);
-        ServerlessNames.reserve(Size);
+        SVNamesStrings.reserve(Size);
+        SVNames.reserve(Size);
         AggregateFuncs.reserve(Size);
         Types.reserve(Size);
 
@@ -295,17 +295,17 @@ public:
             const TLabeledCounterOptions& co = vdesc->options().GetExtension(LabeledCounterOpts);
 
             NamesStrings.push_back(GetFilePrefix(labeledCounterDesc->file()) + co.GetName());
-            ServerlessNamesStrings.push_back(co.GetServerlessName());
+            SVNamesStrings.push_back(co.GetSVName());
             AggregateFuncs.push_back(co.GetAggrFunc());
             Types.push_back(co.GetType());
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
         std::transform(NamesStrings.begin(), NamesStrings.end(),
-                  std::back_inserter(Names), [](auto string) { return string.data(); } );
+                  std::back_inserter(Names), [](auto& string) { return string.data(); } );
 
-        std::transform(ServerlessNamesStrings.begin(), ServerlessNamesStrings.end(),
-                  std::back_inserter(ServerlessNames), [](auto string) { return string.data(); } );
+        std::transform(SVNamesStrings.begin(), SVNamesStrings.end(),
+                  std::back_inserter(SVNames), [](auto& string) { return string.data(); } );
 
         //parse types for counter groups;
         const TLabeledCounterGroupNamesOptions& gn = labeledCounterDesc->options().GetExtension(GlobalGroupNamesOpts);
@@ -317,7 +317,7 @@ public:
         }
 
         std::transform(GroupNamesStrings.begin(), GroupNamesStrings.end(),
-                  std::back_inserter(GroupNames), [](auto string) { return string.data(); } );
+                  std::back_inserter(GroupNames), [](auto& string) { return string.data(); } );
 
     }
     virtual ~TLabeledCounterParsedOpts()
@@ -328,9 +328,9 @@ public:
         return Names.begin();
     }
 
-    const char* const * GetServerlessNames() const
+    const char* const * GetSVNames() const
     {
-        return ServerlessNames.begin();
+        return SVNames.begin();
     }
 
     const ui8* GetCounterTypes() const
@@ -649,7 +649,7 @@ public:
     TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
                                    const TString& databasePath)
         : TTabletLabeledCountersBase(
-              SimpleOpts()->Size, SimpleOpts()->GetServerlessNames(), SimpleOpts()->GetCounterTypes(),
+              SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
     {
         TVector<TString> groups;

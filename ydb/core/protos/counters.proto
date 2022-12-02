@@ -16,7 +16,7 @@ message TCounterOptions {
     optional string Name = 1;
     repeated TRange Ranges = 2;
     optional bool Integral = 3;
-    optional string ServerlessName = 4;
+    optional string SVName = 4;
 }
 
 message TTxTypeOptions {
@@ -39,7 +39,7 @@ message TLabeledCounterOptions {
     optional string Name = 1;
     optional EAggregateFunc AggrFunc = 2;
     optional ECounterType Type = 3 [default = CT_SIMPLE];
-    optional string ServerlessName = 4 [default = ""];
+    optional string SVName = 4 [default = ""];
 }
 
 message TLabeledCounterGroupNamesOptions {

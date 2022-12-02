@@ -147,38 +147,38 @@ enum EClientLabeledCounters {
         Names: "topic"
     };
 
-    METRIC_COMMIT_WRITE_TIME = 0                                     [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByCommitted" AggrFunc : EAF_MIN Type : CT_TIMELAG ServerlessName: "topic.read.max_time_lags_by_committed_milliseconds"}];
-    METRIC_COMMIT_CREATE_TIME = 1                                    [(LabeledCounterOpts) = {Name: "CreateTimeLagMsByCommitted" AggrFunc : EAF_MIN Type : CT_TIMELAG ServerlessName: "topic.read.max_total_time_lag_by_committed_milliseconds"}];
-    METRIC_COMMIT_MESSAGE_LAG = 2                                    [(LabeledCounterOpts) = {Name: "MessageLagByCommitted" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_COMMIT_SIZE_LAG = 3                                       [(LabeledCounterOpts) = {Name: "SizeLagByCommitted" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_READ_WRITE_TIME = 4                                       [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastReadOld" AggrFunc : EAF_MIN Type : CT_TIMELAG ServerlessName: ""}];
-    METRIC_READ_TOTAL_TIME = 5                                       [(LabeledCounterOpts) = {Name: "TotalTimeLagMsByLastRead" AggrFunc : EAF_MAX ServerlessName: "topic.read.max_time_lags_milliseconds"}];
-    METRIC_READ_MESSAGE_LAG = 6                                      [(LabeledCounterOpts) = {Name: "MessageLagByLastRead" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_READ_SIZE_LAG = 7                                         [(LabeledCounterOpts) = {Name: "SizeLagByLastRead" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_USER_PARTITIONS = 8                                       [(LabeledCounterOpts) = {Name: "UserPartitionsAnswered" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_READ_TOTAL_MESSAGE_LAG = 9                                [(LabeledCounterOpts) = {Name: "TotalMessageLagByLastRead" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_READ_TOTAL_SIZE_LAG = 10                                  [(LabeledCounterOpts) = {Name: "TotalSizeLagByLastRead" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MIN_READ_QUOTA_BYTES_AVAIL_SEC = 11                       [(LabeledCounterOpts) = {Name: "ReadBytesAvailAvgSec" AggrFunc : EAF_MIN ServerlessName: ""}];
-    METRIC_MIN_READ_QUOTA_BYTES_AVAIL_MIN = 12                       [(LabeledCounterOpts) = {Name: "ReadBytesAvailAvgMin" AggrFunc : EAF_MIN ServerlessName: ""}];
+    METRIC_COMMIT_WRITE_TIME = 0                                     [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByCommitted" AggrFunc : EAF_MIN Type : CT_TIMELAG SVName: "topic.partitions.committed_read_lag_milliseconds_max"}];
+    METRIC_COMMIT_CREATE_TIME = 1                                    [(LabeledCounterOpts) = {Name: "CreateTimeLagMsByCommitted" AggrFunc : EAF_MIN Type : CT_TIMELAG SVName: "topic.partitions.committed_end_to_end_lag_milliseconds_max"}];
+    METRIC_COMMIT_MESSAGE_LAG = 2                                    [(LabeledCounterOpts) = {Name: "MessageLagByCommitted" AggrFunc : EAF_MAX SVName: "topic.partitions.committed_lag_messages_max"}];
+    METRIC_COMMIT_SIZE_LAG = 3                                       [(LabeledCounterOpts) = {Name: "SizeLagByCommitted" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_READ_WRITE_TIME = 4                                       [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastReadOld" AggrFunc : EAF_MIN Type : CT_TIMELAG SVName: ""}];
+    METRIC_READ_TOTAL_TIME = 5                                       [(LabeledCounterOpts) = {Name: "TotalTimeLagMsByLastRead" AggrFunc : EAF_MAX SVName: "topic.partitions.end_to_end_lag_milliseconds_max"}];
+    METRIC_READ_MESSAGE_LAG = 6                                      [(LabeledCounterOpts) = {Name: "MessageLagByLastRead" AggrFunc : EAF_MAX SVName: "topic.partitions.read_lag_messages_max"}];
+    METRIC_READ_SIZE_LAG = 7                                         [(LabeledCounterOpts) = {Name: "SizeLagByLastRead" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_USER_PARTITIONS = 8                                       [(LabeledCounterOpts) = {Name: "UserPartitionsAnswered" AggrFunc : EAF_SUM SVName: "topic.partitions.alive_count"}];
+    METRIC_READ_TOTAL_MESSAGE_LAG = 9                                [(LabeledCounterOpts) = {Name: "TotalMessageLagByLastRead" AggrFunc : EAF_SUM SVName: "topic.read_lag_messages"}];
+    METRIC_READ_TOTAL_SIZE_LAG = 10                                  [(LabeledCounterOpts) = {Name: "TotalSizeLagByLastRead" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MIN_READ_QUOTA_BYTES_AVAIL_SEC = 11                       [(LabeledCounterOpts) = {Name: "ReadBytesAvailAvgSec" AggrFunc : EAF_MIN SVName: ""}];
+    METRIC_MIN_READ_QUOTA_BYTES_AVAIL_MIN = 12                       [(LabeledCounterOpts) = {Name: "ReadBytesAvailAvgMin" AggrFunc : EAF_MIN SVName: ""}];
 
-    METRIC_READ_OFFSET_REWIND_SUM = 13                               [(LabeledCounterOpts) = {Name: "ReadOffsetRewindSum" AggrFunc : EAF_SUM Type : CT_DERIV ServerlessName: ""}];
+    METRIC_READ_OFFSET_REWIND_SUM = 13                               [(LabeledCounterOpts) = {Name: "ReadOffsetRewindSum" AggrFunc : EAF_SUM Type : CT_DERIV SVName: ""}];
 
-    METRIC_TOTAL_READ_SPEED_1 = 14                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerSec" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_READ_SPEED_1 = 15                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerSec" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_TOTAL_READ_SPEED_2 = 16                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerMin" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_READ_SPEED_2 = 17                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerMin" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_TOTAL_READ_SPEED_3 = 18                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerHour" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_READ_SPEED_3 = 19                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerHour" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_TOTAL_READ_SPEED_4 = 20                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerDay" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_READ_SPEED_4 = 21                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerDay" AggrFunc : EAF_MAX ServerlessName: ""}];
+    METRIC_TOTAL_READ_SPEED_1 = 14                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerSec" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_READ_SPEED_1 = 15                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerSec" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_READ_SPEED_2 = 16                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerMin" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_READ_SPEED_2 = 17                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerMin" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_READ_SPEED_3 = 18                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerHour" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_READ_SPEED_3 = 19                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerHour" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_READ_SPEED_4 = 20                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerDay" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_READ_SPEED_4 = 21                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerDay" AggrFunc : EAF_MAX SVName: ""}];
 
-    METRIC_READ_QUOTA_BYTES = 22                                     [(LabeledCounterOpts) = {Name: "ReadBytesQuota" AggrFunc : EAF_MIN ServerlessName: ""}];
+    METRIC_READ_QUOTA_BYTES = 22                                     [(LabeledCounterOpts) = {Name: "ReadBytesQuota" AggrFunc : EAF_MIN SVName: ""}];
 
-    METRIC_READ_TIME_LAG = 23                                        [(LabeledCounterOpts) = {Name: "ReadTimeLagMs" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_WRITE_TIME_LAG = 24                                       [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastRead" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_LAST_READ_TIME = 25                                       [(LabeledCounterOpts) = {Name: "TimeSinceLastReadMs" AggrFunc : EAF_MIN Type : CT_TIMELAG ServerlessName: ""}];
+    METRIC_READ_TIME_LAG = 23                                        [(LabeledCounterOpts) = {Name: "ReadTimeLagMs" AggrFunc : EAF_MAX SVName: "topic.partitions.read_lag_milliseconds_max"}];
+    METRIC_WRITE_TIME_LAG = 24                                       [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastRead" AggrFunc : EAF_MAX SVName: "topic.partitions.write_lag_milliseconds_max"}];
+    METRIC_LAST_READ_TIME = 25                                       [(LabeledCounterOpts) = {Name: "TimeSinceLastReadMs" AggrFunc : EAF_MIN Type : CT_TIMELAG SVName: "topic.partitions.time_since_last_read_milliseconds_max"}];
 
-    METRIC_READ_QUOTA_USAGE = 26                                     [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX ServerlessName: ""}];
+    METRIC_READ_QUOTA_USAGE = 26                                     [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX SVName: ""}];
 }
 
 
@@ -188,44 +188,44 @@ enum EPartitionLabeledCounters {
         Names: "topic"
     };
 
-    METRIC_LIFE_TIME = 0                                          [(LabeledCounterOpts) = {Name: "PartitionLifeTimeMs" AggrFunc : EAF_MAX Type : CT_TIMELAG ServerlessName: "topic.min_partition_uptime_milliseconds"}];
-    METRIC_INIT_TIME = 1                                          [(LabeledCounterOpts) = {Name: "PartitionInitTimeMs" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_init_duration_milliseconds"}];
-    METRIC_PARTITIONS = 2                                         [(LabeledCounterOpts) = {Name: "PartitionsAnswered" AggrFunc : EAF_SUM ServerlessName: "topic.partitions_alive"}];
-    METRIC_NUM_SIDS = 3                                           [(LabeledCounterOpts) = {Name: "SourceIdCount" AggrFunc : EAF_SUM ServerlessName: "topic.producers"}];
-    METRIC_MAX_NUM_SIDS = 4                                       [(LabeledCounterOpts) = {Name: "SourceIdMaxCount" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_producers"}];
-    METRIC_GAPS_COUNT = 5                                         [(LabeledCounterOpts) = {Name: "GapsCount" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_GAPS_COUNT = 6                                     [(LabeledCounterOpts) = {Name: "GapsMaxCount" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_GAPS_SIZE = 7                                          [(LabeledCounterOpts) = {Name: "GapsSize" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_GAPS_SIZE = 8                                      [(LabeledCounterOpts) = {Name: "GapsMaxSize" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC = 9                    [(LabeledCounterOpts) = {Name: "WriteBytesAvailAvgSec" AggrFunc : EAF_MIN ServerlessName: ""}];
-    METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN = 10                   [(LabeledCounterOpts) = {Name: "WriteBytesAvailAvgMin" AggrFunc : EAF_MIN ServerlessName: ""}];
-    METRIC_TOTAL_WRITE_SPEED_1 = 11                               [(LabeledCounterOpts) = {Name: "WriteBytesPerSec" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_WRITE_SPEED_1 = 12                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerSec" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_incoming_per_second"}];
-    METRIC_TOTAL_WRITE_SPEED_2 = 13                               [(LabeledCounterOpts) = {Name: "WriteBytesPerMin" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_WRITE_SPEED_2 = 14                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerMin" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_incoming_bytes_per_minute"}];
-    METRIC_TOTAL_WRITE_SPEED_3 = 15                               [(LabeledCounterOpts) = {Name: "WriteBytesPerHour" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_WRITE_SPEED_3 = 16                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerHour" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_incoming_per_hour"}];
-    METRIC_TOTAL_WRITE_SPEED_4 = 17                               [(LabeledCounterOpts) = {Name: "WriteBytesPerDay" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_WRITE_SPEED_4 = 18                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerDay" AggrFunc : EAF_MAX ServerlessName: ""}];
+    METRIC_LIFE_TIME = 0                                          [(LabeledCounterOpts) = {Name: "PartitionLifeTimeMs" AggrFunc : EAF_MAX Type : CT_TIMELAG SVName: "topic.partitions.uptime_milliseconds_min"}];
+    METRIC_INIT_TIME = 1                                          [(LabeledCounterOpts) = {Name: "PartitionInitTimeMs" AggrFunc : EAF_MAX SVName: "topic.partitions.init_duration_milliseconds_max"}];
+    METRIC_PARTITIONS = 2                                         [(LabeledCounterOpts) = {Name: "PartitionsAnswered" AggrFunc : EAF_SUM SVName: "topic.partitions.alive_count"}];
+    METRIC_NUM_SIDS = 3                                           [(LabeledCounterOpts) = {Name: "SourceIdCount" AggrFunc : EAF_SUM SVName: "topic.producers_count"}];
+    METRIC_MAX_NUM_SIDS = 4                                       [(LabeledCounterOpts) = {Name: "SourceIdMaxCount" AggrFunc : EAF_MAX SVName: "topic.partitions.producers_count_max"}];
+    METRIC_GAPS_COUNT = 5                                         [(LabeledCounterOpts) = {Name: "GapsCount" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_GAPS_COUNT = 6                                     [(LabeledCounterOpts) = {Name: "GapsMaxCount" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_GAPS_SIZE = 7                                          [(LabeledCounterOpts) = {Name: "GapsSize" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_GAPS_SIZE = 8                                      [(LabeledCounterOpts) = {Name: "GapsMaxSize" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC = 9                    [(LabeledCounterOpts) = {Name: "WriteBytesAvailAvgSec" AggrFunc : EAF_MIN SVName: ""}];
+    METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN = 10                   [(LabeledCounterOpts) = {Name: "WriteBytesAvailAvgMin" AggrFunc : EAF_MIN SVName: ""}];
+    METRIC_TOTAL_WRITE_SPEED_1 = 11                               [(LabeledCounterOpts) = {Name: "WriteBytesPerSec" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_WRITE_SPEED_1 = 12                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerSec" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_WRITE_SPEED_2 = 13                               [(LabeledCounterOpts) = {Name: "WriteBytesPerMin" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_WRITE_SPEED_2 = 14                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerMin" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_WRITE_SPEED_3 = 15                               [(LabeledCounterOpts) = {Name: "WriteBytesPerHour" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_WRITE_SPEED_3 = 16                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerHour" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_WRITE_SPEED_4 = 17                               [(LabeledCounterOpts) = {Name: "WriteBytesPerDay" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_WRITE_SPEED_4 = 18                                 [(LabeledCounterOpts) = {Name: "WriteBytesMaxPerDay" AggrFunc : EAF_MAX SVName: ""}];
 
-    METRIC_TOTAL_PART_SIZE = 19                                   [(LabeledCounterOpts) = {Name: "TotalPartSize" AggrFunc : EAF_SUM ServerlessName: "topic.storage_bytes"}];
-    METRIC_MAX_PART_SIZE = 20                                     [(LabeledCounterOpts) = {Name: "MaxPartSize" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_storage_bytes"}];
+    METRIC_TOTAL_PART_SIZE = 19                                   [(LabeledCounterOpts) = {Name: "TotalPartSize" AggrFunc : EAF_SUM SVName: "topic.storage_bytes"}];
+    METRIC_MAX_PART_SIZE = 20                                     [(LabeledCounterOpts) = {Name: "MaxPartSize" AggrFunc : EAF_MAX SVName: "topic.partitions.storage_bytes_max"}];
 
-    METRIC_WRITE_QUOTA_BYTES = 21                                 [(LabeledCounterOpts) = {Name: "WriteBytesQuota" AggrFunc : EAF_MIN ServerlessName: "topic.partition.max_write_quota_usage"}];
+    METRIC_WRITE_QUOTA_BYTES = 21                                 [(LabeledCounterOpts) = {Name: "WriteBytesQuota" AggrFunc : EAF_MIN SVName: "topic.partitions.write_speed_bytes_per_second"}];
 
-    METRIC_WRITE_TIME_LAG_MS = 22                                 [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastWrite" AggrFunc : EAF_MAX ServerlessName: "topic.partition.max_write_time_lag_milliseconds"}];
-    METRIC_LAST_WRITE_TIME = 23                                   [(LabeledCounterOpts) = {Name: "TimeSinceLastWriteMs" AggrFunc : EAF_MIN Type : CT_TIMELAG ServerlessName: "topic.write.max_time_since_last_write_milliseconds"}];
+    METRIC_WRITE_TIME_LAG_MS = 22                                 [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastWrite" AggrFunc : EAF_MAX SVName: "topic.partitions.write_lag_milliseconds_max"}];
+    METRIC_LAST_WRITE_TIME = 23                                   [(LabeledCounterOpts) = {Name: "TimeSinceLastWriteMs" AggrFunc : EAF_MIN Type : CT_TIMELAG SVName: "topic.partitions.time_since_last_write_milliseconds_max"}];
 
-    METRIC_TOTAL_QUOTA_SPEED_1 = 24                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerSec" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_QUOTA_SPEED_1 = 25                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerSec" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_TOTAL_QUOTA_SPEED_2 = 26                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerMin" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_QUOTA_SPEED_2 = 27                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerMin" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_TOTAL_QUOTA_SPEED_3 = 28                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerHour" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_QUOTA_SPEED_3 = 29                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerHour" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_TOTAL_QUOTA_SPEED_4 = 30                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerDay" AggrFunc : EAF_SUM ServerlessName: ""}];
-    METRIC_MAX_QUOTA_SPEED_4 = 31                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerDay" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX ServerlessName: ""}];
-    METRIC_MIN_SID_LIFETIME = 33                                  [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN ServerlessName: ""}];
+    METRIC_TOTAL_QUOTA_SPEED_1 = 24                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerSec" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_QUOTA_SPEED_1 = 25                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerSec" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_TOTAL_QUOTA_SPEED_2 = 26                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerMin" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_QUOTA_SPEED_2 = 27                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerMin" AggrFunc : EAF_MAX SVName: "topic.partitions.written_bytes_per_minute_max"}];
+    METRIC_TOTAL_QUOTA_SPEED_3 = 28                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerHour" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_QUOTA_SPEED_3 = 29                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerHour" AggrFunc : EAF_MAX SVName: "topic.partitions.written_bytes_per_hour_max"}];
+    METRIC_TOTAL_QUOTA_SPEED_4 = 30                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerDay" AggrFunc : EAF_SUM SVName: ""}];
+    METRIC_MAX_QUOTA_SPEED_4 = 31                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerDay" AggrFunc : EAF_MAX SVName: "topic.partitions.written_bytes_per_day_max"}];
+    METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partitions.write_throttled_nanoseconds_max"}];
+    METRIC_MIN_SID_LIFETIME = 33                                  [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN SVName: ""}];
 
+    METRIC_PARTITIONS_TOTAL = 34                                  [(LabeledCounterOpts) = {Name: "PartitionsTotal" AggrFunc : EAF_MAX SVName: "topic.partitions.total_count"}];
 }
-

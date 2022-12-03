@@ -135,8 +135,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
                 break;
             }
             ui64 duration = (now - LastFlush_[whichOne]).MilliSeconds();
-            ui64 cus = CurrentUsedStorage_ * 1024 * 1024; // in bytes
-            ui64 avgUsage = cus * 1000 / duration;
+            ui64 avgUsage = CurrentUsedStorage_ * 1_MB * 1000 / duration;
             CurrentUsedStorage_ = 0;
             const THashMap<TString, ui64> tags = {
                 {"ydb_size", avgUsage}

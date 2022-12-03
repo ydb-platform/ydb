@@ -14,10 +14,24 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 
-namespace NKikimr {
+namespace NKikimr::NPQ {
+
+void FillPQConfig(NActors::TTestActorRuntime& runtime, const TString& dbRoot, bool isFirstClass) {
+    runtime.GetAppData(0).PQConfig.SetEnabled(true);
+    // NOTE(shmel1k@): KIKIMR-14221
+    runtime.GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(isFirstClass);
+    runtime.GetAppData(0).PQConfig.SetRequireCredentialsInNewProtocol(false);
+    runtime.GetAppData(0).PQConfig.SetRoot(dbRoot);
+    runtime.GetAppData(0).PQConfig.SetClusterTablePath(TStringBuilder() << dbRoot << "/Config/V2/Cluster");
+    runtime.GetAppData(0).PQConfig.SetVersionTablePath(TStringBuilder() << dbRoot << "/Config/V2/Versions");
+    runtime.GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+}
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,
-                     const TVector<std::pair<TString, bool>>& users, TTestContext& tc) {
+                     const TVector<std::pair<TString, bool>>& users,
+                     TTestActorRuntime& runtime,
+                     ui64 tabletId,
+                     TActorId edge) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     if (parameters.specVersion) {
@@ -27,7 +41,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
     }
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            tc.Runtime->ResetScheduledCount();
+            runtime.ResetScheduledCount();
 
             THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
             for (ui32 i = 0; i < parameters.partitions; ++i) {
@@ -36,9 +50,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
             request->Record.SetTxId(12345);
             auto tabletConfig = request->Record.MutableTabletConfig();
-            if (tc.Runtime->GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
+            if (runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
                 tabletConfig->SetTopicName("topic");
-                tabletConfig->SetTopicPath(tc.Runtime->GetAppData().PQConfig.GetDatabase() + "/topic");
+                tabletConfig->SetTopicPath(runtime.GetAppData().PQConfig.GetDatabase() + "/topic");
                 tabletConfig->SetYcCloudId(parameters.cloudId);
                 tabletConfig->SetYcFolderId(parameters.folderId);
                 tabletConfig->SetYdbDatabaseId(parameters.databaseId);
@@ -73,15 +87,15 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 if (u.first != "user")
                     tabletConfig->AddReadRules(u.first);
             }
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
             TEvPersQueue::TEvUpdateConfigResponse* result =
-                tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+                runtime.GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
 
             UNIT_ASSERT(result);
             auto& rec = result->Record;
             UNIT_ASSERT(rec.HasStatus() && rec.GetStatus() == NKikimrPQ::OK);
             UNIT_ASSERT(rec.HasTxId() && rec.GetTxId() == 12345);
-            UNIT_ASSERT(rec.HasOrigin() && result->GetOrigin() == 1);
+            UNIT_ASSERT(rec.HasOrigin() && result->GetOrigin() == tabletId);
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {
             UNIT_ASSERT(retriesLeft >= 1);
@@ -96,8 +110,8 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             auto read = request->Record.AddCmdRead();
             read->SetKey("_config");
 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
@@ -108,6 +122,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
         }
     }
 }
+
+void PQTabletPrepare(const TTabletPreparationParameters& parameters,
+                     const TVector<std::pair<TString, bool>>& users,
+                     TTestContext& context) {
+    PQTabletPrepare(parameters, users, *context.Runtime, context.TabletId, context.Edge);
+}
+
 
 void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {
@@ -141,7 +162,7 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestCo
                 UNIT_ASSERT_EQUAL(resp.HasCreateTimestampMS(), ctime > 0);
                 if (ctime > 0) {
                     if (ctime == Max<i64>()) {
-                        UNIT_ASSERT(resp.GetCreateTimestampMS() + 86000000 < TAppData::TimeProvider->Now().MilliSeconds());
+                        UNIT_ASSERT(resp.GetCreateTimestampMS() + 86'000'000 < TAppData::TimeProvider->Now().MilliSeconds());
                     } else {
                         UNIT_ASSERT_EQUAL((i64)resp.GetCreateTimestampMS(), ctime);
                     }
@@ -160,14 +181,20 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestCo
     }
 }
 
-void BalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId, TTestContext& tc, const bool requireAuth) {
+void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
+                       TTestContext& context, const bool requireAuth) {
+    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth);
+}
+
+void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
+                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     ++version;
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            tc.Runtime->ResetScheduledCount();
+            runtime.ResetScheduledCount();
 
             THolder<TEvPersQueue::TEvUpdateBalancerConfig> request(new TEvPersQueue::TEvUpdateBalancerConfig());
             for (const auto& p : map) {
@@ -191,23 +218,21 @@ void BalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pai
             request->Record.MutableTabletConfig()->SetRequireAuthWrite(requireAuth);
             request->Record.MutableTabletConfig()->SetRequireAuthRead(requireAuth);
 
-            tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            TEvPersQueue::TEvUpdateConfigResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+            runtime.SendToPipe(balancerTabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+            TEvPersQueue::TEvUpdateConfigResponse* result = runtime.GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
 
             UNIT_ASSERT(result);
             auto& rec = result->Record;
             UNIT_ASSERT(rec.HasStatus() && rec.GetStatus() == NKikimrPQ::OK);
             UNIT_ASSERT(rec.HasTxId() && rec.GetTxId() == 12345);
-            UNIT_ASSERT(rec.HasOrigin() && result->GetOrigin() == tc.BalancerTabletId);
+            UNIT_ASSERT(rec.HasOrigin() && result->GetOrigin() == balancerTabletId);
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {
             UNIT_ASSERT(retriesLeft >= 1);
         }
     }
     //TODO: check state
-    TTestActorRuntime& runtime = *tc.Runtime;
-
-    ForwardToTablet(runtime, tc.BalancerTabletId, tc.Edge, new TEvents::TEvPoisonPill());
+    ForwardToTablet(runtime, balancerTabletId, edge, new TEvents::TEvPoisonPill());
     TDispatchOptions rebootOptions;
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);
@@ -246,9 +271,11 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
 }
 
 void PQTabletRestart(TTestContext& tc) {
-    TTestActorRuntime& runtime = *tc.Runtime;
+    PQTabletRestart(*tc.Runtime, tc.TabletId, tc.Edge);
+}
 
-    ForwardToTablet(runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill());
+void PQTabletRestart(TTestActorRuntime& runtime, ui64 tabletId, TActorId edge) {
+    ForwardToTablet(runtime, tabletId, edge, new TEvents::TEvPoisonPill());
     TDispatchOptions rebootOptions;
     rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
     runtime.DispatchEvents(rebootOptions);
@@ -483,10 +510,13 @@ void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             WriteData(partition, sourceId, data, tc, cookie, msgSeqNo, offset, disableDeduplication);
-            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
-                if (ev.Record.HasPartitionResponse() && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0 || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
-                    return true;
-                return false;
+            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+                [](const TEvPersQueue::TEvResponse& ev){
+                    if (ev.Record.HasPartitionResponse() &&
+                        ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0 ||
+                        ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
+                        return true;
+                    return false;
             }); //there could be outgoing reads in TestReadSubscription test
 
             UNIT_ASSERT(result);
@@ -497,14 +527,16 @@ void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::
                 continue;
             }
 
-            if (!treatWrongCookieAsError && result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
+            if (!treatWrongCookieAsError &&
+                result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
                 cookie = CmdSetOwner(partition, tc).first;
                 msgSeqNo = 0;
                 retriesLeft = 3;
                 continue;
             }
 
-            if (!treatBadOffsetAsError && result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_BAD_OFFSET) {
+            if (!treatBadOffsetAsError &&
+                result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_BAD_OFFSET) {
                 return;
             }
 
@@ -910,4 +942,4 @@ void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, co
     write->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NPQ

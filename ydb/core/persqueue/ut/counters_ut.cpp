@@ -6,14 +6,15 @@
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 
-namespace NKikimr {
+namespace NKikimr::NPQ {
 
 namespace {
 
 TVector<std::pair<ui64, TString>> TestData() {
     TVector<std::pair<ui64, TString>> data;
     TString s{32, 'c'};
-    ui32 pp = 8 + 4 + 2 + 9;
+    // FIXME: replace magic numbers and add VERIFY on sizes
+    const ui32 pp = 8 + 4 + 2 + 9;
     for (ui32 i = 0; i < 10; ++i) {
         data.push_back({i + 1, s.substr(pp)});
     }
@@ -81,6 +82,7 @@ Y_UNIT_TEST(Partition) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
 
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
@@ -111,6 +113,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
 
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
@@ -369,4 +372,4 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
 }
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)
 
-} // namespace NKikimr
+} // namespace NKikimr::NPQ

@@ -627,6 +627,6 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TUserActionProcessorFixture)
     WaitProxyResponse({.Cookie=6, .Offset=4});
 }
 
-}
+} // Y_UNIT_TEST_SUITE(TUserActionProcessorTests)
 
-}
+} // namespace NKikimr::NPQ

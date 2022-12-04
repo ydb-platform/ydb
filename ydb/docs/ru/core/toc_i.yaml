@@ -26,25 +26,27 @@ items:
   - name: Ядро
     items:
     - name: Тестирование с помощью нагружающих акторов
-      href: development/testing-load-actor.md
-    - name: KV нагрузка
-      href: development/key-value-load-start.md
-    - name: KQP нагрузка
-      href: development/kqp-load-start.md
-    - name: DSProxy нагрузка
-      href: development/load-start.md
-    - name: Остановка нагрузки
-      href: development/load-stop.md
-    - name: Проверка производительности памяти
-      href: development/memory-load-start.md
-    - name: PDisk нагрузка на запись
-      href: development/pdisk-load-start.md
-    - name: PDisk нагрузка, пишущая в лог
-      href: development/pdisk-log-load-start.md
-    - name: PDisk нагрузка на чтение
-      href: development/pdisk-read-load-start.md
-    - name: VDisk нагрузка
-      href: development/vdisk-load-start.md
+      items:
+      - name: Обзор
+        href: development/load-actors-overview.md
+      - name: KqpLoadStart
+        href: development/load-actors-kqp.md
+      - name: KeyValueLoadStart
+        href: development/load-actors-key-value.md
+      - name: LoadStart
+        href: development/load-actors-load-start.md
+      - name: VDiskLoadStart
+        href: development/load-actors-vdisk.md
+      - name: PDiskLoadStart
+        href: development/load-actors-pdisk.md
+      - name: PDiskReadLoadStart
+        href: development/load-actors-pdisk-read.md
+      - name: PDiskLogLoadStart
+        href: development/load-actors-pdisk-log.md
+      - name: MemoryLoadStart
+        href: development/load-actors-memory.md
+      - name: LoadStop
+        href: development/load-actors-load-stop.md
 
 # Footer
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }

@@ -858,14 +858,14 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         {{"cloud", CloudId},
          {"folder", FolderId},
          {"database", DbId},
-         {"stream", TopicConverter->GetFederationPath()},
+         {"topic", TopicConverter->GetFederationPath()},
          {"host", DCId},
-         {"shard", ToString<ui32>(Partition)}},
-        {"name", "stream.internal_write.buffer_brimmed_duration_ms", true});
+         {"partition", ToString<ui32>(Partition)}},
+        {"name", "api.topic_service.stream_write.buffer_brimmed_milliseconds", true});
 
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         NPersQueue::GetCountersForStream(counters), labels,
-                    {{"name", "stream.internal_write.time_lags_milliseconds"}}, "bin",
+                    {{"name", "topic.write_lag_milliseconds"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {100, "100"}, {200, "200"}, {500, "500"},
                         {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
@@ -874,7 +874,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         NPersQueue::GetCountersForStream(counters), labels,
-                    {{"name", "stream.internal_write.record_size_bytes"}}, "bin",
+                    {{"name", "topic.written_message_size_bytes"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
                         {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
@@ -885,20 +885,17 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     BytesWritten = NKikimr::NPQ::TMultiCounter(
 
         NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.bytes_per_second",
-                     "stream.incoming_bytes_per_second"} , true, "name");
+                    {"api.topic_service.stream_write.bytes_per_second",
+                     "topic.written_bytes_per_second"} , true, "name");
     MsgsWritten = NKikimr::NPQ::TMultiCounter(
         NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.records_per_second",
-                     "stream.incoming_records_per_second"}, true, "name");
+                    {"api.topic_service.stream_write.messages_per_second",
+                     "topic.written_messages_per_second"}, true, "name");
 
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
 
         NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.uncompressed_bytes_per_second"}, true, "name");
-    BytesWrittenComp = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForStream(counters), labels, {},
-                    {"stream.internal_write.compacted_bytes_per_second"}, true, "name");
+                    {"topic.written_uncompressed_bytes_per_second"}, true, "name");
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -912,7 +909,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForStream(counters), labels,
-                            {{"name", "stream.internal_write.topic_write_quota_wait_milliseconds"}}, "bin",
+                            {{"name", "api.topic_service.stream_write.topic_throttled_milliseconds"}}, "bin",
                             TVector<std::pair<ui64, TString>>{
                                 {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                                 {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
@@ -923,7 +920,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForStream(counters), labels,
-                        {{"name", "stream.internal_write.partition_write_quota_wait_milliseconds"}}, "bin",
+                        {{"name", "api.topic_service.stream_write.partition_throttled_milliseconds"}}, "bin",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                             {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},

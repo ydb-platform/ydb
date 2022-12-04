@@ -88,18 +88,18 @@ NJson::TJsonValue GetClientCountersLegacy(ui16 port, const TString& counters, co
 
 NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
                                       const TString& cloudId, const TString& databaseId,
-                                      const TString& folderId, const TString& streamName,
+                                      const TString& folderId, const TString& topicName,
                                       const TString& consumer, const TString& host,
-                                      const TString& shard) {
+                                      const TString& partition) {
     bool mayFail = false;
-    TVector<TString> pathItems = SplitString(streamName, "/");
+    TVector<TString> pathItems = SplitString(topicName, "/");
     TStringBuilder queryBuilder;
     queryBuilder <<
         "/counters/counters=" << counters <<
         "/cloud=" << cloudId <<
         "/folder=" << folderId <<
         "/database=" << databaseId <<
-        "/stream=" << JoinRange("%2F", pathItems.begin(), pathItems.end());
+        "/topic=" << JoinRange("%2F", pathItems.begin(), pathItems.end());
 
     if (consumer) {
         queryBuilder <<
@@ -111,9 +111,9 @@ NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
             "/host=" << host;
     }
 
-    if (shard) {
+    if (partition) {
         queryBuilder <<
-            "/shard=" << shard;
+            "/partition=" << partition;
         mayFail = true;
     }
 

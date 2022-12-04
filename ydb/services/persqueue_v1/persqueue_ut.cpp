@@ -2780,7 +2780,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                                   "PartitionsReleased",
                                   "PartitionsToBeLocked",
                                   "PartitionsToBeReleased",
-                                  "WaitsForData"
+                                  "WaitsForData",
                               },
                               "", "cluster", "", ""
                               );

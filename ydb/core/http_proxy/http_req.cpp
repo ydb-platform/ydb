@@ -392,7 +392,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText) {
-                ctx.Send(MakeMetricsServiceID(),
+                /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              {{"method", Method},
@@ -402,6 +402,18 @@ namespace NKikimr::NHttpProxy {
                               {"stream", HttpContext.StreamName},
                               {"code", TStringBuilder() << (int)StatusToHttpCode(status)},
                               {"name", "api.http.errors_per_second"}}
+                         });
+
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{
+                             1, true, true,
+                             {{"method", Method},
+                              {"cloud", HttpContext.CloudId},
+                              {"folder", HttpContext.FolderId},
+                              {"database", HttpContext.DatabaseId},
+                              {"topic", HttpContext.StreamName},
+                              {"code", TStringBuilder() << (int)StatusToHttpCode(status)},
+                              {"name", "api.data_streams.errors_per_second"}}
                          });
 
                 HttpContext.ResponseData.Status = status;
@@ -431,9 +443,13 @@ namespace NKikimr::NHttpProxy {
                     }
 
                     FillInputCustomMetrics<TProtoRequest>(Request, HttpContext, ctx);
+                    /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
+                             new TEvServerlessProxy::TEvCounter{1, true, true,
+                                 BuildLabels(Method, HttpContext, "api.http.requests_per_second", setStreamPrefix)
+                             });
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.http.requests_per_second")
+                                 BuildLabels(Method, HttpContext, "api.data_streams.requests_per_second")
                              });
                     CreateClient(ctx);
                     return;
@@ -444,9 +460,13 @@ namespace NKikimr::NHttpProxy {
 
             void ReportLatencyCounters(const TActorContext& ctx) {
                 TDuration dur = ctx.Now() - StartTime;
+                /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
+                             BuildLabels(Method, HttpContext, "api.http.requests_duration_milliseconds", setStreamPrefix)
+                        });
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                                    BuildLabels(Method, HttpContext, "api.http.requests_duration_milliseconds")
+                             BuildLabels(Method, HttpContext, "api.data_streams.requests_duration_milliseconds")
                         });
             }
 
@@ -458,9 +478,13 @@ namespace NKikimr::NHttpProxy {
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ReportLatencyCounters(ctx);
 
+                    /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
+                             new TEvServerlessProxy::TEvCounter{1, true, true,
+                                 BuildLabels(Method, HttpContext, "api.http.success_per_second", setStreamPrefix)
+                             });
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.http.success_per_second")
+                                 BuildLabels(Method, HttpContext, "api.data_streams.success_per_second")
                              });
 
                     HttpContext.DoReply(ctx);

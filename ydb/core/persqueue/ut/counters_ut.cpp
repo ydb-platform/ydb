@@ -130,7 +130,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 }
 

@@ -2,12 +2,8 @@
 
 #include <util/system/platform.h>
 
-#if defined(__ANDROID__) && defined(MAPSMOBI_BUILD)
-#   include "curl_config-android-maps-mobile.h"
-#elif defined(__ANDROID__)
+#if defined(__ANDROID__)
 #   include "curl_config-android.h"
-#elif defined(__IOS__) && defined(MAPSMOBI_BUILD)
-#   include "curl_config-ios-maps-mobile.h"
 #elif defined(__IOS__)
 #   include "curl_config-ios.h"
 #elif defined(__APPLE__)
@@ -51,25 +47,16 @@
 #if defined(ARCADIA_CURL_DNS_RESOLVER_ARES)
     #define USE_ARES
 #elif defined(ARCADIA_CURL_DNS_RESOLVER_MULTITHREADED)
-    #if defined(USE_ARES)
-        #undef USE_ARES
-    #endif
-    #if defined(__linux__) && !defined(USE_THREADS_POSIX)
-        #define USE_THREADS_POSIX 1
-    #elif defined(_MSC_VER) && !defined(USE_THREADS_WIN32)
+    #undef USE_ARES
+    #if defined(_MSC_VER)
         #define USE_THREADS_WIN32 1
+    #else
+        #define USE_THREADS_POSIX 1
     #endif
 #elif defined(ARCADIA_CURL_DNS_RESOLVER_SYNCHRONOUS)
-    // force using synchronous resolver by disabling thread support
-    #if defined(USE_ARES)
-        #undef USE_ARES
-    #endif
-    #if defined(USE_THREADS_POSIX)
-        #undef USE_THREADS_POSIX
-    #endif
-    #if defined(USE_THREADS_WIN32)
-        #undef USE_THREADS_WIN32
-    #endif
+    #undef USE_ARES
+    #undef USE_THREADS_POSIX
+    #undef USE_THREADS_WIN32
 #else
     #error "No dns resolver is specified or resolver specification is wrong"
 #endif

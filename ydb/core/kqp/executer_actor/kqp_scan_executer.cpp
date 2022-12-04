@@ -788,10 +788,6 @@ private:
             channelPair.second->Receive(ev, TActivationContext::AsActorContext());
         }
 
-        if (KqpShardsResolverId) {
-            Send(KqpShardsResolverId, new TEvents::TEvPoison);
-        }
-
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
         }

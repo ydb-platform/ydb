@@ -948,6 +948,9 @@ protected:
         if (CancelAtActor) {
             this->Send(CancelAtActor, new TEvents::TEvPoison);
         }
+        if (KqpShardsResolverId) {
+            this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
+        }
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
             this->Send(this->SelfId(), new TEvents::TEvPoison);

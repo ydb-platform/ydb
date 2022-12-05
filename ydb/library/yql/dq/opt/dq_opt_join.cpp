@@ -1051,7 +1051,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         } else if (rightKind){
             commonType = JoinDryKeyType(keyType2, keyType1, ctx);
         } else {
-            commonType = CommonType<true>(join.Pos(), DryType(keyType1, ctx), DryType(keyType2, ctx), ctx);
+            commonType = JoinCommonDryType(join.Pos(), keyType1, keyType2, ctx);
         }
 
         if (commonType) {

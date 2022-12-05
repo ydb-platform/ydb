@@ -1639,6 +1639,20 @@ const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, co
     return nullptr;
 }
 
+const TTypeAnnotationNode* JoinCommonDryType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
+    auto dryOne = DryType(one, ctx);
+    auto dryTwo = DryType(two, ctx);
+    if (!(dryOne && dryTwo))
+        return nullptr;
+
+    if (dryOne->GetKind() == ETypeAnnotationKind::Optional && dryTwo->GetKind() != ETypeAnnotationKind::Optional)
+        dryTwo = ctx.MakeType<TOptionalExprType>(dryTwo);
+    else  if (dryOne->GetKind() != ETypeAnnotationKind::Optional && dryTwo->GetKind() == ETypeAnnotationKind::Optional)
+        dryOne = ctx.MakeType<TOptionalExprType>(dryOne);
+
+    return CommonType<true>(position, dryOne, dryTwo, ctx);
+}
+
 template<bool Strict>
 const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
     if (!(one && two))

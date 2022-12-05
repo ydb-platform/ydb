@@ -34,6 +34,8 @@ public:
 
 bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status);
 
+bool IsAbortedStatus(YandexQuery::QueryMeta::ComputeStatus status);
+
 TDuration GetDuration(const TString& value, const TDuration& defaultValue);
 
 NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlaneStorageConfig config);

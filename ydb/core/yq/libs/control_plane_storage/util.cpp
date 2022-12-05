@@ -42,6 +42,11 @@ bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status)
         YandexQuery::QueryMeta::COMPLETED, YandexQuery::QueryMeta::FAILED }, status);
 }
 
+bool IsAbortedStatus(YandexQuery::QueryMeta::ComputeStatus status)
+{
+    return IsIn({ YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM }, status);
+}
+
 TDuration GetDuration(const TString& value, const TDuration& defaultValue)
 {
     TDuration result = defaultValue;

@@ -30,6 +30,7 @@ struct TColumnDataPackInfo {
     ui32 Bytes = 0; // Size in bytes for fixed size values
     TType* MKQLType; // Data type of the column in term of compute nodes data flows
     NUdf::EDataSlot DataType = NUdf::EDataSlot::Uint32; // Data type of the column for standard types (TDataType)
+    TString Name; // Name of the type column
     bool IsKeyColumn = false; // True if this columns is key for join
     bool IsString = false; // True if value is string
     bool IsPgType = false; // True if column is PG type
@@ -99,6 +100,7 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.IsPresortSupported = true;
             res.IsString = true;
             res.DataType = NUdf::EDataSlot::String;
+            res.Name = pgType->GetName();
         } else {
             res.IsIType = true;    
         }
@@ -208,7 +210,7 @@ void TGraceJoinPacker::Pack()  {
             if (pi.IsIType ) { // Interface-based type
                 IColumnsHolder[offset] = value;
             } else {
-                TStringBuf strBuf = Packers[i].Pack(value);
+                TStringBuf strBuf = Packers[pi.ColumnIdx].Pack(value);
                 TupleStringHolder[i] = strBuf;
                 TupleStrings[offset] = TupleStringHolder[i].data();
                 TupleStrSizes[offset] = TupleStringHolder[i].size();
@@ -319,10 +321,12 @@ void TGraceJoinPacker::UnPack()  {
 
         if (colType->GetKind() != TType::EKind::Data) {
             if (colType->GetKind() == TType::EKind::Pg) {
-                value = IColumnsHolder[offset];
-                continue;
+                if ( pi.IsIType ) { // Interface-based type
+                    value = IColumnsHolder[offset];
+                    continue;
+                }
             }
-            value = Packers[i].Unpack(TStringBuf(TupleStrings[offset], TupleStrSizes[offset]), HolderFactory);
+            value = Packers[pi.ColumnIdx].Unpack(TStringBuf(TupleStrings[offset], TupleStrSizes[offset]), HolderFactory);
             continue;
         }
 
@@ -394,6 +398,7 @@ void TGraceJoinPacker::UnPack()  {
         }
 
         }
+
     }
 
 }
@@ -417,15 +422,14 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
         ui32 keyColNums = std::count_if(keyColumns.begin(), keyColumns.end(), [&](ui32 k) {return k == i;});
 
+        Packers.push_back(TValuePacker(true,colType));
         if (keyColNums > 0) {
             packInfo.IsKeyColumn = true;
             for (ui32 j = 0; j < keyColNums; j++) {
                 ColumnsPackInfo.push_back(packInfo);
-                Packers.push_back(TValuePacker(true,colType));
             }
         } else {
             ColumnsPackInfo.push_back(packInfo);
-            Packers.push_back(TValuePacker(true,colType));
         }
      }
 
@@ -466,14 +470,19 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     JoinTupleData.StrColumns = TupleStrings.data();
     JoinTupleData.StrSizes = TupleStrSizes.data();
 
-    std::sort(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo & a, TColumnDataPackInfo & b)
+     std::sort( ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](const TColumnDataPackInfo & a, const TColumnDataPackInfo & b)
         {
+
             if (a.IsKeyColumn && !b.IsKeyColumn) return true;
+            if (b.IsKeyColumn && !a.IsKeyColumn) return false;
+
             if (a.Bytes > b.Bytes) return true;
+            if (b.Bytes > a.Bytes) return false;
             if (a.ColumnIdx < b.ColumnIdx ) return true;
             return false;
         });
-    
+
+   
     Offsets.resize(nColumns);
     TupleHolder.resize(nColumns);
     TupleStringHolder.resize(nColumns);
@@ -772,6 +781,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 return EFetchResult::One;
             }
 
+//            Cout << "Tuples unpacked: " << LeftPacker->TuplesUnpacked << Endl;
             return EFetchResult::Finish;
 }
 

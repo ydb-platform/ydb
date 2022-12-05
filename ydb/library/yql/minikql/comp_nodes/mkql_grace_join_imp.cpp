@@ -5,6 +5,7 @@
 
 #include <contrib/libs/xxhash/xxhash.h>
 #include <chrono>
+#include <string_view>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -40,7 +41,8 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         for ( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
 
             TStringBuf val = (ColInterfaces + i)->Packer.Pack(*(iColumns+i));
-            IColumnsVals[i] = val;
+            IColumnsVals[i].clear();
+            IColumnsVals[i].insert(IColumnsVals[i].begin(), val.cbegin(), val.end());
             totalBytesForStrings += val.size();
         }
 
@@ -98,9 +100,10 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         }
 
         if ( NumberOfIColumns ) {
-            for ( ui64 i = NumberOfKeyIColumns - 1; i < NumberOfIColumns; i++) {
+            for ( ui64 i = NumberOfKeyIColumns; i < NumberOfIColumns; i++) {
                 TStringBuf val = (ColInterfaces + i)->Packer.Pack(*(iColumns+i));
-                IColumnsVals[i] = val;
+                IColumnsVals[i].clear();
+                IColumnsVals[i].insert(IColumnsVals[i].begin(), val.cbegin(), val.end());
             }
             for (ui64 i = 0; i < NumberOfIColumns; i++ ) {
                 stringsOffsets.push_back(IColumnsVals[i].size());
@@ -124,7 +127,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     }
 
     for ( ui64 i = 0; i < NumberOfDataIColumns; i++) {
-        stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].cbegin(), IColumnsVals[NumberOfKeyIColumns + i].end());
+        stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
 
     }
 
@@ -139,6 +142,7 @@ void TTable::ResetIterator() {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();
     }
+    TotalUnpacked = 0;
 }
 
 // Checks if there are more tuples and sets bucketId and tupleId to next valid. 
@@ -477,6 +481,8 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
 
     td.AllNulls = false;
 
+    TotalUnpacked++;
+
     TTableBucket & tb = TableBuckets[bucketNum];
     ui64 stringsOffsetsIdx = tupleId * (NumberOfStringColumns + NumberOfIColumns + 2);
 
@@ -520,16 +526,28 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
     }
 
 
-    if(NumberOfDataStringColumns != 0) {
+    if(NumberOfDataStringColumns || NumberOfDataIColumns != 0) {
          dataStringsOffset = tb.StringsOffsets[stringsOffsetsIdx + 1];
     }
 
     strPtr = (tb.StringsValues.data() + dataStringsOffset);
+
+
+
     for ( ui64 i = 0; i < NumberOfDataStringColumns; ++i ) {
         ui32 currIdx = NumberOfKeyStringColumns + i;
         td.StrColumns[currIdx] = strPtr;
-        td.StrSizes[currIdx] = tb.StringsOffsets[stringsOffsetsIdx + 2 + i];
+        td.StrSizes[currIdx] = tb.StringsOffsets[stringsOffsetsIdx + 2 + currIdx];
         strPtr += td.StrSizes[currIdx];
+    }
+
+    for (ui64 i = 0; i < NumberOfDataIColumns; i++ ) {
+        ui32 currIdx = NumberOfStringColumns + NumberOfKeyIColumns + i;
+        ui32 currSize = tb.StringsOffsets[stringsOffsetsIdx + 2 + currIdx];
+
+         *(td.IColumns + NumberOfKeyIColumns + i) = (ColInterfaces + NumberOfKeyIColumns + i)->Packer.Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
+
+         strPtr += currSize;
     }
 
  

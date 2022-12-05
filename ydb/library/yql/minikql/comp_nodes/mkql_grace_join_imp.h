@@ -113,7 +113,7 @@ class TTable {
     std::vector<ui64> IColumnsHashes;
 
     // Serialized values for interface-based columns
-    std::vector<TString> IColumnsVals;
+    std::vector<std::vector<char>> IColumnsVals;
 
     // Current iterator index for NextTuple iterator
     ui64 CurrIterIndex = 0;
@@ -140,7 +140,8 @@ class TTable {
     // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
     inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
 
-    ui64 TotalPacked = 0; 
+    ui64 TotalPacked = 0; // Total number of packed tuples
+    ui64 TotalUnpacked = 0; // Total number of unpacked tuples
 
 public:
 

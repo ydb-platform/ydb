@@ -93,6 +93,38 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(Dict<Uint32,Struct<'Member1':Date>>)");
     }
 
+    Y_UNIT_TEST(ParseTaggedType) {
+        auto protoTypeStr = R"(
+            tagged_type {
+                tag: "my_tag"
+                type {
+                    type_id: STRING
+                }
+            }
+        )";
+
+        Ydb::Type protoType;
+        NProtoBuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
+
+        UNIT_ASSERT_NO_DIFF(FormatType(protoType),
+            R"(Tagged<String,'my_tag'>)");
+    }
+
+    Y_UNIT_TEST(BuildTaggedType) {
+        auto type = TTypeBuilder()
+            .BeginTagged("my_tag")
+                .BeginList()
+                    .BeginOptional()
+                        .Primitive(EPrimitiveType::Uint32)
+                    .EndOptional()
+                .EndList()
+            .EndTagged()
+            .Build();
+
+        UNIT_ASSERT_NO_DIFF(FormatType(type),
+            R"(Tagged<List<Uint32?>,'my_tag'>)");
+    }
+
     Y_UNIT_TEST(BuildType) {
         auto type = TTypeBuilder()
             .BeginStruct()
@@ -606,6 +638,19 @@ Y_UNIT_TEST_SUITE(YdbValue) {
     Y_UNIT_TEST(BuildDyNumberValue) {
         auto value = TValueBuilder()
             .DyNumber("12.345")
+            .Build();
+
+        UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
+            R"("12.345")");
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"("12.345")");
+    }
+
+    Y_UNIT_TEST(BuildTaggedValue) {
+        auto value = TValueBuilder()
+            .BeginTagged("my_tag")
+                .DyNumber("12.345")
+            .EndTagged()
             .Build();
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),

@@ -235,6 +235,12 @@ namespace NYdb {
                 Parser.CloseOptional();
                 break;
 
+            case TTypeParser::ETypeKind::Tagged:
+                Parser.OpenTagged();
+                ParseValue();
+                Parser.CloseTagged();
+                break;
+
             case TTypeParser::ETypeKind::List:
                 Parser.OpenList();
                 Writer.BeginList();
@@ -652,7 +658,7 @@ namespace {
                 break;
 
             case TTypeParser::ETypeKind::Pg: {
-                    TPgType pgType(0, 0, 0);
+                    TPgType pgType(0, -1, -1);
                     if (jsonValue.GetType() == NJson::JSON_STRING) {
                         ValueBuilder.Pg(TPgValue(TPgValue::VK_TEXT, jsonValue.GetString(), pgType));
                     } else if (jsonValue.GetType() == NJson::JSON_NULL) {
@@ -680,6 +686,14 @@ namespace {
                     ValueBuilder.EndOptional();
                 }
                 TypeParser.CloseOptional();
+                break;
+
+            case TTypeParser::ETypeKind::Tagged:
+                TypeParser.OpenTagged();
+                ValueBuilder.BeginTagged(TypeParser.GetTag());
+                ParseValue(jsonValue);
+                ValueBuilder.EndTagged();
+                TypeParser.CloseTagged();
                 break;
 
             case TTypeParser::ETypeKind::List:

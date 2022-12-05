@@ -1,5 +1,7 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "helpers.h"
+#include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
+#include <util/string/builder.h>
 
 namespace NYdb {
 
@@ -20,6 +22,9 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
                 && t1.pg_type().typmod() == t2.pg_type().typmod();
         case Ydb::Type::kOptionalType:
             return TypesEqual(t1.optional_type().item(), t2.optional_type().item());
+        case Ydb::Type::kTaggedType:
+            return t1.tagged_type().tag() == t2.tagged_type().tag() &&
+                TypesEqual(t1.tagged_type().type(), t2.tagged_type().type());
         case Ydb::Type::kListType:
             return TypesEqual(t1.list_type().item(), t2.list_type().item());
         case Ydb::Type::kTupleType:
@@ -85,13 +90,21 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
                     }
                     return true;
                 default:
+                    ThrowFatalError(TStringBuilder() << "Unexpected Variant type case " << static_cast<int>(t1.type_case()));
                     return false;
             }
             return false;
         }
         case Ydb::Type::kVoidType:
             return true;
+        case Ydb::Type::kNullType:
+            return true;
+        case Ydb::Type::kEmptyListType:
+            return true;
+        case Ydb::Type::kEmptyDictType:
+            return true;
         default:
+            ThrowFatalError(TStringBuilder() << "Unexpected type case " << static_cast<int>(t1.type_case()));
             return false;
     }
 }

@@ -203,6 +203,11 @@ public:
     TTypeBuilder& DictPayload(const TType& payloadType);
     TTypeBuilder& EndDict();
 
+    // Tagged
+    TTypeBuilder& BeginTagged(const TString& tag);
+    TTypeBuilder& EndTagged();
+    TTypeBuilder& Tagged(const TString& tag, const TType& itemType);
+
     TType Build();
 
 private:
@@ -474,6 +479,10 @@ public:
     TDerived& EndDict();
     TDerived& EmptyDict(const TType& keyType, const TType& payloadType);
     TDerived& EmptyDict();
+
+    // Tagged
+    TDerived& BeginTagged(const TString& tag);
+    TDerived& EndTagged();
 
 protected:
     TValueBuilderBase(TValueBuilderBase&&);

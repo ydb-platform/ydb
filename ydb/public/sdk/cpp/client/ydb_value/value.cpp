@@ -483,6 +483,14 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             out << '?';
             break;
 
+        case TTypeParser::ETypeKind::Tagged:
+            parser.OpenTagged();
+            out << "Tagged<";
+            FormatTypeInternal(parser, out);
+            out << ",\'" << parser.GetTag() << "\'>";
+            parser.CloseTagged();
+            break;
+
         case TTypeParser::ETypeKind::List:
             out << "List<";
             parser.OpenList();
@@ -710,6 +718,21 @@ public:
         GetProto().CopyFrom(TProtoAccessor::GetProto(payloadType));
     }
 
+    void BeginTagged(const TString& tag) {
+        GetProto().mutable_tagged_type()->set_tag(tag);
+        AddPosition(GetProto().mutable_tagged_type()->mutable_type());
+    }
+
+    void EndTagged() {
+        CloseContainer<ETypeKind::Tagged>();
+    }
+
+    void Tagged(const TString& tag, const TType& itemType) {
+        auto taggedType = GetProto().mutable_tagged_type();
+        taggedType->set_tag(tag);
+        taggedType->mutable_type()->CopyFrom(TProtoAccessor::GetProto(itemType));
+    }
+
     Ydb::Type& GetProto(ui32 offset = 0) {
         return *static_cast<Ydb::Type*>(Path_[Path_.size() - (offset + 1)].Ptr);
     }
@@ -888,6 +911,21 @@ TTypeBuilder& TTypeBuilder::DictPayload(const TType& payloadType) {
 
 TTypeBuilder& TTypeBuilder::EndDict() {
     Impl_->EndDict();
+    return *this;
+}
+
+TTypeBuilder& TTypeBuilder::BeginTagged(const TString& tag) {
+    Impl_->BeginTagged(tag);
+    return *this;
+}
+
+TTypeBuilder& TTypeBuilder::EndTagged() {
+    Impl_->EndTagged();
+    return *this;
+}
+
+TTypeBuilder& TTypeBuilder::Tagged(const TString& tag, const TType& itemType) {
+    Impl_->Tagged(tag, itemType);
     return *this;
 }
 
@@ -1341,6 +1379,10 @@ private:
     }
 
     void PopPath() {
+        if (Path_.empty()) {
+            FatalError(TStringBuilder() << "Bad parser state, no open value.");
+        }
+
         Path_.pop_back();
     }
 
@@ -2420,6 +2462,19 @@ public:
         EndDict();
     }
 
+    void BeginTagged(const TString& tag) {
+        SetBuildType(!CheckType(ETypeKind::Tagged));
+        TypeBuilder_.BeginTagged(tag);
+        PushPath(GetValue());
+    }
+
+    void EndTagged() {
+        CheckContainerKind(ETypeKind::Tagged);
+
+        PopPath();
+        TypeBuilder_.EndTagged();
+    }
+
 private:
     Ydb::Type& GetType(size_t offset = 0) {
         return TypeBuilder_.GetProto(offset);
@@ -3091,6 +3146,18 @@ TDerived& TValueBuilderBase<TDerived>::EmptyDict(const TType& keyType, const TTy
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::EmptyDict() {
     Impl_->EmptyDict();
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::BeginTagged(const TString& tag) {
+    Impl_->BeginTagged(tag);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::EndTagged() {
+    Impl_->EndTagged();
     return static_cast<TDerived&>(*this);
 }
 

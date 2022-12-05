@@ -441,6 +441,23 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
         );
     }
 
+    Y_UNIT_TEST(TaggedValue) {
+        TValue value = TValueBuilder()
+            .BeginTagged("my_tag")
+                .BeginTagged("my_inner_tag")
+                    .Uint32(1)
+                .EndTagged()
+            .EndTagged()
+            .Build();
+        const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString, R"(1)");
+        TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue).DebugString()
+        );
+    }
+
     Y_UNIT_TEST(CompositeValueEmptyList) {
         TValue value = TValueBuilder()
             .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())

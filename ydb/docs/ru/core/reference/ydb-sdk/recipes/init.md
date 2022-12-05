@@ -16,12 +16,12 @@
   import (
     "context"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
   func main() {
-    db, err := ydb.Open(ctx, "grpcs://localhost:2135/local")
+    db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
     if err != nil {
         log.Fatal(err)
     }
@@ -39,7 +39,7 @@
       "context"
       "database/sql"
       "os"
-      
+
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
@@ -52,7 +52,7 @@
       if err != nil {
         panic(err)
       }
-      defer nativeDriver.Close(ctx) 
+      defer nativeDriver.Close(ctx)
       connector, err := ydb.Connector(nativeDriver)
       if err != nil {
         panic(err)
@@ -74,12 +74,12 @@
       "context"
       "database/sql"
       "os"
-      
+
       _ "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
     func main() {
-      db, err := sql.Open("ydb", "grpcs://localhost:2135/local")
+      db, err := sql.Open("ydb", "grpc://localhost:2136/local")
       if err != nil {
           log.Fatal(err)
       }

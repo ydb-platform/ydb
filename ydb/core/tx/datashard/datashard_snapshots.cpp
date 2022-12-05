@@ -817,6 +817,32 @@ void TSnapshotManager::EnsureRemovedRowVersions(NTable::TDatabase& db, const TRo
     }
 }
 
+void TSnapshotManager::RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId) {
+    TSnapshotTableKey prevTableKey(prevTableId.OwnerId, prevTableId.LocalPathId);
+    TSnapshotTableKey newTableKey(newTableId.OwnerId, newTableId.LocalPathId);
+
+    NIceDb::TNiceDb nicedb(db);
+
+    auto it = Snapshots.lower_bound(prevTableKey);
+    while (it != Snapshots.end() && it->first == prevTableKey) {
+        TSnapshotKey oldKey = it->first;
+        TSnapshotKey newKey(newTableKey.OwnerId, newTableKey.PathId, oldKey.Step, oldKey.TxId);
+
+        Y_VERIFY_DEBUG(!References.contains(oldKey), "Unexpected reference to snapshot during rename");
+
+        PersistAddSnapshot(nicedb, newKey, it->second.Name, it->second.Flags, it->second.Timeout);
+
+        if (ExpireQueue.Has(&it->second)) {
+            auto& newSnapshot = Snapshots.at(newKey);
+            newSnapshot.ExpireTime = it->second.ExpireTime;
+            ExpireQueue.Add(&newSnapshot);
+        }
+
+        ++it;
+        PersistRemoveSnapshot(nicedb, oldKey);
+    }
+}
+
 }   // namespace NDataShard
 }   // namespace NKikimr
 

@@ -1350,6 +1350,7 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         }
     }
 
+    SnapshotManager.RenameSnapshots(txc.DB, prevId, newId);
     SchemaSnapshotManager.RenameSnapshots(txc.DB, prevId, newId);
     if (newTableInfo->NeedSchemaSnapshots()) {
         AddSchemaSnapshot(newId, version, op->GetStep(), op->GetTxId(), txc, ctx);

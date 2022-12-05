@@ -207,6 +207,8 @@ public:
     void Fix_KIKIMR_14259(NTable::TDatabase& db);
     void EnsureRemovedRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
 
+    void RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId);
+
 private:
     void DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
 

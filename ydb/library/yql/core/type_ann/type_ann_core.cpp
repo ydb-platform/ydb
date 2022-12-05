@@ -11777,6 +11777,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AsScalar"] = &AsScalarWrapper;
         Functions["BlockCompress"] = &BlockCompressWrapper;
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
+        Functions["BlockAnd"] = &BlockLogicalWrapper;
+        Functions["BlockOr"] = &BlockLogicalWrapper;
+        Functions["BlockXor"] = &BlockLogicalWrapper;
+        Functions["BlockNot"] = &BlockLogicalWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;

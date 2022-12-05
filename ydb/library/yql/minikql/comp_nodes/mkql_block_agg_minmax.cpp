@@ -72,14 +72,13 @@ public:
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
-                auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+                const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
 
                 TIn value = Value_;
                 if (array->GetNullCount() == 0) {
                     IsValid_ = true;
                     for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
-                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
                         value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
                     }
                 } else {
@@ -89,7 +88,7 @@ public:
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
                         TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
                         mask &= filterMask;
                         value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
                         count += mask & 1;
@@ -151,12 +150,12 @@ public:
             const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
             const auto& filterArray = filterDatum.array();
             MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
-            auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+            const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
 
             TIn value = Value_;
             for (int64_t i = 0; i < len; ++i) {
                 ui64 fullIndex = i + array->offset;
-                TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
                 value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
             }
 
@@ -174,108 +173,6 @@ private:
 };
 
 template <bool IsMin>
-class TMinMaxBlockAggregatorBool : public TBlockAggregatorBase {
-public:
-    TMinMaxBlockAggregatorBool(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(filterColumn)
-        , ArgColumn_(argColumn)
-    {
-        if constexpr (IsMin) {
-            Value_ = 1;
-        } else {
-            Value_ = 0;
-        }
-    }
-
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
-        const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
-        if (datum.is_scalar()) {
-            if (datum.scalar()->is_valid) {
-                Value_ = datum.scalar_as<arrow::BooleanScalar>().value ? 1 : 0;
-                IsValid_ = true;
-            }
-        } else {
-            const auto& array = datum.array();
-            auto ptr = array->GetValues<uint8_t>(1, 0);
-            auto len = array->length;
-            auto count = len - array->GetNullCount();
-            if (!count) {
-                return;
-            }
-
-            if (!filtered) {
-                IsValid_ = true;
-                ui8 value = Value_;
-                if (array->GetNullCount() == 0) {
-                    for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
-                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        value = UpdateMinMax<IsMin>(value, in);
-                    }
-                } else {
-                    auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
-                    for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        ui8 mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
-                        value = UpdateMinMax<IsMin>(value, ui8((in & mask) | (value & ~mask)));
-                    }
-                }
-
-                Value_ = value;
-            } else {
-                const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
-                const auto& filterArray = filterDatum.array();
-                MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
-                auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
-
-                ui8 value = Value_;
-                if (array->GetNullCount() == 0) {
-                    IsValid_ = true;
-                    for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
-                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        ui8 filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
-                        value = UpdateMinMax<IsMin>(value, ui8((in & filterMask) | (value & ~filterMask)));
-                    }
-                } else {
-                    ui64 count = 0;
-                    auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
-                    for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
-                        // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        ui8 in = ((ptr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                        ui8 mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
-                        ui8 filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - ui8(1);
-                        mask &= filterMask;
-                        value = UpdateMinMax<IsMin>(value, ui8((in & mask) | (value & ~mask)));
-                        count += mask & 1;
-                    }
-
-                    IsValid_ = IsValid_ || count > 0;
-                }
-
-                Value_ = value;
-            }
-        }
-    }
-
-    NUdf::TUnboxedValue Finish() final {
-        if (!IsValid_) {
-            return NUdf::TUnboxedValuePod();
-        }
-
-        return NUdf::TUnboxedValuePod(Value_ != 0);
-    }
-
-private:
-    const ui32 ArgColumn_;
-    ui8 Value_ = 0;
-    bool IsValid_ = false;
-};
-
-template <bool IsMin>
 class TBlockMinMaxFactory : public IBlockAggregatorFactory {
 public:
    std::unique_ptr<IBlockAggregator> Make(
@@ -290,10 +187,9 @@ public:
        auto dataType = UnpackOptionalData(argType, isOptional);
        if (blockType->GetShape() == TBlockType::EShape::Scalar || isOptional) {
            switch (*dataType->GetDataSlot()) {
-           case NUdf::EDataSlot::Bool:
-               return std::make_unique<TMinMaxBlockAggregatorBool<IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int8:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i8, arrow::Int8Scalar, IsMin>>(filterColumn, argsColumns[0]);
+           case NUdf::EDataSlot::Bool:
            case NUdf::EDataSlot::Uint8:
                return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui8, arrow::UInt8Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int16:
@@ -317,11 +213,10 @@ public:
            }
        } else {
            switch (*dataType->GetDataSlot()) {
-           case NUdf::EDataSlot::Bool:
-               return std::make_unique<TMinMaxBlockAggregatorBool<IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int8:
                return std::make_unique<TMinMaxBlockAggregator<i8, arrow::Int8Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Uint8:
+           case NUdf::EDataSlot::Bool:
                return std::make_unique<TMinMaxBlockAggregator<ui8, arrow::UInt8Scalar, IsMin>>(filterColumn, argsColumns[0]);
            case NUdf::EDataSlot::Int16:
                return std::make_unique<TMinMaxBlockAggregator<i16, arrow::Int16Scalar, IsMin>>(filterColumn, argsColumns[0]);

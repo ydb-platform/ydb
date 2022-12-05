@@ -233,12 +233,6 @@ private:
 TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
 {
     RegisterDefaultOperations(*this, KernelFamilyMap);
-    auto arrowRegistry = arrow::compute::FunctionRegistry::Make();
-    arrow::compute::internal::RegisterScalarBoolean(arrowRegistry.get());
-    RegisterUnary<bool, bool>(*arrowRegistry, "invert", KernelFamilyMap);
-    RegisterBinary<bool, bool, bool>(*arrowRegistry, "and_kleene", KernelFamilyMap);
-    RegisterBinary<bool, bool, bool>(*arrowRegistry, "or_kleene", KernelFamilyMap);
-    RegisterBinary<bool, bool, bool>(*arrowRegistry, "xor", KernelFamilyMap);
     CalculateMetadataEtag();
 }
 

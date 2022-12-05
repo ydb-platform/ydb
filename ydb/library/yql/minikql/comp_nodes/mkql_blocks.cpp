@@ -90,11 +90,10 @@ private:
 
 std::unique_ptr<TBlockBuilderBase> MakeBlockBuilder(TComputationContext& ctx, NUdf::EDataSlot slot) {
     switch (slot) {
-    case NUdf::EDataSlot::Bool:
-        return std::make_unique<TFixedSizeBlockBuilder<bool, arrow::BooleanBuilder>>(ctx, arrow::boolean());
     case NUdf::EDataSlot::Int8:
         return std::make_unique<TFixedSizeBlockBuilder<i8, arrow::Int8Builder>>(ctx, arrow::int8());
     case NUdf::EDataSlot::Uint8:
+    case NUdf::EDataSlot::Bool:
         return std::make_unique<TFixedSizeBlockBuilder<ui8, arrow::UInt8Builder>>(ctx, arrow::uint8());
     case NUdf::EDataSlot::Int16:
         return std::make_unique<TFixedSizeBlockBuilder<i16, arrow::Int16Builder>>(ctx, arrow::int16());
@@ -285,10 +284,9 @@ public:
 
 std::unique_ptr<TBlockReaderBase> MakeBlockReader(NUdf::EDataSlot slot) {
     switch (slot) {
-    case NUdf::EDataSlot::Bool:
-        return std::make_unique<TBoolBlockReader>();
     case NUdf::EDataSlot::Int8:
         return std::make_unique<TFixedSizeBlockReader<i8>>();
+    case NUdf::EDataSlot::Bool:
     case NUdf::EDataSlot::Uint8:
         return std::make_unique<TFixedSizeBlockReader<ui8>>();
     case NUdf::EDataSlot::Int16:
@@ -526,12 +524,10 @@ public:
             result = arrow::MakeNullScalar(Type_);
         } else {
             switch (Slot_) {
-            case NUdf::EDataSlot::Bool:
-                result = arrow::Datum(static_cast<bool>(value.Get<bool>()));
-                break;
             case NUdf::EDataSlot::Int8:
                 result = arrow::Datum(static_cast<int8_t>(value.Get<i8>()));
                 break;
+            case NUdf::EDataSlot::Bool:
             case NUdf::EDataSlot::Uint8:
                 result = arrow::Datum(static_cast<uint8_t>(value.Get<ui8>()));
                 break;

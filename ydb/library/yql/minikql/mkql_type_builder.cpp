@@ -1316,8 +1316,6 @@ namespace NMiniKQL {
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
     switch (slot) {
     case NUdf::EDataSlot::Bool:
-        type = arrow::boolean();
-        return true;
     case NUdf::EDataSlot::Uint8:
         type = arrow::uint8();
         return true;

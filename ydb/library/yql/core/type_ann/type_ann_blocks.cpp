@@ -122,6 +122,51 @@ IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TE
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    const ui32 args = input->IsCallable("BlockNot") ? 1 : 2;
+    if (!EnsureArgsCount(*input, args, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isOptionalResult = false;
+    bool allScalars = true;
+    for (ui32 i = 0U; i < input->ChildrenSize() ; ++i) {
+        auto child = input->Child(i);
+        if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        bool isScalar;
+        const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+
+        bool isOptional;
+        const TDataExprType* dataType;
+        if (!EnsureDataOrOptionalOfData(input->Child(i)->Pos(), blockItemType, isOptional, dataType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(input->Child(i)->Pos(), *dataType, EDataSlot::Bool, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        isOptionalResult = isOptionalResult || isOptional;
+        allScalars = allScalars && isScalar;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
+    if (isOptionalResult) {
+        resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
+    }
+
+    if (allScalars) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1U, ctx.Expr)) {

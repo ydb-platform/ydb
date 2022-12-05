@@ -152,8 +152,13 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TGreaterOrEqualOp;
 
 template<typename TLeft, typename TRight>
-struct TGreaterOrEqualOp<TLeft, TRight, bool> : public TGreaterOrEqual<TLeft, TRight, false> {
+struct TGreaterOrEqualOp<TLeft, TRight, ui8> : public TGreaterOrEqual<TLeft, TRight, false> {
+    using TBase = TGreaterOrEqual<TLeft, TRight, false>;
     static constexpr bool DefaultNulls = true;
+    static ui8 Do(TLeft left, TRight right)
+    {
+        return TBase::Do(left, right);
+    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

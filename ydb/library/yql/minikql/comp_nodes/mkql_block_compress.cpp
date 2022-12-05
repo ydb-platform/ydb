@@ -45,7 +45,7 @@ public:
 
         EFetchResult result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
         if (result == EFetchResult::One) {
-            bool bitmapValue = TArrowBlock::From(s.Bitmap_).GetDatum().scalar_as<arrow::BooleanScalar>().value;
+            bool bitmapValue = TArrowBlock::From(s.Bitmap_).GetDatum().scalar_as<arrow::UInt8Scalar>().value & 1;
             if (!s.SkipAll_.Defined()) {
                 s.SkipAll_ = !bitmapValue;
             } else {
@@ -89,6 +89,13 @@ private:
     const ui32 Width_;
 };
 
+size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
+    size_t len = (size_t)arr->length;
+    MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
+    const ui8* src = arr->GetValues<ui8>(1);
+    return GetSparseBitmapPopCount(src, len);
+}
+
 class TCompressScalars : public TStatefulWideFlowComputationNode<TCompressScalars> {
 public:
     TCompressScalars(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 width)
@@ -116,8 +123,7 @@ public:
                 break;
             }
 
-            arrow::BooleanArray arr(TArrowBlock::From(s.Bitmap_).GetDatum().array());
-            ui64 popCount = (ui64)arr.true_count();
+            const ui64 popCount = GetBitmapPopCount(TArrowBlock::From(s.Bitmap_).GetDatum().array());
             if (popCount != 0) {
                 MKQL_ENSURE(output[Width_ - 2], "Block size should not be marked as unused");
                 *output[Width_ - 2] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(popCount)));
@@ -189,9 +195,9 @@ public:
                     break;
                 }
                 auto& bitmap = s.InputValues_[BitmapIndex_];
-                arrow::BooleanArray arr(TArrowBlock::From(bitmap).GetDatum().array());
-                s.InputSize_ = (size_t)arr.length();
-                s.InputPopCount_ = (size_t)arr.true_count();
+                const auto arr = TArrowBlock::From(bitmap).GetDatum().array();
+                s.InputSize_ = (size_t)arr->length;
+                s.InputPopCount_ = GetBitmapPopCount(arr);
                 continue;
             }
 
@@ -239,17 +245,19 @@ private:
             return ARROW_RESULT(arrow::AllocateBitmap(bitCount, &ctx.ArrowMemoryPool));
         }
 
-        static std::shared_ptr<arrow::Buffer> AllocateBufferWithReserve(size_t objCount, size_t objSize, TComputationContext& ctx) {
+        static std::shared_ptr<arrow::Buffer> AllocateBufferWithReserve(size_t objCount, size_t bitSize, TComputationContext& ctx) {
             // this simplifies code compression code - we can write single object after array boundaries
-            return ARROW_RESULT(arrow::AllocateBuffer((objCount + 1) * objSize, &ctx.ArrowMemoryPool));
+            Y_VERIFY(bitSize >= 8);
+            size_t sz = arrow::BitUtil::BytesForBits((objCount + 1) * bitSize);
+            return ARROW_RESULT(arrow::AllocateBuffer(sz, &ctx.ArrowMemoryPool));
         }
 
-        void Allocate(size_t count, size_t size, TComputationContext& ctx) {
+        void Allocate(size_t count, size_t bitSize, TComputationContext& ctx) {
             Y_VERIFY_DEBUG(!Data_);
             Y_VERIFY_DEBUG(!Nulls_);
             Y_VERIFY_DEBUG(!MaxObjCount_);
             MaxObjCount_ = count;
-            Data_ = (size == 0) ? AllocateBitmapWithReserve(count, ctx) : AllocateBufferWithReserve(count, size, ctx);
+            Data_ = AllocateBufferWithReserve(count, bitSize, ctx);
             // Nulls_ allocation will be delayed until actual nulls are encountered
         }
 
@@ -330,8 +338,7 @@ private:
             auto& desc = Descriptors_[i];
             if (i != BitmapIndex_ && !desc.IsScalar_ && output[outIndex]) {
                 auto& buffers = s.OutputBuffers_[i];
-                size_t size = (*desc.BitWidth_ == 1) ? 0 : (size_t)arrow::BitUtil::BytesForBits(*desc.BitWidth_);
-                buffers.Allocate(count, size, ctx);
+                buffers.Allocate(count, *desc.BitWidth_, ctx);
             }
             if (i != BitmapIndex_) {
                 outIndex++;
@@ -381,36 +388,34 @@ private:
     void AppendArray(const std::shared_ptr<arrow::ArrayData>& src, const std::shared_ptr<arrow::ArrayData>& bitmap,
         TOutputBuffers& dst, size_t dstPos, NUdf::EDataSlot slot, TComputationContext& ctx) const
     {
-        const ui8* bitmapData = bitmap->GetValues<ui8>(1, 0);
-        const size_t bitmapOffset = bitmap->offset;
+        const ui8* bitmapData = bitmap->GetValues<ui8>(1);
         Y_VERIFY_DEBUG(bitmap->length == src->length);
+        Y_VERIFY_DEBUG(bitmap->offset == src->offset);
         const size_t length = src->length;
         ui8* mutDstBase = dst.Data_->mutable_data();
 
         switch (slot) {
-        case NUdf::EDataSlot::Bool:
-            // special handling for bools
-            CompressBitmap(src->GetValues<ui8>(1, 0), src->offset, bitmapData, bitmapOffset, mutDstBase, dstPos, length); break;
         case NUdf::EDataSlot::Int8:
-            CompressArray(src->GetValues<i8>(1),   bitmapData, bitmapOffset, (i8*)mutDstBase   + dstPos, length); break;
+            CompressArray(src->GetValues<i8>(1),   bitmapData, (i8*)mutDstBase   + dstPos, length); break;
         case NUdf::EDataSlot::Uint8:
-            CompressArray(src->GetValues<ui8>(1),  bitmapData, bitmapOffset, (ui8*)mutDstBase  + dstPos, length); break;
+        case NUdf::EDataSlot::Bool:
+            CompressArray(src->GetValues<ui8>(1),  bitmapData, (ui8*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Int16:
-            CompressArray(src->GetValues<i16>(1),  bitmapData, bitmapOffset, (i16*)mutDstBase  + dstPos, length); break;
+            CompressArray(src->GetValues<i16>(1),  bitmapData, (i16*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Uint16:
         case NUdf::EDataSlot::Date:
-            CompressArray(src->GetValues<ui16>(1), bitmapData, bitmapOffset, (ui16*)mutDstBase + dstPos, length); break;
+            CompressArray(src->GetValues<ui16>(1), bitmapData, (ui16*)mutDstBase + dstPos, length); break;
         case NUdf::EDataSlot::Int32:
-            CompressArray(src->GetValues<i32>(1),  bitmapData, bitmapOffset, (i32*)mutDstBase  + dstPos, length); break;
+            CompressArray(src->GetValues<i32>(1),  bitmapData, (i32*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
-            CompressArray(src->GetValues<ui32>(1), bitmapData, bitmapOffset, (ui32*)mutDstBase + dstPos, length); break;
+            CompressArray(src->GetValues<ui32>(1), bitmapData, (ui32*)mutDstBase + dstPos, length); break;
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
-            CompressArray(src->GetValues<i64>(1),  bitmapData, bitmapOffset, (i64*)mutDstBase  + dstPos, length); break;
+            CompressArray(src->GetValues<i64>(1),  bitmapData, (i64*)mutDstBase  + dstPos, length); break;
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
-            CompressArray(src->GetValues<ui64>(1), bitmapData, bitmapOffset, (ui64*)mutDstBase + dstPos, length); break;
+            CompressArray(src->GetValues<ui64>(1), bitmapData, (ui64*)mutDstBase + dstPos, length); break;
         default:
             MKQL_ENSURE(false, "Unsupported data slot");
         }
@@ -420,7 +425,10 @@ private:
                 dst.Nulls_ = TOutputBuffers::AllocateBitmapWithReserve(dst.MaxObjCount_, ctx);
                 arrow::BitUtil::SetBitsTo(dst.Nulls_->mutable_data(), 0, dstPos, false);
             }
-            CompressBitmap(src->GetValues<ui8>(0, 0), src->offset, bitmapData, bitmapOffset,
+            // TODO: optimize
+            auto denseBitmap = ARROW_RESULT(arrow::AllocateBitmap(length, &ctx.ArrowMemoryPool));
+            CompressSparseBitmap(denseBitmap->mutable_data(), bitmapData, length);
+            CompressBitmap(src->GetValues<ui8>(0, 0), src->offset, denseBitmap->data(), 0,
                            dst.Nulls_->mutable_data(), dstPos, length);
         }
     }

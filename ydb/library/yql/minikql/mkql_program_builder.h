@@ -249,6 +249,12 @@ public:
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
 
+    //-- logical functions
+    TRuntimeNode BlockNot(TRuntimeNode data);
+    TRuntimeNode BlockAnd(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockOr(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockXor(TRuntimeNode first, TRuntimeNode second);
+
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, ui32 countColumn, std::optional<ui32> filterColumn,
@@ -678,6 +684,7 @@ protected:
     TRuntimeNode BuildBinaryLogical(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode BuildMinMax(const std::string_view& callableName, const TRuntimeNode* data, size_t size);
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
+    TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
 
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);

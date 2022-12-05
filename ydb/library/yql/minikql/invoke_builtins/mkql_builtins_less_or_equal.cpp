@@ -152,8 +152,13 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TLessOrEqualOp;
 
 template<typename TLeft, typename TRight>
-struct TLessOrEqualOp<TLeft, TRight, bool> : public TLessOrEqual<TLeft, TRight, false> {
+struct TLessOrEqualOp<TLeft, TRight, ui8> : public TLessOrEqual<TLeft, TRight, false> {
+    using TBase = TLessOrEqual<TLeft, TRight, false>;
     static constexpr bool DefaultNulls = true;
+    static ui8 Do(TLeft left, TRight right)
+    {
+        return TBase::Do(left, right);
+    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

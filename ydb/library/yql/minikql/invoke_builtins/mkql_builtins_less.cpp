@@ -152,8 +152,13 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TLessOp;
 
 template<typename TLeft, typename TRight>
-struct TLessOp<TLeft, TRight, bool> : public TLess<TLeft, TRight, false> {
+struct TLessOp<TLeft, TRight, ui8> : public TLess<TLeft, TRight, false> {
+    using TBase = TLess<TLeft, TRight, false>;
     static constexpr bool DefaultNulls = true;
+    static ui8 Do(TLeft left, TRight right)
+    {
+        return TBase::Do(left, right);
+    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

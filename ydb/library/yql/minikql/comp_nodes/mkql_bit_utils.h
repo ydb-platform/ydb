@@ -61,6 +61,88 @@ inline ui8 PopCountByte(ui8 value) {
     return bytePopCounts[value];
 }
 
+inline size_t GetSparseBitmapPopCount(const ui8* src, size_t len) {
+    // auto-vectorization is performed here
+    size_t result = 0;
+    while (len--) {
+        result += *src++ & ui8(1);
+    }
+    return result;
+}
+
+namespace {
+template<bool Negate>
+inline void CompressSparseImpl(ui8* dst, const ui8* srcSparse, size_t len) {
+    while (len >= 8) {
+        ui8 result = 0;
+        result |= (*srcSparse++ & 1u) << 0;
+        result |= (*srcSparse++ & 1u) << 1;
+        result |= (*srcSparse++ & 1u) << 2;
+        result |= (*srcSparse++ & 1u) << 3;
+        result |= (*srcSparse++ & 1u) << 4;
+        result |= (*srcSparse++ & 1u) << 5;
+        result |= (*srcSparse++ & 1u) << 6;
+        result |= (*srcSparse++ & 1u) << 7;
+        if constexpr (Negate) {
+            *dst++ = ~result;
+        } else {
+            *dst++ = result;
+        }
+        len -= 8;
+    }
+    if (len) {
+        ui8 result = 0;
+        for (ui8 i = 0; i < len; ++i) {
+            result |= (*srcSparse++ & 1u) << i;
+        }
+        if constexpr (Negate) {
+            *dst++ = ~result;
+        } else {
+            *dst++ = result;
+        }
+    }
+}
+
+} // namespace
+
+inline void CompressSparseBitmap(ui8* dst, const ui8* srcSparse, size_t len) {
+    return CompressSparseImpl<false>(dst, srcSparse, len);
+}
+
+inline void CompressSparseBitmapNegate(ui8* dst, const ui8* srcSparse, size_t len) {
+    return CompressSparseImpl<true>(dst, srcSparse, len);
+}
+
+inline void NegateSparseBitmap(ui8* dst, const ui8* src, size_t len) {
+    while (len--) {
+        *dst++ = ~(*src++) & ui8(1);
+    }
+}
+
+inline void XorSparseBitmapScalar(ui8* dst, ui8 value, const ui8* src, size_t len) {
+    while (len--) {
+        *dst++ = (*src++ ^ value) & ui8(1);
+    }
+}
+
+inline void XorSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t len) {
+    while (len--) {
+        *dst++ = (*src1++ ^ *src2++) & ui8(1);
+    }
+}
+
+inline void AndSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t len) {
+    while (len--) {
+        *dst++ = (*src1++ & *src2++) & ui8(1);
+    }
+}
+
+inline void OrSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t len) {
+    while (len--) {
+        *dst++ = (*src1++ | *src2++) & ui8(1);
+    }
+}
+
 inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
     const ui8* bitmap, size_t bitmapOffset, ui8* dst, size_t dstOffset, size_t count)
 {
@@ -101,11 +183,11 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
 }
 
 template<typename T>
-inline T* CompressArray(const T* src, const ui8* bitmap, size_t bitmapOffset, T* dst, size_t count) {
+inline T* CompressArray(const T* src, const ui8* sparseBitmap, T* dst, size_t count) {
     while (count--) {
         *dst = *src++;
-        dst += (bitmap[bitmapOffset >> 3] >> ui8(bitmapOffset & 7u)) & 1u;
-        bitmapOffset++;
+        dst += *sparseBitmap & 1u;
+        sparseBitmap++;
     }
     return dst;
 }

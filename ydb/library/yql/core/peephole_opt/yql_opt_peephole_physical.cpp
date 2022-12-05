@@ -4381,13 +4381,6 @@ struct TBlockRules {
         {"/", { "Div" } },
         {"%", { "Mod" } },
 
-        // logical operators
-        {"Not", { "invert" }},
-        // standard boolean kernels support only 2 inputs, so arguments are split into pairs before deploying next 3 kernels
-        {"And", { "and_kleene" }},
-        {"Or", { "or_kleene" }},
-        {"Xor", { "xor" }},
-
         // comparison kernels
         {"==", { "Equals" } },
         {"!=", { "NotEquals" } },
@@ -4408,22 +4401,22 @@ struct TBlockRules {
     const TBlockFuncMap Funcs;
 };
 
-TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TExprNode::TPtr& funcName, const TExprNode::TListType& funcArgs,
+TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TStringBuf& funcName, const TExprNode::TListType& funcArgs,
     size_t begin, size_t end, TExprContext& ctx)
 {
     YQL_ENSURE(end >= begin + 2);
     const size_t len = end - begin;
     if (len < 4) {
-        auto result = ctx.NewCallable(pos, "BlockFunc", { funcName, funcArgs[begin], funcArgs[begin + 1] });
+        auto result = ctx.NewCallable(pos, funcName, { funcArgs[begin], funcArgs[begin + 1] });
         if (len == 3) {
-            result = ctx.NewCallable(pos, "BlockFunc", { funcName, result, funcArgs[begin + 2] });
+            result = ctx.NewCallable(pos, funcName, { result, funcArgs[begin + 2] });
         }
         return result;
     }
 
     auto left = SplitByPairs(pos, funcName, funcArgs, begin, begin + len / 2, ctx);
     auto right = SplitByPairs(pos, funcName, funcArgs, begin + len / 2, end, ctx);
-    return ctx.NewCallable(pos, "BlockFunc", { funcName, left, right });
+    return ctx.NewCallable(pos, funcName, { left, right });
 }
 
 bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputColumns, const TExprNode::TPtr& lambda,
@@ -4493,8 +4486,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsCallable({"And", "Or", "Xor"}) && node->ChildrenSize() > 2 ||
-            node->IsCallable("Coalesce") && node->ChildrenSize() == 2)
+        if (node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce"}))
         {
             for (auto& child : node->ChildrenList()) {
                 if (child->IsComplete()) {
@@ -4506,16 +4498,13 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 }
             }
 
-            if (node->IsCallable("Coalesce")) {
-                rewrites[node.Get()] = ctx.NewCallable(node->Pos(), "BlockCoalesce", std::move(funcArgs));
-            } else {
-                auto fit = funcs.find(node->Content());
-                YQL_ENSURE(fit != funcs.end());
-                arrowFunctionName = fit->second.Name;
-
-                auto nameAtom = ctx.NewAtom(node->Pos(), arrowFunctionName);
+            TString blockFuncName = TString("Block") + node->Content();
+            if (funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
-                rewrites[node.Get()] = SplitByPairs(node->Pos(), nameAtom, funcArgs, 0, funcArgs.size(), ctx);
+                // this is only supported by And/Or/Xor
+                rewrites[node.Get()] = SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), ctx);
+            } else {
+                rewrites[node.Get()] = ctx.NewCallable(node->Pos(), blockFuncName, std::move(funcArgs));
             }
             ++newNodes;
             return true;

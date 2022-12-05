@@ -152,8 +152,13 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TGreaterOp;
 
 template<typename TLeft, typename TRight>
-struct TGreaterOp<TLeft, TRight, bool> : public TGreater<TLeft, TRight, false> {
+struct TGreaterOp<TLeft, TRight, ui8> : public TGreater<TLeft, TRight, false> {
+    using TBase = TGreater<TLeft, TRight, false>;
     static constexpr bool DefaultNulls = true;
+    static ui8 Do(TLeft left, TRight right)
+    {
+        return TBase::Do(left, right);
+    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

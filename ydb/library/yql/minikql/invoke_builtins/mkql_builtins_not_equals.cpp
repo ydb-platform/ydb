@@ -159,8 +159,13 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TNotEqualsOp;
 
 template<typename TLeft, typename TRight>
-struct TNotEqualsOp<TLeft, TRight, bool> : public TNotEquals<TLeft, TRight, false> {
+struct TNotEqualsOp<TLeft, TRight, ui8> : public TNotEquals<TLeft, TRight, false> {
+    using TBase = TNotEquals<TLeft, TRight, false>;
     static constexpr bool DefaultNulls = true;
+    static ui8 Do(TLeft left, TRight right)
+    {
+        return TBase::Do(left, right);
+    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>

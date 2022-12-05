@@ -393,6 +393,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Inc", &TProgramBuilder::Increment},
         {"Dec", &TProgramBuilder::Decrement},
         {"Not", &TProgramBuilder::Not},
+        {"BlockNot", &TProgramBuilder::BlockNot},
 
         {"BitNot", &TProgramBuilder::BitNot},
 
@@ -521,6 +522,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"WideTakeBlocks", &TProgramBuilder::WideTakeBlocks},
         {"WideSkipBlocks", &TProgramBuilder::WideSkipBlocks},
         {"BlockCoalesce", &TProgramBuilder::BlockCoalesce},
+
+        {"BlockAnd", &TProgramBuilder::BlockAnd},
+        {"BlockOr", &TProgramBuilder::BlockOr},
+        {"BlockXor", &TProgramBuilder::BlockXor},
 
         {"Append", &TProgramBuilder::Append},
         {"Insert", &TProgramBuilder::Append},

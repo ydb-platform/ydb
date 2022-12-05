@@ -64,12 +64,10 @@ private:
         std::shared_ptr<arrow::Buffer> bitmap;
         if (scalar.scalar()->is_valid) {
             switch (Slot) {
-                case NUdf::EDataSlot::Bool:
-                    // special handling for bools
-                    arrow::BitUtil::SetBitsTo(data->mutable_data(), 0, len, scalar.scalar_as<arrow::BooleanScalar>().value); break;
                 case NUdf::EDataSlot::Int8:
                     FillArray(scalar.scalar_as<arrow::Int8Scalar>().value, (int8_t*)data->mutable_data(), len); break;
                 case NUdf::EDataSlot::Uint8:
+                case NUdf::EDataSlot::Bool:
                     FillArray(scalar.scalar_as<arrow::UInt8Scalar>().value, (uint8_t*)data->mutable_data(), len); break;
                 case NUdf::EDataSlot::Int16:
                     FillArray(scalar.scalar_as<arrow::Int16Scalar>().value, (int16_t*)data->mutable_data(), len); break;
@@ -116,12 +114,10 @@ private:
         Y_VERIFY(arrMask);
         NUdf::TUnboxedValuePod result;
         switch (Slot) {
-            case NUdf::EDataSlot::Bool:
-                // special handling for bools
-                result = CoalesceBools(ctx, arr->GetValues<ui8>(1, 0), arrMask, scalar.scalar_as<arrow::BooleanScalar>().value, offset, len); break;
             case NUdf::EDataSlot::Int8:
                 result = Coalesce(ctx, arr->GetValues<int8_t>(1), arrMask, scalar.scalar_as<arrow::Int8Scalar>().value, offset, len); break;
             case NUdf::EDataSlot::Uint8:
+            case NUdf::EDataSlot::Bool:
                 result = Coalesce(ctx, arr->GetValues<uint8_t>(1), arrMask, scalar.scalar_as<arrow::UInt8Scalar>().value, offset, len); break;
             case NUdf::EDataSlot::Int16:
                 result = Coalesce(ctx, arr->GetValues<int16_t>(1), arrMask, scalar.scalar_as<arrow::Int16Scalar>().value, offset, len); break;
@@ -157,12 +153,10 @@ private:
         std::shared_ptr<arrow::Buffer> arr2Mask = arr2->buffers[0];
         NUdf::TUnboxedValuePod result;
         switch (Slot) {
-            case NUdf::EDataSlot::Bool:
-                // special handling for bools
-                result = CoalesceBools(ctx, arr1->GetValues<ui8>(1, 0), arr1Mask, arr2->GetValues<ui8>(1, 0), arr2Mask, offset, len); break;
             case NUdf::EDataSlot::Int8:
                 result = Coalesce(ctx, arr1->GetValues<int8_t>(1), arr1Mask, arr2->GetValues<int8_t>(1), arr2Mask, offset, len); break;
             case NUdf::EDataSlot::Uint8:
+            case NUdf::EDataSlot::Bool:
                 result = Coalesce(ctx, arr1->GetValues<uint8_t>(1), arr1Mask, arr2->GetValues<uint8_t>(1), arr2Mask, offset, len); break;
             case NUdf::EDataSlot::Int16:
                 result = Coalesce(ctx, arr1->GetValues<int16_t>(1), arr1Mask, arr2->GetValues<int16_t>(1), arr2Mask, offset, len); break;
@@ -206,14 +200,6 @@ private:
         return ctx.HolderFactory.CreateArrowBlock(arrow::ArrayData::Make(Type, len, { std::shared_ptr<arrow::Buffer>(), result }));
     }
 
-    NUdf::TUnboxedValuePod CoalesceBools(TComputationContext& ctx, const ui8* first, const ui8* firstMask, bool second, size_t offset, size_t len) const {
-        std::shared_ptr<arrow::Buffer> result = arrow::internal::BitmapAnd(&ctx.ArrowMemoryPool, first, offset, firstMask, offset, len, 0).ValueOrDie();
-        if (second) {
-            result = arrow::internal::BitmapOrNot(&ctx.ArrowMemoryPool, result->data(), 0, firstMask, offset, len, 0).ValueOrDie();
-        }
-        return ctx.HolderFactory.CreateArrowBlock(arrow::ArrayData::Make(Type, len, { std::shared_ptr<arrow::Buffer>(), result }));
-    }
-
     template<typename T>
     NUdf::TUnboxedValuePod Coalesce(TComputationContext& ctx, const T* first, const ui8* firstMask,
         const T* second, const std::shared_ptr<arrow::Buffer>& secondMask, size_t offset, size_t len) const
@@ -222,7 +208,6 @@ private:
         MKQL_ENSURE(fixedType, "Only fixed width types are currently supported");
         size_t size = (size_t)arrow::BitUtil::BytesForBits(fixedType->bit_width());
         Y_VERIFY(size > 0);
-
 
         std::shared_ptr<arrow::Buffer> result = arrow::AllocateBuffer(len * size, &ctx.ArrowMemoryPool).ValueOrDie();
         T* output = (T*)result->mutable_data();
@@ -251,28 +236,6 @@ private:
             }
         }
 
-        return ctx.HolderFactory.CreateArrowBlock(arrow::ArrayData::Make(Type, len, { resultMask, result }));
-    }
-
-    NUdf::TUnboxedValuePod CoalesceBools(TComputationContext& ctx, const ui8* first, const ui8* firstMask,
-        const ui8* second, const std::shared_ptr<arrow::Buffer>& secondMask, size_t offset, size_t len) const
-    {
-        std::shared_ptr<arrow::Buffer> resultMask;
-
-        std::shared_ptr<arrow::Buffer> firstValue = arrow::internal::BitmapAnd(&ctx.ArrowMemoryPool, first, offset, firstMask, offset, len, 0).ValueOrDie();
-        std::shared_ptr<arrow::Buffer> secondValue;
-        if (secondMask) {
-            // resultMask = m1 | m2;
-            // result = (v1 & m1) | (v2 & m2 & ~m1)
-            resultMask = arrow::internal::BitmapOr(&ctx.ArrowMemoryPool, firstMask, offset, secondMask->data(), offset, len, 0).ValueOrDie();
-
-            secondValue = arrow::internal::BitmapAnd(&ctx.ArrowMemoryPool, second, offset, secondMask->data(), offset, len, 0).ValueOrDie();
-            secondValue = arrow::internal::BitmapAndNot(&ctx.ArrowMemoryPool, secondValue->data(), 0, firstMask, offset, len, 0).ValueOrDie();
-        } else {
-            secondValue = arrow::internal::BitmapAndNot(&ctx.ArrowMemoryPool, second, offset, firstMask, offset, len, 0).ValueOrDie();
-        }
-
-        std::shared_ptr<arrow::Buffer> result = arrow::internal::BitmapOr(&ctx.ArrowMemoryPool, firstValue->data(), 0, secondValue->data(), 0, len, 0).ValueOrDie();
         return ctx.HolderFactory.CreateArrowBlock(arrow::ArrayData::Make(Type, len, { resultMask, result }));
     }
 

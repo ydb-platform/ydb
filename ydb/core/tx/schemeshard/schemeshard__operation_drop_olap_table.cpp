@@ -270,8 +270,7 @@ private:
         bool isStandalone = false;
         {
             Y_VERIFY(context.SS->ColumnTables.contains(txState->TargetPathId));
-            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(txState->TargetPathId);
-            Y_VERIFY(tableInfo);
+            auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
             isStandalone = tableInfo->IsStandalone();
         }
 
@@ -316,7 +315,7 @@ public:
             return Finish(context);
         }
         NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
-        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
+        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
         const TString& tieringId = tableInfo->Description.GetTtlSettings().GetTiering().GetUseTiering();
         if (!tieringId) {
             return Finish(context);
@@ -411,7 +410,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
-        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
+        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
 
         if (tableInfo->IsStandalone()) {
             for (auto shardIdx : tableInfo->OwnedColumnShards) {

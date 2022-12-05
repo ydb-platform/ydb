@@ -501,7 +501,7 @@ public:
             if (!context.SS->ColumnTables.contains(pathId)) {
                 continue; // ignore tables that don't exist
             }
-            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(pathId);
+            auto tableInfo = context.SS->ColumnTables.at(pathId);
             if (tableInfo->AlterData) {
                 continue; // ignore tables that have some alter
             }

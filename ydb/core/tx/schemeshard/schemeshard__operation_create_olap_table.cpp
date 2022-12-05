@@ -181,7 +181,7 @@ TColumnTableInfo::TPtr CreateColumnTableInStore(
 }
 
 void SetShardingTablets(
-        TColumnTableInfo::TPtr& tableInfo,
+        TColumnTableInfo::TPtr tableInfo,
         const TVector<TShardIdx>& columnShards, ui32 columnShardCount, bool shuffle,
         TSchemeShard* ss)
 {
@@ -293,8 +293,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
 
-        TColumnTableInfo::TPtr pendingInfo = context.SS->ColumnTables[pathId];
-        Y_VERIFY(pendingInfo);
+        auto pendingInfo = context.SS->ColumnTables.TakeVerified(pathId);
         Y_VERIFY(pendingInfo->AlterData);
         TColumnTableInfo::TPtr tableInfo = pendingInfo->AlterData;
 
@@ -420,16 +419,11 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TColumnTableInfo::TPtr pending = context.SS->ColumnTables[pathId];
-        Y_VERIFY(pending);
-        TColumnTableInfo::TPtr table = pending->AlterData;
-        Y_VERIFY(table);
+        auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
             Y_VERIFY(table->ColumnShards.empty());
-            SetShardingTablets(table, table->OwnedColumnShards, table->OwnedColumnShards.size(), false, context.SS);
+            SetShardingTablets(table.GetPtr(), table->OwnedColumnShards, table->OwnedColumnShards.size(), false, context.SS);
         }
-
-        context.SS->ColumnTables[pathId] = table;
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
         context.SS->PersistColumnTable(db, pathId, *table);
@@ -756,11 +750,10 @@ public:
                 context.SS->PersistShardTx(db, shardIdx, opTxId);
             }
 
-            TColumnTableInfo::TPtr pending = new TColumnTableInfo;
+            auto pending = context.SS->ColumnTables.BuildNew(pathId);
             pending->AlterData = tableInfo;
             pending->SetOlapStorePathId(olapStorePath->PathId);
             tableInfo->SetOlapStorePathId(olapStorePath->PathId);
-            context.SS->ColumnTables[pathId] = pending;
             storeInfo->ColumnTables.insert(pathId);
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
             context.SS->PersistColumnTable(db, pathId, *pending);
@@ -821,10 +814,9 @@ public:
             }
             Y_VERIFY(txState.Shards.size() == shardsCount);
 
-            TColumnTableInfo::TPtr pending = new TColumnTableInfo;
+            auto pending = context.SS->ColumnTables.BuildNew(pathId);
             pending->AlterData = tableInfo;
 
-            context.SS->ColumnTables[pathId] = pending;
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
             context.SS->IncrementPathDbRefCount(pathId);

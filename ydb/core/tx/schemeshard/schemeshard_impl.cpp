@@ -3116,45 +3116,39 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 }
 
-void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter)
+void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
 {
     Y_VERIFY(IsLocalId(pathId));
-
-    if (isAlter) {
-        db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Delete();
+    auto tablePtr = ColumnTables.at(pathId);
+    if (!tablePtr) {
         return;
     }
+    auto& tableInfo = *tablePtr;
 
-    if (!ColumnTables.contains(pathId)) {
-        return;
-    }
-
-    auto tableInfo = ColumnTables.at(pathId);
-    if (tableInfo->AlterData) {
+    if (tableInfo.AlterData) {
         PersistColumnTableAlterRemove(db, pathId);
     }
 
     // Unlink table from olap store
-    if (tableInfo->OlapStorePathId && *tableInfo->OlapStorePathId) {
-        Y_VERIFY(OlapStores.contains(*tableInfo->OlapStorePathId));
-        auto storeInfo = OlapStores.at(*tableInfo->OlapStorePathId);
+    if (tableInfo.OlapStorePathId && *tableInfo.OlapStorePathId) {
+        Y_VERIFY(OlapStores.contains(*tableInfo.OlapStorePathId));
+        auto storeInfo = OlapStores.at(*tableInfo.OlapStorePathId);
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
-    ColumnTables.erase(pathId);
+    ColumnTables.Drop(pathId);
     DecrementPathDbRefCount(pathId);
 }
 
-void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo)
-{
+void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) {
     PersistColumnTable(db, pathId, tableInfo, true);
 }
 
-void TSchemeShard::PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
-{
-    PersistColumnTableRemove(db, pathId, true);
+void TSchemeShard::PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_VERIFY(IsLocalId(pathId));
+    db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo)

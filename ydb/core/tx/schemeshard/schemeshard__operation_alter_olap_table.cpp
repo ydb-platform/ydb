@@ -10,7 +10,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 TColumnTableInfo::TPtr ParseParams(
-        const TPath& path, const TColumnTableInfo::TPtr& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
+        const TPath& path, TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
         const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain,
         NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
 {
@@ -118,8 +118,7 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
 
-        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables[pathId];
-        Y_VERIFY(tableInfo);
+        auto tableInfo = context.SS->ColumnTables.TakeVerified(pathId);
         TColumnTableInfo::TPtr alterInfo = tableInfo->AlterData;
         Y_VERIFY(alterInfo);
 
@@ -225,15 +224,9 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables[pathId];
-        Y_VERIFY(tableInfo);
-        TColumnTableInfo::TPtr alterInfo = tableInfo->AlterData;
-        Y_VERIFY(alterInfo);
-        alterInfo->AlterBody.Clear();
-        context.SS->ColumnTables[pathId] = alterInfo;
-
+        auto tableInfo = context.SS->ColumnTables.TakeAlterVerified(pathId);
         context.SS->PersistColumnTableAlterRemove(db, pathId);
-        context.SS->PersistColumnTable(db, pathId, *alterInfo);
+        context.SS->PersistColumnTable(db, pathId, *tableInfo);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsLikeDirectory()) {
@@ -421,8 +414,7 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
-        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
+        auto tableInfo = context.SS->ColumnTables.TakeVerified(path.Base()->PathId);
 
         if (!tableInfo->OlapStorePathId) {
             result->SetError(NKikimrScheme::StatusSchemeError,

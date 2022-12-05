@@ -4468,9 +4468,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::ColumnTables::StandaloneSharding>()));
                 }
 
-                TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo(alterVersion,
-                    std::move(description), std::move(sharding), std::move(storeSharding));
-                Self->ColumnTables[pathId] = tableInfo;
+                auto tableInfo = Self->ColumnTables.BuildNew(pathId, new TColumnTableInfo(alterVersion,
+                    std::move(description), std::move(sharding), std::move(storeSharding)));
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (tableInfo->OlapStorePathId) {
@@ -4518,8 +4517,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TColumnTableInfo::TPtr alterData = new TColumnTableInfo(alterVersion,
                     std::move(description), std::move(sharding), std::move(storeSharding), std::move(alterBody));
-
-                Self->ColumnTables[pathId]->AlterData = alterData;
+                auto ctInfo = Self->ColumnTables.TakeVerified(pathId);
+                ctInfo->AlterData = alterData;
 
                 if (!rowset.Next()) {
                     return false;

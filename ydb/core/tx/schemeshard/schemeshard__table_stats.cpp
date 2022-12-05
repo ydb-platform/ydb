@@ -280,7 +280,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
         newAggrStats = olapStore->GetStats().Aggregated;
         updateSubdomainInfo = true;
     } else if (isColumnTable) {
-        TColumnTableInfo::TPtr columnTable = Self->ColumnTables[pathId];
+        auto columnTable = Self->ColumnTables.TakeVerified(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;
         columnTable->UpdateShardStats(shardIdx, newStats);
         newAggrStats = columnTable->GetStats().Aggregated;

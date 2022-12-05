@@ -367,8 +367,7 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
 }
 
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
-    const TColumnTableInfo::TPtr tableInfo = *Self->ColumnTables.FindPtr(pathId);
-    Y_VERIFY(tableInfo, "ColumnTable not found");
+    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
     Y_UNUSED(pathEl);
 
     auto* pathDescription = Result->Record.MutablePathDescription();

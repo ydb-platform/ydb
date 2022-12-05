@@ -142,6 +142,29 @@ protected:
         ReportEventElapsedTime();
     }
 
+    TSet<ui64> CollectShards() {
+        TSet<ui64> shardIds;
+        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+            if (stageInfo.Meta.ShardKey) {
+                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                    shardIds.insert(partition.ShardId);
+                }
+            }
+        }
+        return shardIds;
+    }
+
+    virtual void OnTablesResolve() {
+        TSet<ui64> shardIds = CollectShards();
+        if (shardIds.size() > 0) {
+            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, std::move(shardIds));
+            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
+        } else {
+            static_cast<TDerived*>(this)->Execute();
+        }
+    }
+
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
@@ -152,26 +175,15 @@ protected:
             return;
         }
 
-        TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    shardIds.insert(partition.ShardId);
-                }
-            }
-        }
-
         if (ExecuterTableResolveSpan) {
             ExecuterTableResolveSpan.End();
         }
 
-        if (shardIds.size() > 0) {
-            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, std::move(shardIds));
-            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
-        } else {
-            static_cast<TDerived*>(this)->Execute();
-        }
+        OnTablesResolve();
+    }
+
+    virtual void OnShardsResolve() {
+        static_cast<TDerived*>(this)->Execute();
     }
 
     void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
@@ -210,7 +222,7 @@ protected:
             LOG_D(sb);
         }
 
-        static_cast<TDerived*>(this)->Execute();
+        OnShardsResolve();
     }
 
     void HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {

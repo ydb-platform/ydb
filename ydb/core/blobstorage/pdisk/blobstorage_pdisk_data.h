@@ -35,6 +35,9 @@ constexpr ui32 DefaultSectorSize = 4 * (1 << 10); // 4 KiB
 constexpr ui32 ReplicationFactor = 3;
 constexpr ui32 RecordsInSysLog = 16;
 
+constexpr ui64 FullSizeDiskMinimumSize = 800ull * (1 << 30); // 800GB, all disks smaller are considered "small"
+constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
+
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2
 #define PDISK_DATA_VERSION_2 3
@@ -785,6 +788,9 @@ struct TCheckDiskFormatResult {
         : IsFormatPresent(isFormatPresent)
         , IsReencryptionRequired(isReencryptionRequired)
     {}
+};
+
+struct TPDiskFormatBigChunkException : public yexception {
 };
 
 } // NPDisk

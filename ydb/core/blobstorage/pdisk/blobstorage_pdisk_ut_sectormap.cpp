@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TSectorMap) {
 
         using EDiskMode = NPDisk::NSectorMap::EDiskMode;
         auto test = [&](EDiskMode diskMode, ui32 diskSizeGb, ui32 dataSizeMb, bool toFirstSector, bool testRead, ui32 tries) {
-            if (!TestSectorMapPerformance(diskMode, diskSizeGb, dataSizeMb, toFirstSector, testRead, tries, 0.05, &time)) {
+            if (!TestSectorMapPerformance(diskMode, diskSizeGb, dataSizeMb, toFirstSector, testRead, tries, 0.1, &time)) {
                 failedTests.push_back(TStringBuilder() << diskSizeGb << "GB " << NPDisk::NSectorMap::DiskModeToString(diskMode) <<    
                         (testRead ? " read " : " write ") << dataSizeMb << " MB to" << (toFirstSector ? " first " : " last ") << 
                         "sector, timeExpected=" << time.first << ", timeAverage=" << time.second);

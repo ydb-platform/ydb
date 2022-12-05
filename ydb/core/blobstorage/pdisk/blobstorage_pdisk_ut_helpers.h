@@ -13,9 +13,9 @@ TString PrepareData(ui32 size, ui32 flavor = 0);
 TString StatusToString(const NKikimrProto::EReplyStatus status);
 TString MakeDatabasePath(const char *dir);
 TString MakePDiskPath(const char *dir);
-void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
+void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap);
-void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, bool isErasureEncodeUserLog,
+void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, bool isErasureEncodeUserLog,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap);
 
 void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outData);

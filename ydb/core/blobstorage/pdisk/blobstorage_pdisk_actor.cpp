@@ -362,9 +362,15 @@ public:
                         TPDiskConfig *cfg = actor->Cfg.Get();
 
                         try {
-                            FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
+                            try {
+                                FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                     cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
                                     cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap);
+                            } catch (NPDisk::TPDiskFormatBigChunkException) {
+                                FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
+                                        cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
+                                        cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap);
+                            }
                             actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                         } catch (yexception ex) {
                             LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Formatting error, what#" << ex.what());

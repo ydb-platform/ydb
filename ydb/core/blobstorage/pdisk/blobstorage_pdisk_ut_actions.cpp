@@ -1800,7 +1800,7 @@ void TTestChunkPriorityBlock::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         SafeSize = ((ENABLE_VALGRIND_REQUESTS | IS_SLOW_MACHINE) ? (8 << 20) :
-            (128 << 20)) / LastResponse.AppendBlockSize * LastResponse.AppendBlockSize;
+            (32 << 20)) / LastResponse.AppendBlockSize * LastResponse.AppendBlockSize;
         ChunkWriteData = PrepareData(SafeSize);
         ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 5));
         break;

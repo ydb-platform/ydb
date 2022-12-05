@@ -772,5 +772,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
                 NKikimrProto::CORRUPTED);
     }
+
+    Y_UNIT_TEST(SmallDisk) {
+        for (ui64 diskSizeGb : {512, 200, 100, 80, 40, 20}) {
+            Cerr << "DiskSize " << diskSizeGb << "GB" << Endl;
+            ui64 diskSize = diskSizeGb << 30;
+            TActorTestContext testCtx({ 
+                .IsBad = false,
+                .DiskSize = diskSize,
+            });
+        }
+    }
 }
 } // namespace NKikimr

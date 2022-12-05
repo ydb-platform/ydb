@@ -37,7 +37,7 @@ TString MakePDiskPath(const char *dir) {
     }
 }
 
-void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
+void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
@@ -46,11 +46,17 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, ui64 diskSize, 
     EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
     EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
-    FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
-            NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap);
+    try {
+        FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
+                NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap);
+    } catch (NPDisk::TPDiskFormatBigChunkException) {
+        chunkSize = NPDisk::SmallDiskMaximumChunkSize;
+        FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
+                NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap);
+    }
 }
 
-void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, bool isErasureEncodeUserLog,
+void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, bool isErasureEncodeUserLog,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
     ui64 diskSizeHeuristic = (ui64)chunkSize * 1000;
     FormatPDiskForTest(path, guid, chunkSize, diskSizeHeuristic, isErasureEncodeUserLog, sectorMap);

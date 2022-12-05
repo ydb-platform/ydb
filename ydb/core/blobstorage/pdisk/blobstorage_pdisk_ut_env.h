@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_defs.h"
+#include "blobstorage_pdisk_data.h"
 
 #include "blobstorage_pdisk_abstract.h"
 #include "blobstorage_pdisk_impl.h"
@@ -22,7 +23,7 @@ public:
         bool UsePDiskMock = false;
         ui64 DiskSize = 0;
         EDiskMode DiskMode = EDiskMode::DM_NONE;
-        ui32 ChunkSize = MIN_CHUNK_SIZE;
+        ui32 ChunkSize = 128 * (1 << 20);
     };
 
 private:
@@ -41,7 +42,11 @@ public:
         TString path;
         EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
-        FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap);
+        if (Settings.DiskSize) {
+            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap);
+        } else {
+            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap);
+        }
 
         ui64 pDiskCategory = 0;
         TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(path, TestCtx.PDiskGuid, 1, pDiskCategory);

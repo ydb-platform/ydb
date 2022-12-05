@@ -165,7 +165,6 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
             {
                 TGuard<TMutex> guard(StateMutex);
                 TOwnerData &ownerData = OwnerData[header.OwnerId];
-
                 if (ownerData.VDiskId != TVDiskID::InvalidId) {
                     if (!ownerData.IsNextLsnOk(header.OwnerLsn)) {
                         TStringStream str;
@@ -176,7 +175,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                             << " header.OwnerLsn# " << header.OwnerLsn
                             << " nonce# " << nonce
                             << Endl;
-                        Y_FAIL_S(str.Str() << " operation log# " << ownerData.OperationLog.Print());
+                        Y_FAIL_S(str.Str());
                     }
                     ownerData.LastSeenLsn = header.OwnerLsn;
                 }
@@ -958,7 +957,6 @@ void TLogReader::ReplyOk() {
             }
             // End of log reached
             if (OwnerVDiskId != TVDiskID::InvalidId) {
-                ADD_OPERATION_TO_LOG(ownerData.OperationLog, "Has read the whole log");
                 ownerData.HasReadTheWholeLog = true;
             }
         }

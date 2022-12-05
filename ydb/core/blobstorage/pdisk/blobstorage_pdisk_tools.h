@@ -50,29 +50,6 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);
 
 
-// Size is better to be 2^n, to optimize mod operation
-template <ui32 S>
-struct TOperationLog {
-    constexpr static ui32 Size = S;
-    std::array<TString, S> Records;
-    std::atomic<ui64> RecordIdx = std::atomic<ui64>(0);
-
-    TString Print() const {
-        TStringStream str;
-        str << "[ " ;
-        /* Print OperationLog records from newer to older */ 
-        for (ui32 i = RecordIdx.load(), ctr = 0; ctr < Size; ++ctr, i = (i == 0) ? Size - 1 : i - 1) {
-            str << "Record# " << ctr <<  ": { " << Records[i] << " }, ";
-        }
-        str << " ]";
-        return str.Str();
-    }
-};
-
 } // NKikimr
 
-#define ADD_OPERATION_TO_LOG(log, record)                                                               \
-    do {                                                                                                \
-        ui32 idx = log.RecordIdx.fetch_add(1);                                                          \
-        log.Records[idx % log.Size] = TStringBuilder() << TInstant::Now().ToString() << " " << record;  \
-    } while (false)
+

@@ -48,12 +48,17 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     int const GROUP_START_ID = 1200;
     int const VCARD_START_ID = 5500;
-
-    void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev) {
-        auto pool = (*ev)->Get()->MutableRecord()->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
+    
+    void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
+        auto record = (*ev)->Get()->MutableRecord();
+        auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
         pool->set_name("/Root:test");
         pool->set_kind("kind");
-    };
+
+        auto domain = record->mutable_pathdescription()->mutable_domaindescription();
+        domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
+        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
+    }
 
     void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
         auto& pbRecord = (*ev)->Get()->Record;
@@ -247,6 +252,76 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(IssuesGroupsVCardDeleting) {
         ListingTest(100, 100);
+    }
+
+    void ChangeUsageDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size, ui64 quota) {
+        auto record = (*ev)->Get()->MutableRecord();
+        auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
+        pool->set_name("/Root:test");
+        pool->set_kind("kind");
+
+        auto domain = record->mutable_pathdescription()->mutable_domaindescription();
+        domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
+        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
+    }
+
+     void StorageTest(ui64 usage, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime &runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResult(x, usage, 100);
+                    break;
+                }
+            }
+            
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+        
+        int storageIssuesCount = 0;
+        for (const auto& issue_log : result->Result.Getissue_log()) {
+            if (issue_log.type() == "STORAGE" && issue_log.reason_size() == 0 && issue_log.status() == status) {
+                storageIssuesCount++;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
+    }
+
+    Y_UNIT_TEST(StorageLimit95) {
+        StorageTest(95, 1, Ydb::Monitoring::StatusFlag::RED);
+    }
+
+    Y_UNIT_TEST(StorageLimit87) {
+        StorageTest(87, 1, Ydb::Monitoring::StatusFlag::ORANGE);
+    }
+
+    Y_UNIT_TEST(StorageLimit80) {
+        StorageTest(80, 1, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(StorageLimit50) {
+        StorageTest(50, 0, Ydb::Monitoring::StatusFlag::GREEN);
     }
 }
 

@@ -202,6 +202,8 @@ public:
         TVector<TString> StoragePoolNames;
         THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
+        ui64 StorageLimit;
+        ui64 StorageUsage;
     };
 
     struct TSelfCheckResult {
@@ -910,6 +912,9 @@ public:
             if (path == DomainPath) {
                 state.StoragePoolNames.emplace_back(STATIC_STORAGE_POOL_NAME);
             }
+            state.StorageUsage = ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize();
+            state.StorageLimit = ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetDatabaseQuotas().Getdata_stream_reserved_storage_quota();
+
             DescribeByPath[path] = ev->Release();
         }
         RequestDone("TEvDescribeSchemeResult");
@@ -2166,6 +2171,14 @@ public:
                 default:
                     break;
             }
+        }
+        auto usage = (float)databaseState.StorageUsage / databaseState.StorageLimit;
+        if (usage > 0.9) {
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Storage usage over 90%", ETags::StorageState);
+        } else if (usage > 0.85) {
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Storage usage over 85%", ETags::StorageState);
+        } else if (usage > 0.75) {
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Storage usage over 75%", ETags::StorageState);
         }
         storageStatus.set_overall(context.GetOverallStatus());
     }

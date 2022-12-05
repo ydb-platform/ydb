@@ -47,9 +47,10 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     struct THttpInfoRequest {
         TActorId Origin; // who asked for status
         int SubRequestId; // origin subrequest id
-        THashMap<TActorId, TActorInfo> ActorMap; // per-actor status
+        TMap<TActorId, TActorInfo> ActorMap; // per-actor status
         ui32 HttpInfoResPending; // number of requests pending
         TString ErrorMessage;
+        TString Mode; // mode of page content
     };
 
     struct TFinishedTestInfo {
@@ -295,7 +296,7 @@ public:
                 const bool empty = !actorIt->second.Data;
                 info.ActorMap.erase(actorIt);
                 if (empty && !--info.HttpInfoResPending) {
-                    GenerateHttpInfoRes(ctx, it->first);
+                    GenerateHttpInfoRes(ctx, "results", it->first);
                 }
             }
 
@@ -318,13 +319,14 @@ public:
         // get reference to request information
         THttpInfoRequest& info = InfoRequests[id];
 
+        const auto& params = ev->Get()->Request.GetParams();
+        TString mode = params.Has("mode") ? params.Get("mode") : "start_load";
+
         // fill in sender parameters
         info.Origin = ev->Sender;
         info.SubRequestId = ev->Get()->SubRequestId;
-
+        info.Mode = mode;
         info.ErrorMessage.clear();
-
-        const auto& params = ev->Get()->Request.GetParams();
 
         if (params.Has("protobuf")) {
             NKikimrBlobStorage::TEvTestLoadRequest record;
@@ -366,7 +368,7 @@ public:
             }
             GenerateJsonTagInfoRes(ctx, id, 0);
             return;
-        } else if (params.Has("json_results")) {
+        } else if (mode == "results_json") {
             GenerateJsonInfoRes(ctx, id);
             return;
         }
@@ -379,9 +381,8 @@ public:
 
         // record number of responses pending
         info.HttpInfoResPending = LoadActors.size();
-
         if (!info.HttpInfoResPending) {
-            GenerateHttpInfoRes(ctx, id);
+            GenerateHttpInfoRes(ctx, mode, id);
         }
     }
 
@@ -426,7 +427,7 @@ public:
         perActorInfo.Data = stream.Str();
 
         if (!--info.HttpInfoResPending) {
-            GenerateHttpInfoRes(ctx, id);
+            GenerateHttpInfoRes(ctx, info.Mode, id);
         }
     }
 
@@ -471,16 +472,10 @@ public:
         InfoRequests.erase(it);
     }
 
-    void GenerateHttpInfoRes(const TActorContext& ctx, ui32 id) {
+    void GenerateHttpInfoRes(const TActorContext& ctx, const TString& mode, ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
-
-#define PROFILE(NAME) \
-                        str << "<option value=\"" << ui32(NKikimrBlobStorage::TEvTestLoadRequest::NAME) << "\">" << #NAME << "</option>";
-
-#define PUT_HANDLE_CLASS(NAME) \
-                        str << "<option value=\"" << ui32(NKikimrBlobStorage::NAME) << "\">" << #NAME << "</option>";
 
         TStringStream str;
         HTML(str) {
@@ -489,8 +484,18 @@ public:
                     str << "<h1>" << info.ErrorMessage << "</h1>";
                 }
             }
+            auto printTabs = [&](TString link, TString name) {
+                TString type = link == mode ? "btn-info" : "btn-default";
+                str << "<a href='?mode=" << link << "' class='btn " << type << "'>" << name << "</a>\n";
+            };
 
-            COLLAPSED_BUTTON_CONTENT("start_load_info", "Start load") {
+            printTabs("start_load", "Start load");
+            printTabs("stop_load", "Stop load");
+            printTabs("results", "Results");
+            str << "<br>";
+
+            str << "<div>";
+            if (mode == "start_load") {
                 str << R"___(
                     <script>
                         function sendStartRequest(button) {
@@ -517,9 +522,7 @@ public:
                 str << R"(<input type="checkbox" id="runAllNodes" name="runAll"> )";
                 str << R"(<label for="runAllNodes"> Run on all nodes</label>)" << "<br><br>";
                 str << R"(<button onClick='sendStartRequest(this)' name='startNewLoad' class='btn btn-default'>Start new load</button>)" << "<br><br>";
-            }
-
-            COLLAPSED_BUTTON_CONTENT("stop_load_info", "Stop load") {
+            } else if (mode == "stop_load") {
                 str << R"___(
                     <script>
                         function sendStopRequest(button) {
@@ -542,21 +545,19 @@ public:
                 str << R"(<input type="checkbox" id="stopAllNodes" name="stopAll"> )";
                 str << R"(<label for="stopAllNodes"> Stop load on all nodes</label>)" << "<br><br>";
                 str << R"(<button onClick='sendStopRequest(this)' name='stopNewLoad' class='btn btn-default'>Stop load</button>)" << "<br><br>";
-            }
-
-            for (const auto& pair : info.ActorMap) {
-                const TActorInfo& perActorInfo = pair.second;
-                DIV_CLASS("panel panel-info") {
-                    DIV_CLASS("panel-heading") {
-                        str << "Tag# " << perActorInfo.Tag;
-                    }
-                    DIV_CLASS("panel-body") {
-                        str << perActorInfo.Data;
+            } else if (mode == "results") {
+                for (auto it = info.ActorMap.rbegin(); it != info.ActorMap.rend(); ++it) {
+                    const TActorInfo& perActorInfo = it->second;
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            str << "Tag# " << perActorInfo.Tag;
+                        }
+                        DIV_CLASS("panel-body") {
+                            str << perActorInfo.Data;
+                        }
                     }
                 }
-            }
 
-            COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
                 for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
@@ -570,9 +571,11 @@ public:
                     }
                 }
             }
+            str << "</div>";
         }
 
         ctx.Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId));
+        // ctx.Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId, NMon::IEvHttpInfoRes::EContentType::Custom));
 
         InfoRequests.erase(it);
     }

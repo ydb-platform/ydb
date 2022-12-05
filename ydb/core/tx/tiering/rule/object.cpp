@@ -15,8 +15,8 @@ NJson::TJsonValue TTieringRule::GetDebugJson() const {
     return result;
 }
 
-TString TTieringRule::GetStorageTablePath() {
-    return "/" + AppData()->TenantName + "/.metadata/tiering/rules";
+TString TTieringRule::GetInternalStorageTablePath() {
+    return "tiering/rules";
 }
 
 void TTieringRule::AlteringPreparation(std::vector<TTieringRule>&& objects,

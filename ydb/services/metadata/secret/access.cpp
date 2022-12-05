@@ -4,8 +4,8 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-TString TAccess::GetStorageTablePath() {
-    return "/" + AppData()->TenantName + "/.metadata/secret_access";
+TString TAccess::GetInternalStorageTablePath() {
+    return "secrets/access";
 }
 
 bool TAccess::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {

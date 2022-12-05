@@ -55,6 +55,7 @@ protected:
     NJson::TJsonValue SerializeDescriptionToJson() const;
     bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);
 public:
+    static TString GetInternalStorageTablePath();
     bool ContainsTier(const TString& tierName) const;
 
     void AddInterval(const TString& name, const TDuration evDuration) {
@@ -65,7 +66,6 @@ public:
         return "TIERING_RULE";
     }
 
-    static TString GetStorageTablePath();
     static void AlteringPreparation(std::vector<TTieringRule>&& objects,
         NMetadataManager::IAlterPreparationController<TTieringRule>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);

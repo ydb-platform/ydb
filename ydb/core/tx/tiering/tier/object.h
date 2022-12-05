@@ -19,7 +19,6 @@ private:
     using TTierProto = NKikimrSchemeOp::TStorageTierConfig;
     YDB_ACCESSOR_DEF(TString, TierName);
     YDB_ACCESSOR_DEF(TTierProto, ProtoConfig);
-
 public:
     TTierConfig() = default;
     TTierConfig(const TString& tierName)
@@ -28,6 +27,7 @@ public:
 
     }
 
+    static TString GetInternalStorageTablePath();
     NKikimrSchemeOp::TS3Settings GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const;
 
     class TDecoder: public NInternal::TDecoderBase {
@@ -50,7 +50,6 @@ public:
     static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         const NMetadata::IOperationsManager::TModificationContext& context);
 
-    static TString GetStorageTablePath();
     static void AlteringPreparation(std::vector<TTierConfig>&& objects,
         NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);

@@ -62,10 +62,10 @@ public:
     static void AlteringPreparation(std::vector<TDBInitialization>&& objects,
         NMetadataManager::IAlterPreparationController<TDBInitialization>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);
-    static TString GetStorageTablePath();
     static TString GetStorageHistoryTablePath() {
         return "";
     }
+    static TString GetInternalStorageTablePath();
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
     NKikimr::NMetadataManager::TTableRecord SerializeToRecord() const;
     static TString GetTypeId() {

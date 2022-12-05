@@ -38,8 +38,8 @@ NKikimr::NMetadataManager::TTableRecord TTierConfig::SerializeToRecord() const {
     return result;
 }
 
-TString TTierConfig::GetStorageTablePath() {
-    return "/" + AppData()->TenantName + "/.metadata/tiering/tiers";
+TString TTierConfig::GetInternalStorageTablePath() {
+    return "tiering/tiers";
 }
 
 void TTierConfig::AlteringPreparation(std::vector<TTierConfig>&& objects,

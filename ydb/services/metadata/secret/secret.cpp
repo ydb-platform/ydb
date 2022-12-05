@@ -4,8 +4,8 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-TString TSecret::GetStorageTablePath() {
-    return "/" + AppData()->TenantName + "/.metadata/secrets";
+TString TSecret::GetInternalStorageTablePath() {
+    return "secrets/values";
 }
 
 bool TSecret::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {

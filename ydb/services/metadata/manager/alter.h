@@ -52,10 +52,6 @@ class TDropActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
-    virtual void InitState() override {
-        TBase::Become(&TDropActor<TObject>::StateMain);
-    }
-
     virtual bool BuildRestoreObjectIds() override {
         auto& first = TBase::Patches.front();
         std::vector<Ydb::Column> columns = first.SelectOwnedColumns(TObject::TDecoder::GetPKColumns());

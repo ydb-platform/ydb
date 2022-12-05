@@ -41,7 +41,7 @@ public:
     static void AlteringPreparation(std::vector<TAccess>&& objects,
         NMetadataManager::IAlterPreparationController<TAccess>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);
-    static TString GetStorageTablePath();
+    static TString GetInternalStorageTablePath();
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
     NMetadataManager::TTableRecord SerializeToRecord() const;
 

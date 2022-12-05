@@ -4,8 +4,8 @@
 
 namespace NKikimr::NMetadataInitializer {
 
-TString TDBInitialization::GetStorageTablePath() {
-    return "/" + AppData()->TenantName + "/.metadata/initializations";
+TString TDBInitialization::GetInternalStorageTablePath() {
+    return "initializations";
 }
 
 bool TDBInitialization::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {

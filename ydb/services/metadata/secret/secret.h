@@ -59,8 +59,8 @@ public:
     static void AlteringPreparation(std::vector<TSecret>&& objects,
         NMetadataManager::IAlterPreparationController<TSecret>::TPtr controller,
         const NMetadata::IOperationsManager::TModificationContext& context);
-    static TString GetStorageTablePath();
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
+    static TString GetInternalStorageTablePath();
     NMetadataManager::TTableRecord SerializeToRecord() const;
     static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         const NMetadata::IOperationsManager::TModificationContext& context);

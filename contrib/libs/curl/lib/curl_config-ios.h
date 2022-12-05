@@ -2,7 +2,9 @@
 
 #include "curl_config-osx.h"
 
-#undef USE_OPENSSL
+#define USE_OPENSSL 1
 #undef USE_TLS_SRP
-#define USE_DARWINSSL 1
 #define HAVE_LDAP_SSL 1
+
+#undef CURL_CA_FALLBACK
+#undef CURL_CA_BUNDLE

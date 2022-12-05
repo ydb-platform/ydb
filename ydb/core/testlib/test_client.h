@@ -460,10 +460,6 @@ namespace Tests {
         ui32 GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId);
         bool TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting = false);
         TVector<ui32> GetFollowerNodes(TTestActorRuntime *runtime, ui64 tabletId);
-        void S3Listing(const TString& table, const TString& prefixColumnsPb, const TString &pathPrefix,
-                       const TString &pathDelimiter, const TString& startAfterSuffixColumnsPb,
-                       const TVector<TString>& columnsToReturn, ui32 maxKeys, ui32 timeoutMillisec,
-                       NKikimrClient::TS3ListingResponse &res);
 
         void GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res);
         void GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res);

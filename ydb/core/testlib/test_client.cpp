@@ -19,7 +19,6 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_operation.h>
-#include <ydb/services/ydb/ydb_s3_internal.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
@@ -337,7 +336,6 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId, true));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId, true));
@@ -2305,37 +2303,6 @@ namespace Tests {
         }
 
         return followerNodes;
-    }
-
-    void TClient::S3Listing(const TString& table, const TString& prefixColumnsPb,
-                            const TString& pathPrefix, const TString& pathDelimiter,
-                            const TString& startAfterSuffixColumnsPb,
-                            const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                            ui32 timeoutMillisec,
-                            NKikimrClient::TS3ListingResponse& res) {
-        TAutoPtr<NMsgBusProxy::TBusS3ListingRequest> request = new NMsgBusProxy::TBusS3ListingRequest();
-        request->Record.SetTableName(table);
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(prefixColumnsPb, request->Record.MutableKeyPrefix());
-        UNIT_ASSERT_C(parseOk, "Failed to parse prefix columns: " + prefixColumnsPb);
-        request->Record.SetPathColumnPrefix(pathPrefix);
-        request->Record.SetPathColumnDelimiter(pathDelimiter);
-        if (!startAfterSuffixColumnsPb.empty()) {
-            parseOk = ::google::protobuf::TextFormat::ParseFromString(startAfterSuffixColumnsPb, request->Record.MutableStartAfterKeySuffix());
-            UNIT_ASSERT_C(parseOk, "Failed to parse suffix columns: " + startAfterSuffixColumnsPb);
-        }
-        request->Record.SetMaxKeys(maxKeys);
-        request->Record.SetTimeout(timeoutMillisec);
-        for (const TString& c : columnsToReturn) {
-            request->Record.AddColumnsToReturn(c);
-        }
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        auto status = SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-
-        NKikimrClient::TS3ListingResponse& response = dynamic_cast<NMsgBusProxy::TBusS3ListingResponse*>(reply.Get())->Record;
-
-        res.Swap(&response);
     }
 
     ui64 TClient::GetKesusTabletId(const TString& kesusPath) {

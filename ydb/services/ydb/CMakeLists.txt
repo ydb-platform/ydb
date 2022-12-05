@@ -39,7 +39,6 @@ target_sources(ydb-services-ydb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_operation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_s3_internal.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp

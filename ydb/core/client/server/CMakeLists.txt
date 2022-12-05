@@ -83,7 +83,6 @@ target_sources(core-client-server PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_node_registration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_s3_listing.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_scheme_initroot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_scheme_request.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_sqs.cpp

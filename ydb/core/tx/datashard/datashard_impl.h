@@ -186,7 +186,6 @@ class TDataShard
     class TTxMonitoringCleanupBorrowedPartsActor;
     class TTxMonitoringResetSchemaVersion;
     class TTxUndelivered;
-    class TTxS3Listing;
     class TTxInterruptTransaction;
     class TTxInitiateStatsUpdate;
     class TTxCheckInReadSets;
@@ -245,7 +244,6 @@ class TDataShard
     friend class TSchemeTransactionProcessor;
     friend class TScanTransactionProcessor;
     friend class TDataShardEngineHost;
-    friend class TTxS3Listing;
     friend class TExecuteKqpScanTxUnit;
     friend class TTableScan;
     friend class TKqpScan;
@@ -1053,7 +1051,6 @@ class TDataShard
     void Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -2567,7 +2564,6 @@ protected:
             HFunc(TEvDataShard::TEvSplitPartitioningChanged, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFunc(TEvPrivate::TEvAsyncTableStats, Handle);
-            HFunc(TEvDataShard::TEvS3ListingRequest, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);

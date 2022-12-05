@@ -45,7 +45,6 @@ target_sources(ydb-core-client-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/flat_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/locks_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/query_stats_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/s3_listing_ut.cpp
 )
 add_test(
   NAME

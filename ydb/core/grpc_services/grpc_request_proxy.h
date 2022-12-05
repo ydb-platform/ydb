@@ -50,7 +50,6 @@ public:
 protected:
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);

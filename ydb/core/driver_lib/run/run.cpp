@@ -100,7 +100,6 @@
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
-#include <ydb/services/ydb/ydb_s3_internal.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
@@ -550,8 +549,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["topic"] = &hasTopic;
         TServiceCfg hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;
-        TServiceCfg hasS3Internal = false;
-        names["s3_internal"] = &hasS3Internal;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
@@ -699,11 +696,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasClickhouseInternal) {
             server.AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(ActorSystem.Get(), Counters,
                 AppData->InFlightLimiterRegistry, grpcRequestProxyId, hasClickhouseInternal.IsRlAllowed()));
-        }
-
-        if (hasS3Internal) {
-            server.AddService(new NGRpcService::TGRpcYdbS3InternalService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasS3Internal.IsRlAllowed()));
         }
 
         if (hasScripting) {

@@ -815,30 +815,6 @@ message TEvPeriodicTableStats {
     optional bool IsDstSplit = 13;
 }
 
-message TEvS3ListingRequest {
-    optional uint64 TableId = 1;
-    optional bytes SerializedKeyPrefix = 2;
-
-    optional string PathColumnPrefix = 3;
-    optional string PathColumnDelimiter = 4;
-
-    optional bytes SerializedStartAfterKeySuffix = 5;
-
-    repeated uint32 ColumnsToReturn = 6;
-    optional uint32 MaxKeys = 7;
-
-    optional string LastCommonPrefix = 8;
-}
-
-message TEvS3ListingResponse {
-    optional uint64 TabletID = 1;
-    optional uint32 Status = 2;
-    optional string ErrorDescription = 3;
-    repeated bytes CommonPrefixesRows = 4;  // TSerializedCellVec
-    repeated bytes ContentsRows = 5;        // TSerializedCellVec
-    optional bool MoreRows = 6;
-}
-
 message TSerializedRowColumnsScheme {
     repeated uint32 KeyColumnIds = 1;
     repeated uint32 ValueColumnIds = 2;

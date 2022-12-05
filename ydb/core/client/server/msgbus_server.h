@@ -303,7 +303,6 @@ IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg, const TDynamicNode
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
-IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);

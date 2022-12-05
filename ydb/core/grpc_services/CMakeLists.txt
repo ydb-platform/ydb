@@ -115,7 +115,6 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_remove_directory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_rename_tables.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_rollback_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_s3_listing.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_scheme_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_stream_execute_scan_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_stream_execute_yql_script.cpp

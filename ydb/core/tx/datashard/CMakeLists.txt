@@ -135,7 +135,6 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__readset.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_iterator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_columns.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_download_txs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_upload_txs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__kqp_scan.cpp

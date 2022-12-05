@@ -62,7 +62,6 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_client_certs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_s3_internal_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_split_ut.cpp

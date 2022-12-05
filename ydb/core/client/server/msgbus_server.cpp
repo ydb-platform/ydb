@@ -133,8 +133,6 @@ public:
             MTYPE(TBusSqsRequest)
             MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
-            MTYPE(TBusS3ListingRequest)
-            MTYPE(TBusS3ListingResponse)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
             MTYPE(TBusResolveNode)
@@ -185,7 +183,6 @@ public:
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
             REPLY_OPTION(TBusSqsResponse)
-            REPLY_OPTION(TBusS3ListingResponse)
             REPLY_OPTION(TBusConsoleResponse)
 
             default:
@@ -574,8 +571,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusSqsRequest, msg);
     case MTYPE_CLIENT_WHOAMI:
         return ClientActorRequest(CreateMessageBusWhoAmI, msg);
-    case MTYPE_CLIENT_S3_LISTING_REQUEST:
-        return ClientActorRequest(CreateMessageBusS3ListingRequest, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:

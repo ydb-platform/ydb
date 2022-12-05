@@ -202,14 +202,6 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TS3ListingResponse& resp) override {
-        try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
-        }
-    }
-
     void Reply(const NKikimrClient::TConsoleResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -250,11 +242,6 @@ public:
 
     static void GenerateErrorResponse(NKikimrClient::TSqsResponse&, const TString&)
     { }
-
-    static void GenerateErrorResponse(NKikimrClient::TS3ListingResponse& resp, const TString& reason) {
-        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        resp.SetDescription(reason);
-    }
 
     static void GenerateErrorResponse(NKikimrClient::TConsoleResponse& resp, const TString& reason) {
         resp.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
@@ -525,12 +512,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
         RegisterRequestActor(CreateMessageBusSqsRequest(msg));
-    })
-
-    // S3 listing request
-    ADD_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST));
-        RegisterRequestActor(CreateMessageBusS3ListingRequest(msg));
     })
 
     // Console request

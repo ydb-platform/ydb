@@ -671,27 +671,6 @@ message TSqsResponse {
     optional bool IsFifo = 33;
 }
 
-message TS3ListingRequest {
-    optional string SecurityToken = 1;
-
-    optional string TableName = 2;
-    optional NKikimrMiniKQL.TParams KeyPrefix = 3; // A tuple representing all key columns that preceed path column
-    optional string PathColumnPrefix = 4;
-    optional string PathColumnDelimiter = 5;
-    optional NKikimrMiniKQL.TParams StartAfterKeySuffix = 9; // A tuple representing key columns that succeed path column
-    optional uint32 MaxKeys = 7;
-    repeated string ColumnsToReturn = 8;
-    optional uint32 Timeout = 10; // millisec
-}
-
-message TS3ListingResponse {
-    optional uint32 Status = 1;
-    optional string Description = 2;
-    optional NKikimrMiniKQL.TResult Result = 3;     // Every Contents row starts with key suffix with KeySuffixSize columns
-    optional uint32 KeySuffixSize = 4;              // Number of key columns starting from path and up to the end
-    optional uint32 ErrorCode = 5;                  // Extended error code from NTXProxy::TResultStatus::EStatus enum
-}
-
 message TInterconnectDebug {
     optional string Name = 1;
     optional uint32 Channel = 2;

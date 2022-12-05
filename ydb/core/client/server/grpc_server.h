@@ -39,7 +39,6 @@ public:
     virtual void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) = 0;
     virtual void Reply(const NKikimrClient::TCmsResponse& resp) = 0;
     virtual void Reply(const NKikimrClient::TSqsResponse& resp) = 0;
-    virtual void Reply(const NKikimrClient::TS3ListingResponse& resp) = 0;
     virtual void Reply(const NKikimrClient::TConsoleResponse& resp) = 0;
 
     //! Send error reply when request wasn't handled properly.

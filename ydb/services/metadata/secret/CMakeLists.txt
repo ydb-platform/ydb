@@ -25,6 +25,8 @@ target_sources(services-metadata-secret PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/snapshot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/fetcher.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/checker_secret.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/checker_access.cpp
 )
 
 add_global_library_for(services-metadata-secret.global services-metadata-secret)

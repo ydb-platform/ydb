@@ -27,6 +27,9 @@ public:
     bool operator<(const TSecretId& item) const {
         return std::tie(OwnerUserId, SecretId) < std::tie(item.OwnerUserId, item.SecretId);
     }
+    bool operator==(const TSecretId& item) const {
+        return std::tie(OwnerUserId, SecretId) == std::tie(item.OwnerUserId, item.SecretId);
+    }
 };
 
 class TSecret: public TSecretId, public NMetadataManager::TObject<TSecret> {

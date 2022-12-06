@@ -44,7 +44,7 @@ void TAccessInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr
         request.set_path(TAccess::GetStorageTablePath());
         request.add_primary_key(TAccess::TDecoder::OwnerUserId);
         request.add_primary_key(TAccess::TDecoder::SecretId);
-        request.add_primary_key(TAccess::TDecoder::AccessUserId);
+        request.add_primary_key(TAccess::TDecoder::AccessSID);
         {
             auto& column = *request.add_columns();
             column.set_name(TAccess::TDecoder::OwnerUserId);
@@ -57,7 +57,7 @@ void TAccessInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr
         }
         {
             auto& column = *request.add_columns();
-            column.set_name(TAccess::TDecoder::AccessUserId);
+            column.set_name(TAccess::TDecoder::AccessSID);
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
         result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));

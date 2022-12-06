@@ -199,9 +199,6 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("DROP OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)");
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initializations`");
-            lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initializations`", false);
-            lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initializations`", false);
-            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
 
             emulator->SetExpectedSecretsCount(0).SetExpectedAccessCount(0);
             {
@@ -211,6 +208,52 @@ Y_UNIT_TEST_SUITE(Secret) {
                 }
                 Y_VERIFY(emulator->IsFound());
             }
+        }
+    }
+
+    Y_UNIT_TEST(Validation) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableOlapSchemaOperations(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+
+        TSecretUserEmulator* emulator = new TSecretUserEmulator;
+        runtime.Register(emulator);
+        {
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            Cerr << "Initialization finished" << Endl;
+
+            Tests::NCS::THelper lHelper(*server);
+            lHelper.StartSchemaRequest("CREATE OBJECT secret-1 (TYPE SECRET) WITH value = `100`", false);
+            lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`", false);
+            lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
+            lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@test1` (TYPE SECRET_ACCESS)", false);
+            lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
+            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initializations`");
+            lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initializations`", false);
+            lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initializations`", false);
+            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
         }
     }
 }

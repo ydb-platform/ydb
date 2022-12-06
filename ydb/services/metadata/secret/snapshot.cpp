@@ -39,7 +39,7 @@ TString TSnapshot::DoSerializeToString() const {
     }
     sb << "ACCESS:";
     for (auto&& i : Access) {
-        sb << i.GetOwnerUserId() << ":" << i.GetSecretId() << ":" << i.GetAccessUserId() << ";";
+        sb << i.GetOwnerUserId() << ":" << i.GetSecretId() << ":" << i.GetAccessSID() << ";";
     }
     return sb;
 }
@@ -73,7 +73,10 @@ bool TSnapshot::CheckSecretAccess(const TString& secretableString, const std::op
         return true;
     }
     for (auto&& i : Access) {
-        if (i.GetAccessUserId() == userToken->GetUserSID()) {
+        if (i != sId) {
+            continue;
+        }
+        if (userToken->IsExist(i.GetAccessSID())) {
             return true;
         }
     }

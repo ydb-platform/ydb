@@ -6,25 +6,24 @@
 #include <ydb/services/metadata/abstract/manager.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
+#include <ydb/services/metadata/secret/secret.h>
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TAccess: public NMetadataManager::TObject<TAccess> {
+class TAccess: public TSecretId, public NMetadataManager::TObject<TAccess> {
 private:
     using TBase = NMetadataManager::TObject<TAccess>;
-    YDB_ACCESSOR_DEF(TString, OwnerUserId);
-    YDB_ACCESSOR_DEF(TString, SecretId);
-    YDB_ACCESSOR_DEF(TString, AccessUserId);
+    YDB_ACCESSOR_DEF(TString, AccessSID);
 public:
     class TDecoder: public NInternal::TDecoderBase {
     private:
         YDB_ACCESSOR(i32, OwnerUserIdIdx, -1);
         YDB_ACCESSOR(i32, SecretIdIdx, -1);
-        YDB_ACCESSOR(i32, AccessUserIdIdx, -1);
+        YDB_ACCESSOR(i32, AccessSIDIdx, -1);
     public:
         static inline const TString OwnerUserId = "ownerUserId";
         static inline const TString SecretId = "secretId";
-        static inline const TString AccessUserId = "accessUserId";
+        static inline const TString AccessSID = "accessSID";
         static std::vector<TString> GetPKColumnIds();
         static std::vector<Ydb::Column> GetPKColumns();
         static std::vector<Ydb::Column> GetColumns();
@@ -32,7 +31,7 @@ public:
         TDecoder(const Ydb::ResultSet& rawData) {
             OwnerUserIdIdx = GetFieldIndex(rawData, OwnerUserId);
             SecretIdIdx = GetFieldIndex(rawData, SecretId);
-            AccessUserIdIdx = GetFieldIndex(rawData, AccessUserId);
+            AccessSIDIdx = GetFieldIndex(rawData, AccessSID);
         }
     };
 

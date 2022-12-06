@@ -50,7 +50,7 @@ void THelper::StartSchemaRequest(const TString& request, const bool expectSucces
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
                 Cerr << ss.Str() << Endl;
-                Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
+                Y_VERIFY(expectation == f.GetValueSync().IsSuccess(), "%d", expectation ? 1 : 0);
                 *rrPtr = true;
             });
         });

@@ -1,3 +1,4 @@
+#include "checker_secret.h"
 #include "secret.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
@@ -40,7 +41,7 @@ void TSecret::AlteringPreparation(std::vector<TSecret>&& objects,
             }
         }
     }
-    controller->PreparationFinished(std::move(objects));
+    TActivationContext::Register(new TSecretPreparationActor(std::move(objects), controller, context));
 }
 
 NMetadata::TOperationParsingResult TSecret::BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
@@ -55,6 +56,21 @@ NMetadata::TOperationParsingResult TSecret::BuildPatchFromSettings(const NYql::T
         }
     } else {
         result.SetColumn(TDecoder::OwnerUserId, NMetadataManager::TYDBValue::Bytes(context.GetUserToken()->GetUserSID()));
+    }
+    for (auto&& c : settings.GetObjectId()) {
+        if (c >= '0' && c <= '9') {
+            continue;
+        }
+        if (c >= 'a' && c <= 'z') {
+            continue;
+        }
+        if (c >= 'A' && c <= 'Z') {
+            continue;
+        }
+        if (c == '_') {
+            continue;
+        }
+        return "incorrect character for secret id: '" + TString(c) + "'";
     }
     {
         result.SetColumn(TDecoder::SecretId, NMetadataManager::TYDBValue::Bytes(settings.GetObjectId()));

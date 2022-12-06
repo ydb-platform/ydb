@@ -27,10 +27,12 @@ void TSecretInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr
             column.set_name(TSecret::TDecoder::Value);
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create_secret"));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
         auto hRequest = TSecret::AddHistoryTableScheme(request);
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(hRequest, "create_secret_history"));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(hRequest, "create_history"));
     }
+    result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetStorageTablePath(), "acl"));
+    result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetStorageHistoryTablePath(), "acl_history"));
     controller->PreparationFinished(result);
 }
 
@@ -58,10 +60,12 @@ void TAccessInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr
             column.set_name(TAccess::TDecoder::AccessUserId);
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create_access"));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
         auto hRequest = TAccess::AddHistoryTableScheme(request);
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(hRequest, "create_access_history"));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(hRequest, "create_history"));
     }
+    result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetStorageTablePath(), "acl"));
+    result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetStorageHistoryTablePath(), "acl_history"));
     controller->PreparationFinished(result);
 }
 

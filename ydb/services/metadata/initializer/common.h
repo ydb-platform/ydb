@@ -4,6 +4,8 @@
 
 namespace NKikimr::NMetadataInitializer {
 
+class TACLModifierConstructor;
+
 class ITableModifier {
 private:
     YDB_READONLY_DEF(TString, ModificationId);
@@ -36,12 +38,32 @@ protected:
         return true;
     }
 public:
-    TGenericTableModifier(typename TDialogPolicy::TRequest& request, const TString& modificationId)
+    TGenericTableModifier(const typename TDialogPolicy::TRequest& request, const TString& modificationId)
         : TBase(modificationId)
         , Request(request)
     {
 
     }
+};
+
+class TACLModifierConstructor {
+private:
+    const TString Id;
+    Ydb::Scheme::ModifyPermissionsRequest Request;
+    ITableModifier::TPtr BuildModifier() const;
+public:
+    TACLModifierConstructor(const TString& path, const TString& id)
+        : Id(id) {
+        Request.set_path(path);
+    }
+    Ydb::Scheme::ModifyPermissionsRequest* operator->() {
+        return &Request;
+    }
+    operator ITableModifier::TPtr() const {
+        return BuildModifier();
+    }
+    static TACLModifierConstructor GetNoAccessModifier(const TString& path, const TString& id);
+    static TACLModifierConstructor GetReadOnlyModifier(const TString& path, const TString& id);
 };
 
 class IInitializerInput {

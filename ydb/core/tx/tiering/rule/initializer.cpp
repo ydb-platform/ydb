@@ -25,10 +25,12 @@ TVector<NKikimr::NMetadataInitializer::ITableModifier::TPtr> TTierRulesInitializ
             column.set_name("description");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create_rules"));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
         auto hRequest = TTieringRule::AddHistoryTableScheme(request);
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(hRequest, "create_rules_history"));
+        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(hRequest, "create_history"));
     }
+    result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetReadOnlyModifier(TTieringRule::GetStorageTablePath(), "acl"));
+    result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetReadOnlyModifier(TTieringRule::GetStorageHistoryTablePath(), "acl_history"));
     return result;
 }
 

@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             }
 
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
-            lHelper.StartSchemaRequest("CREATE OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
 
             emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(1);
             {
@@ -196,8 +196,12 @@ Y_UNIT_TEST_SUITE(Secret) {
                 Y_VERIFY(emulator->IsFound());
             }
 
-            lHelper.StartSchemaRequest("DROP OBJECT `secret1/test@test1` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("DROP OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)");
+            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initializations`");
+            lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initializations`", false);
+            lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initializations`", false);
+            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
 
             emulator->SetExpectedSecretsCount(0).SetExpectedAccessCount(0);
             {

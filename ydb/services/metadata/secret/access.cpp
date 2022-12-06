@@ -50,8 +50,8 @@ NMetadata::TOperationParsingResult TAccess::BuildPatchFromSettings(const NYql::T
     TStringBuf sb(settings.GetObjectId().data(), settings.GetObjectId().size());
     TStringBuf l;
     TStringBuf r;
-    if (!sb.TrySplit('/', l, r)) {
-        return "incorrect objectId format (secretId/accessUserId)";
+    if (!sb.TrySplit(':', l, r)) {
+        return "incorrect objectId format (secretId:accessUserId)";
     }
     result.SetColumn(TDecoder::SecretId, NMetadataManager::TYDBValue::Bytes(l));
     result.SetColumn(TDecoder::AccessUserId, NMetadataManager::TYDBValue::Bytes(r));

@@ -175,8 +175,10 @@ bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::
             return true;
         case NKikimrMiniKQL::ETypeKind::Pg:
             return actual.GetPg().Getoid() == expected.GetPg().Getoid();
+        case NKikimrMiniKQL::ETypeKind::Tagged:
+            return (actual.GetTagged().GetTag() == expected.GetTagged().GetTag()) &&
+                IsSameProtoType(actual.GetTagged().GetItem(), expected.GetTagged().GetItem());
         case NKikimrMiniKQL::ETypeKind::Unknown:
-        case NKikimrMiniKQL::ETypeKind::Reserved_11:
         case NKikimrMiniKQL::ETypeKind::Reserved_12:
         case NKikimrMiniKQL::ETypeKind::Reserved_13:
         case NKikimrMiniKQL::ETypeKind::Reserved_14:

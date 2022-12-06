@@ -82,6 +82,12 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             ConvertMiniKQLTypeToYdbType(protoOptionalType.GetItem(), *output.mutable_optional_type()->mutable_item());
             break;
         }
+        case NKikimrMiniKQL::ETypeKind::Tagged: {
+            const NKikimrMiniKQL::TTaggedType& protoTaggedType = input.GetTagged();
+            output.mutable_tagged_type()->set_tag(protoTaggedType.GetTag());
+            ConvertMiniKQLTypeToYdbType(protoTaggedType.GetItem(), *output.mutable_tagged_type()->mutable_type());
+            break;
+        }
         case NKikimrMiniKQL::ETypeKind::List: {
             const NKikimrMiniKQL::TListType& protoListType = input.GetList();
             ConvertMiniKQLTypeToYdbType(protoListType.GetItem(), *output.mutable_list_type()->mutable_item());
@@ -495,6 +501,12 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
                 // Optional type, but there isn't optional value - single empty level - convert to NullFlag
                 output.set_null_flag_value(::google::protobuf::NULL_VALUE);
             }
+            break;
+        }
+        case NKikimrMiniKQL::ETypeKind::Tagged: {
+            const NKikimrMiniKQL::TTaggedType& protoTaggedType = inputType.GetTagged();
+            const NKikimrMiniKQL::TType& protoItemType = protoTaggedType.GetItem();
+            ConvertMiniKQLValueToYdbValue(protoItemType, inputValue, output);
             break;
         }
         case NKikimrMiniKQL::ETypeKind::List: {

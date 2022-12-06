@@ -157,6 +157,14 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
             break;
         }
 
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<TTaggedType *>(type);
+            res.SetKind(NKikimrMiniKQL::ETypeKind::Tagged);
+            res.MutableTagged()->SetTag(TString(taggedType->GetTag()));
+            ExportTypeToProtoImpl(taggedType->GetBaseType(), *res.MutableTagged()->MutableItem());
+            break;
+        }
+
         case TType::EKind::Optional: {
             auto optionalType = static_cast<TOptionalType *>(type);
             res.SetKind(NKikimrMiniKQL::ETypeKind::Optional);
@@ -1003,6 +1011,11 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
             TType* child = ImportTypeFromProto(protoOptionalType.GetItem());
             TOptionalType* optionalType = TOptionalType::Create(child, env);
             return optionalType;
+        }
+        case NKikimrMiniKQL::ETypeKind::Tagged: {
+            const NKikimrMiniKQL::TTaggedType& protoTaggedType = type.GetTagged();
+            TType* child = ImportTypeFromProto(protoTaggedType.GetItem());
+            return TTaggedType::Create(child, protoTaggedType.GetTag(), env);
         }
         case NKikimrMiniKQL::ETypeKind::List: {
             const NKikimrMiniKQL::TListType& protoListType = type.GetList();

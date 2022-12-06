@@ -16,7 +16,7 @@ enum ETypeKind {
     Variant = 8;
     Null = 9;
     Pg = 10;
-    Reserved_11 = 11;
+    Tagged = 11;
     Reserved_12 = 12;
     Reserved_13 = 13;
     Reserved_14 = 14;
@@ -69,6 +69,11 @@ message TPgType {
     required uint32 oid = 1;
 }
 
+message TTaggedType {
+    required string Tag = 1;
+    required TType Item = 2;
+}
+
 message TType {
     required ETypeKind Kind = 1;
     oneof type_type {
@@ -80,6 +85,7 @@ message TType {
         TDictType Dict = 7;
         TVariantType Variant = 8;
         TPgType Pg = 9;
+        TTaggedType Tagged = 10;
     }
 }
 

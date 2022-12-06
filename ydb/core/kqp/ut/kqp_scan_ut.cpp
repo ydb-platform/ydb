@@ -196,6 +196,17 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ])", StreamResultToYson(it));
     }
 
+    Y_UNIT_TEST(TaggedScalar) {
+        auto kikimr = DefaultKikimrRunner();
+
+        auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                SELECT AsTagged(789, "xxx") AS t;
+            )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(R"([[789]])", StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(Offset) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
         auto db = kikimr.GetTableClient();

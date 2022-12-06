@@ -2,25 +2,25 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/core/metering/metering.h>
+#include <ydb/core/yq/libs/control_plane_storage/util.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/library/protobuf_printer/size_printer.h>
 
 #include <google/protobuf/util/time_util.h>
 
+#include <util/system/hostname.h>
+
 namespace NYq {
 
-namespace {
+struct TPingTaskParams {
+    TString Query;
+    TParams Params;
+    const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> Prepare;
+    std::vector<TString> Metrics;
+};
 
-bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
-    return status == YandexQuery::QueryMeta::ABORTED_BY_SYSTEM
-        || status == YandexQuery::QueryMeta::ABORTED_BY_USER
-        || status == YandexQuery::QueryMeta::COMPLETED
-        || status == YandexQuery::QueryMeta::FAILED;
-}
-
-} // namespace
-
-std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
+TPingTaskParams ConstructHardPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
     const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters, uint64_t maxRequestSize) {
@@ -247,7 +247,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             *internal.mutable_disposition() = request.disposition();
         }
 
-        if (request.status() && IsFinishedStatus(request.status())) {
+        if (request.status() && IsTerminalStatus(request.status())) {
             internal.clear_created_topic_consumers();
             // internal.clear_dq_graph(); keep for debug
             internal.clear_dq_graph_index();
@@ -374,10 +374,21 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
     };
     const auto readQuery = readQueryBuilder.Build();
-    return std::make_tuple(readQuery.Sql, readQuery.Params, prepareParams);
+
+    std::vector<TString> meteringRecords;
+
+    if (IsTerminalStatus(request.status()) && request.statistics()) {
+        try {
+            meteringRecords = GetMeteringRecords(request.statistics(), request.query_id().value(), request.scope(), HostName());
+        } catch (yexception &e) {
+            CPS_LOG_E(e.what());
+        }
+    }
+
+    return {readQuery.Sql, readQuery.Params, prepareParams, meteringRecords};
 }
 
-std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructSoftPingTask(
+TPingTaskParams ConstructSoftPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& taskLeaseTtl) {
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "SoftPingTask(read)");
@@ -440,7 +451,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
     };
     const auto readQuery = readQueryBuilder.Build();
-    return std::make_tuple(readQuery.Sql, readQuery.Params, prepareParams);
+    return {readQuery.Sql, readQuery.Params, prepareParams, std::vector<TString>{}};
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev)
@@ -487,12 +498,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl, Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize()) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl);
-    auto readQuery = std::get<0>(pingTaskParams); // Use std::get for win compiler
-    auto readParams = std::get<1>(pingTaskParams);
-    auto prepareParams = std::get<2>(pingTaskParams);
-
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto result = ReadModifyWrite(readQuery, readParams, prepareParams, requestCounters, debugInfo);
+    auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvPingTaskResponse, Fq::Private::PingTaskResult>(
         "PingTaskRequest - PingTaskResult",
@@ -505,9 +512,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
         prepare,
         debugInfo);
 
-    success.Apply([=](const auto& future) {
+    success.Apply([=, actorSystem=NActors::TActivationContext::ActorSystem(), metrics=pingTaskParams.Metrics](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(PingTaskRequest, queryId, delta, future.GetValue());
+            for (const auto& metric : metrics) {
+                actorSystem->Send(NKikimr::NMetering::MakeMeteringServiceID(), new NKikimr::NMetering::TEvMetering::TEvWriteMeteringJson(metric));
+            }
         });
 }
 

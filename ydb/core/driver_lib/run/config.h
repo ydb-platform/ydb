@@ -90,6 +90,7 @@ union TBasicKikimrServicesMask {
         EnableSecurityServices = true;
         EnableYandexQuery = true;
         EnableViewerService = true;
+        EnableMeteringWriter = true;
     }
 
     TBasicKikimrServicesMask() {

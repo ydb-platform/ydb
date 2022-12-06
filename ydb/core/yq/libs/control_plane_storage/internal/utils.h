@@ -31,4 +31,6 @@ NYql::TIssues ValidateNodesHealthCheck(
 
 NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& scope, const TString& tenant, const TString& owner);
 
+std::vector<TString> GetMeteringRecords(const TString& statistics, const TString& queryId, const TString& scope, const TString& sourceId);
+
 };

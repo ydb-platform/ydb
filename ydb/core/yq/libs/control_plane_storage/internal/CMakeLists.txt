@@ -18,6 +18,7 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   cpp-lwtrace-mon
   monlib-service-pages
   ydb-core-base
+  ydb-core-metering
   ydb-core-mon
   yq-libs-common
   yq-libs-config

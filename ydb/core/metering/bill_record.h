@@ -32,6 +32,7 @@ struct TBillRecord {
 
         enum class EUnit {
             RequestUnit /* "request_unit" */,
+            Byte /* "byte" */,
         };
 
         BILL_RECORD_FIELD(EType, Type);

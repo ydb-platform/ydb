@@ -260,6 +260,23 @@ public:
         PassAway();
     }
 
+    STATEFN(WaitResolveState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
+                hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
+                default:
+                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+            }
+
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+        ReportEventElapsedTime();
+    }
+
 private:
     STATEFN(PrepareState) {
         try {
@@ -1388,11 +1405,6 @@ private:
         YQL_ENSURE(result.second);
     }
 
-public:
-    void OnTablesResolve() override {
-        Execute();
-    }
-
     void Execute() {
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
@@ -1667,7 +1679,17 @@ public:
         }
     }
 
-    void OnShardsResolve() override {
+    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+        if (!TBase::HandleResolve(ev)) return;
+        Execute();
+    }
+
+    void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+        if (!TBase::HandleResolve(ev)) return;
+        OnShardsResolve();
+    }
+
+    void OnShardsResolve() {
         const bool forceSnapshot = (
                 ReadOnlyTx &&
                 !ImmediateTx &&

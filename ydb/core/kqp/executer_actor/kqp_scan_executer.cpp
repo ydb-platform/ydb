@@ -70,6 +70,22 @@ public:
     }
 
 public:
+    STATEFN(WaitResolveState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
+                hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
+                default:
+                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+            }
+
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+        ReportEventElapsedTime();
+    }
 
 private:
     STATEFN(ExecuteState) {
@@ -465,7 +481,31 @@ private:
         }
     }
 
-public:
+    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+        if (!TBase::HandleResolve(ev)) return;
+        TSet<ui64> shardIds;
+        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+            if (stageInfo.Meta.ShardKey) {
+                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                    shardIds.insert(partition.ShardId);
+                }
+            }
+        }
+        if (shardIds) {
+            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, std::move(shardIds));
+            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
+        } else {
+            Execute();
+        }
+    }
+
+
+    void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+        if (!TBase::HandleResolve(ev)) return;
+        Execute();
+    }
+
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
         auto& funcRegistry = *AppData()->FunctionRegistry;
@@ -696,6 +736,7 @@ public:
         }
     }
 
+public:
     void Finalize() {
         auto& response = *ResponseEv->Record.MutableResponse();
 

@@ -123,70 +123,26 @@ public:
     }
 
 protected:
-    TActorId KqpShardsResolverId;
-
-    STATEFN(WaitResolveState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-                hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
-                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(TEvents::TEvWakeup, HandleTimeout);
-                default:
-                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
-            }
-
-        } catch (const yexception& e) {
-            InternalError(e.what());
-        }
-        ReportEventElapsedTime();
-    }
-
-    TSet<ui64> CollectShards() {
-        TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    shardIds.insert(partition.ShardId);
-                }
-            }
-        }
-        return shardIds;
-    }
-
-    virtual void OnTablesResolve() {
-        TSet<ui64> shardIds = CollectShards();
-        if (shardIds.size() > 0) {
-            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, std::move(shardIds));
-            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
-        } else {
-            static_cast<TDerived*>(this)->Execute();
-        }
-    }
-
-    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+    [[nodiscard]]
+    bool HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpTableResolverId = {};
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
             ReplyErrorAndDie(reply.Status, reply.Issues);
-            return;
+            return false;
         }
 
         if (ExecuterTableResolveSpan) {
             ExecuterTableResolveSpan.End();
         }
 
-        OnTablesResolve();
+        return true;
     }
 
-    virtual void OnShardsResolve() {
-        static_cast<TDerived*>(this)->Execute();
-    }
-
-    void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+    [[nodiscard]]
+    bool HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
@@ -197,7 +153,7 @@ protected:
             LOG_W("Shards nodes resolve failed, status: " << Ydb::StatusIds_StatusCode_Name(reply.Status)
                 << ", issues: " << reply.Issues.ToString());
             ReplyErrorAndDie(reply.Status, reply.Issues);
-            return;
+            return false;
         }
 
         LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
@@ -221,8 +177,7 @@ protected:
             }
             LOG_D(sb);
         }
-
-        OnShardsResolve();
+        return true;
     }
 
     void HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
@@ -360,7 +315,7 @@ protected:
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         LOG_T("Got request, become WaitResolveState");
-        this->Become(&TKqpExecuterBase::WaitResolveState);
+        this->Become(&TDerived::WaitResolveState);
         if (ExecuterStateSpan) {
             ExecuterStateSpan.End();
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterWaitResolveState, ExecuterSpan.GetTraceId(), "WaitResolveState", NWilson::EFlags::AUTO_END);
@@ -1013,6 +968,7 @@ protected:
     TKqpTableKeys TableKeys;
 
     TActorId KqpTableResolverId;
+    TActorId KqpShardsResolverId;
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     TVector<TProgressStat> LastStats;
 

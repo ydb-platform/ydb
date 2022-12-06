@@ -653,7 +653,7 @@ public:
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
     {
         TVector<TString> groups;
-        StringSplitter(group).Split('|').SkipEmpty().Collect(&groups);
+        StringSplitter(group).Split('|').Collect(&groups);
 
         Y_VERIFY(SimpleOpts()->GetGroupNamesSize() == groups.size());
     }

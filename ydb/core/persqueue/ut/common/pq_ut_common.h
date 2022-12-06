@@ -22,7 +22,7 @@ inline constexpr static T PlainOrSoSlow(T plain, T slow) noexcept {
 
 constexpr ui32 NUM_WRITES = PlainOrSoSlow(100, 1);
 
-void FillPQConfig(NActors::TTestActorRuntime& runtime, const TString& dbRoot, bool isFirstClass);
+void FillPQConfig(NKikimrPQ::TPQConfig& pqConfig, const TString& dbRoot, bool isFirstClass);
 
 class TInitialEventsFilter : TNonCopyable {
     bool IsDone;
@@ -127,6 +127,7 @@ struct TTestContext {
         Runtime->SetScheduledLimit(200);
 
         TAppPrepare appData;
+        appData.SetEnablePersistentQueryStats(enableDbCounters);
         appData.SetEnableDbCounters(enableDbCounters);
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime, &appData);
@@ -135,7 +136,7 @@ struct TTestContext {
             CreateTestTabletInfo(TabletId, PQTabletType, TErasureType::ErasureNone),
             &CreatePersQueue);
 
-        FillPQConfig(*Runtime, "/Root/PQ", isFirstClass);
+        FillPQConfig(Runtime->GetAppData(0).PQConfig, "/Root/PQ", isFirstClass);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));

@@ -14,6 +14,7 @@ TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo*
     , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 1 : 60))
     , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
+    , LabeledGroup(new ::NMonitoring::TDynamicCounters)
 {
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;
@@ -212,6 +213,10 @@ void TSysViewProcessor::ScheduleSendRequests() {
 
 void TSysViewProcessor::ScheduleApplyCounters() {
     Schedule(ProcessCountersInterval, new TEvPrivate::TEvApplyCounters);
+}
+
+void TSysViewProcessor::ScheduleApplyLabeledCounters() {
+    Schedule(ProcessLabeledCountersInterval, new TEvPrivate::TEvApplyLabeledCounters);
 }
 
 void TSysViewProcessor::ScheduleSendNavigate() {

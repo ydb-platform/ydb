@@ -23,6 +23,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/persqueue/pq.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -432,6 +433,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
             } else if (type == TTabletTypes::ReplicationController) {
                 bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
+            } else if (type == TTabletTypes::PersQueue) {
+                bootstrapperActorId = Boot(ctx, type, &NKikimr::CreatePersQueue, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;
             }

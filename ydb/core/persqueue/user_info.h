@@ -303,7 +303,7 @@ struct TUserInfo {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 LabeledCounters.Reset(new TUserLabeledCounters(
-                    user + "|$x|" + topicConverter->GetClientsideName(), partition, *dbPath));
+                    user + "||" + topicConverter->GetClientsideName(), partition, *dbPath));
 
                 if (DoInternalRead) {
                     SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, folderId);
@@ -444,7 +444,7 @@ struct TUserInfo {
     void SetImportant(bool important)
     {
         Important = important;
-        if (LabeledCounters) {
+        if (LabeledCounters && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             LabeledCounters->SetGroup(User + "/" + (important ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
         }
     }

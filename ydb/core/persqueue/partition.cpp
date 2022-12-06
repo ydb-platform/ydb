@@ -764,7 +764,7 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
         userInfo.ReadQuota.UpdateConfig(readQuota.GetBurstSize(), readQuota.GetSpeedInBytesPerSecond());
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "boostrapping " << Partition << " " << ctx.SelfID);
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (NewPartition) {
         InitComplete(ctx);

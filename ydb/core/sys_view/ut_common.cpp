@@ -1,4 +1,5 @@
 #include "ut_common.h"
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -25,7 +26,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool enableSVP) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 pqTabletsN, bool enableSVP) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -63,6 +64,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
     Client->InitRootScheme("Root");
+
+    if (pqTabletsN) {
+        NKikimr::NPQ::FillPQConfig(Settings->PQConfig, "/Root/PQ", true);
+        PqTabletIds = Server->StartPQTablets(pqTabletsN);
+    }
 
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);

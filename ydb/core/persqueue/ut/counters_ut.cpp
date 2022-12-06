@@ -224,9 +224,18 @@ Y_UNIT_TEST(PartitionFirstClass) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         activeZone = false;
+        bool dbRegistered{false};
 
         tc.Prepare(dispatchName, setup, activeZone, true, true, true);
         tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+                auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+                UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+                dbRegistered = true;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(runtime, event);
+        });
 
         PQTabletPrepare({}, {}, tc);
 
@@ -244,15 +253,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-
-        IActor* actorX = CreateClusterLabeledCountersAggregatorActor(tc.Edge, TTabletTypes::PersQueue);
-        tc.Runtime->Register(actorX);
-
-        TAutoPtr<IEventHandle> handle;
-        TEvTabletCounters::TEvTabletLabeledCountersResponse *result;
-        result = tc.Runtime->GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>(handle);
-        UNIT_ASSERT(result);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.LabeledCountersByGroupSize(), 0);
+        UNIT_ASSERT(dbRegistered);
     });
 }
 

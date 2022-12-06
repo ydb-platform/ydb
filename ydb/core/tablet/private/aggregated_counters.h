@@ -156,6 +156,10 @@ public:
 
     void FillGetRequestV2(NKikimr::TTabletLabeledCountersResponseContext* context, const TString& group) const;
 
+    void ToProto(NKikimrLabeledCounters::TTabletLabeledCounters& labeledCounters) const;
+    void FromProto(NMonitoring::TDynamicCounterPtr group,
+                   const NKikimrLabeledCounters::TTabletLabeledCounters& labeledCounters) const;
+
 private:
     //
     ::NMonitoring::TDynamicCounterPtr CounterGroup;

@@ -16,15 +16,15 @@
 
 namespace NKikimr::NPQ {
 
-void FillPQConfig(NActors::TTestActorRuntime& runtime, const TString& dbRoot, bool isFirstClass) {
-    runtime.GetAppData(0).PQConfig.SetEnabled(true);
+void FillPQConfig(NKikimrPQ::TPQConfig& pqConfig, const TString& dbRoot, bool isFirstClass) {
+    pqConfig.SetEnabled(true);
     // NOTE(shmel1k@): KIKIMR-14221
-    runtime.GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(isFirstClass);
-    runtime.GetAppData(0).PQConfig.SetRequireCredentialsInNewProtocol(false);
-    runtime.GetAppData(0).PQConfig.SetRoot(dbRoot);
-    runtime.GetAppData(0).PQConfig.SetClusterTablePath(TStringBuilder() << dbRoot << "/Config/V2/Cluster");
-    runtime.GetAppData(0).PQConfig.SetVersionTablePath(TStringBuilder() << dbRoot << "/Config/V2/Versions");
-    runtime.GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+    pqConfig.SetTopicsAreFirstClassCitizen(isFirstClass);
+    pqConfig.SetRequireCredentialsInNewProtocol(false);
+    pqConfig.SetRoot(dbRoot);
+    pqConfig.SetClusterTablePath(TStringBuilder() << dbRoot << "/Config/V2/Cluster");
+    pqConfig.SetVersionTablePath(TStringBuilder() << dbRoot << "/Config/V2/Versions");
+    pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
 }
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,

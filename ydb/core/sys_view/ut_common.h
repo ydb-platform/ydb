@@ -19,7 +19,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
 class TTestEnv {
 public:
     TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, ui32 storagePools = 0,
-        bool enableSVP = false);
+        ui32 pqTabletsN = 0, bool enableSVP = false);
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {
@@ -42,6 +42,14 @@ public:
         return Endpoint;
     }
 
+    const Tests::TServerSettings::TPtr GetSettings() const {
+        return Settings;
+    }
+
+    const TVector<ui64>& GetPqTabletIds() const {
+        return PqTabletIds;
+    }
+
     TStoragePools GetPools() const;
     TStoragePools CreatePoolsForTenant(const TString& tenant);
 
@@ -57,6 +65,7 @@ private:
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
     THolder<NYdb::TDriver> Driver;
+    TVector<ui64> PqTabletIds;
 };
 
 } // NSysView

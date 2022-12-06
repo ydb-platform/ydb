@@ -105,10 +105,12 @@ struct TEvTabletCounters {
     };
 
     struct TEvRemoveDatabase : public TEventLocal<TEvRemoveDatabase, EvRemoveDatabase> {
+        const TString DbPath;
         const TPathId PathId;
 
-        explicit TEvRemoveDatabase(TPathId pathId)
-            : PathId(pathId)
+        TEvRemoveDatabase(const TString& dbPath, TPathId pathId)
+            : DbPath(dbPath)
+            , PathId(pathId)
         {}
     };
 

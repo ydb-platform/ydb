@@ -46,6 +46,7 @@ public:
             target.SetValue(value);
             target.SetType(type);
             target.SetAggregateFunc(func);
+            target.SetNameId(source.GetNameId());
         }
     }
 

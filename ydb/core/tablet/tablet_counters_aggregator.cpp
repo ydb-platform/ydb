@@ -1,7 +1,9 @@
 #include "tablet_counters_aggregator.h"
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
+#include "labeled_db_counters.h"
 #include "private/aggregated_counters.h"
+#include "private/labeled_db_counters.h"
 
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/mon/mon.h>
@@ -161,6 +163,12 @@ public:
         }
     }
 
+    void ApplyLabeledDbCounters(const TString& dbName, ui64 tabletId,
+                                const TTabletLabeledCountersBase* labeledCounters, const TActorContext& ctx) {
+        auto iterDbLabeled = GetLabeledDbCounters(dbName, ctx);
+        iterDbLabeled->Apply(tabletId, labeledCounters);
+    }
+
     void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId) {
         AllTypes->Forget(tabletId);
         // and now erase from every other path
@@ -172,9 +180,15 @@ public:
         if (auto itPath = CountersByPathId.find(tenantPathId); itPath != CountersByPathId.end()) {
             itPath->second->Forget(tabletId, tabletType);
         }
-        //and from all labeledCounters that could have this tablet
-        auto iterTabletTypeAndGroup = LabeledCountersByTabletTypeAndGroup.lower_bound(std::make_pair(tabletType, TString()));
-        for (; iterTabletTypeAndGroup != LabeledCountersByTabletTypeAndGroup.end() && iterTabletTypeAndGroup->first.first == tabletType; ) {
+
+        for (auto iter = LabeledDbCounters.begin(); iter != LabeledDbCounters.end(); ++iter) {
+            iter->second->ForgetTablet(tabletId);
+        }
+        // and from all labeledCounters that could have this tablet
+        auto iterTabletTypeAndGroup =
+                LabeledCountersByTabletTypeAndGroup.lower_bound(std::make_pair(tabletType, TString()));
+        for (; iterTabletTypeAndGroup != LabeledCountersByTabletTypeAndGroup.end() &&
+               iterTabletTypeAndGroup->first.first == tabletType; ) {
             bool empty = iterTabletTypeAndGroup->second->ForgetTablet(tabletId);
             if (empty) {
                 iterTabletTypeAndGroup = LabeledCountersByTabletTypeAndGroup.erase(iterTabletTypeAndGroup);
@@ -308,6 +322,10 @@ public:
 
     void RemoveTabletsByPathId(TPathId pathId) {
         CountersByPathId.erase(pathId);
+    }
+
+    void RemoveTabletsByDbPath(const TString& dbPath) {
+        LabeledDbCounters.erase(dbPath);
     }
 
 private:
@@ -1049,8 +1067,8 @@ public:
             : ActorSystem(actorSystem)
         {}
 
-        void OnDatabaseRemoved(const TString&, TPathId pathId) override {
-            auto evRemove = MakeHolder<TEvTabletCounters::TEvRemoveDatabase>(pathId);
+        void OnDatabaseRemoved(const TString& dbPath, TPathId pathId) override {
+            auto evRemove = MakeHolder<TEvTabletCounters::TEvRemoveDatabase>(dbPath, pathId);
             auto aggregator = MakeTabletCountersAggregatorID(ActorSystem->NodeId, false);
             ActorSystem->Send(aggregator, evRemove.Release());
         }
@@ -1078,6 +1096,27 @@ private:
         return dbCounters;
     }
 
+    NPrivate::TDbLabeledCounters::TPtr GetLabeledDbCounters(const TString& dbName, const TActorContext& ctx) {
+        auto it = LabeledDbCounters.find(dbName);
+        if (it != LabeledDbCounters.end()) {
+            return it->second;
+        }
+
+        auto dbCounters = MakeIntrusive<NPrivate::TDbLabeledCounters>();
+        LabeledDbCounters[dbName] = dbCounters;
+
+        auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
+            NKikimrSysView::LABELED, dbName, dbCounters);
+        ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()), evRegister.Release());
+
+        if (DbWatcherActorId) {
+            auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(dbName);
+            ctx.Send(DbWatcherActorId, evWatch.Release());
+        }
+
+        return dbCounters;
+    }
+
 private:
     ::NMonitoring::TDynamicCounterPtr Counters;
     TTabletCountersForTabletTypePtr AllTypes;
@@ -1085,6 +1124,7 @@ private:
 
     typedef THashMap<TPathId, TIntrusivePtr<TTabletCountersForDb>> TCountersByPathId;
     typedef TMap<TTabletTypes::EType, THolder<TTabletCountersBase>> TAppCountersByTabletType;
+    typedef THashMap<TString, TIntrusivePtr<NPrivate::TDbLabeledCounters>> TLabeledCountersByDbPath;
     typedef TMap<std::pair<TTabletTypes::EType, TString>, TAutoPtr<NPrivate::TAggregatedLabeledCounters>> TLabeledCountersByTabletTypeAndGroup;
     typedef THashMap<ui64, std::pair<TAutoPtr<TTabletCountersBase>, TAutoPtr<TTabletCountersBase>>> TQuietTabletCounters;
 
@@ -1093,6 +1133,7 @@ private:
     TActorId DbWatcherActorId;
     TAppCountersByTabletType LimitedAppCounters; // without txs
     TYdbTabletCountersPtr YdbCounters;
+    TLabeledCountersByDbPath LabeledDbCounters;
     TLabeledCountersByTabletTypeAndGroup LabeledCountersByTabletTypeAndGroup;
     TQuietTabletCounters QuietTabletCounters;
 };
@@ -1202,8 +1243,14 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabele
     if (msg->LabeledCounters.Get()->GetDatabasePath()) {
         if (msg->TabletType == TTabletTypes::PersQueue) {
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                        "got labeledCounters from db" << msg->LabeledCounters.Get()->GetDatabasePath());
+                        "got labeledCounters from db: " << msg->LabeledCounters.Get()->GetDatabasePath() <<
+                        "; tablet: " << msg->TabletID);
+            TabletMon->ApplyLabeledDbCounters(msg->LabeledCounters.Get()->GetDatabasePath().GetRef(), msg->TabletID, msg->LabeledCounters.Get(), ctx);
         } else {
+            LOG_ERROR_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                        "got labeledCounters from unknown Tablet Type: " << msg->TabletType <<
+                        "; db: " << msg->LabeledCounters.Get()->GetDatabasePath() <<
+                        "; tablet: " << msg->TabletID);
             return;
         }
     } else {
@@ -1353,8 +1400,8 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
 
 ////////////////////////////////////////////
 void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev) {
-
     TabletMon->RemoveTabletsByPathId(ev->Get()->PathId);
+    TabletMon->RemoveTabletsByDbPath(ev->Get()->DbPath);
 }
 
 ////////////////////////////////////////////

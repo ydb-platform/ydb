@@ -574,6 +574,43 @@ void TAggregatedLabeledCounters::FillGetRequestV2(
     }
 }
 
+void TAggregatedLabeledCounters::ToProto(NKikimrLabeledCounters::TTabletLabeledCounters& labeledCounters) const {
+    if (Changed) {
+        for (ui32 idx : xrange(CountersByTabletId.size())) {
+            Recalc(idx);
+        }
+        Changed = false;
+    }
+    ui32 updatedCount{0};
+    for (ui32 i = 0; i < Size(); ++i) {
+        if (strlen(Names[i]) != 0) {
+            if (labeledCounters.LabeledCounterSize() <= updatedCount) {
+                labeledCounters.AddLabeledCounter();
+            }
+            auto& labeledCounter = *labeledCounters.MutableLabeledCounter(updatedCount);
+            labeledCounter.SetValue(GetValue(i));
+            labeledCounter.SetNameId(i);
+            labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(AggrFunc[i]));
+            labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i]));
+            ++updatedCount;
+        }
+    }
+}
+
+void TAggregatedLabeledCounters::FromProto(
+    NMonitoring::TDynamicCounterPtr group,
+    const NKikimrLabeledCounters::TTabletLabeledCounters& labeledCounters) const {
+    for (const auto& counter : labeledCounters.GetLabeledCounter()) {
+        const ui32 nameId{counter.GetNameId()};
+        if (strlen(Names[nameId]) != 0) {
+            // TODO: ASDFGS if CT_TIMELAG -> ctx.Now() - counters.GetValue
+            const bool derived = counter.GetType() == TLabeledCounterOptions::CT_DERIV;
+            auto namedCounter = group->GetNamedCounter("name", Names[nameId], derived);
+            *namedCounter = counter.GetValue();
+        }
+    }
+}
+
 void TAggregatedLabeledCounters::Recalc(ui32 idx) const {
     Y_VERIFY(idx < Ids.size());
     auto &counters = CountersByTabletId[idx];
@@ -581,7 +618,11 @@ void TAggregatedLabeledCounters::Recalc(ui32 idx) const {
     std::pair<ui64, ui64> aggrVal{0,0};
     ui64 cntCount = counters.size();
 
-    Y_VERIFY(cntCount > 0);
+    // Y_VERIFY(cntCount > 0);
+    if (cntCount == 0) {
+        return;
+    }
+
     if (aggrFunc == TTabletLabeledCountersBase::EAggregateFunc::EAF_MIN)
         aggrVal = counters.begin()->second;
 

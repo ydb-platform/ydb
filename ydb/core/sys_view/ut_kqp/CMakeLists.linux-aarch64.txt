@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-sys_view-ut_kqp PUBLIC
   cpp-testing-unittest
   cpp-yson-node
   kqp-ut-common
+  persqueue-ut-common
   core-testlib-default
   cpp-client-draft
 )
@@ -40,6 +41,7 @@ target_sources(ydb-core-sys_view-ut_kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_kqp.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_counters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_labeled.cpp
 )
 add_test(
   NAME

@@ -253,6 +253,14 @@ public:
         AddHandler({TDqQuery::CallableName()}, RequireFirst(), Pass());
     }
 
+    void Rewind() override {
+        ExecState = MakeIntrusive<TExecState>();
+        FileLinks.clear();
+        ModulesMapping.clear();
+
+        TExecTransformerBase::Rewind();
+    }
+
 private:
     struct TExecState : public TThrRefBase {
         TAdaptiveLock Lock;

@@ -1645,6 +1645,19 @@ public:
     ui64 GetMaxObservedStep() const;
     void SendImmediateWriteResult(
             const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
+    TMonotonic ConfirmReadOnlyLease();
+    void ConfirmReadOnlyLease(TMonotonic ts);
+    void SendWithConfirmedReadOnlyLease(
+        TMonotonic ts,
+        const TActorId& target,
+        IEventBase* event,
+        ui64 cookie = 0,
+        const TActorId& sessionId = {});
+    void SendWithConfirmedReadOnlyLease(
+        const TActorId& target,
+        IEventBase* event,
+        ui64 cookie = 0,
+        const TActorId& sessionId = {});
     void SendImmediateReadResult(
         TMonotonic readTime,
         const TActorId& target,

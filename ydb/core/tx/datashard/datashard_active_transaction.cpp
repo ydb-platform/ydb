@@ -348,7 +348,7 @@ TActiveTransaction::~TActiveTransaction()
 void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 {
     Y_VERIFY(!DataTx);
-    Y_VERIFY(TxBody.empty());
+    Y_VERIFY(TxBody.empty() || HasVolatilePrepareFlag());
 
     Target = dataTx->Source();
     DataTx = dataTx;
@@ -392,6 +392,30 @@ void TActiveTransaction::FillTxData(TDataShard *self,
         BuildDistributedEraseTx();
     } else if (IsCommitWritesTx()) {
         BuildCommitWritesTx();
+    }
+
+    TrackMemory();
+}
+
+void TActiveTransaction::FillVolatileTxData(TDataShard *self,
+                                            TTransactionContext &txc,
+                                            const TActorContext &ctx)
+{
+    UntrackMemory();
+
+    Y_VERIFY(!DataTx);
+    Y_VERIFY(!TxBody.empty());
+
+    if (IsDataTx() || IsReadTable()) {
+        BuildDataTx(self, txc, ctx);
+        Y_VERIFY(DataTx->Ready());
+
+        if (DataTx->HasStreamResponse())
+            SetStreamSink(DataTx->GetSink());
+    } else if (IsSnapshotTx()) {
+        BuildSnapshotTx();
+    } else {
+        Y_FAIL("Unexpected FillVolatileTxData call");
     }
 
     TrackMemory();

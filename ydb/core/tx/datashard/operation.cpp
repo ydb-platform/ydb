@@ -270,5 +270,10 @@ bool TOperation::HasRuntimeConflicts() const noexcept
     return !Dependencies.empty();
 }
 
+void TOperation::SetFinishProposeTs() noexcept
+{
+    SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
+}
+
 } // namespace NDataShard
 } // namespace NKikimr

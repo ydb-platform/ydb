@@ -531,6 +531,18 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "LoadTxDetails at " << Self->TabletID() << " got data tx from cache "
                     << tx->GetStep() << ":" << tx->GetTxId());
+    } else if (tx->HasVolatilePrepareFlag()) {
+        // Since transaction is volatile it was never stored on disk, and it
+        // shouldn't have any artifacts yet.
+        tx->FillVolatileTxData(Self, txc, ctx);
+
+        ui32 keysCount = 0;
+        keysCount = tx->ExtractKeys();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "LoadTxDetails at " << Self->TabletID() << " loaded tx from memory "
+                    << tx->GetStep() << ":" << tx->GetTxId() << " keys extracted: "
+                    << keysCount);
     } else {
         NIceDb::TNiceDb db(txc.DB);
         TActorId target;
@@ -993,7 +1005,9 @@ void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransa
 {
     NIceDb::TNiceDb db(txc.DB);
     SetProposed(op->GetTxId(), op->GetTarget());
-    PreserveSchema(db, op->GetMaxStep());
+    if (!op->HasVolatilePrepareFlag()) {
+        PreserveSchema(db, op->GetMaxStep());
+    }
     Self->TransQueue.ProposeTx(db, op, op->GetTarget(), txBody);
     if (Self->IsStopping() && op->GetTarget()) {
         // Send notification if we prepared a tx while shard was stopping

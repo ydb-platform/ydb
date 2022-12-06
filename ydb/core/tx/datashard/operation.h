@@ -196,7 +196,11 @@ public:
     void SetImmediateFlag(bool val = true) { SetFlag(TTxFlags::Immediate, val); }
     void ResetImmediateFlag() { ResetFlag(TTxFlags::Immediate); }
 
-    bool IsImmediate() const { return HasImmediateFlag() && !HasForceOnlineFlag(); }
+    bool HasVolatilePrepareFlag() const { return HasFlag(TTxFlags::VolatilePrepare); }
+    void SetVolatilePrepareFlag(bool val = true) { SetFlag(TTxFlags::VolatilePrepare, val); }
+    void ResetVolatilePrepareFlag() { ResetFlag(TTxFlags::VolatilePrepare); }
+
+    bool IsImmediate() const { return HasImmediateFlag() && !HasForceOnlineFlag() && !HasVolatilePrepareFlag(); }
 
     bool HasInProgressFlag() const { return HasFlag(TTxFlags::InProgress); }
     void SetInProgressFlag(bool val = true) { SetFlag(TTxFlags::InProgress, val); }
@@ -752,6 +756,11 @@ public:
 
     TString ExecutionProfileLogString(ui64 tabletId) const;
 
+    TMonotonic GetFinishProposeTs() const noexcept { return FinishProposeTs; }
+    void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
+    void SetFinishProposeTs() noexcept;
+
+
 protected:
     TOperation()
         : TOperation(TBasicOpInfo())
@@ -818,6 +827,8 @@ private:
     // Index of current execution unit.
     size_t CurrentUnit;
     TExecutionProfile ExecutionProfile;
+
+    TMonotonic FinishProposeTs;
 
     static NMiniKQL::IEngineFlat::TValidationInfo EmptyKeysInfo;
 

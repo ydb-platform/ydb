@@ -37,6 +37,11 @@ namespace NDataShard {
             ForceOnline = 0x04,
             Immediate = 0x08,
 
+            // Transaction must be prepared as a ditributed transaction, but
+            // must also be volatile, i.e. expect that other participants may
+            // cancel it even after it is planned.
+            VolatilePrepare = 0x10,
+
             PublicFlagsMask = 0x000000000000FFFF,
 
             //////////////////////////////

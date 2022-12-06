@@ -50,7 +50,10 @@ EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
     Pipeline.SaveForPropose(tx->GetDataTx());
     Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
 
-    tx->ClearTxBody();
+    if (!op->HasVolatilePrepareFlag()) {
+        tx->ClearTxBody();
+    }
+
     tx->ClearDataTx();
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;

@@ -225,6 +225,12 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 
     AddTxInFly(op);
+
+    if (op->HasVolatilePrepareFlag()) {
+        // We keep volatile transactions in memory and don't store anything
+        return;
+    }
+
     db.Table<Schema::TxMain>().Key(op->GetTxId()).Update(
         NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
         NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
@@ -245,7 +251,10 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
 void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
     using Schema = TDataShard::Schema;
 
-    Y_VERIFY(TxsInFly.contains(txId));
+    auto it = TxsInFly.find(txId);
+    Y_VERIFY(it != TxsInFly.end());
+
+    Y_VERIFY(!it->second->HasVolatilePrepareFlag(), "Unexpected UpdateTxFlags for a volatile transaction");
 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 
@@ -257,6 +266,11 @@ void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
 void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody) {
     using Schema = TDataShard::Schema;
 
+    auto it = TxsInFly.find(txId);
+    Y_VERIFY(it != TxsInFly.end());
+
+    Y_VERIFY(!it->second->HasVolatilePrepareFlag(), "Unexpected UpdateTxBody for a volatile transaction");
+
     db.Table<Schema::TxDetails>().Key(txId, Self->TabletID())
         .Update<Schema::TxDetails::Body>(TString(txBody));
 }
@@ -265,12 +279,15 @@ void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
                            const TOperation &op) {
     using Schema = TDataShard::Schema;
 
-    db.Table<Schema::TxMain>().Key(op.GetTxId()).Delete();
-    db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Delete();
-    db.Table<Schema::TxArtifacts>().Key(op.GetTxId()).Delete();
+    if (!op.HasVolatilePrepareFlag()) {
+        db.Table<Schema::TxMain>().Key(op.GetTxId()).Delete();
+        db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Delete();
+        db.Table<Schema::TxArtifacts>().Key(op.GetTxId()).Delete();
 
-    db.Table<Schema::PlanQueue>().Key(op.GetStep(), op.GetTxId()).Delete();
-    db.Table<Schema::DeadlineQueue>().Key(op.GetMaxStep(), op.GetTxId()).Delete();
+        db.Table<Schema::PlanQueue>().Key(op.GetStep(), op.GetTxId()).Delete();
+        db.Table<Schema::DeadlineQueue>().Key(op.GetMaxStep(), op.GetTxId()).Delete();
+    }
+
     DeadlineQueue.erase(std::make_pair(op.GetMaxStep(), op.GetTxId()));
     RemoveTxInFly(op.GetTxId());
     PlannedTxs.erase(op.GetStepOrder());
@@ -321,6 +338,11 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
                                 ui64 &artifactFlags) {
     using Schema = TDataShard::Schema;
 
+    auto it = TxsInFly.find(txId);
+    Y_VERIFY(it != TxsInFly.end());
+
+    Y_VERIFY(!it->second->HasVolatilePrepareFlag(), "Unexpected LoadTxDetails for a volatile transaction");
+
     auto detailsRow = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Select();
     auto artifactsRow = db.Table<Schema::TxArtifacts>().Key(txId).Select();
 
@@ -370,11 +392,14 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
 
     ui64 maxStep = it->second->GetMaxStep();
 
-    if (!ClearTxDetails(db, txId))
-        return false;
+    if (!it->second->HasVolatilePrepareFlag()) {
+        if (!ClearTxDetails(db, txId)) {
+            return false;
+        }
 
-    db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
-    db.Table<Schema::TxMain>().Key(txId).Delete();
+        db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
+        db.Table<Schema::TxMain>().Key(txId).Delete();
+    }
 
     DeadlineQueue.erase(std::make_pair(maxStep, txId));
     RemoveTxInFly(txId);
@@ -401,11 +426,15 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Cleaning up tx " << txId << " with maxStep " << maxStep << " at outdatedStep " << outdatedStep);
 
-        if (!ClearTxDetails(db, txId))
-            return ECleanupStatus::Restart;
+        auto it = TxsInFly.find(txId);
+        if (it != TxsInFly.end() && !it->second->HasVolatilePrepareFlag()) {
+            if (!ClearTxDetails(db, txId)) {
+                return ECleanupStatus::Restart;
+            }
 
-        db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
-        db.Table<Schema::TxMain>().Key(txId).Delete();
+            db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
+            db.Table<Schema::TxMain>().Key(txId).Delete();
+        }
 
         erasedDeadlines.insert(pr);
         outdatedTxs.push_back(txId);
@@ -444,7 +473,9 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
     }
 
     using Schema = TDataShard::Schema;
-    db.Table<Schema::PlanQueue>().Key(step, op->GetTxId()).Update();
+    if (!op->HasVolatilePrepareFlag()) {
+        db.Table<Schema::PlanQueue>().Key(step, op->GetTxId()).Update();
+    }
     PlannedTxs.emplace(op->GetStepOrder());
     PlannedTxsByKind[op->GetKind()].emplace(op->GetStepOrder());
     DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));

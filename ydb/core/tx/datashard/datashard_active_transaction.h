@@ -354,6 +354,9 @@ public:
                     const TString &txBody,
                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                     ui64 artifactFlags);
+    void FillVolatileTxData(TDataShard *self,
+                            TTransactionContext &txc,
+                            const TActorContext &ctx);
 
     const TString &GetTxBody() const { return TxBody; }
     void SetTxBody(const TString &txBody) {

@@ -1931,15 +1931,35 @@ void TDataShard::SendImmediateWriteResult(
     }
 }
 
-void TDataShard::SendImmediateReadResult(
-    TMonotonic readTime,
+TMonotonic TDataShard::ConfirmReadOnlyLease() {
+    if (IsFollower() || !ReadOnlyLeaseEnabled()) {
+        // Do nothing and return an empty timestamp
+        return {};
+    }
+
+    TMonotonic ts = AppData()->MonotonicTimeProvider->Now();
+    Executor()->ConfirmReadOnlyLease(ts);
+    return ts;
+}
+
+void TDataShard::ConfirmReadOnlyLease(TMonotonic ts) {
+    if (IsFollower() || !ReadOnlyLeaseEnabled()) {
+        // Do nothing
+        return;
+    }
+
+    Executor()->ConfirmReadOnlyLease(ts);
+}
+
+void TDataShard::SendWithConfirmedReadOnlyLease(
+    TMonotonic ts,
     const TActorId& target,
     IEventBase* event,
     ui64 cookie,
     const TActorId& sessionId)
 {
     if (IsFollower() || !ReadOnlyLeaseEnabled()) {
-        // We just send possibly stale result (old behavior)
+        // Send possibly stale result (legacy behavior)
         if (!sessionId) {
             Send(target, event, 0, cookie);
         } else {
@@ -1962,14 +1982,33 @@ void TDataShard::SendImmediateReadResult(
         }
     };
 
-    if (!readTime) {
-        readTime = AppData()->MonotonicTimeProvider->Now();
+    if (!ts) {
+        ts = AppData()->MonotonicTimeProvider->Now();
     }
 
-    Executor()->ConfirmReadOnlyLease(readTime,
+    Executor()->ConfirmReadOnlyLease(ts,
         [state = MakeIntrusive<TSendState>(sessionId, target, SelfId(), event, cookie)] {
             TActivationContext::Send(state->Ev.Release());
     });
+}
+
+void TDataShard::SendWithConfirmedReadOnlyLease(
+    const TActorId& target,
+    IEventBase* event,
+    ui64 cookie,
+    const TActorId& sessionId)
+{
+    SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
+}
+
+void TDataShard::SendImmediateReadResult(
+    TMonotonic readTime,
+    const TActorId& target,
+    IEventBase* event,
+    ui64 cookie,
+    const TActorId& sessionId)
+{
+    SendWithConfirmedReadOnlyLease(readTime, target, event, cookie, sessionId);
 }
 
 void TDataShard::SendImmediateReadResult(
@@ -1978,7 +2017,7 @@ void TDataShard::SendImmediateReadResult(
     ui64 cookie,
     const TActorId& sessionId)
 {
-    SendImmediateReadResult(TMonotonic::Zero(), target, event, cookie, sessionId);
+    SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
 void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {

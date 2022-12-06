@@ -8,12 +8,16 @@
 
 
 add_library(tx-tiering-tier)
+target_compile_options(tx-tiering-tier PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(tx-tiering-tier PUBLIC
   contrib-libs-cxxsupp
   yutil
   services-metadata-initializer
   services-metadata-abstract
   services-metadata-secret
+  core-tx-schemeshard
 )
 target_sources(tx-tiering-tier PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
@@ -22,12 +26,16 @@ target_sources(tx-tiering-tier PRIVATE
 )
 
 add_global_library_for(tx-tiering-tier.global tx-tiering-tier)
+target_compile_options(tx-tiering-tier.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(tx-tiering-tier.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   services-metadata-initializer
   services-metadata-abstract
   services-metadata-secret
+  core-tx-schemeshard
 )
 target_sources(tx-tiering-tier.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp

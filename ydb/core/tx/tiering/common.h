@@ -9,6 +9,9 @@ namespace NKikimr::NColumnShard::NTiers {
 
 enum EEvents {
     EvTierCleared = EventSpaceBegin(TKikimrEvents::ES_TIERING),
+    EvSSFetchingResult,
+    EvSSFetchingProblem,
+    EvTimeout,
     EvEnd
 };
 

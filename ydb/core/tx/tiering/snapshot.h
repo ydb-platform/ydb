@@ -21,6 +21,8 @@ protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;
 public:
+
+    std::set<TString> GetTieringIdsForTier(const TString& tierName) const;
     const TTieringRule* GetTieringById(const TString& tieringId) const;
     std::optional<TTierConfig> GetTierById(const TString& tierName) const;
     using TBase::TBase;

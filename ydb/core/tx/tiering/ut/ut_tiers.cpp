@@ -316,6 +316,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 }
 
                 lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIER)", false);
+                lHelper.StartSchemaRequest("DROP OBJECT tiering1(TYPE TIERING_RULE)", false);
+                lHelper.StartSchemaRequest("DROP TABLE `/Root/olapStore/olapTable`");
                 lHelper.StartSchemaRequest("DROP OBJECT tiering1(TYPE TIERING_RULE)");
                 lHelper.StartSchemaRequest("DROP OBJECT tier1(TYPE TIER)");
                 lHelper.StartSchemaRequest("DROP OBJECT tier2(TYPE TIER)");
@@ -392,6 +394,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.StartSchemaRequest("DROP OBJECT tier2 (TYPE TIER)", false);
         lHelper.StartSchemaRequest("DROP OBJECT tier1 (TYPE TIER)", false);
         lHelper.StartSchemaRequest("DROP OBJECT tiering2 (TYPE TIERING_RULE)");
+        lHelper.StartSchemaRequest("DROP OBJECT tiering1 (TYPE TIERING_RULE)", false);
+        lHelper.StartSchemaRequest("DROP TABLE `/Root/olapStore/olapTable`");
         lHelper.StartSchemaRequest("DROP OBJECT tiering1 (TYPE TIERING_RULE)");
         {
             TTestCSEmulator emulator;

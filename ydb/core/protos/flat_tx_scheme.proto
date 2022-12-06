@@ -54,6 +54,39 @@ message TEvModifySchemeTransaction {
     optional string UserToken = 7; // serialized NACLib::TUserToken
 }
 
+message TFetcherCheckUserTieringPermissionsResult {
+    optional bool OperationAllow = 1;
+    optional string DenyReason = 2;
+}
+
+message TFetcherCheckUserTieringPermissions {
+    optional bytes UserToken = 1;
+    repeated string TieringRuleIds = 2;
+    optional string ActivityType = 3;
+}
+
+message TEvProcessingRequest {
+    optional string ClassName = 1;
+    // Fetcher is string serializable object that deserialized after factory constructed object from ClassName
+    optional bytes Data = 2;
+}
+
+message TEvProcessingResponse {
+    message TContent {
+        // Fetched content is string serializable object that determined by general content fetcher by mthod UnpackContent
+        optional bytes Data = 2;
+    }
+
+    message TError {
+        optional string ErrorMessage = 1;
+    }
+
+    oneof Result {
+        TContent Content = 1;
+        TError Error = 2;
+    }
+}
+
 message TEvModifySchemeTransactionResult {
     optional EStatus Status = 1;
     optional string Reason = 2;

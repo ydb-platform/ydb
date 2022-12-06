@@ -11,6 +11,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/object_factory/object_factory.h>
 
 #include "schemeshard_identificators.h"
 
@@ -20,7 +21,34 @@ namespace NSchemeShard {
 static constexpr ui64 RootSchemeShardId = 0;
 static constexpr ui64 RootPathId = 1;
 
+class TSchemeShard;
 struct TSchemeLimits;
+
+class ISSDataProcessor {
+protected:
+    virtual void DoProcess(TSchemeShard& schemeShard, NKikimrScheme::TEvProcessingResponse& result) const = 0;
+    virtual bool DoDeserializeFromString(const TString& data) = 0;
+    virtual TString DoSerializeToString() const = 0;
+public:
+    using TPtr = std::shared_ptr<ISSDataProcessor>;
+    using TFactory = NObjectFactory::TObjectFactory<ISSDataProcessor, TString>;
+    virtual ~ISSDataProcessor() = default;
+
+    virtual TString DebugString() const = 0;
+
+    TString SerializeToString() const {
+        return DoSerializeToString();
+    }
+    bool DeserializeFromString(const TString& data) {
+        return DoDeserializeFromString(data);
+    }
+
+    virtual TString GetClassName() const = 0;
+
+    void Process(TSchemeShard& schemeShard, NKikimrScheme::TEvProcessingResponse& result) {
+        return DoProcess(schemeShard, result);
+    }
+};
 
 struct TEvSchemeShard {
     enum EEv {
@@ -60,11 +88,49 @@ struct TEvSchemeShard {
         EvBackupDatashardResult,
         EvCancelTx,
         EvCancelTxResult,
+        EvProcessingRequest,
+        EvProcessingResponse,
 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD)");
+
+    struct TEvProcessingResponse: public TEventPB<TEvProcessingResponse,
+        NKikimrScheme::TEvProcessingResponse, EvProcessingResponse> {
+    private:
+        using TBase = TEventPB<TEvProcessingResponse,
+            NKikimrScheme::TEvProcessingResponse, EvProcessingResponse>;
+    public:
+        using TBase::TBase;
+        TEvProcessingResponse(const TString& errorMessage) {
+            Record.MutableError()->SetErrorMessage(errorMessage);
+        }
+    };
+
+    struct TEvProcessingRequest: public TEventPB<TEvProcessingRequest,
+        NKikimrScheme::TEvProcessingRequest, EvProcessingRequest> {
+    private:
+        using TBase = TEventPB<TEvProcessingRequest,
+            NKikimrScheme::TEvProcessingRequest, EvProcessingRequest>;
+    public:
+        using TBase::TBase;
+        TEvProcessingRequest(const ISSDataProcessor& processor) {
+            Record.SetClassName(processor.GetClassName());
+            Record.SetData(processor.SerializeToString());
+        }
+
+        ISSDataProcessor::TPtr RestoreProcessor() const {
+            auto result = ISSDataProcessor::TFactory::MakeHolder(TBase::Record.GetClassName());
+            if (!result) {
+                return nullptr;
+            } else if (!result->DeserializeFromString(TBase::Record.GetData())) {
+                return nullptr;
+            } else {
+                return std::shared_ptr<ISSDataProcessor>(result.Release());
+            }
+        }
+    };
 
     struct TEvModifySchemeTransaction : public TEventPB<TEvModifySchemeTransaction,
                                                         NKikimrScheme::TEvModifySchemeTransaction,

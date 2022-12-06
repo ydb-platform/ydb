@@ -1,6 +1,8 @@
 #pragma once
 #include "object.h"
 
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tiering/rule/ss_fetcher.h>
 #include <ydb/core/tx/tiering/snapshot.h>
 
 #include <ydb/services/metadata/abstract/common.h>
@@ -17,13 +19,17 @@ private:
     NMetadata::IOperationsManager::TModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     std::shared_ptr<TConfigsSnapshot> Tierings;
+    std::shared_ptr<TFetcherCheckUserTieringPermissions> SSFetcher;
+    std::optional<TFetcherCheckUserTieringPermissions::TResult> SSCheckResult;
     void StartChecker();
 protected:
     void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
             default:
                 break;
         }

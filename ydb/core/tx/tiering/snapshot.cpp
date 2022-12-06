@@ -61,6 +61,19 @@ const TTieringRule* TConfigsSnapshot::GetTieringById(const TString& tieringId) c
     }
 }
 
+std::set<TString> TConfigsSnapshot::GetTieringIdsForTier(const TString& tierName) const {
+    std::set<TString> result;
+    for (auto&& i : TableTierings) {
+        for (auto&& t : i.second.GetIntervals()) {
+            if (t.GetTierName() == tierName) {
+                result.emplace(i.second.GetTieringRuleId());
+                break;
+            }
+        }
+    }
+    return result;
+}
+
 TString NTiers::TConfigsSnapshot::DoSerializeToString() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     auto& jsonTiers = result.InsertValue("tiers", NJson::JSON_MAP);

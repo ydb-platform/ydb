@@ -57,6 +57,9 @@ private:
         if (req->clear_permissions()) {
             acl.ClearAccess();
         }
+        if (req->has_interrupt_inheritance()) {
+            acl.SetInterruptInheritance(req->interrupt_inheritance());
+        }
         for (const auto& perm : req->actions()) {
             switch (perm.action_case()) {
                 case Ydb::Scheme::PermissionsAction::kSet: {
@@ -67,7 +70,8 @@ private:
                     }
                 }
                 break;
-                case Ydb::Scheme::PermissionsAction::kGrant: {
+                case Ydb::Scheme::PermissionsAction::kGrant:
+                {
                     for (const auto& n : perm.grant().permission_names()) {
                         auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
                         acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.grant().subject(), aclAttrs.InheritanceType);

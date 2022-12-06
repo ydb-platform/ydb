@@ -13,6 +13,7 @@ message TACE {
 message TACL {
     // deny entries should precede allow entries
     repeated TACE ACE = 1;
+    optional bool InterruptInheritance = 2;
 }
 
 message TProtoHashBucket {
@@ -43,4 +44,5 @@ message TDiffACE {
 
 message TDiffACL {
     repeated TDiffACE DiffACE = 1;
+    optional bool InterruptInheritance = 2;
 }

@@ -123,6 +123,9 @@ message ModifyPermissionsRequest {
     repeated PermissionsAction actions = 3;
     // Clear all permissions on the object for all subjects
     bool clear_permissions = 4;
+    oneof inheritance {
+        bool interrupt_inheritance = 5;
+    }
 }
 
 message ModifyPermissionsResponse {

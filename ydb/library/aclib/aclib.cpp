@@ -205,6 +205,9 @@ bool TSecurityObject::CheckGrantAccess(const NACLibProto::TDiffACL& diffACL, con
 }
 
 TSecurityObject TSecurityObject::MergeWithParent(const NACLibProto::TSecurityObject& parent) const {
+    if (GetACL().GetInterruptInheritance()) {
+        return *this;
+    }
     TSecurityObject result(NACLibProto::TSecurityObject(), IsContainer);
     if (HasOwnerSID()) {
         result.SetOwnerSID(GetOwnerSID());
@@ -377,6 +380,9 @@ TACL::TACL(const TString& string) {
 
 std::pair<ui32, ui32> TACL::ApplyDiff(const NACLibProto::TDiffACL& diffACL) Y_NO_SANITIZE("undefined") {
     std::pair<ui32, ui32> modified = {};
+    if (diffACL.HasInterruptInheritance()) {
+        SetInterruptInheritance(diffACL.GetInterruptInheritance());
+    }
     for (const NACLibProto::TDiffACE& diffACE : diffACL.GetDiffACE()) {
         const NACLibProto::TACE& ace = diffACE.GetACE();
         switch (static_cast<EDiffType>(diffACE.GetDiffType())) {

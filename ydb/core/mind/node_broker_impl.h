@@ -103,6 +103,7 @@ private:
         ui32 Lease;
         TInstant Expire;
         bool LegacyUpdatePending = false;
+        bool AuthorizedByCertificate = false;
     };
 
     // State changes to apply while moving to the next epoch.

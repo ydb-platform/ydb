@@ -115,7 +115,8 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "   DataCenter: " << node.Location.GetDataCenterId() << Endl
                     << "   Location: " << node.Location.ToString() << Endl
                     << "   Lease: " << node.Lease << Endl
-                    << "   Expire: " << node.ExpirationString() << Endl;
+                    << "   Expire: " << node.ExpirationString() << Endl
+                    << "   AuthorizedByCertificate: " << (node.AuthorizedByCertificate ? "true" : "false") << Endl;
             }
             str << Endl;
 

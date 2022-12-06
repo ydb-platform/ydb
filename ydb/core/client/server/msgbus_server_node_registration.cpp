@@ -21,6 +21,15 @@ class TNodeRegistrationActor : public TActorBootstrapped<TNodeRegistrationActor>
 {
     using TActorBase = TActorBootstrapped<TNodeRegistrationActor>;
 
+    struct TNodeAuthorizationResult {
+        bool IsAuthorized = false;
+        bool IsCertififateUsed = false;
+
+        operator bool() const {
+            return IsAuthorized;
+        }
+    };
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
@@ -35,7 +44,8 @@ public:
 
     void Bootstrap(const TActorContext &ctx)
     {
-        if (!IsNodeAuthorized()) {
+        const TNodeAuthorizationResult nodeAuthorizationResult = IsNodeAuthorized();
+        if (!nodeAuthorizationResult.IsAuthorized) {
             SendReplyAndDie(ctx);
         }
 
@@ -78,6 +88,8 @@ public:
         if (Request.HasPath()) {
             request->Record.SetPath(Request.GetPath());
         }
+        request->Record.SetAuthorizedByCertificate(nodeAuthorizationResult.IsCertififateUsed);
+
         NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
 
         Become(&TNodeRegistrationActor::MainState);
@@ -172,14 +184,15 @@ public:
     }
 
 private:
-    bool IsNodeAuthorized() {
+    TNodeAuthorizationResult IsNodeAuthorized() {
+        TNodeAuthorizationResult result {.IsAuthorized = false, .IsCertififateUsed = false};
         auto* appdata = AppData();
         if (appdata && appdata->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
             const auto& nodeAuthValues = FindClientCert();
             if (nodeAuthValues.empty()) {
                 Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
                 Response.MutableStatus()->SetReason("Cannot authorize node. Node has not provided certificate");
-                return false;
+                return result;
             }
             const auto& pemCert = nodeAuthValues.front();
             TMap<TString, TString> subjectDescription;
@@ -191,16 +204,18 @@ private:
             if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
                 Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
                 Response.MutableStatus()->SetReason("Cannot authorize node by certificate");
-                return false;
+                return result;
             }
-            auto host = Request.GetHost();
+            const auto& host = Request.GetHost();
             if (!DynamicNodeAuthorizationParams.IsHostMatchAttributeCN(host)) {
                 Response.MutableStatus()->SetCode(TStatus::UNAUTHORIZED);
                 Response.MutableStatus()->SetReason("Cannot authorize node with host: " + host);
-                return false;
+                return result;
             }
+            result.IsCertififateUsed = true;
         }
-        return true;
+        result.IsAuthorized = true;
+        return result;;
     }
 
     NKikimrClient::TNodeRegistrationRequest Request;

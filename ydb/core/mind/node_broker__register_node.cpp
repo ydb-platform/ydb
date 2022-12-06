@@ -91,6 +91,7 @@ public:
                 Self->DbUpdateNodeLease(node, txc);
                 ExtendLease = true;
             }
+            node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
 
             Response->Record.MutableStatus()->SetCode(TStatus::OK);
             Self->FillNodeInfo(node, *Response->Record.MutableNode());
@@ -105,6 +106,7 @@ public:
         Self->FreeIds.Reset(NodeId);
 
         Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc, false);
+        Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
         Node->Lease = 1;
         Node->Expire = expire;
 

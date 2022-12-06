@@ -68,6 +68,7 @@ message TRegistrationRequest {
   optional NActorsInterconnect.TNodeLocation Location = 5;
   optional bool FixedNodeId = 6;
   optional string Path = 7;
+  optional bool AuthorizedByCertificate = 8;
 }
 
 message TRegistrationResponse {

@@ -175,6 +175,7 @@ private:
             queries = WorkloadQueryGen->GetWorkload(WorkloadType);
         }
 
+        Y_VERIFY(!queries.empty());
         auto q = std::move(queries.front());
         queries.pop_front();
 

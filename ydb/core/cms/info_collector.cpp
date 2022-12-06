@@ -186,13 +186,13 @@ void TInfoCollector::PassAway() {
 void TInfoCollector::Bootstrap() {
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
     Schedule(Timeout, new TEvents::TEvWakeup());
-    RequestBootstrapConfig();
-    RequestStateStorageConfig();
     Become(&TThis::StateWork);
 }
 
 void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBaseConfig();
+    RequestBootstrapConfig();
+    RequestStateStorageConfig();
 
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());

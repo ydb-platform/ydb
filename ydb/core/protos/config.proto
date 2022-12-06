@@ -749,6 +749,9 @@ message TFeatureFlags {
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
     optional bool EnableKqpImmediateEffects = 80 [default = false];
     optional bool EnableDataShardGenericReadSets = 81 [default = false];
+    // enable alter database operation to create subdomain's system tablets
+    // directly in subdomain's hive
+    optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
 }
 
 

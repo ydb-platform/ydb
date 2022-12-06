@@ -102,7 +102,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     void ProposePart(TSubTxId partId, TTabletId tableId);
     void DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx) const;
 
-    // route incomming messages to the parts
+    // route incoming messages to suboperations (parts)
     void RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, const TActorContext& ctx);
     void RegisterRelationByShardIdx(TSubTxId partId, TShardIdx shardIdx, const TActorContext& ctx);
     TSubTxId FindRelatedPartByTabletId(TTabletId tablet, const TActorContext& ctx) const;

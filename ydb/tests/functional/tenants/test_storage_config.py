@@ -532,6 +532,7 @@ def case_10():
     )
     return (creation_options, has_external, scheme)
 
+
 TESTS = [
     case_0,
     case_1,

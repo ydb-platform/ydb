@@ -71,7 +71,7 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
-void MakeAuditLog(const TTxId& txId, const THolder<TProposeResponse>& response, TOperationContext& context) {    
+void MakeAuditLog(const TTxId& txId, const THolder<TProposeResponse>& response, TOperationContext& context) {
     auto fragPath = TPath::Resolve(context.AuditLogFragments.front().GetAnyPath(), context.SS);
     if (!fragPath.IsResolved()) {
         fragPath.RiseUntilFirstResolvedParent();
@@ -879,19 +879,13 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
     case TTxState::ETxType::TxDropSubDomain:
         return CreateDropSubdomain(NextPartId(), txState);
     case TTxState::ETxType::TxForceDropSubDomain:
-        return CreateFroceDropSubDomain(NextPartId(), txState);
-    case TTxState::ETxType::TxCreateExtSubDomain:
-        return CreateExtSubDomain(NextPartId(), txState);
+        return CreateForceDropSubDomain(NextPartId(), txState);
     case TTxState::ETxType::TxCreateKesus:
         return CreateNewKesus(NextPartId(), txState);
     case TTxState::ETxType::TxAlterKesus:
         return CreateAlterKesus(NextPartId(), txState);
     case TTxState::ETxType::TxDropKesus:
         return CreateDropKesus(NextPartId(), txState);
-    case TTxState::ETxType::TxAlterExtSubDomain:
-        return CreateAlterExtSubDomain(NextPartId(), txState);
-    case TTxState::ETxType::TxForceDropExtSubDomain:
-        return CreateFroceDropExtSubDomain(NextPartId(), txState);
     case TTxState::ETxType::TxInitializeBuildIndex:
         return CreateInitializeBuildIndexMainTable(NextPartId(), txState);
     case TTxState::ETxType::TxFinalizeBuildIndex:
@@ -908,6 +902,16 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
         return CreateAlterTableIndex(NextPartId(), txState);
     case TTxState::ETxType::TxAlterSolomonVolume:
         return CreateAlterSolomon(NextPartId(), txState);
+
+    // ExtSubDomain
+    case TTxState::ETxType::TxCreateExtSubDomain:
+        return CreateExtSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterExtSubDomain:
+        return CreateAlterExtSubDomain(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterExtSubDomainCreateHive:
+        return CreateAlterExtSubDomainCreateHive(NextPartId(), txState);
+    case TTxState::ETxType::TxForceDropExtSubDomain:
+        return CreateForceDropExtSubDomain(NextPartId(), txState);
 
     // BlockStore
     case TTxState::ETxType::TxCreateBlockStoreVolume:
@@ -993,7 +997,7 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes:
         return CreateAlterUserAttrs(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe:
-        return CreateFroceDropUnsafe(NextPartId(), tx);
+        return CreateForceDropUnsafe(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         return CreateNewTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
@@ -1053,12 +1057,17 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         return CreateDropSubdomain(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
         Y_FAIL("run in compatible");
+
+    // ExtSubDomain
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
         return CreateExtSubDomain(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
         return CreateAlterExtSubDomain(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
+        Y_FAIL("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
-        return CreateFroceDropExtSubDomain(NextPartId(), tx);
+        return CreateForceDropExtSubDomain(NextPartId(), tx);
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
         return CreateNewKesus(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterKesus:
@@ -1214,7 +1223,8 @@ TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction
         return CreateConsistentAlterTable(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
         return CreateConsistentMoveIndex(NextPartId(), tx, context);
-
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
+        return CreateCompatibleAlterExtSubDomain(NextPartId(), tx, context);
     default:
         return {ConstructPart(opType, tx)};
     }
@@ -1308,17 +1318,12 @@ void TOperation::ProposePart(TSubTxId partId, TTabletId tableId) {
 void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx) const {
     Y_VERIFY(IsReadyToPropose());
 
-    //agregate
+    //aggregate
     TTabletId selfTabletId = ss->SelfTabletId();
-    TTabletId coordinatorId = InvalidTabletId; //common for all part
+    TTabletId coordinatorId = InvalidTabletId; //common for all parts
     TStepId effectiveMinStep = TStepId(0);
 
-    for (auto& rec: Proposes) {
-        TSubTxId partId = InvalidSubTxId;
-        TPathId pathId = InvalidPathId;
-        TStepId minStep = InvalidStepId;
-        std::tie(partId, pathId, minStep) = rec;
-
+    for (auto [_, pathId, minStep]: Proposes) {
         {
             TTabletId curCoordinatorId = ss->SelectCoordinator(TxId, pathId);
             if (coordinatorId == InvalidTabletId) {
@@ -1331,10 +1336,7 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
     }
 
     TSet<TTabletId> shards;
-    for (auto& rec: ShardsProposes) {
-        TSubTxId partId = InvalidSubTxId;
-        TTabletId shard = InvalidTabletId;
-        std::tie(partId, shard) = rec;
+    for (auto [partId, shard]: ShardsProposes) {
         shards.insert(shard);
 
         sideEffects.RouteByTablet(TOperationId(TxId, partId), shard);
@@ -1492,7 +1494,7 @@ TSet<TOperationId> TOperation::ActivatePartsWaitPublication(TPathId pathId, ui64
             activateParts.insert(TOperationId(TxId, partId)); // activate on every path
         }
 
-        it = WaitingPublicationsByPath.erase(it); // move iterator it forwart to the next element
+        it = WaitingPublicationsByPath.erase(it); // move iterator it forward to the next element
     }
 
     return activateParts;

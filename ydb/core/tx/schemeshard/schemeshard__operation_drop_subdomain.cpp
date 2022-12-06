@@ -79,7 +79,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
+        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
         Y_VERIFY(pathes.size() == 1);
         context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
 

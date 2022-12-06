@@ -32,6 +32,8 @@ def get_unique_path_for_current_test(output_path, sub_folder):
 
 
 def ensure_path_exists(path):
+    # NOTE: can't switch to os.makedirs(path, exist_ok=True) as some tests
+    # are still running under python2 (exist_ok was added in py3.2)
     if not os.path.isdir(path):
         os.makedirs(path)
     return path
@@ -46,12 +48,12 @@ def join(a, b):
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
-    def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator,
+    def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
                  binary_path=None, data_center=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
-        self.node_id = node_idx
+        self.node_id = node_id
         self.data_center = data_center
         self.__cwd = None
         self.__config_path = config_path
@@ -369,8 +371,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             if node_index in self.__configurator.dc_mapping:
                 data_center = self.__configurator.dc_mapping[node_index]
         self._nodes[node_index] = KiKiMRNode(
-            node_index,
-            self.config_path,
+            node_id=node_index,
+            config_path=self.config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
@@ -399,8 +401,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             else self.nodes[1].grpc_port
         )
         self._slots[slot_index] = KiKiMRNode(
-            slot_index,
-            self.config_path,
+            node_id=slot_index,
+            config_path=self.config_path,
             port_allocator=self.__port_allocator.get_slot_port_allocator(slot_index),
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
@@ -411,6 +413,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             encryption_key=encryption_key,
         )
         return self._slots[slot_index]
+
+    def unregister_slots(self, slots):
+        for i in slots:
+            del self._slots[i.node_id]
+
+    def unregister_and_stop_slots(self, slots):
+        self.unregister_slots(slots)
+        for i in slots:
+            i.stop()
 
     def __stop_node(self, node):
         ret = None

@@ -61,7 +61,7 @@ public:
             path.Base()->ApplyACL(acl);
             context.SS->PersistACL(db, path.Base());
 
-            auto subtree = context.SS->ListSubThee(path.Base()->PathId, context.Ctx);
+            auto subtree = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
             for (const TPathId pathId : subtree) {
                 if (context.SS->PathsById.at(pathId)->IsMigrated()) {
                     continue;

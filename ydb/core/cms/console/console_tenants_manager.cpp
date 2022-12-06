@@ -472,12 +472,6 @@ public:
                            bool tablets)
     {
         subdomain.SetName(Subdomain.second);
-        if (tablets) {
-            subdomain.SetCoordinators(Tenant->Coordinators);
-            subdomain.SetMediators(Tenant->Mediators);
-            subdomain.SetPlanResolution(Tenant->PlanResolution);
-            subdomain.SetTimeCastBucketsPerMediator(Tenant->TimeCastBucketsPerMediator);
-        }
         if (Tenant->IsExternalSubdomain) {
             subdomain.SetExternalSchemeShard(true);
             if (Tenant->IsExternalHive) {
@@ -486,6 +480,12 @@ public:
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
             }
+        }
+        if (tablets) {
+            subdomain.SetCoordinators(Tenant->Coordinators);
+            subdomain.SetMediators(Tenant->Mediators);
+            subdomain.SetPlanResolution(Tenant->PlanResolution);
+            subdomain.SetTimeCastBucketsPerMediator(Tenant->TimeCastBucketsPerMediator);
         }
 
         for (auto &pr : (SharedTenant ? SharedTenant->StoragePools : Tenant->StoragePools)) {
@@ -572,16 +572,21 @@ public:
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
+
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        tx.SetWorkingDir(Subdomain.first);
+
+        FillSubdomainCreationInfo(*tx.MutableSubDomain());
+
         if (Tenant->IsExternalSubdomain) {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
         } else {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSubDomain);
         }
-        tx.SetWorkingDir(Subdomain.first);
-        FillSubdomainCreationInfo(*tx.MutableSubDomain());
+
         if (Tenant->Attributes.UserAttributesSize())
             tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
 

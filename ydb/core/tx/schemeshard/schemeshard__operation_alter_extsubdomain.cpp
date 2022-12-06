@@ -1,62 +1,698 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
+
+
+#define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+
+
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
-
-void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
-                   ui32 count, TTabletTypes::EType type,
-                   const TChannelsBindings& channelsBindings,
-                   TSchemeShard* ss)
+void AddShardsTo(TTxState& txState, TTxId txId, TPathId pathId,
+    ui32 count, TTabletTypes::EType type,
+    const TChannelsBindings& channelsBindings,
+    TSchemeShard* ss)
 {
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
         auto shardId = ss->RegisterShardInfo(
-            TShardInfo(txId, pathId, type)
-                .WithBindedChannels(channelsBindings));
+            TShardInfo(txId, pathId, type).WithBindedChannels(channelsBindings)
+        );
         txState.Shards.emplace_back(shardId, type, TTxState::CreateParts);
     }
 }
 
-void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, ui64 shardsToCreate, TSchemeShard* ss) {
-    for (const auto& shard : txState.Shards) {
-        Y_VERIFY(shard.Operation == TTxState::ETxState::CreateParts);
-        Y_VERIFY(ss->ShardInfos.contains(shard.Idx), "shard info is set before");
-        auto& shardInfo = ss->ShardInfos[shard.Idx];
-        ss->PersistShardMapping(db, shard.Idx, InvalidTabletId, shardInfo.PathId, shardInfo.CurrentTxId, shardInfo.TabletType);
-        ss->PersistChannelsBinding(db, shard.Idx, shardInfo.BindedChannels);
+struct TParamsDelta {
+    uint64_t CoordinatorsAdded = 0;
+    uint64_t MediatorsAdded = 0;
+    uint64_t TimeCastBucketsPerMediatorAdded = 0;
+    uint8_t AddExternalSchemeShard = 0;
+    uint8_t AddExternalHive = 0;
+    uint8_t AddExternalSysViewProcessor = 0;
+    bool SharedTxSupportAdded = false;
+    TVector<TStoragePool> StoragePoolsAdded;
+};
+
+std::tuple<NKikimrScheme::EStatus, TString>
+VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input) {
+    auto paramError = [](const TStringBuf& msg) {
+        return std::make_tuple(NKikimrScheme::EStatus::StatusInvalidParameter,
+            TStringBuilder() << "Invalid ExtSubDomain request: " << msg
+        );
+    };
+
+    // Process input TSubDomainSetting using diff semantics:
+    // - present diff.param indicate change to the state
+    // - unset diff.param does not matter
+    // - state with applied change should be valid and workable
+    //
+    // Currently this operation support very few workable result states:
+    // 1. extsubdomain with full SharedTxSupport (ExternalSchemeShard, Coordinators, Mediators + required params),
+    //   with or without ExternalHive and ExternalSysViewProcessor
+    //
+
+    // First params check: single values
+
+    // PlanResolution
+    uint64_t planResolutionAdded = 0;
+    if (input.HasPlanResolution()) {
+        const auto prev = current->GetPlanResolution();
+        const auto next = input.GetPlanResolution();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (prev != 0) {
+                return paramError("PlanResolution could be set only once");
+            }
+            planResolutionAdded = next;
+        }
     }
-    Y_VERIFY(shardsToCreate == txState.Shards.size());
+
+    // Coordinators (also mediators) check:
+    // if state.param unset, then diff.param:
+    // - could be 0 -> state.param stays unset
+    // - could be non-zero value -> state.param become set
+    // if state.param set, then state.param:
+    // - couldn't be changed
+    // - couldn't be unset
+    //
+    uint64_t coordinatorsAdded = 0;
+    if (input.HasCoordinators()) {
+        const auto prev = current->GetProcessingParams().CoordinatorsSize();
+        const auto next = input.GetCoordinators();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (prev != 0) {
+                return paramError("Coordinators could be set only once");
+            }
+            coordinatorsAdded = next;
+        }
+    }
+    // Mediators checks
+    uint64_t mediatorsAdded = 0;
+    if (input.HasMediators()) {
+        const auto prev = current->GetProcessingParams().MediatorsSize();
+        const auto next = input.GetMediators();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (prev != 0) {
+                return paramError("Mediators could be set only once");
+            }
+            mediatorsAdded = next;
+        }
+    }
+
+    // TimeCastBucketsPerMediator
+    uint64_t timeCastBucketsPerMediatorAdded = 0;
+    if (input.HasTimeCastBucketsPerMediator()) {
+        const auto prev = current->GetProcessingParams().GetTimeCastBucketsPerMediator();
+        const auto next = input.GetTimeCastBucketsPerMediator();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (prev != 0) {
+                return paramError("TimeCastBucketsPerMediator could be set only once");
+            }
+            timeCastBucketsPerMediatorAdded = next;
+        }
+    }
+
+    // ExternalSchemeShard checks
+    uint8_t addExternalSchemeShard = 0;
+    if (input.HasExternalSchemeShard()) {
+        const bool prev = bool(current->GetTenantSchemeShardID());
+        const bool next = input.GetExternalSchemeShard();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("ExternalSchemeShard could only be added, not removed");
+            }
+            addExternalSchemeShard = 1;
+        }
+    }
+
+    // ExternalHive checks
+    uint8_t addExternalHive = 0;
+    if (input.HasExternalHive()) {
+        const bool prev = bool(current->GetTenantHiveID());
+        const bool next = input.GetExternalHive();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("ExternalHive could only be added, not removed");
+            }
+            addExternalHive = 1;
+        }
+    }
+
+    // ExternalSysViewProcessor checks
+    uint8_t addExternalSysViewProcessor = 0;
+    if (input.HasExternalSysViewProcessor()) {
+        const bool prev = bool(current->GetTenantSysViewProcessorID());
+        const bool next = input.GetExternalSysViewProcessor();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("ExternalSysViewProcessor could only be added, not removed");
+            }
+            addExternalSysViewProcessor = 1;
+        }
+    }
+
+    // Second params check: combinations
+
+    bool sharedTxSupportAdded = (coordinatorsAdded + mediatorsAdded) > 0;
+
+    if (sharedTxSupportAdded) {
+        if (0 == coordinatorsAdded) {
+            return paramError("can not create ExtSubDomain with zero Coordinators");
+        }
+        if (0 == mediatorsAdded) {
+            return paramError("can not create ExtSubDomain with zero Mediators");
+        }
+
+        if (0 == timeCastBucketsPerMediatorAdded) {
+            return paramError("can not create ExtSubDomain with TimeCastBucketsPerMediator not set");
+        }
+        if (0 == planResolutionAdded) {
+            return paramError("can not create ExtSubDomain with PlanResolution not set");
+        }
+    }
+    if (!addExternalSchemeShard && sharedTxSupportAdded) {
+        return paramError("ExtSubDomain without ExternalSchemeShard is useless, use SubDomain");
+    }
+    if (addExternalSchemeShard && !sharedTxSupportAdded) {
+        return paramError("ExtSubDomain without coordinators/mediators is useful for NBS, but not supported yet, use SubDomain");
+    }
+
+    // Storage pools check
+    TVector<TStoragePool> storagePoolsAdded;
+    {
+        auto actualPools = TStoragePools(current->GetStoragePools());
+        std::sort(actualPools.begin(), actualPools.end());
+
+        auto requestedPools = TStoragePools(input.GetStoragePools().begin(), input.GetStoragePools().end());
+        std::sort(requestedPools.begin(), requestedPools.end());
+
+        auto uniqEnd = std::unique(requestedPools.begin(), requestedPools.end());
+        if (uniqEnd != requestedPools.end()) {
+            return paramError(TStringBuilder() << "requested storage pools are not unique, for example, the pool '" << uniqEnd->GetName() << "' repeats several times");
+        }
+
+        {
+            TStoragePools omittedPools;
+            std::set_difference(
+                actualPools.begin(), actualPools.end(),
+                requestedPools.begin(), requestedPools.end(),
+                std::back_inserter(omittedPools)
+            );
+
+            if (omittedPools && requestedPools) {
+                return paramError(TStringBuilder() << "deleting storage pools is not allowed, for example, deletion of '" << omittedPools.begin()->GetName() << "' requested");
+            }
+        }
+
+        std::set_difference(requestedPools.begin(), requestedPools.end(),
+                            actualPools.begin(), actualPools.end(),
+                            std::back_inserter(storagePoolsAdded));
+    }
+
+    delta->CoordinatorsAdded = coordinatorsAdded;
+    delta->MediatorsAdded = mediatorsAdded;
+    delta->TimeCastBucketsPerMediatorAdded = timeCastBucketsPerMediatorAdded;
+    delta->AddExternalSchemeShard = addExternalSchemeShard;
+    delta->AddExternalHive = addExternalHive;
+    delta->AddExternalSysViewProcessor = addExternalSysViewProcessor;
+    delta->SharedTxSupportAdded = sharedTxSupportAdded;
+    delta->StoragePoolsAdded = std::move(storagePoolsAdded);
+
+    return {NKikimrScheme::EStatus::StatusAccepted, {}};
 }
 
-class TAlterExtSubDomain: public TSubOperation {
+void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input) {
+    // TProposeRespose should come in assuming positive outcome (status NKikimrScheme::StatusAccepted, no errors)
+    Y_VERIFY(result->IsAccepted());
+    auto [status, reason] = VerifyParams(delta, current, input);
+    result->SetStatus(status, reason);
+}
+
+void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
+    const auto& basenameId = path.Base()->PathId;
+
+    context.MemChanges.GrabPath(context.SS, basenameId);
+
+    // Registering shards is a bit complicated as every shard should be registered
+    // in many places:
+    //  - in schemeshard.ShardInfo as a "wannabe tablet" (this is done at AddShardsTo())
+    //  - in extsubdomain path as a "shard that leaves inside" that path
+    //  - in extsubdomain alter as a "private/system part of the subdomain entity"
+    for (auto& shard: txState.Shards) {
+        auto shardIdx = shard.Idx;
+
+        // Schemeshard local db
+        context.DbChanges.PersistShard(shardIdx);
+
+        // Path
+        path.DomainInfo()->AddInternalShard(shardIdx);
+        path.Base()->IncShardsInside(1);
+
+        // Extsubdomain data
+        alter->AddPrivateShard(shardIdx);
+    }
+
+    // Path state change
+    {
+        path.Base()->LastTxId = operationTxId;
+        path.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
+        context.DbChanges.PersistPath(path.Base()->PathId);
+    }
+
+    // Subdomain alter state
+    {
+        subdomainInfo->SetAlter(alter);
+    }
+}
+
+class TCreateHive: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TCreateHive, operationId# " << OperationId << ", ";
+    }
+
+public:
+    TCreateHive(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    void SendCreateTabletEvent(const TPathId& pathId, TShardIdx shardIdx, TOperationContext& context) {
+        auto path = context.SS->PathsById.at(pathId);
+
+        auto ev = CreateEvCreateTablet(path, shardIdx, context);
+        auto rootHiveId = context.SS->GetGlobalHive(context.Ctx);
+
+        LOG_D(DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());
+
+        context.OnComplete.BindMsgToPipe(OperationId, rootHiveId, shardIdx, ev.Release());
+
+        context.OnComplete.RouteByShardIdx(OperationId, shardIdx);
+    }
+
+    void SendPublishPathRequest(const TPathId& pathId, TOperationContext& context) {
+        context.OnComplete.PublishAndWaitPublication(OperationId, pathId);
+    }
+
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterExtSubDomainCreateHive);
+        Y_VERIFY(txState->Shards.size() == 1);
+        Y_VERIFY(txState->Shards.back().TabletType == ETabletType::Hive,
+            "expected tablet type HIVE, actual type %s", ETabletType::TypeToStr(txState->Shards.back().TabletType)
+        );
+
+        // In the case of schemeshard reboots hive could have already created.
+        // If so, operation should skip tablet creation step but still perform publishing step.
+
+        auto shard = txState->Shards.back();
+
+        auto getSubdomainHiveTabletId = [](const TPathId& pathId, TShardIdx shardIdx, TOperationContext& context) {
+            auto subdomain = context.SS->SubDomains.at(pathId);
+            Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+            auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+            Y_VERIFY(shardInfo.TabletType == ETabletType::Hive);
+            return shardInfo.TabletID;
+        };
+
+        auto subdomainHiveTabletId = getSubdomainHiveTabletId(txState->TargetPathId, shard.Idx, context);
+
+        if (subdomainHiveTabletId == InvalidTabletId) {
+            SendCreateTabletEvent(txState->TargetPathId, shard.Idx, context);
+
+        } else {
+            LOG_I(DebugHint() << "ProgressState, ExtSubDomain hive already exist, tabletId: " << subdomainHiveTabletId);
+            SendPublishPathRequest(txState->TargetPathId, context);
+        }
+
+        return false;
+    }
+
+    bool HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvCreateTabletReply");
+        LOG_D(DebugHint() << "HandleReply TEvCreateTabletReply, msg: " << DebugReply(ev));
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterExtSubDomainCreateHive);
+
+        const auto& record = ev->Get()->Record;
+        auto shardIdx = TShardIdx(record.GetOwner(), TLocalShardIdx(record.GetOwnerIdx()));
+        auto createdTabletId = TTabletId(record.GetTabletID());  // global id from hive
+        Y_VERIFY(createdTabletId != InvalidTabletId);
+
+        NKikimrProto::EReplyStatus status = record.GetStatus();
+        Y_VERIFY_S((
+                status ==  NKikimrProto::OK
+                || status == NKikimrProto::ALREADY
+            ),
+            "Unexpected status " << NKikimrProto::EReplyStatus_Name(status)
+                    << " in CreateTabletReply shard idx " << shardIdx << " tabletId " << createdTabletId
+        );
+
+        auto rootHiveId = TTabletId(record.GetOrigin());
+        Y_VERIFY(rootHiveId == context.SS->GetGlobalHive(context.Ctx));
+
+        TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
+
+        Y_VERIFY(shardInfo.TabletType == ETabletType::Hive);
+        Y_VERIFY(shardInfo.TabletID == InvalidTabletId || shardInfo.TabletID == createdTabletId);
+        Y_VERIFY(shardInfo.CurrentTxId == OperationId.GetTxId());
+
+        if (shardInfo.TabletID == InvalidTabletId) {
+            context.SS->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1);
+        }
+
+        shardInfo.TabletID = createdTabletId;
+        context.SS->TabletIdToShardIdx[createdTabletId] = shardIdx;
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        // commit new extsubdomain's hive data to the subdomain, db and memory,
+        // (and publish that change to the extsubdomain's path below)
+        // so that next stages would get extsubdomain's hive tablet id
+        // by requesting on extsubdomain's path
+        {
+            auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
+            subdomain->AddPrivateShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx);
+
+            subdomain->SetTenantHiveIDPrivate(createdTabletId);
+
+            Y_VERIFY(subdomain->GetVersion() + 2 == subdomain->GetAlter()->GetVersion());
+            subdomain->SetVersion(subdomain->GetVersion() + 1);
+
+            context.SS->PersistSubDomainVersion(db, txState->TargetPathId, *subdomain);
+            context.SS->PersistSubDomainPrivateShards(db, txState->TargetPathId, *subdomain);
+        }
+
+        context.SS->PersistShardMapping(db, shardIdx, createdTabletId, shardInfo.PathId, OperationId.GetTxId(), ETabletType::Hive);
+
+        context.OnComplete.UnbindMsgFromPipe(OperationId, rootHiveId, shardIdx);
+        context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId());
+
+        LOG_I(DebugHint() << "ExtSubDomain hive created, tabletId " << createdTabletId);
+
+        // no need to configure new hive by a separate EvConfigureHive
+        // as new hive is already configured to serve new subdomain at creation
+        // (by getting proper ObjectDomain, see ydb/core/mind/hive/tx_create_tablet.cpp)
+
+        // publish new path info to make this transient extsubdomain state
+        // (nothing + hive) visible to entire system, or rather to local services
+        // that should join extsubdomain resource pool and in order to do so must register
+        // to the newly created extsubdomain's hive
+        SendPublishPathRequest(txState->TargetPathId, context);
+
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvCompletePublication");
+        LOG_D(DebugHint() << "HandleReply TEvCompletePublication" << ", msg: " << DebugReply(ev));
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterExtSubDomainCreateHive);
+
+        Y_VERIFY(txState->TargetPathId == ev->Get()->PathId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        // Register barrier to release fellow suboperation waiting on hive creation.
+        // This is a sync point with TAlterExtSubDomain.
+        context.OnComplete.Barrier(OperationId, "extsubdomain-hive-created");
+
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvPrivate:TEvCompleteBarrier, msg: " << ev->Get()->ToString());
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+
+        return true;
+    }
+};
+
+class TEmptyPropose: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
+    }
+
+public:
+    TEmptyPropose(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+
+        LOG_I(DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+
+        return true;
+    }
+};
+
+class TAlterExtSubDomainCreateHive: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
-        switch (state) {
+        switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose; // DONE ???
+            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
         }
+        return TTxState::Invalid;
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
-        switch (state) {
+        switch(state) {
         case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return THolder(new TCreateHive(OperationId));
+        case TTxState::Propose:
+            return THolder(new TEmptyPropose(OperationId));
+        case TTxState::Done:
+            return THolder(new TDone(OperationId));
+        default:
+            return nullptr;
+        }
+    }
+
+public:
+    using TSubOperation::TSubOperation;
+
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
+        const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
+
+        TPath path = TPath::Resolve(Transaction.GetWorkingDir(), context.SS).Dive(inputSettings.GetName());
+
+        LOG_I("TAlterExtSubDomainCreateHive Propose"
+            << ", opId: " << OperationId
+            << ", path: " << path.PathString()
+        );
+
+        // No need to check conditions on extsubdomain path: checked in CreateCompatibleAlterExtSubDomain() already
+
+        const auto& basenameId = path.Base()->PathId;
+
+        // Get existing extsubdomain
+        Y_VERIFY(context.SS->SubDomains.contains(basenameId));
+        auto subdomainInfo = context.SS->SubDomains.at(basenameId);
+        Y_VERIFY(subdomainInfo);
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        result->SetPathId(basenameId.LocalPathId);
+
+        // Check params and build change delta
+        TParamsDelta delta;
+        VerifyParams(result.Get(), &delta, subdomainInfo, inputSettings);
+        if (!result->IsAccepted()) {
+            return result;
+        }
+
+        // No need to check (shard) limits on path: hive goes above any limits
+
+        // This suboperation can't be used as no-op, so check that hive creation is required
+        Y_VERIFY(delta.AddExternalHive);
+
+        // Generate changes in: operation object, path, schemeshard in-memory object and local db
+
+        // Create in-flight operation object
+        Y_VERIFY(!context.SS->FindTx(OperationId));
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExtSubDomainCreateHive, basenameId);
+
+        // Create subdomain alter
+        TSubDomainInfo::TPtr alter = new TSubDomainInfo(*subdomainInfo, 0, 0);
+
+        LOG_D("TAlterExtSubDomainCreateHive Propose"
+            << ", opId: " << OperationId
+            << ", subdomain ver " << subdomainInfo->GetVersion()
+            << ", alter ver " << alter->GetVersion()
+        );
+
+        auto guard = context.DbGuard();
+
+        // Create shard for the hive to-be.
+        {
+            TChannelsBindings channelsBinding;
+            if (!context.SS->ResolveSubdomainsChannels(delta.StoragePoolsAdded, channelsBinding)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
+                return result;
+            }
+
+            AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::Hive, channelsBinding, context.SS);
+            Y_VERIFY(txState.Shards.size() == 1);
+        }
+
+        // Register extsubdomain changes in shards, path, alter
+        RegisterChanges(txState, OperationId.GetTxId(), context, path, subdomainInfo, alter);
+        //NOTE: alter do not get persisted here, this is intentional
+
+        // Operation in-flight state change
+        {
+            txState.State = TTxState::CreateParts;
+            context.DbChanges.PersistTxState(OperationId);
+        }
+
+        context.OnComplete.ActivateTx(OperationId);
+
+        // Set initial operation state
+        SetState(NextState());
+
+        return result;
+    }
+
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TAlterExtSubDomainCreateHive AbortPropose"
+            << ", opId " << OperationId
+        );
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        LOG_N("TAlterExtSubDomainCreateHive AbortUnsafe"
+            << ", opId: " << OperationId
+            << ", forceDropId: " << forceDropTxId
+        );
+
+        context.OnComplete.DoneOperation(OperationId);
+    }
+};
+
+class TWaitHiveCreated: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TWaitHiveCreated, operationId " << OperationId << ", ";
+    }
+
+public:
+    TWaitHiveCreated(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+
+        LOG_I(DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
+
+        // Register barrier which this suboperation will wait on.
+        // This is a sync point with TAlterExtSubDomainCreateHive suboperation.
+        context.OnComplete.Barrier(OperationId, "extsubdomain-hive-created");
+
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvPrivate:TEvCompleteBarrier, msg: " << ev->Get()->ToString());
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
+
+        return true;
+    }
+};
+
+class TAlterExtSubDomain: public TSubOperation {
+    static TTxState::ETxState NextState() {
+        return TTxState::Waiting;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch(state) {
+        case TTxState::Waiting:
+            return TTxState::CreateParts;
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
+        case TTxState::Propose:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+        return TTxState::Invalid;
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch(state) {
+        case TTxState::Waiting:
+            return THolder(new TWaitHiveCreated(OperationId));
         case TTxState::CreateParts:
             return THolder(new TCreateParts(OperationId));
         case TTxState::ConfigureParts:
@@ -74,48 +710,49 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TTabletId ssId = context.SS->SelfTabletId();
+        const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
+        const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
-        const auto& settings = Transaction.GetSubDomain();
+        TPath path = TPath::Resolve(Transaction.GetWorkingDir(), context.SS).Dive(inputSettings.GetName());
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = settings.GetName();
+        LOG_I("TAlterExtSubDomain Propose"
+            << ", opId: " << OperationId
+            << ", path: " << path.PathString()
+        );
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterExtSubDomain Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        // No need to check conditions on extsubdomain path: checked in CreateCompatibleAlterExtSubDomain() already
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
+        const auto& basenameId = path.Base()->PathId;
 
-        if (!parentPathStr) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Malformed subdomain request: no working dir");
+        // Get existing extsubdomain
+        Y_VERIFY(context.SS->SubDomains.contains(basenameId));
+        auto subdomainInfo = context.SS->SubDomains.at(basenameId);
+        Y_VERIFY(subdomainInfo);
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        result->SetPathId(basenameId.LocalPathId);
+
+        // Check params and build change delta
+        TParamsDelta delta;
+        VerifyParams(result.Get(), &delta, subdomainInfo, inputSettings);
+        if (!result->IsAccepted()) {
             return result;
         }
 
-        if (!name) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: no name");
-            return result;
-        }
+        // Count tablets to create
 
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        //NOTE: ExternalHive and ExternalSysViewProcessor are _not_ counted against limits
+        ui64 tabletsToCreateUnderLimit = delta.AddExternalSchemeShard + delta.CoordinatorsAdded + delta.MediatorsAdded;
+        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor;
+        ui64 tabletsToCreateTotal = tabletsToCreateUnderLimit + tabletsToCreateOverLimit;
+
+        // Check path limits
 
         {
             TPath::TChecker checks = path.Check();
             checks
-                .NotEmpty()
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .IsExternalSubDomain()
-                .NotUnderOperation()
-                .IsCommonSensePath();
+                .ShardsLimit(tabletsToCreateUnderLimit)
+                .PathShardsLimit(tabletsToCreateUnderLimit);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -123,309 +760,124 @@ public:
             }
         }
 
-        TPathElement::TPtr subDomain = path.Base();
+        // Generate changes in: operation object, path, schemeshard in-memory object and local db
 
-        Y_VERIFY(context.SS->SubDomains.contains(subDomain->PathId));
-        auto subDomainInfo = context.SS->SubDomains.at(subDomain->PathId);
-        Y_VERIFY(subDomainInfo);
-
-        if (subDomainInfo->GetAlter()) {
-            result->SetError(NKikimrScheme::StatusPathDoesNotExist, "SubDomain is under another alter 2");
-            return result;
-        }
-
-        result->SetPathId(subDomain->PathId.LocalPathId);
-
-        if (0 != settings.GetPlanResolution()) {
-            if (subDomainInfo->GetPlanResolution() != 0 && subDomainInfo->GetPlanResolution() != settings.GetPlanResolution()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change PlanResolution, only set it up");
-                return result;
-            }
-            if (subDomain->IsRoot()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change PlanResolution at root, only additiong storage pools is allowed");
-                return result;
-            }
-        }
-
-        if (0 != settings.GetTimeCastBucketsPerMediator()) {
-            if (subDomainInfo->GetTCB() != 0 && subDomainInfo->GetTCB() != settings.GetTimeCastBucketsPerMediator()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change TimeCastBucketsPerMediator, only set it up");
-                return result;
-            }
-            if (subDomain->IsRoot()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change TimeCastBucketsPerMediator at root, only additiong storage pools is allowed");
-                return result;
-            }
-        }
-
-        if (0 == settings.GetCoordinators() && 0 != settings.GetMediators()) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: cant create subdomain with mediators, but no coordinators");
-            return result;
-        }
-
-        if (0 != settings.GetCoordinators() && 0 == settings.GetMediators()) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: cant create subdomain with coordinators, but no mediators");
-            return result;
-        }
-
-        const bool wasSharedTxSupported = subDomainInfo->IsSupportTransactions();
-        const bool setSupportSharedTx = bool(settings.GetCoordinators()) || bool(settings.GetMediators());
-
-        const bool wasExternalSchemeShard = bool(subDomainInfo->GetTenantSchemeShardID());
-        const bool setExternalSchemeShard = settings.HasExternalSchemeShard();
-        const bool addExternalSchemeShard = !wasExternalSchemeShard && setExternalSchemeShard && settings.GetExternalSchemeShard();
-
-        const bool wasExternalHive = bool(subDomainInfo->GetTenantHiveID());
-        const bool setExternalHive = settings.HasExternalHive();
-        const bool addExternalHive = !wasExternalHive && setExternalHive && settings.GetExternalHive();
-
-        const bool wasViewProcessors = bool(subDomainInfo->GetTenantSysViewProcessorID());
-        const bool setViewProcessors = settings.HasExternalSysViewProcessor();
-        const bool addViewProcessors = !wasViewProcessors && setViewProcessors && settings.GetExternalSysViewProcessor();
-
-        ui64 shardsToCreate = 0;
-        ui64 allowOverTheLimitShards = 0;
-
-        if (wasExternalSchemeShard && setExternalSchemeShard) {
-            if (bool(subDomainInfo->GetTenantSchemeShardID()) != settings.GetExternalSchemeShard()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change ExternalSchemeShard, only set it up");
-                return result;
-            }
-        }
-
-        if (addExternalSchemeShard) {
-            shardsToCreate += 1;
-
-            if (!wasSharedTxSupported && !setSupportSharedTx) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: ExtSubdomain without coordinators/mediators is usefull for NBS, but not supported yet, use SubDomain");
-                return result;
-            }
-        }
-
-        if (wasExternalHive && setExternalHive) {
-            if (bool(subDomainInfo->GetTenantHiveID()) != settings.GetExternalHive()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change ExternalHive, only set it up");
-                return result;
-            }
-        }
-
-        if (addExternalHive) {
-            shardsToCreate += 1;
-            allowOverTheLimitShards += 1;
-        }
-
-        if (wasViewProcessors && setViewProcessors) {
-            if (bool(subDomainInfo->GetTenantSysViewProcessorID()) != settings.GetExternalSysViewProcessor()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change ViewProcessors, only set it up");
-                return result;
-            }
-        }
-
-        if (addViewProcessors) {
-            shardsToCreate += 1;
-            allowOverTheLimitShards += 1;
-        }
-
-        if (wasSharedTxSupported && setSupportSharedTx) {
-            if (subDomainInfo->GetProcessingParams().CoordinatorsSize() != settings.GetCoordinators()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change Coordinators count, only set it up");
-                return result;
-            }
-
-            if (subDomainInfo->GetProcessingParams().MediatorsSize() != settings.GetMediators()) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: unable to change Mediators count, only set it up");
-                return result;
-            }
-        }
-
-        if (!wasSharedTxSupported && setSupportSharedTx) {
-            shardsToCreate += settings.GetCoordinators() + settings.GetMediators();
-
-            if (settings.GetTimeCastBucketsPerMediator() == 0) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: TimeCastBucketsPerMediator should be set when coordinators create");
-                return result;
-            }
-
-            if (settings.GetPlanResolution() == 0) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: PlanResolution should be set when coordinators create");
-                return result;
-            }
-
-            if (!wasExternalSchemeShard && !setExternalSchemeShard) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: ExtSubdomain without External SchemeShard is useless, use SubDomain");
-                return result;
-            }
-        }
-
-        {
-            TPath::TChecker checks = path.Check();
-            checks
-                .ShardsLimit(shardsToCreate - allowOverTheLimitShards)
-                .PathShardsLimit(shardsToCreate - allowOverTheLimitShards);
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
-        auto actualPools = TStoragePools(subDomainInfo->GetStoragePools());
-        std::sort(actualPools.begin(), actualPools.end());
-
-        auto requestedPools = TVector<TStoragePool>(settings.GetStoragePools().begin(), settings.GetStoragePools().end());
-        std::sort(requestedPools.begin(), requestedPools.end());
-
-        auto uniqEnd = std::unique(requestedPools.begin(), requestedPools.end());
-        if (uniqEnd != requestedPools.end()) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: requested storage pools is not qunique, for example, the pool '" + uniqEnd->GetName() +"' repeats several times");
-            return result;
-        }
-
-        {
-            TVector<TStoragePool> omitedPools;
-            std::set_difference(actualPools.begin(), actualPools.end(),
-                                requestedPools.begin(), requestedPools.end(),
-                                std::back_inserter(omitedPools));
-
-            if (omitedPools && requestedPools) {
-                result->SetError(
-                    NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: deleting storage pool is not allowed, for example, requested deletion '" + omitedPools.begin()->GetName() +"'");
-                return result;
-            }
-        }
-
-        TVector<TStoragePool> addedPools;
-        std::set_difference(requestedPools.begin(), requestedPools.end(),
-                            actualPools.begin(), actualPools.end(),
-                            std::back_inserter(addedPools));
-
-        TSubDomainInfo::TPtr alterData = new TSubDomainInfo(*subDomainInfo,
-                                                            settings.GetPlanResolution(),
-                                                            settings.GetTimeCastBucketsPerMediator(),
-                                                            addedPools);
-
-        TChannelsBindings channelBindings;
-        if (setSupportSharedTx || setExternalSchemeShard || setExternalHive || setViewProcessors) {
-            if (!context.SS->ResolveSubdomainsChannels(alterData->GetStoragePools(), channelBindings)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable construct channels binding");
-                return result;
-            }
-        }
-
-        TString errStr;
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-
-        if (settings.HasDeclaredSchemeQuotas()) {
-            alterData->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas());
-        }
-
-        if (settings.HasDatabaseQuotas()) {
-            alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
-        }
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        subDomain->LastTxId = OperationId.GetTxId();
-        subDomain->PathState = TPathElement::EPathState::EPathStateAlter;
-        context.SS->PersistPath(db, subDomain->PathId);
-
+        // Create in-flight operation object
         Y_VERIFY(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExtSubDomain, subDomain->PathId);
-        txState.State = TTxState::CreateParts;
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExtSubDomain, basenameId);
 
-        if (!wasSharedTxSupported && setSupportSharedTx) {
-            DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, settings.GetCoordinators(), TTabletTypes::Coordinator, channelBindings, context.SS);
-            DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, settings.GetMediators(), TTabletTypes::Mediator, channelBindings, context.SS);
+        // Create or derive alter.
+        // (We could have always created new alter from a current subdomainInfo but
+        // we need to take into account possible version increase from CreateHive suboperation.)
+        auto createAlterFrom = [&inputSettings, &delta](auto prototype) {
+            return MakeIntrusive<TSubDomainInfo>(
+                *prototype,
+                inputSettings.GetPlanResolution(),
+                inputSettings.GetTimeCastBucketsPerMediator(),
+                delta.StoragePoolsAdded
+            );
+        };
+        TSubDomainInfo::TPtr alter = [&delta, &subdomainInfo, &createAlterFrom, &context]() {
+            if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
+                Y_VERIFY(subdomainInfo->GetAlter());
+                return createAlterFrom(subdomainInfo->GetAlter());
+            } else {
+                Y_VERIFY(!subdomainInfo->GetAlter());
+                return createAlterFrom(subdomainInfo);
+            }
+        }();
+
+        if (inputSettings.HasDeclaredSchemeQuotas()) {
+            alter->SetDeclaredSchemeQuotas(inputSettings.GetDeclaredSchemeQuotas());
+        }
+        if (inputSettings.HasDatabaseQuotas()) {
+            alter->SetDatabaseQuotas(inputSettings.GetDatabaseQuotas());
         }
 
-        if (addExternalSchemeShard) {
-            DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::SchemeShard, channelBindings, context.SS);
+        LOG_D("TAlterExtSubDomain Propose"
+            << ", opId: " << OperationId
+            << ", subdomain ver " << subdomainInfo->GetVersion()
+            << ", alter ver " << alter->GetVersion()
+        );
+
+        auto guard = context.DbGuard();
+
+        // Create shards for the requested tablets (except hive)
+        {
+            TChannelsBindings channelsBinding;
+            if (delta.SharedTxSupportAdded || delta.AddExternalSchemeShard || delta.AddExternalSysViewProcessor || delta.AddExternalHive) {
+                if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
+                    return result;
+                }
+            }
+
+            // Declare shards.
+            // - hive always come first (OwnerIdx 1)
+            // - schemeshard always come second (OwnerIdx 2)
+            // - others follow
+            //
+            if (delta.AddExternalHive && !context.SS->EnableAlterDatabaseCreateHiveFirst) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::Hive, channelsBinding, context.SS);
+                ++tabletsToCreateTotal;
+            }
+            if (delta.AddExternalSchemeShard) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::SchemeShard, channelsBinding, context.SS);
+            }
+            if (delta.SharedTxSupportAdded) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, delta.CoordinatorsAdded, TTabletTypes::Coordinator, channelsBinding, context.SS);
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, delta.MediatorsAdded, TTabletTypes::Mediator, channelsBinding, context.SS);
+            }
+            if (delta.AddExternalSysViewProcessor) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::SysViewProcessor, channelsBinding, context.SS);
+            }
+            Y_VERIFY(txState.Shards.size() == tabletsToCreateTotal);
         }
 
-        if (addExternalHive) {
-            DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::Hive, channelBindings, context.SS);
-        } else if (!alterData->GetSharedHive()) {
-            alterData->SetSharedHive(context.SS->GetGlobalHive(context.Ctx));
+        // Register extsubdomain changes in shards, path, alter
+        RegisterChanges(txState, OperationId.GetTxId(), context, path, subdomainInfo, alter);
+        // Persist alter
+        context.DbChanges.PersistSubDomainAlter(basenameId);
+
+        // Operation in-flight state change
+        {
+            // txState.State = TTxState::CreateParts;
+            txState.State = TTxState::Waiting;
+            context.DbChanges.PersistTxState(OperationId);
         }
 
-        if (addViewProcessors) {
-            DeclareShards(txState, OperationId.GetTxId(), subDomain->PathId, 1, TTabletTypes::SysViewProcessor, channelBindings, context.SS);
-        }
-
-        for (auto& shard: txState.Shards) {
-            alterData->AddPrivateShard(shard.Idx);
-        }
-
-        PersistShards(db, txState, shardsToCreate, context.SS);
-        context.SS->PersistUpdateNextShardIdx(db);
-
-        subDomainInfo->SetAlter(alterData);
-        context.SS->PersistSubDomainAlter(db, subDomain->PathId, *alterData);
-
-        context.SS->PersistTxState(db, OperationId);
         context.OnComplete.ActivateTx(OperationId);
 
-        path.DomainInfo()->AddInternalShards(txState);
-        path.Base()->IncShardsInside(shardsToCreate);
-
+        // Set initial operation state
         SetState(NextState());
+
         return result;
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterSubDomain");
+        Y_FAIL("no AbortPropose for TAlterExtSubDomain");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterSubDomain AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        LOG_N("TAlterExtSubDomain AbortUnsafe"
+            << ", opId: " << OperationId
+            << ", forceDropId: " << forceDropTxId
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
+} // anonymous namespace
+
+ISubOperationBase::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterExtSubDomainCreateHive>(id, tx);
 }
 
-namespace NKikimr::NSchemeShard {
+ISubOperationBase::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state) {
+    Y_VERIFY(state != TTxState::Invalid);
+    return MakeSubOperation<TAlterExtSubDomainCreateHive>(id, state);
+}
 
 ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterExtSubDomain>(id, tx);
@@ -436,4 +888,100 @@ ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxSt
     return MakeSubOperation<TAlterExtSubDomain>(id, state);
 }
 
+TVector<ISubOperationBase::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+
+    LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id
+        << ", feature flag EnableAlterDatabaseCreateHiveFirst " << context.SS->EnableAlterDatabaseCreateHiveFirst
+        << ", tx " << tx.ShortDebugString()
+    );
+
+    const TString& parentPathStr = tx.GetWorkingDir();
+    const auto& inputSettings = tx.GetSubDomain();
+    const TString& name = inputSettings.GetName();
+
+    LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id << ", path " << parentPathStr << "/" << name);
+
+    auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperationBase::TPtr> {
+        return {CreateReject(id, status, TStringBuilder() << "Invalid AlterExtSubDomain request: " << msg)};
+    };
+
+    if (!parentPathStr) {
+        return errorResult(NKikimrScheme::StatusInvalidParameter, "no working dir");
+    }
+    if (!name) {
+        return errorResult(NKikimrScheme::StatusInvalidParameter, "no name");
+    }
+
+    TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+
+    // check extsubdomain path and its condition
+    {
+        TPath::TChecker checks = path.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsExternalSubDomain()
+            .NotUnderOperation()
+            .IsCommonSensePath();  // dirname consist of directories and subdomain roots (and olapstores!!)
+
+        if (!checks) {
+            return errorResult(checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    // check if extsubdomain is already being altered
+    //NOTE: (didn't TChecker::NotUnderOperation() checked that already?)
+    const auto& basenameId = path.Base()->PathId;
+
+    Y_VERIFY(context.SS->SubDomains.contains(basenameId));
+    auto subdomainInfo = context.SS->SubDomains.at(basenameId);
+    Y_VERIFY(subdomainInfo);
+
+    if (subdomainInfo->GetAlter()) {
+        return errorResult(NKikimrScheme::StatusMultipleModifications, "extsubdomain is under another alter operation");
+    }
+
+    // check operation condition and limits
+    {
+        TString explain;
+        if (!context.SS->CheckApplyIf(tx, explain)) {
+            return errorResult(NKikimrScheme::StatusPreconditionFailed, explain);
+        }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterExtSubDomain, explain)) {
+            return errorResult(NKikimrScheme::StatusResourceExhausted, explain);
+        }
+    }
+
+    // Check params and build change delta
+    TParamsDelta delta;
+    {
+        auto [status, reason] = VerifyParams(&delta, subdomainInfo, inputSettings);
+        if (status != NKikimrScheme::EStatus::StatusAccepted) {
+            return errorResult(status, reason);
+        }
+    }
+
+    // create suboperations
+    TVector<ISubOperationBase::TPtr> result;
+
+    if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
+        auto msg = TransactionTemplate(parentPathStr, NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive);
+        msg.MutableSubDomain()->CopyFrom(inputSettings);
+
+        result.push_back(CreateAlterExtSubDomainCreateHive(NextPartId(id, result), msg));
+    }
+    {
+        auto msg = TransactionTemplate(parentPathStr, NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+        msg.MutableSubDomain()->CopyFrom(inputSettings);
+
+        result.push_back(CreateAlterExtSubDomain(NextPartId(id, result), msg));
+    }
+
+    return result;
 }
+
+} // namespace NKikimr::NSchemeShard

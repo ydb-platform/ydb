@@ -35,7 +35,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
-        // Initiate asynchonous deletion of all shards
+        // Initiate asynchronous deletion of all shards
         for (auto shard : txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }
@@ -169,7 +169,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
+        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
         context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -197,9 +197,9 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
-        auto pathes = context.SS->ListSubThee(txState->TargetPathId, context.Ctx);
-        NForceDrop::ValidateNoTrasactionOnPathes(OperationId, pathes, context);
-        context.SS->MarkAsDroping({txState->TargetPathId}, OperationId.GetTxId(), context.Ctx);
+        auto pathes = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
+        NForceDrop::ValidateNoTransactionOnPathes(OperationId, pathes, context);
+        context.SS->MarkAsDropping({txState->TargetPathId}, OperationId.GetTxId(), context.Ctx);
         NForceDrop::CollectShards(pathes, OperationId, txState, context);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
@@ -328,7 +328,7 @@ public:
             }
         }
 
-        context.SS->MarkAsDroping({path.Base()->PathId}, OperationId.GetTxId(), context.Ctx);
+        context.SS->MarkAsDropping({path.Base()->PathId}, OperationId.GetTxId(), context.Ctx);
 
         txState.State = TTxState::Propose;
         context.OnComplete.ActivateTx(OperationId);
@@ -381,11 +381,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, const TTxTransaction& tx) {
+ISubOperationBase::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropExtSubdomain>(id, tx);
 }
 
-ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, TTxState::ETxState state) {
+ISubOperationBase::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
     return MakeSubOperation<TDropExtSubdomain>(id, state);
 }

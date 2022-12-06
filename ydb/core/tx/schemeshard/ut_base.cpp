@@ -8065,7 +8065,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
-        CheckExpected(
+        CheckExpectedStatus(
             { NKikimrScheme::StatusMultipleModifications },
             event->Record.GetStatus(), event->Record.GetReason());
 

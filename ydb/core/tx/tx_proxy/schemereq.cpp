@@ -173,6 +173,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomain:
             return *modifyScheme.MutableSubDomain()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
+            Y_FAIL("no implementation for ESchemeOpAlterExtSubDomainCreateHive");
+
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
             return *modifyScheme.MutableCreateRtmrVolume()->MutableName();
 
@@ -737,6 +740,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
+        case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
             return false;
         }
         return true;

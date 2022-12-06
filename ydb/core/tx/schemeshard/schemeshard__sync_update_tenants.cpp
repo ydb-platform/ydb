@@ -89,7 +89,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             Self->ParentDomainCachedEffectiveACL.Init(Self->ParentDomainEffectiveACL);
 
             Self->PersistParentDomainEffectiveACL(db, record.GetOwner(), record.GetEffectiveACL(), record.GetEffectiveACLVersion());
-            for (const TPathId pathId : Self->ListSubThee(Self->RootPathId(), ctx)) {
+            for (const TPathId pathId : Self->ListSubTree(Self->RootPathId(), ctx)) {
                 SideEffects.PublishToSchemeBoard(InvalidOperationId, pathId);
             }
 
@@ -195,7 +195,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 ++path->ACLVersion;
                 Self->PersistACL(db, path);
 
-                for (const TPathId pathId : Self->ListSubThee(Self->RootPathId(), ctx)) {
+                for (const TPathId pathId : Self->ListSubTree(Self->RootPathId(), ctx)) {
                     SideEffects.PublishToSchemeBoard(InvalidOperationId, pathId);
                 }
 

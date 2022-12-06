@@ -62,6 +62,7 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
         return "CREATE DATABASE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
         return "ALTER DATABASE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
@@ -186,6 +187,7 @@ TString DefineUserOperationName(NKikimrSchemeOp::EOperationType type) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
         return "DROP BLOB DEPOT";
     }
+    Y_FAIL("switch should cover all operation types");
 }
 
 TAuditLogFragment::TAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
@@ -326,9 +328,8 @@ void TAuditLogFragment::FillPathes(const NKikimrSchemeOp::TModifyScheme& tx) {
         Path = JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()});
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-        Path = JoinPath({tx.GetWorkingDir(), tx.GetSubDomain().GetName()});
-        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetSubDomain().GetName()});
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:

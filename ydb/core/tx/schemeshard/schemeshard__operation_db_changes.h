@@ -32,6 +32,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TOperationId> TxStates;
 
+    TDeque<TPathId> AlterSubDomains;
+
 public:
     ~TStorageChanges() = default;
 
@@ -81,6 +83,10 @@ public:
 
     void PersistShard(const TShardIdx& shardIdx) {
         Shards.push_back(shardIdx);
+    }
+
+    void PersistSubDomainAlter(const TPathId& pathId) {
+        AlterSubDomains.push_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

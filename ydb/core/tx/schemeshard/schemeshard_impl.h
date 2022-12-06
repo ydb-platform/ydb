@@ -256,6 +256,7 @@ public:
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = false;
+    bool EnableAlterDatabaseCreateHiveFirst = false;
 
     TShardDeleter ShardDeleter;
 
@@ -529,11 +530,11 @@ public:
 
     THashSet<TShardIdx> CollectAllShards(const THashSet<TPathId>& pathes) const;
     void ExamineTreeVFS(TPathId nodeId, std::function<void(TPathElement::TPtr)> func, const TActorContext& ctx);
-    THashSet<TPathId> ListSubThee(TPathId subdomain_root, const TActorContext& ctx);
+    THashSet<TPathId> ListSubTree(TPathId subdomain_root, const TActorContext& ctx);
     THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& pathes, const TActorContext &ctx);
 
     void MarkAsDroping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
-    void MarkAsDroping(const THashSet<TPathId>& pathes, TTxId txId, const TActorContext& ctx);
+    void MarkAsDropping(const THashSet<TPathId>& pathes, TTxId txId, const TActorContext& ctx);
 
     void UncountNode(TPathElement::TPtr node);
     void MarkAsMigrated(TPathElement::TPtr node, const TActorContext& ctx);
@@ -655,6 +656,7 @@ public:
     void PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainSecurityStateVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSubDomainPrivateShards(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistDeleteSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
     void PersistKesusVersion(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);

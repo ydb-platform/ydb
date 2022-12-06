@@ -170,6 +170,8 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxAllocatePQ   = 138            [(CounterOpts) = {Name: "InFlightOps/AllocatePQ"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTableWithSnapshot = 139 [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTableWithSnapshot"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomainCreateHive = 140  [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomainCreateHive"}];
 }
 
 enum ECumulativeCounters {
@@ -207,7 +209,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterUserAttributes = 29       [(CounterOpts) = {Name: "FinishedOps/AlterUserAttributes"}];
     COUNTER_FINISHED_OPS_TxCreateTableIndex = 30          [(CounterOpts) = {Name: "FinishedOps/CreateTableIndex"}];
     COUNTER_FINISHED_OPS_TxDropTableIndex = 31            [(CounterOpts) = {Name: "FinishedOps/DropTableIndex"}];
-    COUNTER_FINISHED_OPS_TxCreateExtSubDomain = 32        [(CounterOpts) = {Name: "FinishedOps/DropExtSubDomain"}];
+    COUNTER_FINISHED_OPS_TxCreateExtSubDomain = 32        [(CounterOpts) = {Name: "FinishedOps/CreateExtSubDomain"}];
     COUNTER_FINISHED_OPS_TxMergeTablePartition = 33       [(CounterOpts) = {Name: "FinishedOps/MergeTablePartition"}];
     COUNTER_FINISHED_OPS_TxAlterExtSubDomain = 34         [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomain"}];
     COUNTER_FINISHED_OPS_TxForceDropExtSubDomain = 35     [(CounterOpts) = {Name: "FinishedOps/ForceDropExtSubDomain"}];
@@ -261,8 +263,8 @@ enum ECumulativeCounters {
     COUNTER_BACKGROUND_COMPACTION_NOT_NEEDED = 74         [(CounterOpts) = {Name: "BackgroundCompactionNotNeeded"}];
     COUNTER_BACKGROUND_COMPACTION_LOANED = 75             [(CounterOpts) = {Name: "BackgroundCompactionLoaned"}];
 
-    COUNTER_BORROWED_COMPACTION_OK = 76                  [(CounterOpts) = {Name: "BorrowedCompactionOK"}];
-    COUNTER_BORROWED_COMPACTION_TIMEOUT = 77             [(CounterOpts) = {Name: "BorrowedCompactionTimeout"}];
+    COUNTER_BORROWED_COMPACTION_OK = 76                   [(CounterOpts) = {Name: "BorrowedCompactionOK"}];
+    COUNTER_BORROWED_COMPACTION_TIMEOUT = 77              [(CounterOpts) = {Name: "BorrowedCompactionTimeout"}];
 
     COUNTER_FINISHED_OPS_TxCreateBlobDepot = 78           [(CounterOpts) = {Name: "FinishedOps/CreateBlobDepot"}];
     COUNTER_FINISHED_OPS_TxAlterBlobDepot = 79            [(CounterOpts) = {Name: "FinishedOps/AlterBlobDepot"}];
@@ -273,6 +275,9 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxAllocatePQ   = 83              [(CounterOpts) = {Name: "FinishedOps/AllocatePQ"}];
     COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTableWithSnapshot = 84 [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTableWithSnapshot"}];
+
+    COUNTER_FINISHED_OPS_TxAlterExtSubDomainCreateHive = 85   [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomainCreateHive"}];
+
 }
 
 enum EPercentileCounters {

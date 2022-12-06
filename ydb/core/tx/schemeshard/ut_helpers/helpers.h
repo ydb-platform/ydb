@@ -30,6 +30,23 @@
     #define Cdbg Cnull
 #endif
 
+
+// ad-hoc test parametrization support: only for single boolean flag
+// taken from ydb/core/ut/common/kqp_ut_common.h:Y_UNIT_TEST_TWIN
+//TODO: introduce general support for test parametrization?
+#define Y_UNIT_TEST_FLAG(N, OPT)                                                                                   \
+    template<bool OPT> void N(NUnitTest::TTestContext&);                                                           \
+    struct TTestRegistration##N {                                                                                  \
+        TTestRegistration##N() {                                                                                   \
+            TCurrentTest::AddTest(#N "-" #OPT "-false", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false); \
+            TCurrentTest::AddTest(#N "-" #OPT "-true", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true>), false);   \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template<bool OPT>                                                                                             \
+    void N(NUnitTest::TTestContext&)
+
+
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
@@ -63,7 +80,7 @@ namespace NSchemeShardUT_Private {
     NKikimrScheme::TEvDescribeSchemeResult DescribePrivatePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false);
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false, bool showPrivate = false, bool returnBackups = false);
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, bool returnPartitioning = false, bool returnBoundaries = false, bool showPrivate = false, bool returnBackups = false);
-    TPathVersion ExtructPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& describe);
+    TPathVersion ExtractPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& describe);
     TPathVersion TestDescribeResult(const NKikimrScheme::TEvDescribeSchemeResult& describe, TVector<NLs::TCheckFunc> checks = {});
 
     TString TestDescribe(TTestActorRuntime& runtime, const TString& path);
@@ -74,11 +91,28 @@ namespace NSchemeShardUT_Private {
     THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TString& path,
         NSchemeCache::TSchemeCacheNavigate::EOp op = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath);
 
+    ////////// expected results
+    struct TExpectedResult {
+        TEvSchemeShard::EStatus Status;
+        TString ReasonFragment;
+
+        TExpectedResult(TEvSchemeShard::EStatus status)
+            : Status(status)
+        {}
+        TExpectedResult(TEvSchemeShard::EStatus status, TString reasonFragment)
+            : Status(status)
+            , ReasonFragment(reasonFragment)
+        {}
+    };
+
     ////////// modification results
-    void CheckExpected(const TVector<TEvSchemeShard::EStatus>& expected, TEvSchemeShard::EStatus result, const TString& reason);
-    void CheckExpected(const TVector<Ydb::StatusIds::StatusCode>& expected, Ydb::StatusIds::StatusCode result, const TString& reason);
-    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId,TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
-    ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId, const TVector<TEvSchemeShard::EStatus>& expectedResults);
+    void CheckExpectedResult(const TVector<TExpectedResult>& expected, TEvSchemeShard::EStatus actualStatus, const TString& actualReason);
+    // CheckExpectedStatus is a deprecated version of CheckExpectedResult that can't check reasons.
+    // Used by non generic test helpers. Should be replaced by CheckExpectedResult.
+    void CheckExpectedStatus(const TVector<NKikimrScheme::EStatus>& expected, TEvSchemeShard::EStatus actualStatus, const TString& actualReason);
+    void CheckExpectedStatusCode(const TVector<Ydb::StatusIds::StatusCode>& expected, Ydb::StatusIds::StatusCode result, const TString& reason);
+    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId, TEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted);
+    ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId, const TVector<TExpectedResult>& expectedResults);
     void SkipModificationReply(TTestActorRuntime& runtime, ui32 num = 1);
 
     TEvTx* CombineSchemeTransactions(const TVector<TEvTx*>& transactions);
@@ -97,9 +131,9 @@ namespace NSchemeShardUT_Private {
         void Async##name(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, params, __VA_ARGS__); \
         void Async##name(TTestActorRuntime& runtime, ui64 txId, params, __VA_ARGS__); \
         ui64 Test##name(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, params, \
-            const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted}, __VA_ARGS__); \
+            const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}}, __VA_ARGS__); \
         ui64 Test##name(TTestActorRuntime& runtime, ui64 txId, params, \
-            const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted}, __VA_ARGS__)
+            const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}}, __VA_ARGS__) \
 
     #define GENERIC_HELPERS(name) DEFINE_HELPERS(name, UT_GENERIC_PARAMS, const TApplyIf& applyIf = {})
     #define GENERIC_WITH_ATTRS_HELPERS(name) DEFINE_HELPERS(name, UT_GENERIC_PARAMS, const NKikimrSchemeOp::TAlterUserAttributes& userAttrs = {}, const TApplyIf& applyIf = {})
@@ -209,7 +243,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBlockStoreVolume);
     DROP_BY_PATH_ID_HELPERS(DropBlockStoreVolume);
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0);
-    void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusSuccess});
+    void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusSuccess});
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
@@ -224,7 +258,7 @@ namespace NSchemeShardUT_Private {
     TEvSchemeShard::TEvCancelTx* CancelTxRequest(ui64 txId, ui64 targetTxId);
     void AsyncCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId);
     void TestCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId,
-                               const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+                               const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
     // modify acl
     TEvTx* CreateModifyACLRequest(ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
@@ -236,12 +270,12 @@ namespace NSchemeShardUT_Private {
     // upgrade subdomain
     TEvTx* UpgradeSubDomainRequest(ui64 txId, const TString& parentPath, const TString& name);
     void AsyncUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
-    void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TEvSchemeShard::EStatus>& expectedResults);
+    void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults);
     void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
 
     TEvTx* UpgradeSubDomainDecisionRequest(ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
-    void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TEvSchemeShard::EStatus>& expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
 
     // copy table
@@ -254,29 +288,27 @@ namespace NSchemeShardUT_Private {
     // move table
     TEvTx* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard = TTestTxConfig::SchemeShard, const TApplyIf& applyIf = {});
     void AsyncMoveTable(TTestActorRuntime& runtime, ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard = TTestTxConfig::SchemeShard);
-    void TestMoveTable(TTestActorRuntime& runtime, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
-    void TestMoveTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestMoveTable(TTestActorRuntime& runtime, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestMoveTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
     // move index
     TEvTx* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard = TTestTxConfig::SchemeShard, const TApplyIf& applyIf = {});
     void AsyncMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard = TTestTxConfig::SchemeShard);
-    void TestMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcMove, const TString& dstMove, bool allowOverwrite, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
-    void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& srcMove, const TString& dstMove, bool allowOverwrite, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcMove, const TString& dstMove, bool allowOverwrite, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& srcMove, const TString& dstMove, bool allowOverwrite, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
     // locks
     TEvTx* LockRequest(ui64 txId, const TString &parentPath, const TString& name);
     void AsyncLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
     void AsyncLock(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
     void TestLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name,
-                  const TVector<TEvSchemeShard::EStatus> expectedResults = {NKikimrScheme::StatusAccepted});
+                  const TVector<TExpectedResult> expectedResults = {NKikimrScheme::StatusAccepted});
     void TestLock(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
-                  const TVector<TEvSchemeShard::EStatus> expectedResults = {NKikimrScheme::StatusAccepted});
-    void AsyncUnkock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, ui64 lockId, const TString& parentPath, const TString& name);
-    void AsyncUnkock(TTestActorRuntime& runtime, ui64 txId, ui64 lockId, const TString& parentPath, const TString& name);
+                  const TVector<TExpectedResult> expectedResults = {NKikimrScheme::StatusAccepted});
     void TestUnlock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, ui64 lockId, const TString& parentPath, const TString& name,
-                  const TVector<TEvSchemeShard::EStatus> expectedResults = {NKikimrScheme::StatusAccepted});
+                  const TVector<TExpectedResult> expectedResults = {NKikimrScheme::StatusAccepted});
     void TestUnlock(TTestActorRuntime& runtime, ui64 txId, ui64 lockId, const TString& parentPath, const TString& name,
-                  const TVector<TEvSchemeShard::EStatus> expectedResults = {NKikimrScheme::StatusAccepted});
+                  const TVector<TExpectedResult> expectedResults = {NKikimrScheme::StatusAccepted});
 
     // index build
     struct TBuildIndexConfig {

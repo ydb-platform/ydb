@@ -1390,7 +1390,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         if (!Self->IsShemeShardConfigured()) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit, SS hasn't been configured jet"
+                         "TTxInit, SS hasn't been configured yet"
                              << ", state: " << (ui64)Self->InitState
                              << ", at schemeshard: " << Self->TabletID());
             return true;
@@ -1576,14 +1576,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     ui64 alterVersion = rowset.GetValue<Schema::SubDomains::AlterVersion>();
                     ui64 planResolution = rowset.GetValue<Schema::SubDomains::PlanResolution>();
-                    ui32 timeCastBukets = rowset.GetValue<Schema::SubDomains::TimeCastBuckets>();
+                    ui32 timeCastBuckets = rowset.GetValue<Schema::SubDomains::TimeCastBuckets>();
                     TPathId resourcesDomainId = TPathId(
                         rowset.GetValue<Schema::SubDomains::ResourcesDomainOwnerPathId>(),
                         rowset.GetValue<Schema::SubDomains::ResourcesDomainLocalPathId>());
                     TSubDomainInfo::TPtr domainInfo = new TSubDomainInfo(
                         alterVersion,
                         planResolution,
-                        timeCastBukets,
+                        timeCastBuckets,
                         resourcesDomainId);
                     Self->SubDomains[pathId] = domainInfo;
                     Self->IncrementPathDbRefCount(pathId);
@@ -1645,7 +1645,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     ui64 alterVersion = rowset.GetValue<Schema::SubDomainsAlterData::AlterVersion>();
                     ui64 planResolution = rowset.GetValue<Schema::SubDomainsAlterData::PlanResolution>();
-                    ui32 timeCastBukets = rowset.GetValue<Schema::SubDomainsAlterData::TimeCastBuckets>();
+                    ui32 timeCastBuckets = rowset.GetValue<Schema::SubDomainsAlterData::TimeCastBuckets>();
 
                     TPathId resourcesDomainId = TPathId(
                         rowset.GetValue<Schema::SubDomainsAlterData::ResourcesDomainOwnerPathId>(),
@@ -1667,7 +1667,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     alter = new TSubDomainInfo(
                         alterVersion,
                         planResolution,
-                        timeCastBukets,
+                        timeCastBuckets,
                         resourcesDomainId);
 
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomainsAlterData::SharedHiveId>();
@@ -2929,6 +2929,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Initialize SubDomains
         {
             for(auto item: Self->SubDomains) {
                 auto pathId = item.first;
@@ -3463,8 +3464,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         for (TOperationId opId: forceDropOpIds) {
             TTxState* txState = Self->FindTx(opId);
             Y_VERIFY(txState);
-            auto pathes = Self->ListSubThee(txState->TargetPathId, ctx);
-            Self->MarkAsDroping(pathes, opId.GetTxId(), ctx);
+            auto pathes = Self->ListSubTree(txState->TargetPathId, ctx);
+            Self->MarkAsDropping(pathes, opId.GetTxId(), ctx);
         }
 
         // Read txid dependencies

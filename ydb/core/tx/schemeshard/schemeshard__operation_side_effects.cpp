@@ -135,8 +135,8 @@ void TSideEffects::ReadyToNotify(TOperationId opId) {
     ReadyToNotifyOperations.insert(opId);
 }
 
-void TSideEffects::Dependence(TTxId parend, TTxId child) {
-    Dependencies.push_back(TDependence(parend, child));
+void TSideEffects::Dependence(TTxId parent, TTxId child) {
+    Dependencies.push_back(TDependence(parent, child));
 }
 
 void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {

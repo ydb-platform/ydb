@@ -117,6 +117,7 @@ struct TTxState {
         item(TxUpdateMainTableOnIndexMove, 71) \
         item(TxAllocatePQ, 72) \
         item(TxCreateCdcStreamAtTableWithSnapshot, 73) \
+        item(TxAlterExtSubDomainCreateHive, 74) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -371,6 +372,7 @@ struct TTxState {
         case TxUpgradeSubDomain:
         case TxUpgradeSubDomainDecision:
         case TxAlterExtSubDomain:
+        case TxAlterExtSubDomainCreateHive:
         case TxAlterUserAttributes:
         case TxAlterTableIndex:
         case TxAlterSolomonVolume:
@@ -456,6 +458,7 @@ struct TTxState {
         case TxUpgradeSubDomain:
         case TxUpgradeSubDomainDecision:
         case TxAlterExtSubDomain:
+        case TxAlterExtSubDomainCreateHive:
         case TxAlterUserAttributes:
         case TxAlterTableIndex:
         case TxAlterSolomonVolume:
@@ -539,6 +542,7 @@ struct TTxState {
         case TxAlterKesus:
         case TxAlterSubDomain:
         case TxAlterExtSubDomain:
+        case TxAlterExtSubDomainCreateHive:
         case TxUpgradeSubDomain:
         case TxUpgradeSubDomainDecision:
         case TxAlterUserAttributes:

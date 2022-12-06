@@ -8,6 +8,8 @@ namespace NKikimr::NSchemeShard {
 void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) {
     NIceDb::TNiceDb db(txc.DB);
 
+    //TODO: paths/other changes could be repeated many times, could it be a problem?
+
     for (const auto& pId : Pathes) {
         ss->PersistPath(db, pId);
     }
@@ -51,18 +53,26 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& shardIdx : Shards) {
         const TShardInfo& shardInfo = ss->ShardInfos.at(shardIdx);
         const TPathId& pId = shardInfo.PathId;
-        const TTableInfo::TPtr tableInfo =  ss->Tables.at(pId);
 
         ss->PersistShardMapping(db, shardIdx, shardInfo.TabletID, pId, shardInfo.CurrentTxId, shardInfo.TabletType);
         ss->PersistChannelsBinding(db, shardIdx, shardInfo.BindedChannels);
 
-        if (tableInfo->PerShardPartitionConfig.contains(shardIdx)) {
-            ss->PersistAddTableShardPartitionConfig(db, shardIdx, tableInfo->PerShardPartitionConfig.at(shardIdx));
+        if (ss->Tables.contains(pId)) {
+            auto tableInfo = ss->Tables.at(pId);
+            if (tableInfo->PerShardPartitionConfig.contains(shardIdx)) {
+                ss->PersistAddTableShardPartitionConfig(db, shardIdx, tableInfo->PerShardPartitionConfig.at(shardIdx));
+            }
         }
     }
 
     for (const auto& opId : TxStates) {
         ss->PersistTxState(db, opId);
+    }
+
+
+    for (const auto& pId : AlterSubDomains) {
+        auto subdomainInfo = ss->SubDomains.at(pId);
+        ss->PersistSubDomainAlter(db, pId, *subdomainInfo->GetAlter());
     }
 
     ss->PersistUpdateNextPathId(db);

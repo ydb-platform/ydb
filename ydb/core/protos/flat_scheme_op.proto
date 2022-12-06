@@ -1272,6 +1272,9 @@ enum EOperationType {
 
     ESchemeOpAllocatePersQueueGroup = 83;
     ESchemeOpDeallocatePersQueueGroup = 84;
+
+    // AlterExtSubDomain suboperations
+    ESchemeOpAlterExtSubDomainCreateHive = 85;
 }
 
 message TApplyIf {

@@ -42,7 +42,7 @@ public:
         bool isDone = true;
 
         // wait all transaction inside
-        auto pathes = context.SS->ListSubThee(txState->TargetPathId, context.Ctx);
+        auto pathes = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
         auto relatedTx = context.SS->GetRelatedTransactions(pathes, context.Ctx);
         for (auto otherTxId: relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
@@ -429,7 +429,7 @@ public:
         shard.Operation = TTxState::ConfigureParts;
 
         TenantSchemeShardId = TTabletId(processing.GetSchemeShard());
-        PathesInside = context.SS->ListSubThee(path.Base()->PathId, context.Ctx);
+        PathesInside = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint()
@@ -550,7 +550,7 @@ public:
         auto path = context.SS->PathsById.at(pathId);
 
         path->SwapChildren(HidenChildren); //return back children, now we do not pretend that there no children, we define them as Migrated
-        auto pathsInside = context.SS->ListSubThee(pathId, context.Ctx);
+        auto pathsInside = context.SS->ListSubTree(pathId, context.Ctx);
         pathsInside.erase(pathId);
         for (auto pId: pathsInside) {
             auto item = context.SS->PathsById.at(pId);
@@ -621,7 +621,7 @@ public:
         context.SS->PersistACL(db, item);
         context.SS->ClearDescribePathCaches(item);
 
-        auto subtree = context.SS->ListSubThee(pathId, context.Ctx);
+        auto subtree = context.SS->ListSubTree(pathId, context.Ctx);
         for (const TPathId pathId : subtree) {
             context.OnComplete.RePublishToSchemeBoard(OperationId, pathId);
         }
@@ -831,7 +831,7 @@ public:
         TenantSchemeShardId = subDomain->GetTenantSchemeShardID();
         Y_VERIFY(TenantSchemeShardId);
 
-        auto pathesInside = context.SS->ListSubThee(targetPathId, context.Ctx);
+        auto pathesInside = context.SS->ListSubTree(targetPathId, context.Ctx);
         pathesInside.erase(targetPathId);
         for (auto pId: pathesInside) {
             TPathElement::TPtr item = context.SS->PathsById.at(pId);
@@ -977,7 +977,7 @@ public:
         }
         IsInited = true;
 
-        auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
+        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
         pathes.erase(pathId);
 
         auto shards = context.SS->CollectAllShards(pathes);
@@ -1168,7 +1168,7 @@ public:
             TPathElement::EPathType::EPathTypeKesus
         };
 
-        auto pathesInside = context.SS->ListSubThee(pathId, context.Ctx);
+        auto pathesInside = context.SS->ListSubTree(pathId, context.Ctx);
         for (auto pId: pathesInside) {
             if (pId == pathId) {
                 continue;
@@ -1514,15 +1514,15 @@ ISubOperationBase::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperati
             .NotDeleted();
 
         if (!checks) {
-            return CreateFroceDropSubDomain(id, tx);
+            return CreateForceDropSubDomain(id, tx);
         }
     }
 
     if (path.Base()->IsExternalSubDomainRoot()) {
-        return CreateFroceDropExtSubDomain(id, tx);
+        return CreateForceDropExtSubDomain(id, tx);
     }
 
-    return CreateFroceDropSubDomain(id, tx);
+    return CreateForceDropSubDomain(id, tx);
 }
 
 ISubOperationBase::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {

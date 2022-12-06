@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
 
-    Y_UNIT_TEST(CreataWithoutPlanResolution) {
+    Y_UNIT_TEST(CreateWithoutPlanResolution) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST(CreataWithoutTimeCastBuckets) {
+    Y_UNIT_TEST(CreateWithoutTimeCastBuckets) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;

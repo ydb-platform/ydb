@@ -473,6 +473,18 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     } else {
         BLOG_D("SubDomain Hive is ready");
 
+        if (!PrimaryDomainKey && Info()->TenantPathId) {
+            //NOTE: Primary(Sub)DomainKey isn't set after loading everything from the local db --
+            // -- this is first time boot or incomplete configuration.
+            BLOG_I("Primary(Sub)DomainKey is not set, setting it from TTabletStorageInfo::TenantPathId to " << Info()->TenantPathId);
+
+            auto msg = MakeHolder<TEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
+            TEvHive::TEvConfigureHive::TPtr event((TEventHandle<TEvHive::TEvConfigureHive>*) new IEventHandle(
+                TActorId(), TActorId(), msg.Release()
+            ));
+            Execute(CreateConfigureSubdomain(event));
+        }
+
         if (!TabletOwnersSynced) {
             // this code should be removed later
             THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
@@ -1217,6 +1229,8 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
             break;
         }
     }
+    BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected nodes count " << selectedNodes.size());
+
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
         switch (GetNodeSelectStrategy()) {

@@ -115,7 +115,7 @@ public:
     void AddAuditLogFragment(TAuditLogFragment&& op) {
         AuditLogFragments.push_back(std::move(op));
     }
-    
+
     void ClearAuditLogFragments() {
         AuditLogFragments.clear();
     }
@@ -348,8 +348,8 @@ ISubOperationBase::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState stat
 ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateFroceDropUnsafe(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = { });
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
@@ -477,17 +477,26 @@ ISubOperationBase::TPtr CreateUpgradeSubDomainDecision(TOperationId id, TTxState
 ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateFroceDropSubDomain(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateFroceDropSubDomain(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateForceDropSubDomain(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateForceDropSubDomain(TOperationId id, TTxState::ETxState state);
 
+
+/// ExtSubDomain
+// Create
 ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state);
 
+// Alter
+TVector<ISubOperationBase::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateFroceDropExtSubDomain(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperationBase::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxState state);
+
 
 ISubOperationBase::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state);

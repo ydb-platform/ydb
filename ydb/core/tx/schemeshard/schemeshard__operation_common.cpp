@@ -3,6 +3,86 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context)
+{
+    auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
+    const auto& shard = context.SS->ShardInfos[shardIdx];
+
+    if (shard.TabletType == ETabletType::BlockStorePartition ||
+        shard.TabletType == ETabletType::BlockStorePartition2)
+    {
+        auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
+        Y_VERIFY(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
+        auto volume = *it;
+        /*const auto* volumeConfig = &volume->VolumeConfig;
+        if (volume->AlterData) {
+            volumeConfig = &volume->AlterData->VolumeConfig;
+        }*/
+    }
+
+    THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
+
+    TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
+
+    TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
+    auto objectDomain = ev->Record.MutableObjectDomain();
+    if (domainEl->IsRoot()) {
+        objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId);
+        objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId);
+    } else {
+        objectDomain->SetSchemeShard(domainId.OwnerId);
+        objectDomain->SetPathId(domainId.LocalPathId);
+    }
+
+    Y_VERIFY(context.SS->SubDomains.contains(domainId));
+    TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(domainId);
+
+    TPathId resourcesDomainId;
+    if (subDomain->GetResourcesDomainId()) {
+        resourcesDomainId = subDomain->GetResourcesDomainId();
+    } else if (subDomain->GetAlter() && subDomain->GetAlter()->GetResourcesDomainId()) {
+        resourcesDomainId = subDomain->GetAlter()->GetResourcesDomainId();
+    } else {
+        Y_FAIL("Cannot retrieve resources domain id");
+    }
+
+    auto allowedDomain = ev->Record.AddAllowedDomains();
+    allowedDomain->SetSchemeShard(resourcesDomainId.OwnerId);
+    allowedDomain->SetPathId(resourcesDomainId.LocalPathId);
+
+    if (tablePartitionConfig) {
+        if (tablePartitionConfig->FollowerGroupsSize()) {
+            ev->Record.MutableFollowerGroups()->CopyFrom(tablePartitionConfig->GetFollowerGroups());
+        } else {
+            if (tablePartitionConfig->HasAllowFollowerPromotion()) {
+                ev->Record.SetAllowFollowerPromotion(tablePartitionConfig->GetAllowFollowerPromotion());
+            }
+
+            if (tablePartitionConfig->HasCrossDataCenterFollowerCount()) {
+                ev->Record.SetCrossDataCenterFollowerCount(tablePartitionConfig->GetCrossDataCenterFollowerCount());
+            } else if (tablePartitionConfig->HasFollowerCount()) {
+                ev->Record.SetFollowerCount(tablePartitionConfig->GetFollowerCount());
+            }
+        }
+    }
+
+    if (shard.TabletType == ETabletType::BlockStorePartition   ||
+        shard.TabletType == ETabletType::BlockStorePartition2 ||
+        shard.TabletType == ETabletType::RTMRPartition) {
+        // Partitions should never be booted by local
+        ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+    }
+
+    ev->Record.SetObjectId(targetPath->PathId.LocalPathId);
+
+    if (shard.TabletID) {
+        ev->Record.SetTabletID(ui64(shard.TabletID));
+    }
+
+    return ev;
+}
+
+
 namespace
 {
 
@@ -76,7 +156,7 @@ bool CollectProposeTxResults(
     return false;
 }
 
-}
+} // anonymous namespace
 
 bool NTableState::CollectProposeTransactionResults(
         const NKikimr::NSchemeShard::TOperationId &operationId,
@@ -534,7 +614,7 @@ void NForceDrop::CollectShards(const THashSet<TPathId>& pathes, TOperationId ope
     context.SS->PersistTxState(db, operationId);
 }
 
-void NForceDrop::ValidateNoTrasactionOnPathes(TOperationId operationId, const THashSet<TPathId>& pathes, TOperationContext &context) {
+void NForceDrop::ValidateNoTransactionOnPathes(TOperationId operationId, const THashSet<TPathId>& pathes, TOperationContext &context) {
     // it is not supposed that someone transaction is able to materialise in dropping subdomain
     // all transaction should check parent dir status
     // however, it is better to check that all locks are ours

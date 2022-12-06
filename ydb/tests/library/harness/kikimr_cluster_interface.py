@@ -11,6 +11,7 @@ from ydb.tests.library.common.protobuf_console import (
     RemoveTenantRequest, GetOperationRequest)
 import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb import issues
 
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ class KiKiMRClusterInterface(object):
         if not operation.ready:
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
         if operation.status != StatusIds.SUCCESS:
-            raise RuntimeError('create_database failed: %s' % (operation.status,))
+            raise RuntimeError('create_database failed: %s, %s' % (operation.status, issues._format_issues(operation.issues)))
 
         self.__wait_tenant_up(
             database_name,
@@ -281,16 +282,21 @@ class KiKiMRClusterInterface(object):
     def remove_database(
             self,
             database_name,
-            timeout_seconds=120
+            timeout_seconds=20
     ):
+        logger.debug(database_name)
+
         req = RemoveTenantRequest(database_name)
 
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.RemoveTenantResponse.Response.operation
+        logger.debug('response from console: %s', response)
         if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
             raise RuntimeError('remove_database failed: %s: %s' % (response.Status.Code, response.Status.Reason))
         if not operation.ready:
+            logger.debug('waiting for operation done')
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
+            logger.debug('operation done')
         if operation.status not in (StatusIds.SUCCESS, StatusIds.NOT_FOUND):
             raise RuntimeError('remove_database failed: %s' % (operation.status,))
 
@@ -299,12 +305,17 @@ class KiKiMRClusterInterface(object):
                 GetTenantStatusRequest(database_name).protobuf, method='ConsoleRequest').GetTenantStatusResponse
             return response.Response.operation.status == StatusIds.NOT_FOUND
 
+        logger.debug('waiting tenant gone')
+
         tenant_not_found = wait_for(
             predicate=predicate,
             timeout_seconds=timeout_seconds,
             step_seconds=1
         )
         assert tenant_not_found
+
+        logger.debug('tenant gone')
+
         return database_name
 
     def __str__(self):

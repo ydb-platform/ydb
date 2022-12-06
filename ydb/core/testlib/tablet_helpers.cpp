@@ -1107,6 +1107,8 @@ namespace NKikimr {
                 ctx.ExecutorThread.Send(ev.Release());
                 InitialEventsQueue.pop_front();
             }
+
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] started, primary subdomain " << PrimarySubDomainKey);
         }
 
         void OnDetach(const TActorContext &ctx) override {
@@ -1130,6 +1132,7 @@ namespace NKikimr {
         void StateWork(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+                HFunc(TEvHive::TEvConfigureHive, Handle);
                 HFunc(TEvHive::TEvCreateTablet, Handle);
                 HFunc(TEvHive::TEvAdoptTablet, Handle);
                 HFunc(TEvHive::TEvDeleteTablet, Handle);
@@ -1147,17 +1150,35 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvHive::TEvConfigureHive::TPtr& ev, const TActorContext& ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvConfigureHive, msg: " << ev->Get()->Record.ShortDebugString());
+
+            const auto& subdomainKey(ev->Get()->Record.GetDomain());
+            PrimarySubDomainKey = TSubDomainKey(subdomainKey);
+
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvConfigureHive, subdomain set to " << subdomainKey);
+            ctx.Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
+        }
+
         void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvCreateTablet, msg: " << ev->Get()->Record.ShortDebugString());
             Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
             const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
             const auto type = ev->Get()->Record.GetTabletType();
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
+
+            auto logPrefix = TStringBuilder() << "[" << TabletID() << "] TEvCreateTablet"
+                << ", Owner " << ev->Get()->Record.GetOwner() << ", OwnerIdx " << ev->Get()->Record.GetOwnerIdx()
+                << ", type " << type
+                << ", ";
+
             auto it = State->Tablets.find(key);
             TActorId bootstrapperActorId;
             if (it == State->Tablets.end()) {
                 if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                     // don't boot anything
+                    LOG_INFO_S(ctx, NKikimrServices::HIVE, logPrefix << "external boot mode requested");
                 } else if (auto x = GetTabletCreationFunc(type)) {
                     bootstrapperActorId = Boot(ctx, type, x, DataGroupErasure);
                 } else if (type == TTabletTypes::DataShard) {
@@ -1197,6 +1218,10 @@ namespace NKikimr {
                     ui64 tabletId = State->AllocateTabletId();
                     it = State->Tablets.insert(std::make_pair(key, TTabletInfo(type, tabletId, bootstrapperActorId))).first;
                     State->TabletIdToOwner[tabletId] = key;
+
+                    LOG_INFO_S(ctx, NKikimrServices::HIVE, logPrefix << "boot OK, tablet id " << tabletId);
+                } else {
+                    LOG_ERROR_S(ctx, NKikimrServices::HIVE, logPrefix << "boot failed, status " << status);
                 }
             } else {
                 if (it->second.Type != type) {
@@ -1224,18 +1249,18 @@ namespace NKikimr {
             auto it = State->Tablets.find(newKey);
             if (it !=  State->Tablets.end()) {
                 if (it->second.TabletId != tabletID) {
-                    explain = "there is another tablet assotiated with the (owner; ownerIdx)";
+                    explain = "there is another tablet associated with the (owner; ownerIdx)";
                     status = NKikimrProto::EReplyStatus::RACE;
                     return;
                 }
 
                 if (it->second.Type != type) {
-                    explain = "there is the tablet with different type assotiated with the (owner; ownerIdx)";
+                    explain = "there is the tablet with different type associated with the (owner; ownerIdx)";
                     status = NKikimrProto::EReplyStatus::RACE;
                     return;
                 }
 
-                explain = "it seems like the tablet aleready adopted";
+                explain = "it seems like the tablet already adopted";
                 status = NKikimrProto::EReplyStatus::ALREADY;
                 return;
             }
@@ -1248,13 +1273,13 @@ namespace NKikimr {
             }
 
             if (it->second.TabletId != tabletID) {
-                explain = "there is another tablet assotiated with the (prevOwner; prevOwnerIdx)";
+                explain = "there is another tablet associated with the (prevOwner; prevOwnerIdx)";
                 status = NKikimrProto::EReplyStatus::ERROR;
                 return;
             }
 
             if (it->second.Type != type) { // tablet is the same
-                explain = "there is the tablet with different type assotiated with the (preOwner; prevOwnerIdx)";
+                explain = "there is the tablet with different type associated with the (preOwner; prevOwnerIdx)";
                 status = NKikimrProto::EReplyStatus::ERROR;
                 return;
             }
@@ -1269,6 +1294,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvAdoptTablet::TPtr& ev, const TActorContext& ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvAdoptTablet, msg: " << ev->Get()->Record.ShortDebugString());
             const std::pair<ui64, ui64> prevKey(ev->Get()->Record.GetPrevOwner(), ev->Get()->Record.GetPrevOwnerIdx());
             const std::pair<ui64, ui64> newKey(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
             const TTabletTypes::EType type = ev->Get()->Record.GetTabletType();
@@ -1304,6 +1330,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvDeleteTablet, msg: " << ev->Get()->Record.ShortDebugString());
             NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record;
             Cout << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl;
             TVector<ui64> deletedIdx;
@@ -1316,6 +1343,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvDeleteOwnerTablets, msg: " << ev->Get()->Record);
             NKikimrHive::TEvDeleteOwnerTablets& rec = ev->Get()->Record;
             Cout << "FAKEHIVE " << TabletID() << " TEvDeleteOwnerTablets " << rec.ShortDebugString() << Endl;
             auto ownerId = rec.GetOwner();
@@ -1350,6 +1378,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvRequestHiveInfo::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvRequestHiveInfo, msg: " << ev->Get()->Record.ShortDebugString());
             const auto& record = ev->Get()->Record;
             TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
 
@@ -1369,6 +1398,8 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvInitiateTabletExternalBoot, msg: " << ev->Get()->Record.ShortDebugString());
+
             ui64 tabletId = ev->Get()->Record.GetTabletID();
             if (!State->TabletIdToOwner.contains(tabletId)) {
                 ctx.Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
@@ -1384,6 +1415,8 @@ namespace NKikimr {
         }
 
         void Handle(TEvFakeHive::TEvSubscribeToTabletDeletion::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvSubscribeToTabletDeletion, " << ev->Get()->TabletId);
+
             ui64 tabletId = ev->Get()->TabletId;
             auto it = State->TabletIdToOwner.find(tabletId);
             if (it == State->TabletIdToOwner.end()) {
@@ -1400,6 +1433,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvPoisonPill");
             Y_UNUSED(ev);
             Become(&TThis::BrokenState);
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
@@ -1429,6 +1463,7 @@ namespace NKikimr {
         TState::TPtr State;
         TGetTabletCreationFunc GetTabletCreationFunc;
         TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
+        TSubDomainKey PrimarySubDomainKey;
     };
 
     void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state,

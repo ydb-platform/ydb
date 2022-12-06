@@ -1,9 +1,9 @@
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
 
 namespace {
 
@@ -50,8 +50,6 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = settings.GetName();
 
-        ui64 shardsToCreate = settings.GetCoordinators() + settings.GetMediators();
-
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateExtSubDomain Propose"
                          << ", path" << parentPathStr << "/" << name
@@ -61,17 +59,19 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (!parentPathStr) {
+        auto paramErrorResult = [&result](const char* const msg) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Malformed subdomain request: no working dir");
-            return result;
+                TStringBuilder() << "Invalid ExtSubDomain request: " << msg
+            );
+            return std::move(result);
+        };
+
+        if (!parentPathStr) {
+            return paramErrorResult("no working dir");
         }
 
         if (!name) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: no name");
-            return result;
+            return paramErrorResult("no name");
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
@@ -115,8 +115,6 @@ public:
                     .DepthLimit()
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
-                    .PathShardsLimit(shardsToCreate)
-                    .ShardsLimit(shardsToCreate) //check capacity on root Domain
                     .IsValidACL(acl);
             }
 
@@ -136,10 +134,7 @@ public:
             settings.GetMediators() == 0;
 
         if (!onlyDeclaration) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: only declaration at creation is allowed, do not set up tables");
-            return result;
+            return paramErrorResult("only declaration at creation is allowed, do not set up tables");
         }
 
         TPathId resourcesDomainId;
@@ -164,10 +159,7 @@ public:
 
         bool requestedStoragePools = !settings.GetStoragePools().empty();
         if (requestedStoragePools) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: only declaration at creation is allowed, do not set up storage");
-            return result;
+            return paramErrorResult("only declaration at creation is allowed, do not set up storage");
         }
 
         const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();

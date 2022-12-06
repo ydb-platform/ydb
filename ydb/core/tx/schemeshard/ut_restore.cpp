@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
     }
 
     void TestRestoreNegative(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
-            const TVector<TEvSchemeShard::EStatus>& expectedResults) {
+            const TVector<TExpectedResult>& expectedResults) {
 
         TestRestore(runtime, ++txId, parentPath, Sprintf(R"(
             TableName: "%s"
@@ -1802,7 +1802,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             runtime.DispatchEvents(opts);
         }
 
-        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"281474976725758-9437199-2-9437199-4","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"281474976725758-9437197-2-9437197-4","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
         UNIT_ASSERT_NO_DIFF(billRecords[0], expectedBillRecord + "\n");

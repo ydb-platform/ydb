@@ -1,60 +1,54 @@
 # -*- coding: utf-8 -*-
-import os
 import logging
-import pytest
-import ydb
+import os
 
+import pytest
 from tornado import gen
 from tornado.ioloop import IOLoop
 
-from ydb.tests.library.common.types import from_bytes
+import ydb
 from ydb.tornado import as_tornado_future
+from ydb.tests.library.common.types import Erasure, from_bytes
+from ydb.tests.library.harness.util import LogLevels
+
 from common import (
     async_execute_serializable_job,
     async_execute_stale_ro_job,
     async_scheme_job,
-    async_repeat_n_times
+    async_repeat_n_times,
 )
 
 logger = logging.getLogger(__name__)
 
-SIMPLE_TABLE_TEMPLATE = (
-"""
+SIMPLE_TABLE_TEMPLATE = (r"""
 CREATE TABLE `{table}` (
     `id` Uint64,
     `value` Utf8,
     PRIMARY KEY (`id`)
 )
-"""
-)
+""")
 
-INDEXED_TABLE_TEMPLATE = (
-"""
+INDEXED_TABLE_TEMPLATE = (r"""
 CREATE TABLE `{table}` (
     `id` Uint64,
     `value` Utf8,
     PRIMARY KEY (`id`),
     INDEX value_index GLOBAL ON (`value`)
 )
-"""
-)
+""")
 
-INDEXED_ASYNC_TABLE_TEMPLATE = (
-"""
+INDEXED_ASYNC_TABLE_TEMPLATE = (r"""
 CREATE TABLE `{table}` (
     `id` Uint64,
     `value` Utf8,
     PRIMARY KEY (`id`),
     INDEX value_index GLOBAL ASYNC ON (`value`)
 )
-"""
-)
+""")
 
-DROP_TABLE_TEMPLATE = (
-"""
+DROP_TABLE_TEMPLATE = (r"""
 DROP TABLE `{table}`
-"""
-)
+""")
 
 
 def create_simple_table(pool, path):
@@ -140,7 +134,7 @@ class Simple:
         self._select_from_index = select_from_index
 
     upsert_table_template = (
-        """
+        r"""
         DECLARE $key AS Uint64;
         DECLARE $value AS Utf8;
 
@@ -151,14 +145,14 @@ class Simple:
     )
 
     select_table_template = (
-        """
+        r"""
         DECLARE $key AS Uint64;
         SELECT value FROM `{table}` WHERE id = $key;
         """
     )
 
     select_index_table_template = (
-        """
+        r"""
         DECLARE $value AS Utf8;
         SELECT id FROM `{table}` VIEW `value_index` WHERE value = $value;
         """
@@ -237,9 +231,30 @@ class Simple:
         IOLoop.current().run_sync(lambda: calle())
 
 
+# local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
+CLUSTER_CONFIG = dict(
+    erasure=Erasure.NONE,
+    nodes=3,
+    n_to_select=1,
+    additional_log_configs={
+        'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
+        'SCHEME_BOARD_POPULATOR': LogLevels.WARN,
+        'SCHEME_BOARD_SUBSCRIBER': LogLevels.WARN,
+        'TX_DATASHARD': LogLevels.DEBUG,
+        'CHANGE_EXCHANGE': LogLevels.DEBUG,
+    },
+)
+
+
 @pytest.mark.parametrize("create_method,select_from_index", [
-    (create_simple_table, False), (create_indexed_table, True), (create_indexed_async_table, True)])
-@pytest.mark.parametrize("replace_method", [replace_table, substitute_table])
+    (create_simple_table, False),
+    (create_indexed_table, True),
+    (create_indexed_async_table, True),
+])
+@pytest.mark.parametrize("replace_method", [
+    replace_table,
+    substitute_table,
+])
 def test_client_gets_retriable_errors_when_rename(create_method, select_from_index, replace_method, ydb_database, ydb_endpoint):
     database = ydb_database
     logger.info(" database is %s", database)

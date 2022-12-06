@@ -16,6 +16,8 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
+
 namespace NTableState {
 
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context);
@@ -125,344 +127,7 @@ public:
     }
 };
 
-}
-
-namespace NSubDomainState {
-
-class TConfigureParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NSubDomainState::TConfigureParts"
-                << " operationId#" << OperationId;
-    }
-public:
-    TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
-    }
-
-    bool HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint()
-                       << " HandleReply TEvInitTenantSchemeShardResult"
-                       << " operationId: " << OperationId
-                       << " at schemeshard: " << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
-                 || txState->TxType == TTxState::TxAlterSubDomain
-                 || txState->TxType == TTxState::TxAlterExtSubDomain);
-
-        const auto& record = ev->Get()->Record;
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TTabletId tabletId = TTabletId(record.GetTenantSchemeShard());
-        auto status = record.GetStatus();
-
-        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
-
-        if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
-            LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint()
-                           << " Got error status on SubDomain Configure"
-                           << "from tenant schemeshard tablet: " << tabletId
-                           << " shard: " << shardIdx
-                           << " status: " << NKikimrScheme::EStatus_Name(status)
-                           << " opId: " << OperationId
-                           << " schemeshard: " << ssId);
-            return false;
-        }
-
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint()
-                        << " Got OK TEvInitTenantSchemeShardResult from schemeshard"
-                        << " tablet: " << tabletId
-                        << " shardIdx: " << shardIdx
-                        << " at schemeshard: " << ssId);
-
-        txState->ShardsInProgress.erase(shardIdx);
-        context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, shardIdx);
-
-        if (txState->ShardsInProgress.empty()) {
-            // All tablets have replied so we can done this transaction
-            context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-            context.OnComplete.ActivateTx(OperationId);
-            return true;
-        }
-
-        return false;
-    }
-
-    bool HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint()
-                    << " HandleReply TEvConfigureStatus"
-                    << " operationId:" << OperationId
-                    << " at schemeshard:" << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
-                 || txState->TxType == TTxState::TxAlterSubDomain
-                 || txState->TxType == TTxState::TxAlterExtSubDomain);
-
-        const auto& record = ev->Get()->Record;
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TTabletId tabletId = TTabletId(record.GetOnTabletId());
-        auto status = record.GetStatus();
-
-        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
-
-        if (status == NKikimrTx::TEvSubDomainConfigurationAck::REJECT) {
-            LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint()
-                           << " Got REJECT on SubDomain Configure"
-                           << "from tablet: " << tabletId
-                           << " shard: " << shardIdx
-                           << " opId: " << OperationId
-                           << " schemeshard: " << ssId);
-            return false;
-        }
-
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() <<
-                    " Got OK TEvConfigureStatus from "
-                    << " tablet# " << tabletId
-                    << " shardIdx# " << shardIdx
-                    << " at schemeshard# " << ssId);
-
-        txState->ShardsInProgress.erase(shardIdx);
-        context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, shardIdx);
-
-        if (txState->ShardsInProgress.empty()) {
-            // All tablets have replied so we can done this transaction
-            context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-            context.OnComplete.ActivateTx(OperationId);
-            return true;
-        }
-
-        return false;
-    }
-
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint()
-                       << " ProgressState"
-                       << ", at schemeshard: " << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
-                 || txState->TxType == TTxState::TxAlterSubDomain
-                 || txState->TxType == TTxState::TxAlterExtSubDomain);
-
-        txState->ClearShardsInProgress();
-
-        if (txState->Shards.empty()) {
-            NIceDb::TNiceDb db(context.GetDB());
-            context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-            context.OnComplete.ActivateTx(OperationId);
-            return true;
-        }
-
-        auto pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
-        TPath path = TPath::Init(pathId, context.SS);
-
-        Y_VERIFY(context.SS->SubDomains.contains(pathId));
-        auto subDomain = context.SS->SubDomains.at(pathId);
-        auto alterData = subDomain->GetAlter();
-        Y_VERIFY(alterData);
-        alterData->Initialize(context.SS->ShardInfos);
-        auto processing = alterData->GetProcessingParams();
-        auto storagePools = alterData->GetStoragePools();
-        auto& schemeLimits = subDomain->GetSchemeLimits();
-
-        for (ui32 i = 0; i < txState->Shards.size(); ++i) {
-            auto &shard = txState->Shards[i];
-            TShardIdx idx = shard.Idx;
-            Y_VERIFY(context.SS->ShardInfos.contains(idx));
-            TTabletId tabletID = context.SS->ShardInfos[idx].TabletID;
-            auto type = context.SS->ShardInfos[idx].TabletType;
-
-            switch (type) {
-            case ETabletType::Coordinator:
-            case ETabletType::Mediator: {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to coordinator/mediator: " << tabletID <<
-                    " opId: " << OperationId <<
-                    " schemeshard: " << ssId);
-                shard.Operation = TTxState::ConfigureParts;
-                auto event = new TEvSubDomain::TEvConfigure(processing);
-                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-                break;
-            }
-            case ETabletType::Hive: {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to hive: " << tabletID <<
-                    " opId: " << OperationId <<
-                    " schemeshard: " << ssId);
-                shard.Operation = TTxState::ConfigureParts;
-                auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
-                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-                break;
-            }
-            case ETabletType::SysViewProcessor: {
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to sysview processor: " << tabletID <<
-                    " opId: " << OperationId <<
-                    " schemeshard: " << ssId);
-                auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());
-                shard.Operation = TTxState::ConfigureParts;
-                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-                break;
-            }
-            case ETabletType::SchemeShard: {
-                auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(ui64(ssId),
-                                                                              pathId.LocalPathId, path.PathString(),
-                                                                              path.Base()->Owner, path.GetEffectiveACL(), path.GetEffectiveACLVersion(),
-                                                                              processing, storagePools,
-                                                                              path.Base()->UserAttrs->Attrs, path.Base()->UserAttrs->AlterVersion,
-                                                                              schemeLimits, ui64(alterData->GetSharedHive()), alterData->GetResourcesDomainId()
-                                                                              );
-                if (alterData->GetDeclaredSchemeQuotas()) {
-                    event->Record.MutableDeclaredSchemeQuotas()->CopyFrom(*alterData->GetDeclaredSchemeQuotas());
-                }
-                if (alterData->GetDatabaseQuotas()) {
-                    event->Record.MutableDatabaseQuotas()->CopyFrom(*alterData->GetDatabaseQuotas());
-                }
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Send configure request to schemeshard: " << tabletID <<
-                                " opId: " << OperationId <<
-                                " schemeshard: " << ssId <<
-                                " msg: " << event->Record.ShortDebugString());
-
-                shard.Operation = TTxState::ConfigureParts;
-                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-                break;
-            }
-            default:
-                Y_FAIL_S("Unexpected type, we don't create tablets with type " << ETabletType::TypeToStr(type));
-            }
-        }
-
-        txState->UpdateShardsInProgress(TTxState::ConfigureParts);
-        return false;
-    }
-};
-
-class TPropose: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NSubDomainState::TPropose"
-                << " operationId#" << OperationId;
-    }
-
-public:
-    TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType, TEvSubDomain::TEvConfigureStatus::EventType});
-    }
-
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "NSubDomainState::TPropose HandleReply TEvOperationPlan"
-                     << " operationId#" << OperationId
-                     << " at tablet" << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        if (!txState) {
-            return false;
-        }
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
-                 || txState->TxType == TTxState::TxAlterSubDomain
-                 || txState->TxType == TTxState::TxCreateExtSubDomain
-                 || txState->TxType == TTxState::TxAlterExtSubDomain);
-
-        TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        if (path->StepCreated == InvalidStepId) {
-            path->StepCreated = step;
-            context.SS->PersistCreateStep(db, pathId, step);
-        }
-
-        Y_VERIFY(context.SS->SubDomains.contains(pathId));
-        auto subDomain = context.SS->SubDomains.at(pathId);
-        auto alter = subDomain->GetAlter();
-        Y_VERIFY(alter);
-        Y_VERIFY(subDomain->GetVersion() < alter->GetVersion());
-
-        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(),
-                /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
-                context.SS);
-
-        context.SS->SubDomains[pathId] = alter;
-        context.SS->PersistSubDomain(db, pathId, *alter);
-        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter);
-
-        if (txState->TxType == TTxState::TxCreateSubDomain || txState->TxType == TTxState::TxCreateExtSubDomain) {
-            auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-            ++parentDir->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, parentDir);
-            context.SS->ClearDescribePathCaches(parentDir);
-            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-        }
-
-        context.OnComplete.UpdateTenant(pathId);
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "NSubDomainState::TPropose ProgressState"
-                       << ", operationId: " << OperationId
-                       << ", at schemeshard: " << ssId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
-                 || txState->TxType == TTxState::TxAlterSubDomain
-                 || txState->TxType == TTxState::TxCreateExtSubDomain
-                 || txState->TxType == TTxState::TxAlterExtSubDomain);
-
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
-        return false;
-    }
-};
-
-}
+} // namespace NTableState
 
 class TCreateParts: public TSubOperationState {
 private:
@@ -601,7 +266,7 @@ public:
             context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
 
             auto path = context.SS->PathsById.at(txState.TargetPathId);
-            auto request = CreateRequest(path, shardIdx, context);
+            auto request = CreateEvCreateTablet(path, shardIdx, context);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " CreateRequest"
@@ -654,84 +319,6 @@ public:
         }
 
         return false;
-    }
-
-    THolder<TEvHive::TEvCreateTablet> CreateRequest(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context) {
-        auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
-        const auto& shard = context.SS->ShardInfos[shardIdx];
-
-        if (shard.TabletType == ETabletType::BlockStorePartition ||
-            shard.TabletType == ETabletType::BlockStorePartition2)
-        {
-            auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
-            Y_VERIFY(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
-            auto volume = *it;
-            /*const auto* volumeConfig = &volume->VolumeConfig;
-            if (volume->AlterData) {
-                volumeConfig = &volume->AlterData->VolumeConfig;
-            }*/
-        }
-
-        THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
-
-        TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
-
-        TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
-        auto objectDomain = ev->Record.MutableObjectDomain();
-        if (domainEl->IsRoot()) {
-            objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId);
-            objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId);
-        } else {
-            objectDomain->SetSchemeShard(domainId.OwnerId);
-            objectDomain->SetPathId(domainId.LocalPathId);
-        }
-
-        Y_VERIFY(context.SS->SubDomains.contains(domainId));
-        TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(domainId);
-
-        TPathId resourcesDomainId;
-        if (subDomain->GetResourcesDomainId()) {
-            resourcesDomainId = subDomain->GetResourcesDomainId();
-        } else if (subDomain->GetAlter() && subDomain->GetAlter()->GetResourcesDomainId()) {
-            resourcesDomainId = subDomain->GetAlter()->GetResourcesDomainId();
-        } else {
-            Y_FAIL("Cannot retrieve resources domain id");
-        }
-
-        auto allowedDomain = ev->Record.AddAllowedDomains();
-        allowedDomain->SetSchemeShard(resourcesDomainId.OwnerId);
-        allowedDomain->SetPathId(resourcesDomainId.LocalPathId);
-
-        if (tablePartitionConfig) {
-            if (tablePartitionConfig->FollowerGroupsSize()) {
-                ev->Record.MutableFollowerGroups()->CopyFrom(tablePartitionConfig->GetFollowerGroups());
-            } else {
-                if (tablePartitionConfig->HasAllowFollowerPromotion()) {
-                    ev->Record.SetAllowFollowerPromotion(tablePartitionConfig->GetAllowFollowerPromotion());
-                }
-
-                if (tablePartitionConfig->HasCrossDataCenterFollowerCount()) {
-                    ev->Record.SetCrossDataCenterFollowerCount(tablePartitionConfig->GetCrossDataCenterFollowerCount());
-                } else if (tablePartitionConfig->HasFollowerCount()) {
-                    ev->Record.SetFollowerCount(tablePartitionConfig->GetFollowerCount());
-                }
-            }
-        }
-
-        if (shard.TabletType == ETabletType::BlockStorePartition   ||
-            shard.TabletType == ETabletType::BlockStorePartition2 ||
-            shard.TabletType == ETabletType::RTMRPartition) {
-            // Partitions should never be booted by local
-            ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
-        }
-
-        ev->Record.SetObjectId(targetPath->PathId.LocalPathId);
-
-        if (shard.TabletID) {
-            ev->Record.SetTabletID(ui64(shard.TabletID));
-        }
-
-        return ev;
     }
 
     THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context) {
@@ -795,10 +382,10 @@ public:
 
             if (context.SS->AdoptedShards.contains(shard.Idx)) {
                 auto ev = AdoptRequest(shard.Idx, context);
-                context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(context.Ctx)    , shard.Idx, ev.Release());
+                context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(context.Ctx), shard.Idx, ev.Release());
             } else {
                 auto path = context.SS->PathsById.at(txState->TargetPathId);
-                auto ev = CreateRequest(path, shard.Idx, context);
+                auto ev = CreateEvCreateTablet(path, shard.Idx, context);
 
                 auto hiveToRequest = context.SS->ResolveHive(shard.Idx, context.Ctx);
 
@@ -1630,10 +1217,10 @@ protected:
 } // NCdcStreamState
 
 namespace NForceDrop {
-void ValidateNoTrasactionOnPathes(TOperationId operationId, const THashSet<TPathId>& pathes, TOperationContext& context);
+void ValidateNoTransactionOnPathes(TOperationId operationId, const THashSet<TPathId>& pathes, TOperationContext& context);
 
 void CollectShards(const THashSet<TPathId>& pathes, TOperationId operationId, TTxState* txState, TOperationContext& context);
-}
+} // namespace NForceDrop
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

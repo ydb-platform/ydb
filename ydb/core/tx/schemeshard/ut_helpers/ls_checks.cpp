@@ -109,6 +109,18 @@ TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId) {
     };
 }
 
+TCheckFunc ExtractDomainHive(ui64* domainHiveId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT(pathDescr.HasDomainDescription());
+        const auto& domainDesc = pathDescr.GetDomainDescription();
+        UNIT_ASSERT(domainDesc.HasProcessingParams());
+        const auto& procParams = domainDesc.GetProcessingParams();
+        *domainHiveId = procParams.GetHive();
+    };
+}
+
 void InExternalSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     PathRedirected(record);
 
@@ -179,7 +191,7 @@ TCheckFunc DomainCoordinators(TVector<ui64> coordinators) {
         const auto& processingParams = pathDescr.GetDomainDescription().GetProcessingParams();
 
         UNIT_ASSERT_VALUES_EQUAL(processingParams.CoordinatorsSize(), coordinators.size());
-        TVector<ui64> actual(processingParams.GetCoordinators().begin(),processingParams.GetCoordinators().end());
+        TVector<ui64> actual(processingParams.GetCoordinators().begin(), processingParams.GetCoordinators().end());
         UNIT_ASSERT_EQUAL(actual, coordinators);
     };
 }
@@ -197,17 +209,32 @@ TCheckFunc DomainMediators(TVector<ui64> mediators) {
     };
 }
 
-TCheckFunc DomainSchemeshard(ui64 schemeshard) {
+TCheckFunc DomainSchemeshard(ui64 domainSchemeshardId) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
 
         const auto& pathDescr = record.GetPathDescription();
         const auto& processingParams = pathDescr.GetDomainDescription().GetProcessingParams();
 
-        if (schemeshard) {
-            UNIT_ASSERT_VALUES_EQUAL(processingParams.GetSchemeShard(), schemeshard);
+        if (domainSchemeshardId) {
+            UNIT_ASSERT_VALUES_EQUAL(processingParams.GetSchemeShard(), domainSchemeshardId);
         } else {
             UNIT_ASSERT(!processingParams.HasSchemeShard());
+        }
+    };
+}
+
+TCheckFunc DomainHive(ui64 domainHiveId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& pathDescr = record.GetPathDescription();
+        const auto& processingParams = pathDescr.GetDomainDescription().GetProcessingParams();
+
+        if (domainHiveId) {
+            UNIT_ASSERT_VALUES_EQUAL(processingParams.GetHive(), domainHiveId);
+        } else {
+            UNIT_ASSERT(!processingParams.HasHive());
         }
     };
 }

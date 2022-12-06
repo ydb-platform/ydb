@@ -314,7 +314,7 @@ namespace {
                 .Column(3, key);
         }
 
-        Cout << table;
+        Cout << "Columns:" << Endl << table;
     }
 
     void PrintIndexes(const NTable::TTableDescription& tableDescription) {
@@ -322,31 +322,19 @@ namespace {
         if (!indexes.size()) {
             return;
         }
-        Cout << Endl << "Indexes: " << Endl;
-        for (const auto& index : indexes) {
-            Cout << index.GetIndexName() << " [" << index.GetIndexType() << "] Index columns: (";
-            const auto& columns = index.GetIndexColumns();
-            for (auto colIt = columns.begin(); colIt != columns.end();) {
-                Cout << (*colIt);
-                if (++colIt != columns.end()) {
-                    Cout << ",";
-                }
-            }
 
-            const auto& cover = index.GetDataColumns();
-            if (!cover) {
-                Cout << ")" << Endl;
-            } else {
-                Cout << ") Cover columns: (";
-                for (auto colIt = cover.begin(); colIt != cover.end();) {
-                    Cout << (*colIt);
-                    if (++colIt != cover.end()) {
-                        Cout << ",";
-                    }
-                }
-                Cout << ")" << Endl;
-            }
+        TPrettyTable table({ "Name", "Type", "Index columns", "Cover columns" },
+            TPrettyTableConfig().WithoutRowDelimiters());
+
+        for (const auto& index : indexes) {
+            table.AddRow()
+                .Column(0, index.GetIndexName())
+                .Column(1, index.GetIndexType())
+                .Column(2, JoinSeq(",", index.GetIndexColumns()))
+                .Column(3, JoinSeq(",", index.GetDataColumns()));
         }
+
+        Cout << Endl << "Indexes:" << Endl << table;
     }
 
     void PrintChangefeeds(const NTable::TTableDescription& tableDescription) {
@@ -355,13 +343,17 @@ namespace {
             return;
         }
 
-        Cout << Endl << "Changefeeds:" << Endl;
+        TPrettyTable table({ "Name", "Mode", "Format" },
+            TPrettyTableConfig().WithoutRowDelimiters());
+
         for (const auto& changefeed : changefeeds) {
-            Cout << changefeed.GetName()
-                 << " Mode: " << changefeed.GetMode()
-                 << " Format: " << changefeed.GetFormat()
-                 << Endl;
+            table.AddRow()
+                .Column(0, changefeed.GetName())
+                .Column(1, changefeed.GetMode())
+                .Column(2, changefeed.GetFormat());
         }
+
+        Cout << Endl << "Changefeeds:" << Endl << table;
     }
 
     void PrintStorageSettings(const NTable::TTableDescription& tableDescription) {

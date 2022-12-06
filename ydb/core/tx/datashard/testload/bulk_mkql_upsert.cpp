@@ -11,7 +11,7 @@
 #include <google/protobuf/text_format.h>
 
 // * Scheme is hardcoded and it is like default YCSB setup:
-// 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
+// 1 Text "id" column, 10 Bytes "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
 namespace NKikimr::NDataShardLoad {
@@ -65,7 +65,7 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TSt
     if (!programWithoutKey) {
         TString fields;
         for (size_t i = 0; i < 10; ++i) {
-            fields += Sprintf("'('field%lu (Utf8 '%s))", i, Value.data());
+            fields += Sprintf("'('field%lu (String '%s))", i, Value.data());
         }
         TString rowUpd = "(let upd_ '(" + fields + "))";
 
@@ -82,7 +82,7 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TSt
     TString key = GetKey(keyNum);
 
     auto programText = Sprintf(R"((
-        (let row1_ '('('key (Utf8 '%s))))
+        (let row1_ '('('id (Utf8 '%s))))
     )", key.data()) + programWithoutKey;
 
     auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();

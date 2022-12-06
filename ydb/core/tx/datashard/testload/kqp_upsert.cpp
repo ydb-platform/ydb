@@ -14,7 +14,7 @@
 #include <google/protobuf/text_format.h>
 
 // * Scheme is hardcoded and it is like default YCSB setup:
-// 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
+// 1 Text "id" column, 10 Bytes "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
 
 namespace NKikimr::NDataShardLoad {
@@ -44,19 +44,19 @@ TQueryInfo GenerateUpsert(size_t n, const TString& table) {
     str << Sprintf(R"__(
         --!syntax_v1
 
-        DECLARE $key AS Utf8;
-        DECLARE $field0 AS Utf8;
-        DECLARE $field1 AS Utf8;
-        DECLARE $field2 AS Utf8;
-        DECLARE $field3 AS Utf8;
-        DECLARE $field4 AS Utf8;
-        DECLARE $field5 AS Utf8;
-        DECLARE $field6 AS Utf8;
-        DECLARE $field7 AS Utf8;
-        DECLARE $field8 AS Utf8;
-        DECLARE $field9 AS Utf8;
+        DECLARE $key AS Text;
+        DECLARE $field0 AS Bytes;
+        DECLARE $field1 AS Bytes;
+        DECLARE $field2 AS Bytes;
+        DECLARE $field3 AS Bytes;
+        DECLARE $field4 AS Bytes;
+        DECLARE $field5 AS Bytes;
+        DECLARE $field6 AS Bytes;
+        DECLARE $field7 AS Bytes;
+        DECLARE $field8 AS Bytes;
+        DECLARE $field9 AS Bytes;
 
-        UPSERT INTO `%s` ( key, field0, field1, field2, field3, field4, field5, field6, field7, field8, field9 )
+        UPSERT INTO `%s` ( id, field0, field1, field2, field3, field4, field5, field6, field7, field8, field9 )
             VALUES ( $key, $field0, $field1, $field2, $field3, $field4, $field5, $field6, $field7, $field8, $field9 );
     )__", table.c_str());
 
@@ -64,7 +64,7 @@ TQueryInfo GenerateUpsert(size_t n, const TString& table) {
 
     for (size_t i = 0; i < 10; ++i) {
         TString name = "$field" + ToString(i);
-        paramsBuilder.AddParam(name).Utf8(Value).Build();
+        paramsBuilder.AddParam(name).String(Value).Build();
     }
 
     auto params = paramsBuilder.Build();

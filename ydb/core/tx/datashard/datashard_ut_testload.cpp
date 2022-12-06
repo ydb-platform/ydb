@@ -33,11 +33,11 @@ void CreateTable(Tests::TServer::TPtr server,
     TVector<TShardedTableOptions::TColumn> columns;
     columns.reserve(ValueColumnsCount + 1);
 
-    columns.emplace_back("key", "Utf8", true, false);
+    columns.emplace_back("id", "Utf8", true, false);
 
     for (size_t i = 0; i < ValueColumnsCount; ++i) {
         TString fieldName = FieldPrefix + ToString(i);
-        columns.emplace_back(fieldName, "Utf8", false, false);
+        columns.emplace_back(fieldName, "String", false, false);
     }
 
     auto opts = TShardedTableOptions()

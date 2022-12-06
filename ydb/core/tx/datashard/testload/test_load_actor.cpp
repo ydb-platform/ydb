@@ -207,18 +207,18 @@ public:
         TString queryBase = R"__(
             --!syntax_v1
             CREATE TABLE `%s/%s` (
-                key Utf8,
-                field0 Utf8,
-                field1 Utf8,
-                field2 Utf8,
-                field3 Utf8,
-                field4 Utf8,
-                field5 Utf8,
-                field6 Utf8,
-                field7 Utf8,
-                field8 Utf8,
-                field9 Utf8,
-                PRIMARY KEY(key)
+                id Text NOT NULL,
+                field0 Bytes,
+                field1 Bytes,
+                field2 Bytes,
+                field3 Bytes,
+                field4 Bytes,
+                field5 Bytes,
+                field6 Bytes,
+                field7 Bytes,
+                field8 Bytes,
+                field9 Bytes,
+                PRIMARY KEY(id)
             ) WITH (AUTO_PARTITIONING_BY_LOAD = DISABLED,
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
                     AUTO_PARTITIONING_PARTITION_SIZE_MB = %)__" PRIu64 R"__(,

@@ -343,14 +343,15 @@ namespace {
             return;
         }
 
-        TPrettyTable table({ "Name", "Mode", "Format" },
+        TPrettyTable table({ "Name", "Mode", "Format", "VirtualTimestamps" },
             TPrettyTableConfig().WithoutRowDelimiters());
 
         for (const auto& changefeed : changefeeds) {
             table.AddRow()
                 .Column(0, changefeed.GetName())
                 .Column(1, changefeed.GetMode())
-                .Column(2, changefeed.GetFormat());
+                .Column(2, changefeed.GetFormat())
+                .Column(3, changefeed.GetVirtualTimestamps() ? "on" : "off");
         }
 
         Cout << Endl << "Changefeeds:" << Endl << table;

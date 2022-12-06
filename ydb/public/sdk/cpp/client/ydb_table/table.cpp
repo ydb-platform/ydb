@@ -4395,6 +4395,11 @@ TChangefeedDescription::TChangefeedDescription(const Ydb::Table::ChangefeedDescr
     : TChangefeedDescription(FromProto(proto))
 {}
 
+TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
+    VirtualTimestamps_ = true;
+    return *this;
+}
+
 const TString& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -4407,11 +4412,13 @@ EChangefeedFormat TChangefeedDescription::GetFormat() const {
     return Format_;
 }
 
+bool TChangefeedDescription::GetVirtualTimestamps() const {
+    return VirtualTimestamps_;
+}
+
 template <typename TProto>
 TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     EChangefeedMode mode;
-    EChangefeedFormat format;
-
     switch (proto.mode()) {
     case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:
         mode = EChangefeedMode::KeysOnly;
@@ -4433,6 +4440,7 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         break;
     }
 
+    EChangefeedFormat format;
     switch (proto.format()) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         format = EChangefeedFormat::Json;
@@ -4442,11 +4450,17 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         break;
     }
 
-    return TChangefeedDescription(proto.name(), mode, format);
+    auto ret = TChangefeedDescription(proto.name(), mode, format);
+    if (proto.virtual_timestamps()) {
+        ret.WithVirtualTimestamps();
+    }
+
+    return ret;
 }
 
 void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     proto.set_name(Name_);
+    proto.set_virtual_timestamps(VirtualTimestamps_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -4488,13 +4502,15 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
     o << "{ name: \"" << Name_ << "\""
       << ", mode: " << Mode_ << ""
       << ", format: " << Format_ << ""
+      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
     << " }";
 }
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {
     return lhs.GetName() == rhs.GetName()
         && lhs.GetMode() == rhs.GetMode()
-        && lhs.GetFormat() == rhs.GetFormat();
+        && lhs.GetFormat() == rhs.GetFormat()
+        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

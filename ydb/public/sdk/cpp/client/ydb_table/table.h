@@ -201,9 +201,12 @@ class TChangefeedDescription {
 public:
     TChangefeedDescription(const TString& name, EChangefeedMode mode, EChangefeedFormat format);
 
+    TChangefeedDescription& WithVirtualTimestamps();
+
     const TString& GetName() const;
     EChangefeedMode GetMode() const;
     EChangefeedFormat GetFormat() const;
+    bool GetVirtualTimestamps() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -220,6 +223,7 @@ private:
     TString Name_;
     EChangefeedMode Mode_;
     EChangefeedFormat Format_;
+    bool VirtualTimestamps_ = false;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);

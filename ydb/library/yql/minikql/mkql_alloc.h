@@ -213,6 +213,10 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state) {
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
+    if (!ret) {
+        throw TMemoryLimitExceededException();
+    }
+
     ret->Link(&state->OffloadedBlocksRoot);
     return ret + 1;
 #endif
@@ -240,6 +244,10 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state) {
     if (useMemalloc) {
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
+        if (!ret) {
+            throw TMemoryLimitExceededException();
+        }
+
         ret->Link(&state->OffloadedBlocksRoot);
         return ret + 1;
     }

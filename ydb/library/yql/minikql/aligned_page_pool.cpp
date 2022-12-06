@@ -266,7 +266,12 @@ void* TAlignedPagePool::GetBlock(size_t size) {
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     OffloadAlloc(size);
-    return malloc(size);
+    auto ret = malloc(size);
+    if (!ret) {
+        throw TMemoryLimitExceededException();
+    }
+
+    return ret;
 #else
     if (size == POOL_PAGE_SIZE) {
         return GetPage();

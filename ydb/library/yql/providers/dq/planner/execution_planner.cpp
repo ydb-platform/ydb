@@ -461,7 +461,7 @@ namespace NYql::NDqs {
         }
     }
 
-    TString TDqsExecutionPlanner::GetResultType(bool withTagged) const {
+    TString TDqsExecutionPlanner::GetResultType() const {
         if (SourceTaskID) {
             auto& stage = TasksGraph.GetStageInfo(TasksGraph.GetTask(SourceTaskID).StageId).Meta.Stage;
             auto result = stage.Ref().GetTypeAnn();
@@ -476,6 +476,7 @@ namespace NYql::NDqs {
 
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
             TStringStream errorStream;
+            const bool withTagged = true;
             auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream, withTagged);
             return SerializeNode(type, typeEnv);
         }
@@ -796,9 +797,9 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
         }
     }
 
-    TString TDqsSingleExecutionPlanner::GetResultType(bool withTagged) const
+    TString TDqsSingleExecutionPlanner::GetResultType() const
     {
-        if (withTagged && TypeAnn) {
+        if (TypeAnn && TypeAnn->GetKind() == ETypeAnnotationKind::List) {
             auto item = TypeAnn;
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
@@ -808,6 +809,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
 
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
             TStringStream errorStream;
+            const bool withTagged = true;
             auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream, withTagged);
             return SerializeNode(type, typeEnv);
         } else {
@@ -878,7 +880,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
         }
     }
 
-    TString TGraphExecutionPlanner::GetResultType(bool) const
+    TString TGraphExecutionPlanner::GetResultType() const
     {
         return ResultType;
     }

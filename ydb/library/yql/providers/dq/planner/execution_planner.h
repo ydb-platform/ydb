@@ -26,7 +26,7 @@ namespace NYql::NDqs {
         virtual TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) = 0;
         virtual TVector<NDqProto::TDqTask>& GetTasks() = 0;
         virtual NActors::TActorId GetSourceID() const = 0;
-        virtual TString GetResultType(bool withTagged = false) const = 0;
+        virtual TString GetResultType() const = 0;
 
         TPlan GetPlan() {
             return TPlan {
@@ -57,7 +57,7 @@ namespace NYql::NDqs {
         TVector<NDqProto::TDqTask>& GetTasks() override;
 
         NActors::TActorId GetSourceID() const override;
-        TString GetResultType(bool withTagged = false) const override;
+        TString GetResultType() const override;
 
         void SetPublicIds(const THashMap<ui64, ui32>& publicIds) {
             PublicIds = publicIds;
@@ -106,7 +106,7 @@ namespace NYql::NDqs {
         TVector<NDqProto::TDqTask>& GetTasks() override;
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         NActors::TActorId GetSourceID() const override;
-        TString GetResultType(bool withTagged = false) const override;
+        TString GetResultType() const override;
 
     private:
         TString Program;
@@ -134,7 +134,7 @@ namespace NYql::NDqs {
         }
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         NActors::TActorId GetSourceID() const override;
-        TString GetResultType(bool withTagged = false) const override;
+        TString GetResultType() const override;
 
     private:
         TVector<NDqProto::TDqTask> Tasks;

@@ -205,6 +205,10 @@ private:
                         return NJson::JSON_UNDEFINED;
                 }
 
+            case NYdb::TTypeParser::ETypeKind::Tagged:
+                valueParser.OpenTagged();
+                return ColumnValueToJsonValue(valueParser);
+
             default:
                 return NJson::JSON_UNDEFINED;
         }

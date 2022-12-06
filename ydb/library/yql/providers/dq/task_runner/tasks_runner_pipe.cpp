@@ -1751,16 +1751,9 @@ private:
         task.GetMeta().UnpackTo(&taskMeta);
 
         auto* files = taskMeta.MutableFiles();
-        THashSet<TString> initialized;
 
         for (auto& file : *files) {
             if (file.GetObjectType() != Yql::DqsProto::TFile::EEXE_FILE) {
-                if (initialized.contains(file.GetObjectId())) {
-                    file.SetObjectType(Yql::DqsProto::TFile::EEXE_FILE); // skip this in runner
-                    continue;
-                }
-                initialized.insert(file.GetObjectId());
-
                 auto maybeFile = FileCache->FindFile(file.GetObjectId());
                 if (!maybeFile) {
                     throw std::runtime_error("Cannot find object `" + file.GetObjectId() + "' in cache");

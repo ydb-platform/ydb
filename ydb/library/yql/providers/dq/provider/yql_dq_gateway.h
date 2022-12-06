@@ -30,13 +30,13 @@ public:
 
     struct TFileResourceHash {
         std::size_t operator()(const TFileResource& f) const {
-            return std::hash<TString>()(f.GetObjectId());
+            return std::hash<TString>()(f.GetName());
         }
     };
 
     struct TFileResourceEqual {
         bool operator()(const TFileResource& a, const TFileResource& b) const {
-            return a.GetObjectId() == b.GetObjectId();
+            return a.GetName() == b.GetName();
         }
     };
 

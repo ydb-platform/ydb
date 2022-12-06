@@ -361,7 +361,7 @@ private:
                 YQL_CLOG(DEBUG, ProviderDq) << "WorkerInfo: " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(workerInfo, taskMeta.GetStageId());
                 YQL_CLOG(DEBUG, ProviderDq) << "TaskInfo: " << i << "/" << tasks[i].GetId();
                 for (const auto& file: taskMeta.GetFiles()) {
-                    YQL_CLOG(DEBUG, ProviderDq) << " ObjectId: " << file.GetObjectId();
+                    YQL_CLOG(DEBUG, ProviderDq) << " ObjectId: " << file.GetObjectId()  << ", " << file.GetName() << ", " << file.GetLocalPath();
                 }
                 i++;
 

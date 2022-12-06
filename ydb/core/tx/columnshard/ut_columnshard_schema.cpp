@@ -335,15 +335,15 @@ public:
     }
 
     void WaitEvents(TTestBasicRuntime& runtime, const TActorId sender, const ui32 attemption, const ui32 expectedDeltaSuccess, const TDuration timeout) {
-        const TInstant startInstant = Now();
+        const TInstant startInstant = TAppData::TimeProvider->Now();
         const TInstant deadline = startInstant + timeout;
         Cerr << "START_WAITING(" << attemption << "): " << SerializeToString() << Endl;
-        while (Now() < deadline) {
+        while (TAppData::TimeProvider->Now() < deadline) {
             if (PopRestartTabletOnPutData()) {
                 RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
             }
             Cerr << "IN_WAITING(" << attemption << "):" << SerializeToString() << Endl;
-            runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(5));
+            runtime.SimulateSleep(TDuration::Seconds(1));
             UNIT_ASSERT(ErrorsCounter == 0);
             if (expectedDeltaSuccess) {
                 if (SuccessCounter >= SuccessCounterStart + expectedDeltaSuccess) {
@@ -417,7 +417,7 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
-    //runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -497,6 +497,9 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
             }
         } else {
             counter.WaitEvents(runtime, sender, i, 0, TDuration::Seconds(5));
+        }
+        if (reboots) {
+            ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
         // Read

@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         void Bootstrap() {
-            ProviderId = NMetadataProvider::MakeServiceId(1);
+            ProviderId = NMetadataProvider::MakeServiceId(SelfId().NodeId());
             ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
             Become(&TThis::StateInit);
             Sender<NMetadataProvider::TEvSubscribeExternal>(ExternalDataManipulation).SendTo(ProviderId);

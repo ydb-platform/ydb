@@ -1,3 +1,4 @@
+#include "common.h"
 #include "manager.h"
 #include "external_data.h"
 #include "s3_actor.h"
@@ -102,7 +103,6 @@ bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     auto s3Config = Config.GetPatchedConfig(secrets);
     
     ctx.Send(newActor, new TEvPrivate::TEvS3Settings(s3Config));
-    Stop();
     StorageActorId = newActor;
 #endif
     return true;
@@ -171,6 +171,8 @@ void TTiersManager::TakeConfigs(NMetadataProvider::ISnapshot::TPtr snapshotExt, 
         auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
         manager.Start(Secrets);
     }
+    ReadyForUsageFlag = true;
+    TActivationContext::AsActorContext().Send(TabletActorId, new NTiers::TEvTiersManagerReadyForUsage);
 }
 
 TActorId TTiersManager::GetStorageActorId(const TString& tierId) {

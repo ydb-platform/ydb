@@ -41,6 +41,7 @@ private:
     TActor* Actor = nullptr;
     std::unordered_map<ui64, TString> PathIdTiering;
     YDB_READONLY_DEF(TManagers, Managers);
+    YDB_READONLY_FLAG(ReadyForUsage, false);
 
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     NMetadataProvider::ISnapshot::TPtr Snapshot;

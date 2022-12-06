@@ -1038,8 +1038,18 @@ TActorId TColumnShard::GetS3ActorForTier(const TString& tierId) const {
     return Tiers->GetStorageActorId(tierId);
 }
 
+void TColumnShard::Handle(NTiers::TEvTiersManagerReadyForUsage::TPtr& /*ev*/) {
+    Y_VERIFY(Tiers);
+    Y_VERIFY(Tiers->IsReadyForUsage());
+    if (TieringWaiting) {
+        TieringWaiting = false;
+        SignalTabletActive(TActivationContext::AsActorContext());
+    }
+}
+
 void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(Tiers);
+    ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadataProvider::TEvRefreshSubscriberData" << ev->Get()->GetSnapshot()->SerializeToString();
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 

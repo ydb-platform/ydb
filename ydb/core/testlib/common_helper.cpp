@@ -47,11 +47,11 @@ void THelper::StartSchemaRequest(const TString& request, const bool expectSucces
         auto session = f.GetValueSync().GetSession();
         session.ExecuteSchemeQuery(request).Subscribe([rrPtr, expectation](NYdb::TAsyncStatus f)
             {
-                *rrPtr = true;
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
                 Cerr << ss.Str() << Endl;
                 Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
+                *rrPtr = true;
             });
         });
     const TInstant start = TInstant::Now();

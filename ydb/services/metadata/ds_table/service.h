@@ -153,7 +153,7 @@ public:
     TService(const TConfig& config)
         : Config(config)
     {
-        TServiceOperator::Register();
+        TServiceOperator::Register(Config);
     }
 };
 

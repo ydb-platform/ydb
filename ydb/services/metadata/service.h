@@ -48,13 +48,17 @@ public:
 
 NActors::TActorId MakeServiceId(const ui32 node);
 
+class TConfig;
+
 class TServiceOperator {
 private:
     friend class TService;
     bool EnabledFlag = false;
-    static void Register();
+    TString Path = ".metadata";
+    static void Register(const TConfig& config);
 public:
     static bool IsEnabled();
+    static const TString& GetPath();
 };
 
 }

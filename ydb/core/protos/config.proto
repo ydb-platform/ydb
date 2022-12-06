@@ -585,6 +585,7 @@ message TMetadataProviderConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 RefreshPeriodSeconds = 2 [default = 10];
     optional TInternalRequestConfig RequestConfig = 3;
+    optional string Path = 4;
 }
 
 message TBackgroundTasksConfig {

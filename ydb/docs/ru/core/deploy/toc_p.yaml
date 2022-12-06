@@ -3,7 +3,7 @@ items:
   href: index.md
 - name: Системные требования и рекомендации
   href: ../cluster/system-requirements.md
-- name: Логгирование
+- name: Логирование
   href: ../cluster/logs.md
 - name: Топология
   href: ../cluster/topology.md

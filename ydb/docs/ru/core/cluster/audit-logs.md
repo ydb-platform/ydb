@@ -4,41 +4,36 @@
 
 ## Подключение аудитных логов
 
-Аудитный логи поставляются в рамках [логгирования компонентов](./logs.md) YDB.
-
-Чтобы подключить аудитные логи, нужно [изменить уровни логирования](../maintenance/embedded_monitoring/logs.md#change_log_level):
-
-1. Перейти по ссылке вида
-
-    ```bash
-    http://<endpoint>:8765/cms
-    ```
-
-    Откроется страница `Cluster Management System`.
-    
-1. На вкладке **Configs** кликнуть на строку `LogConfigItems`. 
-
-1. В разделе `Component log settings` найти компонент `FLAT_TX_SCHEMESHARD`. Выставить у этого компонента уровень логирования не ниже, чем `NOTICE`. 
-
-1. Сохранить изменения нажатием кнопки `Submit`
-
-Аудитные логи пишутся вместе с другими логами YDB.
+Чтобы подключить аудитные логи, необходимо в файле отвечающем за конфигурацию кластера прописать:
+```
+audit:
+  audit_file_path: "/Berkanavt/kikimr/audit.log"
+  format: JSON
+```
+* `audit_file_path` - путь к файлу, куда будут писаться аудитные логи
+* `format` - формат записи аудитных файлов (возможные значения: JSON или TXT)
 
 ## Формат аудитных логов {#format}
 
-Событие лога состоит из полей `ключ: значение`, разделенных запятыми:
+Событие лога состоит из полей `ключ: значение`. Конкретный формат записи полей зависит от значения `format` в cluster.yaml:
 
-```text
-2022-08-03T22:41:43.860439Z node 1 :FLAT_TX_SCHEMESHARD NOTICE: AUDIT: txId: 281474976710670, database: /Root, subject: no subject, status: StatusSuccess, operation: MODIFY ACL, path: Root, add access: +(CT):user0@builtin, protobuf request: WorkingDir: "" OperationType: ESchemeOpModifyACL ModifyACL { Name: "Root" DiffACL: "\n\031\010\000\022\025\010\001\020@\032\ruser0@builtin \003" }
+###### Запись в формате JSON
+```
+2022-12-05T18:58:39.517833Z: {"protobuf request":"WorkingDir: \"/ydb_vla_dev07/db1\" OperationType: ESchemeOpCreateTable CreateTable { Name: \"my_table\" Columns { Name: \"id\" Type: \"Uint64\" NotNull: false } Columns { Name: \"name\" Type: \"String\" NotNull: false } KeyColumnNames: \"id\" PartitionConfig { PartitioningPolicy { SizeToSplit: 2147483648 } ColumnFamilies { StorageConfig { SysLog { PreferredPoolKind: \"ssd\" } Log { PreferredPoolKind: \"ssd\" } Data { PreferredPoolKind: \"ssd\" } } } } } FailOnExist: false","txId":"281474976720657","subject":"no subject","status":"StatusAccepted","operation":"CREATE TABLE","path":"/ydb_vla_dev07/db1/my_table","database":"/ydb_vla_dev07/db1"}
 
-2022-08-03T22:41:43.931561Z node 1 :FLAT_TX_SCHEMESHARD NOTICE: AUDIT: txId: 281474976710672, database: /Root, subject: user0@builtin, status: StatusAccepted, operation: DROP TABLE, path: /Root/Test1234/KeyValue, protobuf request: WorkingDir: "/Root/Test1234" OperationType: ESchemeOpDropTable Drop { Name: "KeyValue" }
-
-2022-08-03T22:41:43.895591Z node 1 :FLAT_TX_SCHEMESHARD NOTICE: AUDIT: txId: 281474976710671, database: /Root, subject: user0@builtin, status: StatusAccepted, operation: CREATE DIRECTORY, path: /Root/Test1234, protobuf request: WorkingDir: "/Root" OperationType: ESchemeOpMkDir MkDir { Name: "Test1234" } FailOnExist: true, operation: CREATE TABLE, path: /Root/Test1234/KeyValue, protobuf request: WorkingDir: "/Root/Test1234" OperationType: ESchemeOpCreateTable CreateTable { Name: "KeyValue" Columns { Name: "Key" Type: "Uint32" NotNull: false } Columns { Name: "Value" Type: "String" NotNull: false } KeyColumnNames: "Key" PartitionConfig { ColumnFamilies { Id: 0 StorageConfig { SysLog { PreferredPoolKind: "test" } Log { PreferredPoolKind: "test" } Data { PreferredPoolKind: "test" } } } } } FailOnExist: false
+2022-12-05T19:01:22.309877Z: {"dst path":"{/ydb_vla_dev07/db1/my_table2}","database":"/ydb_vla_dev07/db1","txId":"281474976720658","protobuf request":"OperationType: ESchemeOpMoveTable MoveTable { SrcPath: \"/ydb_vla_dev07/db1/my_table\" DstPath: \"/ydb_vla_dev07/db1/my_table2\" }","status":"StatusAccepted","subject":"no subject","src path":"{/ydb_vla_dev07/db1/my_table}","operation":"ALTER TABLE RENAME"}
 ```
 
-Одно событие описывает одну транзакцию. В событии может быть описано несколько операций, выполненных в рамках одной транзакции. В этом случае часть полей будут описывать [события транзакции](#tx-fields), а часть полей — [события операций](#sub-operation-fields) внутри транзакции.
+###### Запись в формате TXT
+```
+2022-12-05T18:44:19.831251Z: txId=562949953441313, database=/ydb_vla_dev07/db1, subject=no subject, status=StatusAccepted, operation=CREATE TABLE, path=/ydb_vla_dev07/db1/my_table, protobuf request=WorkingDir: "/ydb_vla_dev07/db1" OperationType: ESchemeOpCreateTable CreateTable { Name: "my_table" Columns { Name: "id" Type: "Uint64" NotNull: false } Columns { Name: "name" Type: "String" NotNull: false } KeyColumnNames: "id" PartitionConfig { PartitioningPolicy { SizeToSplit: 2147483648 } ColumnFamilies { StorageConfig { SysLog { PreferredPoolKind: "ssd" } Log { PreferredPoolKind: "ssd" } Data { PreferredPoolKind: "ssd" } } } } } FailOnExist: false
 
-### Поля транзакции {#tx-fields}
+2022-12-05T18:45:32.790052Z: txId=562949953441314, database=/ydb_vla_dev07/db1, subject=no subject, status=StatusAccepted, operation=ALTER TABLE RENAME, src path={/ydb_vla_dev07/db1/my_table}, dst path={/ydb_vla_dev07/db1/my_table2}, protobuf request=OperationType: ESchemeOpMoveTable MoveTable { SrcPath: "/ydb_vla_dev07/db1/my_table" DstPath: "/ydb_vla_dev07/db1/my_table2" }
+```
+
+Событие описаывает операцию. Несколько событий могут описывать несколько операций выполненных в рамках одной транзакции. В этом случае часть полей будут описывать [события транзакции](#tx-fields), а часть полей — [события операций](#sub-operation-fields) внутри транзакции.
+
+### Поля операции {#tx-fields}
 
 * `txId` — (обязательно) уникальный идентификатор транзакции.
 * `database` — (опционально) путь к базе данных.
@@ -50,12 +45,11 @@
 
 * `operation` — (обязательно) название операции.
 * `path` — (опционально) путь к объекту изменения. Это поле может меняться в рамках транзакции.
-* `src path` — (опционально) путь к исходному объекту (для операций копирования и перемещения).
-* `dst path` — (опционально) путь к конечному объекту (для операций копирования и перемещения).
-* `no path` — (опционально) если объект изменения отсутствует, содержит значение `no path`.
+* `src path` — (опционально) путь к исходному объекту (для операций копирования и перемещения). Поле может содержать несколько значений.
+* `dst path` — (опционально) путь к конечному объекту (для операций копирования и перемещения). Поле может содержать несколько значений.
 * `set owner` — (опционально) новый владелец при изменении ACL.
-* `add access` — (опционально) добавление доступа при изменении ACL. Поле может повторятся.
-* `remove access` — (опционально) удаление доступа при изменении ACL. Поле может повторяться.
+* `add access` — (опционально) добавление доступа при изменении ACL. Поле может содержать несколько значений.
+* `remove access` — (опционально) удаление доступа при изменении ACL. Поле может содержать несколько значений.
 * `protobuf request` — (опционально) Описание изменения схемы или ACL в формате protobuf.
 
 <!-- 

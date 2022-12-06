@@ -5,52 +5,68 @@ namespace NMiniKQL {
 
 class TCountAllBlockAggregator : public TBlockAggregatorBase {
 public:
+    struct TState {
+        ui64 Count_ = 0;
+    };
+
     TCountAllBlockAggregator(std::optional<ui32> filterColumn)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState();
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         Y_UNUSED(columns);
         if (filtered) {
-           State_ += *filtered;
+           typedState->Count_ += *filtered;
         } else {
-           State_ += batchLength;
+           typedState->Count_ += batchLength;
         }
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        return NUdf::TUnboxedValuePod(State_);
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        return NUdf::TUnboxedValuePod(typedState->Count_);
     }
-
-private:
-    ui64 State_ = 0;
 };
 
 class TCountBlockAggregator : public TBlockAggregatorBase {
 public:
+    struct TState {
+        ui64 Count_ = 0;
+    };
+
     TCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
         , ArgColumn_(argColumn)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState();
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                State_ += filtered ? *filtered : batchLength;
+                typedState->Count_ += filtered ? *filtered : batchLength;
             }
         } else {
             const auto& array = datum.array();
             if (!filtered) {
-                State_ += array->length - array->GetNullCount();
+                typedState->Count_ += array->length - array->GetNullCount();
             } else if (array->GetNullCount() == array->length) {
                 // all nulls
                 return;
             } else if (array->GetNullCount() == 0) {
                 // no nulls
-                State_ += *filtered;
+                typedState->Count_ += *filtered;
             } else {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 // intersect masks from nulls and filter column
@@ -58,7 +74,7 @@ public:
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 auto filterBitmap = filterArray->GetValues<uint8_t>(1, 0);
-                auto state = State_;
+                auto state = typedState->Count_;
                 for (ui32 i = 0; i < array->length; ++i) {
                     ui64 fullIndex = i + array->offset;
                     auto bit1 = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
@@ -66,18 +82,18 @@ public:
                     state += bit1 & bit2;
                 }
 
-                State_ = state;
+                typedState->Count_ = state;
             }
         }
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        return NUdf::TUnboxedValuePod(State_);
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        return NUdf::TUnboxedValuePod(typedState->Count_);
     }
 
 private:
     const ui32 ArgColumn_;
-    ui64 State_ = 0;
 };
 
 class TBlockCountAllFactory : public IBlockAggregatorFactory {

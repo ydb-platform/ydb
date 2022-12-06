@@ -13,18 +13,28 @@ namespace NMiniKQL {
 template <typename TIn, typename TSum, typename TInScalar>
 class TSumBlockAggregatorNullableOrScalar : public TBlockAggregatorBase {
 public:
+    struct TState {
+        TSum Sum_ = 0;
+        bool IsValid_ = false;
+    };
+
     TSumBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
         , ArgColumn_(argColumn)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState();
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                Sum_ += (filtered ? *filtered : batchLength) * datum.scalar_as<TInScalar>().value;
-                IsValid_ = true;
+                typedState->Sum_ += (filtered ? *filtered : batchLength) * datum.scalar_as<TInScalar>().value;
+                typedState->IsValid_ = true;
             }
         } else {
             const auto& array = datum.array();
@@ -36,8 +46,8 @@ public:
             }
 
             if (!filtered) {
-                IsValid_ = true;
-                TSum sum = Sum_;
+                typedState->IsValid_ = true;
+                TSum sum = typedState->Sum_;
                 if (array->GetNullCount() == 0) {
                     for (int64_t i = 0; i < len; ++i) {
                         sum += ptr[i];
@@ -52,15 +62,15 @@ public:
                     }
                 }
 
-                Sum_ = sum;
+                typedState->Sum_ = sum;
             } else {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
-                TSum sum = Sum_;
+                TSum sum = typedState->Sum_;
                 if (array->GetNullCount() == 0) {
-                    IsValid_ = true;
+                    typedState->IsValid_ = true;
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
@@ -80,38 +90,46 @@ public:
                         count += mask & 1;
                     }
 
-                    IsValid_ = IsValid_ || count > 0;
+                    typedState->IsValid_ = typedState->IsValid_ || count > 0;
                 }
 
-                Sum_ = sum;
+                typedState->Sum_ = sum;
             }
         }
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        if (!IsValid_) {
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        if (!typedState->IsValid_) {
             return NUdf::TUnboxedValuePod();
         }
 
-        return NUdf::TUnboxedValuePod(Sum_);
+        return NUdf::TUnboxedValuePod(typedState->Sum_);
     }
 
 private:
     const ui32 ArgColumn_;
-    TSum Sum_ = 0;
-    bool IsValid_ = false;
 };
 
 template <typename TIn, typename TSum, typename TInScalar>
 class TSumBlockAggregator : public TBlockAggregatorBase {
 public:
+    struct TState {
+        TSum Sum_ = 0;
+    };
+
     TSumBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
         , ArgColumn_(argColumn)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState();
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         MKQL_ENSURE(datum.is_array(), "Expected array");
@@ -121,7 +139,7 @@ public:
         MKQL_ENSURE(array->GetNullCount() == 0, "Expected no nulls");
         MKQL_ENSURE(len > 0, "Expected at least one value");
 
-        TSum sum = Sum_;
+        TSum sum = typedState->Sum_;
         if (!filtered) {
             for (int64_t i = 0; i < len; ++i) {
                 sum += ptr[i];
@@ -139,34 +157,44 @@ public:
             }
         }
 
-        Sum_ = sum;
+        typedState->Sum_ = sum;
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        return NUdf::TUnboxedValuePod(Sum_);
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        return NUdf::TUnboxedValuePod(typedState->Sum_);
     }
 
 private:
     const ui32 ArgColumn_;
-    TSum Sum_ = 0;
 };
 
 template <typename TIn, typename TInScalar>
 class TAvgBlockAggregator : public TBlockAggregatorBase {
 public:
+    struct TState {
+        double Sum_ = 0;
+        ui64 Count_ = 0;
+    };
+
     TAvgBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn, const THolderFactory& holderFactory)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
         , ArgColumn_(argColumn)
         , HolderFactory_(holderFactory)
     {
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState();
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                Sum_ += double((filtered ? *filtered : batchLength) * datum.scalar_as<TInScalar>().value);
-                Count_ += batchLength;
+                typedState->Sum_ += double((filtered ? *filtered : batchLength) * datum.scalar_as<TInScalar>().value);
+                typedState->Count_ += batchLength;
             }
         } else {
             const auto& array = datum.array();
@@ -178,8 +206,8 @@ public:
             }
 
             if (!filtered) {
-                Count_ += count;
-                double sum = Sum_;
+                typedState->Count_ += count;
+                double sum = typedState->Sum_;
                 if (array->GetNullCount() == 0) {
                     for (int64_t i = 0; i < len; ++i) {
                         sum += double(ptr[i]);
@@ -194,15 +222,15 @@ public:
                     }
                 }
 
-                Sum_ = sum;
+                typedState->Sum_ = sum;
             } else {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
 
-                double sum = Sum_;
-                ui64 count = Count_;
+                double sum = typedState->Sum_;
+                ui64 count = typedState->Count_;
                 if (array->GetNullCount() == 0) {
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
@@ -224,29 +252,28 @@ public:
                     }
                 }
 
-                Sum_ = sum;
-                Count_ = count;
+                typedState->Sum_ = sum;
+                typedState->Count_ = count;
             }
         }
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        if (!Count_) {
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        if (!typedState->Count_) {
             return NUdf::TUnboxedValuePod();
         }
 
         NUdf::TUnboxedValue* items;
         auto arr = HolderFactory_.CreateDirectArrayHolder(2, items);
-        items[0] = NUdf::TUnboxedValuePod(Sum_);
-        items[1] = NUdf::TUnboxedValuePod(Count_);
+        items[0] = NUdf::TUnboxedValuePod(typedState->Sum_);
+        items[1] = NUdf::TUnboxedValuePod(typedState->Count_);
         return arr;
     }
 
 private:
     const ui32 ArgColumn_;
     const THolderFactory& HolderFactory_;
-    double Sum_ = 0;
-    ui64 Count_ = 0;
 };
 
 class TBlockSumFactory : public IBlockAggregatorFactory {

@@ -22,24 +22,37 @@ T UpdateMinMax(T x, T y) {
 template <typename TIn, typename TInScalar, bool IsMin>
 class TMinMaxBlockAggregatorNullableOrScalar : public TBlockAggregatorBase {
 public:
+    struct TState {
+        TIn Value_;
+        bool IsValid_ = false;
+
+        TState() {
+            if constexpr (IsMin) {
+                Value_ = std::numeric_limits<TIn>::max();
+            } else {
+                Value_ = std::numeric_limits<TIn>::min();
+            }
+        }
+    };
+
     TMinMaxBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
         , ArgColumn_(argColumn)
     {
-        if constexpr (IsMin) {
-            Value_ = std::numeric_limits<TIn>::max();
-        } else {
-            Value_ = std::numeric_limits<TIn>::min();
-        }
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState();
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                Value_ = datum.scalar_as<TInScalar>().value;
-                IsValid_ = true;
+                typedState->Value_ = datum.scalar_as<TInScalar>().value;
+                typedState->IsValid_ = true;
             }
         } else {
             const auto& array = datum.array();
@@ -51,8 +64,8 @@ public:
             }
 
             if (!filtered) {
-                IsValid_ = true;
-                TIn value = Value_;
+                typedState->IsValid_ = true;
+                TIn value = typedState->Value_;
                 if (array->GetNullCount() == 0) {
                     for (int64_t i = 0; i < len; ++i) {
                         value = UpdateMinMax<IsMin>(value, ptr[i]);
@@ -67,16 +80,16 @@ public:
                     }
                 }
 
-                Value_ = value;
+                typedState->Value_ = value;
             } else {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
 
-                TIn value = Value_;
+                TIn value = typedState->Value_;
                 if (array->GetNullCount() == 0) {
-                    IsValid_ = true;
+                    typedState->IsValid_ = true;
                     for (int64_t i = 0; i < len; ++i) {
                         TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
                         value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
@@ -94,43 +107,53 @@ public:
                         count += mask & 1;
                     }
 
-                    IsValid_ = IsValid_ || count > 0;
+                    typedState->IsValid_ = typedState->IsValid_ || count > 0;
                 }
 
-                Value_ = value;
+                typedState->Value_ = value;
             }
         }
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        if (!IsValid_) {
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        if (!typedState->IsValid_) {
             return NUdf::TUnboxedValuePod();
         }
 
-        return NUdf::TUnboxedValuePod(Value_);
+        return NUdf::TUnboxedValuePod(typedState->Value_);
     }
 
 private:
     const ui32 ArgColumn_;
-    TIn Value_ = 0;
-    bool IsValid_ = false;
 };
 
 template <typename TIn, typename TInScalar, bool IsMin>
 class TMinMaxBlockAggregator: public TBlockAggregatorBase {
 public:
+    struct TState {
+        TIn Value_;
+        TState() {
+            if constexpr (IsMin) {
+                Value_ = std::numeric_limits<TIn>::max();
+            } else {
+                Value_ = std::numeric_limits<TIn>::min();
+            }
+        }
+    };
+
     TMinMaxBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(filterColumn)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn)
         , ArgColumn_(argColumn)
     {
-        if constexpr (IsMin) {
-            Value_ = std::numeric_limits<TIn>::max();
-        } else {
-            Value_ = std::numeric_limits<TIn>::min();
-        }
     }
 
-    void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+    void InitState(void* state) final {
+        new(state) TState;
+    }
+
+    void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
+        auto typedState = static_cast<TState*>(state);
         Y_UNUSED(batchLength);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         MKQL_ENSURE(datum.is_array(), "Expected array");
@@ -140,36 +163,36 @@ public:
         MKQL_ENSURE(array->GetNullCount() == 0, "Expected no nulls");
         MKQL_ENSURE(len > 0, "Expected at least one value");
         if (!filtered) {
-            TIn value = Value_;
+            TIn value = typedState->Value_;
             for (int64_t i = 0; i < len; ++i) {
                 value = UpdateMinMax<IsMin>(value, ptr[i]);
             }
 
-            Value_ = value;
+            typedState->Value_ = value;
         } else {
             const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
             const auto& filterArray = filterDatum.array();
             MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
             const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
 
-            TIn value = Value_;
+            TIn value = typedState->Value_;
             for (int64_t i = 0; i < len; ++i) {
                 ui64 fullIndex = i + array->offset;
                 TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
                 value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
             }
 
-            Value_ = value;
+            typedState->Value_ = value;
         }
     }
 
-    NUdf::TUnboxedValue Finish() final {
-        return NUdf::TUnboxedValuePod(Value_);
+    NUdf::TUnboxedValue FinishOne(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        return NUdf::TUnboxedValuePod(typedState->Value_);
     }
 
 private:
     const ui32 ArgColumn_;
-    TIn Value_ = 0;
 };
 
 template <bool IsMin>

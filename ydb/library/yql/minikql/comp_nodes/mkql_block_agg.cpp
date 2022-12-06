@@ -76,10 +76,13 @@ public:
                 }
 
                 s.HasValues_ = true;
+                char* ptr = s.AggStates_.data();
                 for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (output[i]) {
-                        s.Aggs_[i]->AddMany(s.Values_.data(), batchLength, filtered);
+                        s.Aggs_[i]->AddMany(ptr, s.Values_.data(), batchLength, filtered);
                     }
+
+                    ptr += s.Aggs_[i]->StateSize;
                 }
             } else {
                 s.IsFinished_ = true;
@@ -87,10 +90,13 @@ public:
                     return EFetchResult::Finish;
                 }
 
+                char* ptr = s.AggStates_.data();
                 for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (auto* out = output[i]; out != nullptr) {
-                        *out = s.Aggs_[i]->Finish();
+                        *out = s.Aggs_[i]->FinishOne(ptr);
                     }
+
+                    ptr += s.Aggs_[i]->StateSize;
                 }
 
                 return EFetchResult::One;
@@ -107,6 +113,7 @@ private:
         TVector<std::unique_ptr<IBlockAggregator>> Aggs_;
         bool IsFinished_ = false;
         bool HasValues_ = false;
+        TVector<char> AggStates_;
 
         TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams>& params, const THolderFactory& holderFactory)
             : TComputationValue(memInfo)
@@ -117,8 +124,18 @@ private:
                 ValuePointers_[i] = &Values_[i];
             }
 
+            ui32 totalStateSize = 0;
             for (const auto& p : params) {
                 Aggs_.emplace_back(MakeBlockAggregator(p.Name, p.TupleType, filterColumn, p.ArgColumns, holderFactory));
+
+                totalStateSize += Aggs_.back()->StateSize;
+            }
+
+            AggStates_.resize(totalStateSize);
+            char* ptr = AggStates_.data();
+            for (const auto& agg : Aggs_) {
+                agg->InitState(ptr);
+                ptr += agg->StateSize;
             }
         }
     };

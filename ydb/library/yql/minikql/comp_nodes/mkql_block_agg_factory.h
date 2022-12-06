@@ -10,15 +10,24 @@ class IBlockAggregator {
 public:
     virtual ~IBlockAggregator() = default;
 
-    virtual void AddMany(const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) = 0;
+    virtual void InitState(void* state) = 0;
 
-    virtual NUdf::TUnboxedValue Finish() = 0;
+    virtual void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) = 0;
+
+    virtual NUdf::TUnboxedValue FinishOne(const void* state) = 0;
+
+    const ui32 StateSize;
+
+    explicit IBlockAggregator(ui32 stateSize)
+        : StateSize(stateSize)
+    {}
 };
 
 class TBlockAggregatorBase : public IBlockAggregator {
 public:
-    TBlockAggregatorBase(std::optional<ui32> filterColumn)
-        : FilterColumn_(filterColumn)
+    TBlockAggregatorBase(ui32 stateSize, std::optional<ui32> filterColumn)
+        : IBlockAggregator(stateSize)
+        , FilterColumn_(filterColumn)
     {
     }
 

@@ -4400,6 +4400,11 @@ TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithRetentionPeriod(const TDuration& value) {
+    RetentionPeriod_ = value;
+    return *this;
+}
+
 const TString& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -4489,6 +4494,12 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     case EChangefeedFormat::Unknown:
         break;
     }
+
+    if (RetentionPeriod_) {
+        auto& retention = *proto.mutable_retention_period();
+        retention.set_seconds(RetentionPeriod_->Seconds());
+        retention.set_nanos(RetentionPeriod_->NanoSecondsOfSecond());
+    }
 }
 
 TString TChangefeedDescription::ToString() const {
@@ -4502,8 +4513,13 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
     o << "{ name: \"" << Name_ << "\""
       << ", mode: " << Mode_ << ""
       << ", format: " << Format_ << ""
-      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
-    << " }";
+      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << "";
+
+    if (RetentionPeriod_) {
+        o << ", retention_period: " << *RetentionPeriod_;
+    }
+
+    o << " }";
 }
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

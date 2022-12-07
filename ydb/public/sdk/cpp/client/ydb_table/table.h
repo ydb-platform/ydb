@@ -201,7 +201,10 @@ class TChangefeedDescription {
 public:
     TChangefeedDescription(const TString& name, EChangefeedMode mode, EChangefeedFormat format);
 
+    // Enable virtual timestamps
     TChangefeedDescription& WithVirtualTimestamps();
+    // Customise retention period of underlying topic (24h by default).
+    TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
 
     const TString& GetName() const;
     EChangefeedMode GetMode() const;
@@ -224,6 +227,7 @@ private:
     EChangefeedMode Mode_;
     EChangefeedFormat Format_;
     bool VirtualTimestamps_ = false;
+    std::optional<TDuration> RetentionPeriod_;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);

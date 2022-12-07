@@ -1,6 +1,6 @@
 # Managing profiles
 
-A profile is a saved and locally named configuration of DB connection parameters. With profiles, you can reuse data about DB location and authentication parameters, making a CLI call much shorter:
+A profile is a named set of DB connection parameters stored in a configuration file in the local file system. With profiles, you can reuse data about DB location and authentication parameters, making a CLI call much shorter:
 
 - Calling the `scheme ls` command without a profile:
 

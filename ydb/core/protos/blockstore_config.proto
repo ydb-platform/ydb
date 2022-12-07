@@ -19,6 +19,11 @@ enum EPartitionType {
     NonReplicated = 1; // directly mapped network partitions
 }
 
+message TEncryptionDesc {
+    optional uint32 Mode = 1;
+    optional bytes KeyHash = 2;
+}
+
 message TVolumeConfig {
     optional uint32 BlockSize = 1; // block size in bytes
     optional uint32 StripeSize = 2; // stripe chunk size in blocks, default 0 (linear addressing)
@@ -91,9 +96,6 @@ message TVolumeConfig {
     // Determines index geometry for v2 partitions.
     optional uint32 ZoneBlockCount = 38;
 
-    // Encryption key hash
-    optional bytes EncryptionKeyHash = 39;
-
     // Indicates that volume does not belong to user directly, but used for system needs
     optional bool IsSystem = 40;
 
@@ -105,6 +107,9 @@ message TVolumeConfig {
 
     // List of agents to allocate disk, allowed only for nonreplicated volumes.
     repeated string AgentIds = 43;
+
+    // Encryption description.
+    optional TEncryptionDesc EncryptionDesc = 44;
 }
 
 message TUpdateVolumeConfig {

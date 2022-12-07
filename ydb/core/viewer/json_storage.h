@@ -510,7 +510,7 @@ public:
         MergedBSGroupInfo = MergeWhiteboardResponses(BSGroupInfo, TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetDefaultMergeField());
         MergedVDiskInfo = MergeWhiteboardResponses(VDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetDefaultMergeField());
         MergedPDiskInfo = MergeWhiteboardResponses(PDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetDefaultMergeField());
-        for (auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo.Get())) {
             element.SetStateFlag(GetWhiteboardFlag(GetPDiskStateFlag(element)));
             auto overall = NKikimrViewer::EFlag_Name(GetPDiskOverallFlag(element));
             auto key = TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementKey(element);
@@ -518,7 +518,7 @@ public:
             PDisksOverall.emplace(key, overall);
             PDisksIndex.emplace(key, element);
         }
-        for (auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo.Get())) {
             auto overall = NKikimrViewer::EFlag_Name(GetVDiskOverallFlag(element));
             auto key = TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementKey(element);
             element.ClearOverall();
@@ -533,7 +533,7 @@ public:
                 VSlotsIndex.emplace(std::move(slotId), element);
             }
         }
-        for (auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
             auto state = GetBSGroupOverallState(element, VDisksIndex, PDisksIndex);
             auto key = ToString(TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementKey(element));
             if (state.MissingDisks > 0) {

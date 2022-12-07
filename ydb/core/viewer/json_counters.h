@@ -178,13 +178,13 @@ public:
                      const TVector<const FieldDescriptor*>& groupFields) {
 
         THolder<ResponseType> groupedResponse = TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, true);
-        auto* stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(groupedResponse.Get());
+        auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(groupedResponse.Get());
         TStringBuf host(nodeInfo.Host);
         size_t pos = host.find('.');
         if (pos != TString::npos) {
             host = host.substr(0, pos);
         }
-        for (typename TWhiteboardInfo<ResponseType>::TElementType& info : *stateInfo) {
+        for (typename TWhiteboardInfo<ResponseType>::TElementType& info : stateInfo) {
             const Reflection& reflectionFrom = *info.GetReflection();
             json << ",{\"labels\":{";
             if (nodeInfo.NodeId != 0) {
@@ -289,8 +289,8 @@ public:
                 ++itPDiskInfo;
             if (itPDiskInfo != PDiskInfo.end() && itPDiskInfo->first == nodeInfo.NodeId && itPDiskInfo->second) {
                 RenderStats(json, itPDiskInfo->second, nodeInfo);
-                auto* stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(itPDiskInfo->second.Get());
-                for (const typename TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::TElementType& info : *stateInfo) {
+                auto& stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(itPDiskInfo->second.Get());
+                for (const typename TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::TElementType& info : stateInfo) {
                     if (info.GetTotalSize() > 0 && info.GetAvailableSize() > 0) {
                         ++pDiskUserSpaceHistogram[std::min((info.GetTotalSize() - info.GetAvailableSize()) * pDiskUserSpaceHistogram.size() / info.GetTotalSize(), pDiskUserSpaceHistogram.size() - 1)];
                     }
@@ -330,14 +330,14 @@ public:
         std::unordered_map<ui64, int> bsGroupGreenVDisks;
         std::unordered_map<ui64, int> bsGroupNotGreenVDisks;
         {
-            auto* stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(mergedBSGroupInfo.Get());
-            for (const typename TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::TElementType& info : *stateInfo) {
+            auto& stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(mergedBSGroupInfo.Get());
+            for (const typename TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::TElementType& info : stateInfo) {
                 bsGroupVDisks[info.GetGroupID()] = info.VDiskIdsSize();
             }
         }
         {
-            auto* stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(mergedVDiskInfo.Get());
-            for (const typename TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::TElementType& info : *stateInfo) {
+            auto& stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(mergedVDiskInfo.Get());
+            for (const typename TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::TElementType& info : stateInfo) {
                 auto groupId = info.GetVDiskId().GetGroupID();
                 bsGroupVDisks[groupId]--;
                 auto flag = GetVDiskOverallFlag(info);

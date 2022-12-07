@@ -322,6 +322,8 @@ enum EServiceKikimr {
 
     DQ_TASK_RUNNER       = 1165;
 
+    VIEWER = 1166;
+
     // 1024 - 1099 is reserved for nbs
 
     // Change exchange (async indexes & CDC)

@@ -21,25 +21,77 @@ using namespace NKikimrWhiteboard;
 
 Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(TabletMerging) {
-        TMap<ui32, THolder<TEvWhiteboard::TEvTabletStateResponse>> nodesData;
-        for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
-            THolder<TEvWhiteboard::TEvTabletStateResponse>& nodeData = nodesData[nodeId] = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
-            nodeData->Record.MutableTabletStateInfo()->Reserve(10000);
-            for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
-                NKikimrWhiteboard::TTabletStateInfo* tabletData = nodeData->Record.AddTabletStateInfo();
-                tabletData->SetTabletId(tabletId);
-                tabletData->SetLeader(true);
-                tabletData->SetGeneration(13);
-                tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
-            }
-        }
-        Ctest << "Data has built" << Endl;
         THPTimer timer;
-        THolder<TEvWhiteboard::TEvTabletStateResponse> result = MergeWhiteboardResponses(nodesData);
-        Ctest << "Merge = " << timer.Passed() << Endl;
-        UNIT_ASSERT_LT(timer.Passed(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.TabletStateInfoSize(), 10000);
-        Ctest << "Data has merged" << Endl;
+        {
+            TMap<ui32, TString> nodesBlob;
+            timer.Reset();
+            for (ui32 nodeId = 1; nodeId <= 10000; ++nodeId) {
+                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+                nodeData->Record.MutableTabletStateInfo()->Reserve(10000);
+                for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
+                    NKikimrWhiteboard::TTabletStateInfo* tabletData = nodeData->Record.AddTabletStateInfo();
+                    tabletData->SetTabletId(tabletId);
+                    tabletData->SetLeader(true);
+                    tabletData->SetGeneration(13);
+                    tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
+                    tabletData->MutableTenantId()->SetSchemeShard(8);
+                    tabletData->MutableTenantId()->SetPathId(14);
+                    tabletData->MutableChannelGroupIDs()->Add(9);
+                    tabletData->MutableChannelGroupIDs()->Add(10);
+                    tabletData->MutableChannelGroupIDs()->Add(11);
+                }
+                nodesBlob[nodeId] = nodeData->Record.SerializeAsString();
+            }
+            Ctest << "Build = " << timer.Passed() << Endl;
+            timer.Reset();
+            TMap<ui32, THolder<TEvWhiteboard::TEvTabletStateResponse>> nodesData;
+            for (const auto& [nodeId, nodeBlob] : nodesBlob) {
+                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+                bool res = nodeData->Record.ParseFromString(nodesBlob[nodeId]);
+                Y_UNUSED(res);
+                nodesData[nodeId] = std::move(nodeData);
+            }
+            THolder<TEvWhiteboard::TEvTabletStateResponse> result = MergeWhiteboardResponses(nodesData);
+            Ctest << "Merge = " << timer.Passed() << Endl;
+            UNIT_ASSERT_LT(timer.Passed(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.TabletStateInfoSize(), 10000);
+            timer.Reset();
+        }
+        Ctest << "Destroy = " << timer.Passed() << Endl;
+    }
+
+    Y_UNIT_TEST(TabletMergingPacked) {
+        THPTimer timer;
+        {
+            TMap<ui32, TString> nodesBlob;
+            timer.Reset();
+            for (ui32 nodeId = 1; nodeId <= 10000; ++nodeId) {
+                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+                auto* tabletData = nodeData->AllocatePackedResponse(10000);
+                for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
+                    tabletData->TabletId = tabletId;
+                    tabletData->FollowerId = 0;
+                    tabletData->Generation = 13;
+                    //tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
+                    ++tabletData;
+                }
+                nodesBlob[nodeId] = nodeData->Record.SerializeAsString();
+            }
+            Ctest << "Build = " << timer.Passed() << Endl;
+            TMap<ui32, THolder<TEvWhiteboard::TEvTabletStateResponse>> nodesData;
+            for (const auto& [nodeId, nodeBlob] : nodesBlob) {
+                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+                bool res = nodeData->Record.ParseFromString(nodesBlob[nodeId]);
+                Y_UNUSED(res);
+                nodesData[nodeId] = std::move(nodeData);
+            }
+            THolder<TEvWhiteboard::TEvTabletStateResponse> result = MergeWhiteboardResponses(nodesData);
+            Ctest << "Merge = " << timer.Passed() << Endl;
+            UNIT_ASSERT_LT(timer.Passed(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.TabletStateInfoSize(), 10000);
+            timer.Reset();
+        }
+        Ctest << "Destroy = " << timer.Passed() << Endl;
     }
 
     Y_UNIT_TEST(VDiskMerging) {

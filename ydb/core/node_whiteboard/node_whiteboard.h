@@ -110,7 +110,48 @@ struct TEvWhiteboard{
 
     struct TEvTabletStateRequest : public TEventPB<TEvTabletStateRequest, NKikimrWhiteboard::TEvTabletStateRequest, EvTabletStateRequest> {};
 
-    struct TEvTabletStateResponse : public TEventPB<TEvTabletStateResponse, NKikimrWhiteboard::TEvTabletStateResponse, EvTabletStateResponse> {};
+#pragma pack(push, 1)
+    struct TEvTabletStateResponsePacked5 {
+        ui64 TabletId;
+        ui32 FollowerId;
+        ui32 Generation;
+        NKikimrTabletBase::TTabletTypes::EType Type;
+        NKikimrWhiteboard::TTabletStateInfo::ETabletState State;
+
+        TEvTabletStateResponsePacked5() = default;
+        TEvTabletStateResponsePacked5(const NKikimrWhiteboard::TTabletStateInfo& elem)
+            : TabletId(elem.GetTabletId())
+            , FollowerId(elem.GetFollowerId())
+            , Generation(elem.GetGeneration())
+            , Type(elem.GetType())
+            , State(elem.GetState())
+        {}
+
+        operator NKikimrWhiteboard::TTabletStateInfo() const {
+            NKikimrWhiteboard::TTabletStateInfo result;
+            Fill(result);
+            return result;
+        }
+
+        void Fill(NKikimrWhiteboard::TTabletStateInfo& result) const {
+            result.SetTabletId(TabletId);
+            result.SetFollowerId(FollowerId);
+            result.SetGeneration(Generation);
+            result.SetType(Type);
+            result.SetState(State);
+        }
+    } Y_PACKED;
+
+    static_assert(sizeof(TEvTabletStateResponsePacked5) == 24);
+#pragma pack(pop)
+
+    struct TEvTabletStateResponse : public TEventPB<TEvTabletStateResponse, NKikimrWhiteboard::TEvTabletStateResponse, EvTabletStateResponse> {
+        TEvTabletStateResponsePacked5* AllocatePackedResponse(size_t count) {
+            auto& packed5 = *Record.MutablePacked5();
+            packed5.resize(count * sizeof(TEvTabletStateResponsePacked5));
+            return reinterpret_cast<TEvTabletStateResponsePacked5*>(packed5.Detach());
+        }
+    };
 
     struct TEvPDiskStateUpdate : TEventPB<TEvPDiskStateUpdate, NKikimrWhiteboard::TPDiskStateInfo, EvPDiskStateUpdate> {
         TEvPDiskStateUpdate() = default;

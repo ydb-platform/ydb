@@ -15,6 +15,7 @@
 #include "json_pipe_req.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include "log.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -31,6 +32,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     NMon::TEvHttpInfo::TPtr Event;
     THashSet<TNodeId> NodeIds;
+    THashSet<TNodeId> NodeIdsForTablets;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodeSysInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> NodeTabletInfo;
     TJsonSettings JsonSettings;
@@ -54,11 +56,17 @@ public:
         , Event(ev)
     {}
 
+    TString GetLogPrefix() {
+        static TString prefix = "json/tenantinfo ";
+        return prefix;
+    }
+
     TString GetDomainId(TPathId pathId) {
         return TStringBuilder() << pathId.OwnerId << '-' << pathId.LocalPathId;
     }
 
     void Bootstrap() {
+        BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -103,8 +111,12 @@ public:
     void PassAway() override {
         for (const TNodeId nodeId : NodeIds) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-        };
+        }
+        for (const TNodeId nodeId : NodeIdsForTablets) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
+        }
         TBase::PassAway();
+        BLOG_TRACE("PassAway()");
     }
 
     STATEFN(StateRequested) {
@@ -124,6 +136,7 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+        BLOG_TRACE("Received ListTenantsResponse");
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
@@ -137,6 +150,7 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
+        BLOG_TRACE("Received GetTenantStatusResponse");
         Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&getTenantStatusResult);
         TString path = getTenantStatusResult.path();
@@ -192,15 +206,20 @@ public:
                     tenant.SetAliveNodes(hiveStat.GetAliveNodes());
                 }
             }
+
+            BLOG_TRACE("Received HiveDomainStats for " << tenant.GetId() << " from " << ev->Cookie);
+
             for (TNodeId nodeId : hiveStat.GetNodeIds()) {
+                TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
                 if (NodeIds.insert(nodeId).second) {
-                    TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
                     THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
                     SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                    if (Tablets) {
-                        THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
-                        SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                    }
+                }
+                if (Tablets && NodeIdsForTablets.insert(nodeId).second) {
+                    THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
+                    request->Record.SetFormat("packed5");
+                    BLOG_TRACE("Tenant " << tenant.GetId() << " send to " << nodeId << " TEvTabletStateRequest: " << request->Record.ShortDebugString());
+                    SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
                 }
             }
         }
@@ -209,6 +228,7 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
+        BLOG_TRACE("Received HiveStorageStats from " << ev->Cookie);
         HiveStorageStats[ev->Cookie] = std::move(ev->Release());
         RequestDone();
     }
@@ -235,6 +255,7 @@ public:
             }
             TString id = GetDomainId(domainInfo->DomainKey);
             TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
+            BLOG_TRACE("Received Navigate for " << id << " " << path);
             tenant.SetId(id);
             tenant.SetName(path);
             if (tenant.GetType() == NKikimrViewer::UnknownTenantType) {
@@ -247,18 +268,21 @@ public:
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("Received TEvSystemStateResponse from " << nodeId);
         NodeSysInfo[nodeId] = ev->Release();
         RequestDone();
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("Received TEvTabletStateResponse from " << nodeId << " with " << ev->Get()->Record.TabletStateInfoSize() << " tablets");
         NodeTabletInfo[nodeId] = ev->Release();
         RequestDone();
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
         ui32 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
         if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest) {
             if (NodeSysInfo.emplace(nodeId, nullptr).second) {
                 RequestDone();
@@ -273,6 +297,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         ui32 nodeId = ev->Get()->NodeId;
+        BLOG_TRACE("NodeDisconnected for node " << nodeId);
         if (NodeSysInfo.emplace(nodeId, nullptr).second) {
             RequestDone();
         }
@@ -282,13 +307,14 @@ public:
     }
 
     void ReplyAndPassAway() {
+        BLOG_TRACE("ReplyAndPassAway() started");
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         THolder<TEvWhiteboard::TEvTabletStateResponse> tabletInfo;
         THashMap<TTabletId, const NKikimrWhiteboard::TTabletStateInfo*> tabletInfoIndex;
         if (Tablets) {
-            tabletInfo = MergeWhiteboardResponses(NodeTabletInfo);
-            for (const auto& info : tabletInfo->Record.GetTabletStateInfo()) {
+            tabletInfo = TWhiteboardInfo<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>::MergeResponses(NodeTabletInfo);
+            for (const auto& info : TWhiteboardInfo<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>::GetElementsField(tabletInfo.Get())) {
                 tabletInfoIndex[info.GetTabletId()] = &info;
             }
         }
@@ -380,10 +406,12 @@ public:
                         uint64 storageMinAvailableSize = std::numeric_limits<ui64>::max();
                         uint64 storageGroups = 0;
                         for (const NKikimrHive::THiveStoragePoolStats& poolStat : record.GetPools()) {
-                            for (const NKikimrHive::THiveStorageGroupStats& groupStat : poolStat.GetGroups()) {
-                                storageAllocatedSize += groupStat.GetAllocatedSize();
-                                storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
-                                ++storageGroups;
+                            if (poolStat.GetName().StartsWith(tenantBySubDomainKey.GetName())) {
+                                for (const NKikimrHive::THiveStorageGroupStats& groupStat : poolStat.GetGroups()) {
+                                    storageAllocatedSize += groupStat.GetAllocatedSize();
+                                    storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
+                                    ++storageGroups;
+                                }
                             }
                         }
                         tenant.SetStorageAllocatedSize(storageAllocatedSize);
@@ -504,6 +532,7 @@ public:
     }
 
     void HandleTimeout() {
+        BLOG_TRACE("Timeout occurred");
         Result.AddErrors("Timeout occurred");
         ReplyAndPassAway();
     }

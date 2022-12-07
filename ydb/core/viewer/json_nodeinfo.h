@@ -18,8 +18,8 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse> {
 
     static constexpr bool StaticNodesOnly = false;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>* GetElementsField(TResponseType* response) {
-        return response->Record.MutableNodeStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
+        return *response->Record.MutableNodeStateInfo();
     }
 
     static const TString& GetElementKey(const TElementType& type) {

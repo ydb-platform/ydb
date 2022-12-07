@@ -244,22 +244,22 @@ public:
 
     static THolder<ResponseType> GroupResponse(THolder<TResponseType>& source, const TVector<const FieldDescriptor*>& groupFields, bool allEnums = false) {
         THolder<TResponseType> result = MakeHolder<TResponseType>();
-        TElementsFieldType* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
+        TElementsFieldType& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
         bool allKeys = allEnums && IsEnum(groupFields);
         TMap<TPartProtoKey, ui32> counters;
         TMap<TPartProtoKey, TElementType*> elements;
         if (allKeys) {
             TPartProtoKeyEnum keyEnum(groupFields);
             do {
-                auto* element = field->Add();
+                auto* element = field.Add();
                 TPartProtoKey key(*element, groupFields);
                 key = keyEnum;
                 element->SetCount(0);
                 elements.emplace(key, element);
             } while (++keyEnum);
         }
-        auto* sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
-        for (TElementType& info : *sourceField) {
+        auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
+        for (TElementType& info : sourceField) {
             TPartProtoKey key(info, groupFields);
             if (key.Exists()) {
                 counters[key]++;
@@ -270,7 +270,7 @@ public:
                 if (allKeys) {
                     elements[pr.first]->SetCount(pr.second);
                 } else {
-                    auto* element = field->Add();
+                    auto* element = field.Add();
                     TPartProtoKey(*element, groupFields) = pr.first;
                     element->SetCount(pr.second);
                 }

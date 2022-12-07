@@ -60,7 +60,7 @@ inline ui32 GetFixedSize(TTypeInfo typeInfo) {
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
     case NTypeIds::Pg:
-        return NPg::TypeDescGetTypeLen(typeInfo.GetTypeDesc());
+        return NPg::TypeDescGetStoredSize(typeInfo.GetTypeDesc());
     default:
         return 0;
     }

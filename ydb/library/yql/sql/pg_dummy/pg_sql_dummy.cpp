@@ -294,7 +294,7 @@ bool TypeDescIsComparable(void* typeDesc) {
     throw yexception() << "PG types are not supported";
 }
 
-ui32 TypeDescGetTypeLen(void* typeDesc) {
+ui32 TypeDescGetStoredSize(void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }

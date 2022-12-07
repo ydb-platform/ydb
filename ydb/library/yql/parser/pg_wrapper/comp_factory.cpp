@@ -2936,55 +2936,74 @@ public:
     explicit TPgTypeDescriptor(const NYql::NPg::TTypeDesc& desc)
         : NYql::NPg::TTypeDesc(desc)
     {
-        // TODO: btarraycmp and hash_array for array types
-        if (CompareProcId) {
-            InitFunc(CompareProcId, &CompareProcInfo, 2, 2);
-        }
-        if (HashProcId) {
-            InitFunc(HashProcId, &HashProcInfo, 1, 1);
-        }
-        if (ReceiveFuncId) {
-            InitFunc(ReceiveFuncId, &ReceiveFuncInfo, 1, 3);
-        }
-        if (SendFuncId) {
-            InitFunc(SendFuncId, &SendFuncInfo, 1, 1);
+        if (TypeId == ArrayTypeId) {
+            const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
+            if (typeDesc.CompareProcId) {
+                CompareProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
+            }
+            if (typeDesc.HashProcId) {
+                HashProcId = NYql::NPg::LookupProc("hash_array", { 0 }).ProcId;
+            }
+            if (typeDesc.ReceiveFuncId) {
+                ReceiveFuncId = NYql::NPg::LookupProc("array_recv", { 0, 0, 0 }).ProcId;
+            }
+            if (typeDesc.SendFuncId) {
+                SendFuncId = NYql::NPg::LookupProc("array_send", { 0 }).ProcId;
+            }
+            if (typeDesc.InFuncId) {
+                InFuncId = NYql::NPg::LookupProc("array_in", { 0, 0, 0 }).ProcId;
+            }
+            if (typeDesc.OutFuncId) {
+                OutFuncId = NYql::NPg::LookupProc("array_out", { 0 }).ProcId;
+            }
+        } else {
+            StoredSize = TypeLen < 0 ? 0 : TypeLen;
+            if (TypeId == NAMEOID) {
+                StoredSize = 0; // store 'name' as usual string
+            }
         }
     }
 
     int Compare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR) const {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
+        Datum datumL = 0, datumR = 0;
+        Y_DEFER {
+            if (!PassByValue) {
+                if (datumL)
+                    pfree((void*)datumL);
+                if (datumR)
+                    pfree((void*)datumR);
+            }
+        };
         PG_TRY();
         {
-            Datum datumL, datumR;
             if (PassByValue) {
                 datumL = ScalarDatumFromData(dataL, sizeL);
                 datumR = ScalarDatumFromData(dataR, sizeR);
             } else {
-                datumL = Unpack(dataL, sizeL);
-                datumR = Unpack(dataR, sizeR);
+                datumL = PointerDatumFromData(dataL, sizeL);
+                datumR = PointerDatumFromData(dataR, sizeR);
             }
-
+            FmgrInfo finfo;
+            InitFunc(CompareProcId, &finfo, 2, 2);
             LOCAL_FCINFO(callInfo, 2);
             Zero(*callInfo);
-            callInfo->flinfo = (FmgrInfo*)&CompareProcInfo;
+            callInfo->flinfo = &finfo;
             callInfo->nargs = 2;
             callInfo->fncollation = DEFAULT_COLLATION_OID;
             callInfo->isnull = false;
             callInfo->args[0] = { datumL, false };
             callInfo->args[1] = { datumR, false };
 
-            auto result = CompareProcInfo.fn_addr(callInfo);
+            auto result = finfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            if (!PassByValue) {
-                pfree((void*)datumL);
-                pfree((void*)datumR);
-            }
             return DatumGetInt32(result);
         }
         PG_CATCH();
         {
             // TODO
+            Y_VERIFY(false, "PG error in Compare");
         }
         PG_END_TRY();
         return 0;
@@ -2993,40 +3012,141 @@ public:
     ui64 Hash(const char* data, size_t size) const {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
+        Datum datum = 0;
+        Y_DEFER {
+            if (!PassByValue && datum) {
+                pfree((void*)datum);
+            }
+        };
         PG_TRY();
         {
-            Datum datum;
             if (PassByValue) {
                 datum = ScalarDatumFromData(data, size);
             } else {
-                datum = Unpack(data, size);
+                datum = PointerDatumFromData(data, size);
             }
-
+            FmgrInfo finfo;
+            InitFunc(HashProcId, &finfo, 1, 1);
             LOCAL_FCINFO(callInfo, 1);
             Zero(*callInfo);
-            callInfo->flinfo = (FmgrInfo*)&HashProcInfo;
+            callInfo->flinfo = &finfo;
             callInfo->nargs = 1;
             callInfo->fncollation = DEFAULT_COLLATION_OID;
             callInfo->isnull = false;
             callInfo->args[0] = { datum, false };
 
-            auto result = HashProcInfo.fn_addr(callInfo);
+            auto result = finfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            if (!PassByValue) {
-                pfree((void*)datum);
-            }
             return DatumGetUInt32(result);
         }
         PG_CATCH();
         {
             // TODO
+            Y_VERIFY(false, "PG error in Hash");
+        }
+        PG_END_TRY();
+        return 0;
+    }
+
+    TString NativeBinaryFromNativeText(const TString& str) const {
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NMiniKQL::TPAllocScope scope;
+        Datum datum = 0;
+        text* serialized = nullptr;
+        Y_DEFER {
+            if (!PassByValue && datum) {
+                pfree((void*)datum);
+            }
+            if (serialized) {
+                pfree(serialized);
+            }
+        };
+        PG_TRY();
+        {
+            {
+                FmgrInfo finfo;
+                InitFunc(InFuncId, &finfo, 1, 3);
+                LOCAL_FCINFO(callInfo, 3);
+                Zero(*callInfo);
+                callInfo->flinfo = &finfo;
+                callInfo->nargs = 3;
+                callInfo->fncollation = DEFAULT_COLLATION_OID;
+                callInfo->isnull = false;
+                callInfo->args[0] = { (Datum)str.c_str(), false };
+                callInfo->args[1] = { ObjectIdGetDatum(NMiniKQL::MakeTypeIOParam(*this)), false };
+                callInfo->args[2] = { Int32GetDatum(-1), false };
+
+                datum = finfo.fn_addr(callInfo);
+                Y_ENSURE(!callInfo->isnull);
+            }
+            FmgrInfo finfo;
+            InitFunc(SendFuncId, &finfo, 1, 1);
+            LOCAL_FCINFO(callInfo, 1);
+            Zero(*callInfo);
+            callInfo->flinfo = &finfo;
+            callInfo->nargs = 1;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { datum, false };
+
+            serialized = (text*)finfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+            return TString(NMiniKQL::GetVarBuf(serialized));
+        }
+        PG_CATCH();
+        {
+            // TODO
+            Y_VERIFY(false, "PG error in NativeBinaryFromNativeText");
+        }
+        PG_END_TRY();
+        return 0;
+    }
+
+    TString NativeTextFromNativeBinary(const TString& binary) const {
+        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NMiniKQL::TPAllocScope scope;
+        Datum datum = 0;
+        char* str = nullptr;
+        Y_DEFER {
+            if (!PassByValue && datum) {
+                pfree((void*)datum);
+            }
+            if (str) {
+                pfree(str);
+            }
+        };
+        PG_TRY();
+        {
+            if (PassByValue) {
+                datum = ScalarDatumFromData(binary.Data(), binary.Size());
+            } else {
+                datum = PointerDatumFromData(binary.Data(), binary.Size());
+            }
+            FmgrInfo finfo;
+            InitFunc(OutFuncId, &finfo, 1, 1);
+            LOCAL_FCINFO(callInfo, 1);
+            Zero(*callInfo);
+            callInfo->flinfo = &finfo;
+            callInfo->nargs = 1;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { datum, false };
+
+            str = (char*)finfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+            return TString(str);
+        }
+        PG_CATCH();
+        {
+            // TODO
+            Y_VERIFY(false, "PG error in NativeTextFromNativeBinary");
         }
         PG_END_TRY();
         return 0;
     }
 
 private:
-    inline Datum ScalarDatumFromData(const char* data, size_t size) const {
+    Datum ScalarDatumFromData(const char* data, size_t size) const {
         switch (TypeId) {
         case BOOLOID:
             Y_ENSURE(size == sizeof(bool));
@@ -3058,29 +3178,31 @@ private:
         }
     }
 
-    Datum Unpack(const char* data, size_t size) const {
+    Datum PointerDatumFromData(const char* data, size_t size) const {
         StringInfoData stringInfo;
         stringInfo.data = (char*)data;
         stringInfo.len = size;
         stringInfo.maxlen = size;
         stringInfo.cursor = 0;
 
+        FmgrInfo finfo;
+        InitFunc(ReceiveFuncId, &finfo, 1, 3);
         LOCAL_FCINFO(callInfo, 3);
         Zero(*callInfo);
-        callInfo->flinfo = (FmgrInfo*)&ReceiveFuncInfo;
+        callInfo->flinfo = &finfo;
         callInfo->nargs = 3;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { (Datum)&stringInfo, false };
-        callInfo->args[1] = { ObjectIdGetDatum(NKikimr::NMiniKQL::MakeTypeIOParam(*this)), false };
+        callInfo->args[1] = { ObjectIdGetDatum(NMiniKQL::MakeTypeIOParam(*this)), false };
         callInfo->args[2] = { Int32GetDatum(-1), false };
 
-        auto result = ReceiveFuncInfo.fn_addr(callInfo);
+        auto result = finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return result;
     }
 
-    static void InitFunc(ui32 funcId, FmgrInfo* info, ui32 argCountMin, ui32 argCountMax) {
+    static inline void InitFunc(ui32 funcId, FmgrInfo* info, ui32 argCountMin, ui32 argCountMax) {
         Zero(*info);
         Y_ENSURE(funcId);
         fmgr_info(funcId, info);
@@ -3088,11 +3210,8 @@ private:
         Y_ENSURE(info->fn_nargs >= argCountMin && info->fn_nargs <= argCountMax);
     }
 
-private:
-    FmgrInfo CompareProcInfo;
-    FmgrInfo HashProcInfo;
-    FmgrInfo ReceiveFuncInfo;
-    FmgrInfo SendFuncInfo;
+public:
+    ui32 StoredSize = 0; // size in local db, 0 for variable size
 };
 
 class TPgTypeDescriptors {
@@ -3122,9 +3241,6 @@ public:
 
 private:
     void InitType(ui32 pgTypeId, const NYql::NPg::TTypeDesc& type) {
-        if (type.TypeId == type.ArrayTypeId) { // TODO: support arrays
-            return;
-        }
         PgTypeDescriptors[pgTypeId] = TPgTypeDescriptor(type);
         ByName[type.Name] = pgTypeId;
     }
@@ -3166,12 +3282,11 @@ bool TypeDescIsComparable(void* typeDesc) {
     return static_cast<TPgTypeDescriptor*>(typeDesc)->CompareProcId != 0;
 }
 
-ui32 TypeDescGetTypeLen(void* typeDesc) {
+ui32 TypeDescGetStoredSize(void* typeDesc) {
     if (!typeDesc) {
         return 0;
     }
-    i32 res = static_cast<TPgTypeDescriptor*>(typeDesc)->TypeLen;
-    return res < 0 ? 0 : (ui32)res;
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->StoredSize;
 }
 
 int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, size_t sizeR, void* typeDesc) {
@@ -3180,6 +3295,18 @@ int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, si
 
 ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
     return static_cast<TPgTypeDescriptor*>(typeDesc)->Hash(data, size);
+}
+
+TString PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
+    auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
+    Y_VERIFY(typeDesc);
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeBinaryFromNativeText(str);
+}
+
+TString PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
+    auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
+    Y_VERIFY(typeDesc);
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeTextFromNativeBinary(binary);
 }
 
 } // namespace NKikimr::NPg

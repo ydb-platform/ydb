@@ -3,6 +3,7 @@ import os
 import logging
 import random
 import time
+import copy
 import pytest
 
 from hamcrest import assert_that, greater_than, is_, not_, none
@@ -36,8 +37,20 @@ CLUSTER_CONFIG = dict(
         'KQP_COMPILE_ACTOR': LogLevels.CRIT,
         'PERSQUEUE_CLUSTER_TRACKER': LogLevels.CRIT,
     },
-    enable_alter_database_create_hive_first=True,
 )
+
+
+@pytest.fixture(scope='module', params=[True, False], ids=['enable_alter_database_create_hive_first--true', 'enable_alter_database_create_hive_first--false'])
+def enable_alter_database_create_hive_first(request):
+    return request.param
+
+
+# ydb_fixtures.ydb_cluster_configuration local override
+@pytest.fixture(scope='module')
+def ydb_cluster_configuration(enable_alter_database_create_hive_first):
+    conf = copy.deepcopy(CLUSTER_CONFIG)
+    conf['enable_alter_database_create_hive_first'] = enable_alter_database_create_hive_first
+    return conf
 
 
 class TestTenants():

@@ -31,18 +31,23 @@ DEFAULT_CLUSTER_CONFIG = dict(
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration(request):
     conf = getattr(request.module, 'CLUSTER_CONFIG', DEFAULT_CLUSTER_CONFIG)
-    return KikimrConfigGenerator(**conf)
+    return conf
 
 
 @pytest.fixture(scope='module')
-def ydb_cluster(ydb_cluster_configuration, request):
+def ydb_configurator(ydb_cluster_configuration):
+    return KikimrConfigGenerator(**ydb_cluster_configuration)
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster(ydb_configurator, request):
     module_name = request.module.__name__
 
     logger.info("setup ydb_cluster for %s", module_name)
 
     logger.info("setup ydb_cluster as local")
     cluster = kikimr_cluster_factory(
-        configurator=ydb_cluster_configuration
+        configurator=ydb_configurator,
     )
     cluster.is_local_test = True
 

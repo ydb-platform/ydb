@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope='module')
-def metering_file_path(ydb_cluster_configuration):
-    return ydb_cluster_configuration.metering_file_path
+def metering_file_path(ydb_configurator):
+    return ydb_configurator.metering_file_path
 
 
 @contextlib.contextmanager

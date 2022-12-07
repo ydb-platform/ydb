@@ -17,3 +17,5 @@ items:
       href: ../administration/monitoring.md
     - name: Grafana dashboards
       href: ../administration/grafana-dashboards.md
+- name: YDB updating
+  href: ../administration/upgrade.md

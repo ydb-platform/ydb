@@ -7,3 +7,4 @@ This section provides information about deploying, configuring, maintaining, mon
 * [{#T}](../maintenance/manual/index.md).
 * [{#T}](../troubleshooting/system_views_cluster.md).
 * [{#T}](../administration/monitoring.md).
+* [{#T}](../administration/upgrade.md).

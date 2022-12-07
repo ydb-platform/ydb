@@ -976,26 +976,35 @@ template <bool Strong>
 TExprNode::TPtr ExpandCastOverVariant(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Variant";
     const auto targetType = input->GetTypeAnn();
+    const auto sourceType = input->Head().GetTypeAnn();
     const auto targetUnderType = targetType->Cast<TVariantExprType>()->GetUnderlyingType();
+    const auto sourceUnderType = sourceType->Cast<TVariantExprType>()->GetUnderlyingType();
     TExprNode::TListType variants, types;
     switch (targetUnderType->GetKind()) {
         case ETypeAnnotationKind::Tuple: {
-            const auto& items = targetUnderType->Cast<TTupleExprType>()->GetItems();
-            types.resize(items.size());
-            variants.resize(items.size());
-            for (ui32 i = 0U; i < variants.size(); ++i) {
+            const auto sourceTupleType = sourceUnderType->Cast<TTupleExprType>();
+            const auto targetTupleType = targetUnderType->Cast<TTupleExprType>();
+            const auto size = std::min(sourceTupleType->GetSize(), targetTupleType->GetSize());
+            types.resize(size);
+            variants.resize(size);
+            const auto& items = targetTupleType->GetItems();
+            for (ui32 i = 0U; i < size; ++i) {
                 types[i] = ExpandType(input->Tail().Pos(), *items[i], ctx);
-                variants[i] = ctx.NewAtom(input->Pos(), ToString(i), TNodeFlags::Default);
+                variants[i] = ctx.NewAtom(input->Pos(), ctx.GetIndexAsString(i), TNodeFlags::Default);
             }
             break;
         }
         case ETypeAnnotationKind::Struct: {
-            const auto& items = targetUnderType->Cast<TStructExprType>()->GetItems();
-            types.resize(items.size());
-            variants.resize(items.size());
-            for (ui32 i = 0U; i < items.size(); ++i) {
-                types[i] = ExpandType(input->Tail().Pos(), *items[i]->GetItemType(), ctx);
-                variants[i] = ctx.NewAtom(input->Pos(), items[i]->GetName());
+            const auto sourceStructType = sourceUnderType->Cast<TStructExprType>();
+            const auto targetStructType = targetUnderType->Cast<TStructExprType>();
+            const auto size = std::min(sourceStructType->GetSize(), targetStructType->GetSize());
+            types.reserve(size);
+            variants.reserve(size);
+            for (const auto& item : sourceStructType->GetItems()) {
+                if (const auto type = targetStructType->FindItemType(item->GetName())) {
+                    types.emplace_back(ExpandType(input->Tail().Pos(), *type, ctx));
+                    variants.emplace_back(ctx.NewAtom(input->Pos(), item->GetName()));
+                }
             }
             break;
         }

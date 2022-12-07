@@ -201,6 +201,24 @@ private:
     TNodeSet CurrentEvalNodes;
 };
 
+struct TEvalScope {
+    TEvalScope(TTypeAnnotationContext& types)
+        : Types(types)
+    {
+        ++Types.EvaluationInProgress;
+        for (auto& dataProvider : Types.DataSources) {
+            dataProvider->EnterEvaluation(Types.EvaluationInProgress);
+        }
+    }
+
+    ~TEvalScope() {
+        for (auto& dataProvider : Types.DataSources) {
+            dataProvider->LeaveEvaluation(Types.EvaluationInProgress);
+        }
+        --Types.EvaluationInProgress;
+    }
+    TTypeAnnotationContext& Types;
+};
 
 bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& types, TNodeSet& visited) {
     if (!visited.emplace(&node).second) {
@@ -948,10 +966,9 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             calcWorldRoot.Drop();
             fullTransformer->Rewind();
             auto prevSteps = ctx.Step;
-            ++types.EvaluationInProgress;
+            TEvalScope scope(types);
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
             ctx.Step = prevSteps;
-            --types.EvaluationInProgress;
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }
@@ -999,11 +1016,6 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             delegatedNode->SetState(TExprNode::EState::ConstrComplete);
 
             status = SyncTransform(calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer(), delegatedNode, ctx);
-
-            for (auto& dataProvider : types.DataSources) {
-                dataProvider->UndoEvaluationChanges();
-            }
-
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }

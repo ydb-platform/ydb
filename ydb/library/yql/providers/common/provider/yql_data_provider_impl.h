@@ -66,7 +66,8 @@ public:
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override;
     bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override;
     bool CanEvaluate(const TExprNode& node) override;
-    void UndoEvaluationChanges() override;
+    void EnterEvaluation(ui64 id) override;
+    void LeaveEvaluation(ui64 id) override;
     TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) override;
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override;

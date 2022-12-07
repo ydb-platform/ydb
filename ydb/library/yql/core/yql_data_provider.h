@@ -142,7 +142,8 @@ public:
     virtual bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) = 0;
     virtual bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) = 0;
     virtual bool CanEvaluate(const TExprNode& node) = 0;
-    virtual void UndoEvaluationChanges() = 0;
+    virtual void EnterEvaluation(ui64 id) = 0;
+    virtual void LeaveEvaluation(ui64 id) = 0;
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) = 0;

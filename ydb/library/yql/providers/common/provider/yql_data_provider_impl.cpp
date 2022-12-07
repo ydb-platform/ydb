@@ -216,9 +216,12 @@ bool TDataProviderBase::CanEvaluate(const TExprNode& node) {
     return false;
 }
 
-void TDataProviderBase::UndoEvaluationChanges() {
-    GetCallableExecutionTransformer().Rewind();
-    GetEpochsTransformer().Rewind();
+void TDataProviderBase::EnterEvaluation(ui64 id) {
+    Y_UNUSED(id);
+}
+
+void TDataProviderBase::LeaveEvaluation(ui64 id) {
+    Y_UNUSED(id);
 }
 
 TExprNode::TPtr TDataProviderBase::CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {

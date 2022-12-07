@@ -404,7 +404,11 @@ public:
             entry = cache->Find(program.GetRaw());
             if (!entry) {
                 entry = CreateComputationPattern(task, program.GetRaw());
-                cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+                if (entry->Pattern->GetSuitableForCache()) {
+                    cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+                } else {
+                    cache->IncNotSuitablePattern();
+                }
             }
         } else {
             entry = CreateComputationPattern(task, program.GetRaw());

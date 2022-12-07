@@ -353,6 +353,7 @@ public:
 
     virtual ~IComputationPattern() = default;
     virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0;
+    virtual bool GetSuitableForCache() const = 0;
 };
 
 // node cookie's will be clean up when graph will be destroyed, explorer must not be changed/destroyed until that time

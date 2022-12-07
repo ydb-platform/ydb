@@ -191,6 +191,10 @@ public:
         return RootNode;
     }
 
+    bool GetSuitableForCache() const {
+        return SuitableForCache;
+    }
+
 private:
     friend class TComputationGraphBuildingVisitor;
     friend class TComputationGraph;
@@ -204,6 +208,7 @@ private:
     IComputationNode* RootNode = nullptr;
     TComputationExternalNodePtrVector Runtime2Computation;
     TComputationNodeOnNodeMap ElementsCache;
+    bool SuitableForCache = true;
 };
 
 class TComputationGraphBuildingVisitor:
@@ -444,10 +449,14 @@ private:
                 PatternNodes->ElementsCache,
                 std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1));
         const auto computationNode = Factory(node, ctx);
+        const auto& name = node.GetType()->GetName();
+        if (name == "Switch") { // KIKIMR-16457
+            PatternNodes->SuitableForCache = false;
+        }
 
         if (!computationNode) {
             THROW yexception()
-                << "Computation graph builder, unsupported function: " << node.GetType()->GetName() << " type: " << Factory.target_type().name() ;
+                << "Computation graph builder, unsupported function: " << name << " type: " << Factory.target_type().name() ;
         }
 
         AddNode(node, computationNode);
@@ -807,6 +816,10 @@ public:
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) final {
         return MakeHolder<TComputationGraph>(PatternNodes, compOpts);
+    }
+
+    bool GetSuitableForCache() const final {
+        return PatternNodes->GetSuitableForCache();
     }
 
 private:

@@ -58,8 +58,10 @@ class TComputationPatternLRUCache {
 public:
     NMonitoring::TDynamicCounters::TCounterPtr Hits;
     NMonitoring::TDynamicCounters::TCounterPtr Misses;
+    NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern;
     NMonitoring::TDynamicCounters::TCounterPtr SizeItems;
     NMonitoring::TDynamicCounters::TCounterPtr SizeBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxSizeBytesCounter;
 
 public:
     TComputationPatternLRUCache(size_t sizeBytes, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>())
@@ -67,10 +69,12 @@ public:
         , MaxSizeBytes(sizeBytes)
         , Hits(counters->GetCounter("PatternCache/Hits", true))
         , Misses(counters->GetCounter("PatternCache/Misses", true))
+        , NotSuitablePattern(counters->GetCounter("PatternCache/NotSuitablePattern", true))
         , SizeItems(counters->GetCounter("PatternCache/SizeItems", false))
         , SizeBytes(counters->GetCounter("PatternCache/SizeBytes", false))
+        , MaxSizeBytesCounter(counters->GetCounter("PatternCache/MaxSizeBytes", false))
     {
-        *counters->GetCounter("PatternCache/MaxSizeBytes", false) = MaxSizeBytes;
+        *MaxSizeBytesCounter = MaxSizeBytes;
     }
 
     static std::shared_ptr<TPatternCacheEntry> CreateCacheEntry(bool useAlloc = true) {
@@ -117,10 +121,9 @@ public:
     }
 
     void CleanCache() {
-        *Hits = 0;
-        *Misses = 0;
         *SizeItems = 0;
         *SizeBytes = 0;
+        *MaxSizeBytesCounter = 0;
         auto guard = std::scoped_lock<std::mutex>(Mutex);
         CurrentSizeBytes = 0;
         Cache.Clear();
@@ -141,9 +144,12 @@ public:
         return *Hits;
     }
 
+    void IncNotSuitablePattern() {
+        ++*NotSuitablePattern;
+    }
+
     ~TComputationPatternLRUCache() {
         CleanCache();
-        Mutex.lock();
     }
 };
 

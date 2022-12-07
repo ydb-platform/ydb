@@ -8634,7 +8634,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
-            if (subquery) {
+            if (subquery && Mode == NSQLTranslation::ESqlMode::LIBRARY && Ctx.ScopeLevel == 0) {
+                for (size_t i = 0; i < names.size(); ++i) {
+                    nodes.push_back(BuildInvalidSubqueryRef(subquery->GetPos()));
+                }
+            } else if (subquery) {
                 const auto alias = Ctx.MakeName("subquerynode");
                 const auto ref = Ctx.MakeName("subquery");
                 blocks.push_back(BuildSubquery(subquery, alias,

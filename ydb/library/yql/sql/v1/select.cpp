@@ -650,6 +650,37 @@ TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleInde
     return new TSubqueryRefNode(std::move(subquery), alias, tupleIndex);
 }
 
+class TInvalidSubqueryRefNode: public ISource {
+public:
+    TInvalidSubqueryRefNode(TPosition pos)
+        : ISource(pos)
+        , Pos(pos)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        ctx.Error(Pos) << "Named subquery can not be used as a top level statement in libraries";
+        return false;
+    }
+
+    TNodePtr Build(TContext& ctx) override {
+        Y_UNUSED(ctx);
+        return {};
+    }
+
+    TPtr DoClone() const final {
+        return new TInvalidSubqueryRefNode(Pos);
+    }
+
+protected:
+    const TPosition Pos;
+};
+
+TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos) {
+    return new TInvalidSubqueryRefNode(subqueryPos);
+}
+
 class TTableSource: public IRealSource {
 public:
     TTableSource(TPosition pos, const TTableRef& table, const TString& label)

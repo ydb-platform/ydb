@@ -3551,6 +3551,27 @@ select FormatType($f());
             "<main>:1:42: Error: Source does not allow column references\n"
             "<main>:1:71: Error: Column reference 'subkey'\n");
     }
+
+    Y_UNIT_TEST(ErrorInLibraryWithTopLevelNamedSubquery) {
+        TString withUnusedSubq = "$unused = select max(key) from plato.Input;\n"
+                                 "\n"
+                                 "define subquery $foo() as\n"
+                                 "  $count = select count(*) from plato.Input;\n"
+                                 "  select * from plato.Input limit $count / 2;\n"
+                                 "end define;\n"
+                                 "export $foo;\n";
+        UNIT_ASSERT(SqlToYqlWithMode(withUnusedSubq, NSQLTranslation::ESqlMode::LIBRARY).IsOk());
+
+        TString withTopLevelSubq = "$count = select count(*) from plato.Input;\n"
+                                   "\n"
+                                   "define subquery $foo() as\n"
+                                   "  select * from plato.Input limit $count / 2;\n"
+                                   "end define;\n"
+                                   "export $foo;\n";
+        auto res = SqlToYqlWithMode(withTopLevelSubq, NSQLTranslation::ESqlMode::LIBRARY);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

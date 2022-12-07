@@ -521,8 +521,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
     }
 
     //now topic is checked, can create group for real topic, not garbage
-    auto subGroup = NPersQueue::GetCountersForStream(Counters);
-    auto aggr = NPersQueue::GetLabelsForStream(FullConverter, cloudId, dbId, folderId);
+    auto subGroup = NPersQueue::GetCountersForDataStream(Counters);
+    auto aggr = NPersQueue::GetLabelsForTopic(FullConverter, cloudId, dbId, folderId);
 
     SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.sessions_created_per_second"}, true, "name");
     SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.sessions_active_count"}, false, "name");

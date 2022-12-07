@@ -1,93 +1,87 @@
 <pre>
-cloud=somecloud:
+topic=topic:
+    name=api.topic_service.stream_write.bytes_per_second: 2700
+    name=api.topic_service.stream_write.messages_per_second: 150
+    name=topic.written_bytes_per_second: 2700
+    name=topic.written_messages_per_second: 150
+    name=topic.written_uncompressed_bytes_per_second: 1350
 
-    folder=somefolder:
+    consumer=user:
+        name=api.topic_service.stream_read.bytes_per_second: 0
+        name=api.topic_service.stream_read.messages_per_second: 0
+        name=topic.read_bytes_per_second: 0
+        name=topic.read_messages_per_second: 0
 
-        database=PQ:
+        host=1:
 
-            topic=topic:
-                name=api.topic_service.stream_write.bytes_per_second: 2700
-                name=api.topic_service.stream_write.messages_per_second: 150
-                name=topic.written_bytes_per_second: 2700
-                name=topic.written_messages_per_second: 150
-                name=topic.written_uncompressed_bytes_per_second: 1350
+            partition=0:
+                name=topic.awaiting_consume_milliseconds: 0
 
-                consumer=user:
-                    name=api.topic_service.stream_read.bytes_per_second: 0
-                    name=api.topic_service.stream_read.messages_per_second: 0
-                    name=topic.read_bytes_per_second: 0
-                    name=topic.read_messages_per_second: 0
+            partition=1:
+                name=topic.awaiting_consume_milliseconds: 0
 
-                    host=1:
+        name=topic.read_lag_milliseconds:
+            bin=100: 0
+            bin=1000: 0
+            bin=10000: 0
+            bin=180000: 0
+            bin=200: 0
+            bin=2000: 0
+            bin=30000: 0
+            bin=500: 0
+            bin=5000: 0
+            bin=60000: 0
+            bin=999999: 0
 
-                        partition=0:
-                            name=topic.awaiting_consume_milliseconds: 0
+    host=1:
 
-                        partition=1:
-                            name=topic.awaiting_consume_milliseconds: 0
+        partition=0:
+            name=api.topic_service.stream_write.buffer_brimmed_milliseconds: 0
 
-                    name=topic.read_lag_milliseconds:
-                        bin=100: 0
-                        bin=1000: 0
-                        bin=10000: 0
-                        bin=180000: 0
-                        bin=200: 0
-                        bin=2000: 0
-                        bin=30000: 0
-                        bin=500: 0
-                        bin=5000: 0
-                        bin=60000: 0
-                        bin=999999: 0
+        partition=1:
+            name=api.topic_service.stream_write.buffer_brimmed_milliseconds: 0
 
-                host=1:
+    name=api.topic_service.stream_write.partition_throttled_milliseconds:
+        bin=0: 150
+        bin=1: 0
+        bin=10: 0
+        bin=100: 0
+        bin=1000: 0
+        bin=10000: 0
+        bin=20: 0
+        bin=2500: 0
+        bin=5: 0
+        bin=50: 0
+        bin=500: 0
+        bin=5000: 0
+        bin=999999: 0
 
-                    partition=0:
-                        name=api.topic_service.stream_write.buffer_brimmed_milliseconds: 0
+    name=topic.write_lag_milliseconds:
+        bin=100: 150
+        bin=1000: 0
+        bin=10000: 0
+        bin=180000: 0
+        bin=200: 0
+        bin=2000: 0
+        bin=30000: 0
+        bin=500: 0
+        bin=5000: 0
+        bin=60000: 0
+        bin=999999: 0
 
-                    partition=1:
-                        name=api.topic_service.stream_write.buffer_brimmed_milliseconds: 0
-
-                name=api.topic_service.stream_write.partition_throttled_milliseconds:
-                    bin=0: 150
-                    bin=1: 0
-                    bin=10: 0
-                    bin=100: 0
-                    bin=1000: 0
-                    bin=10000: 0
-                    bin=20: 0
-                    bin=2500: 0
-                    bin=5: 0
-                    bin=50: 0
-                    bin=500: 0
-                    bin=5000: 0
-                    bin=999999: 0
-
-                name=topic.write_lag_milliseconds:
-                    bin=100: 150
-                    bin=1000: 0
-                    bin=10000: 0
-                    bin=180000: 0
-                    bin=200: 0
-                    bin=2000: 0
-                    bin=30000: 0
-                    bin=500: 0
-                    bin=5000: 0
-                    bin=60000: 0
-                    bin=999999: 0
-
-                name=topic.written_message_size_bytes:
-                    bin=1024: 150
-                    bin=10240: 0
-                    bin=102400: 0
-                    bin=1048576: 0
-                    bin=10485760: 0
-                    bin=20480: 0
-                    bin=204800: 0
-                    bin=2097152: 0
-                    bin=5120: 0
-                    bin=51200: 0
-                    bin=524288: 0
-                    bin=5242880: 0
-                    bin=67108864: 0
-                    bin=99999999: 0
+    name=topic.written_message_size_bytes:
+        bin=1024: 150
+        bin=10240: 0
+        bin=102400: 0
+        bin=1048576: 0
+        bin=10485760: 0
+        bin=20480: 0
+        bin=204800: 0
+        bin=2097152: 0
+        bin=5120: 0
+        bin=51200: 0
+        bin=524288: 0
+        bin=5242880: 0
+        bin=67108864: 0
+        bin=99999999: 0
 </pre>

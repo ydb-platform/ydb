@@ -322,9 +322,9 @@ struct TUserInfo {
         const TActorContext& ctx, const TString& dcId, const TString& partition,
         const TString& cloudId, const TString& dbId, const TString& folderId
     ) {
-        auto subgroup = NPersQueue::GetCountersForStream(AppData(ctx)->Counters);
+        auto subgroup = NPersQueue::GetCountersForDataStream(AppData(ctx)->Counters);
         auto aggregates =
-            NPersQueue::GetLabelsForStream(TopicConverter, cloudId, dbId, folderId);
+            NPersQueue::GetLabelsForTopic(TopicConverter, cloudId, dbId, folderId);
 
         BytesRead = TMultiCounter(subgroup,
                                   aggregates, {{"consumer", User}},
@@ -336,13 +336,13 @@ struct TUserInfo {
                                   "topic.read_messages_per_second"}, true, "name");
 
         Counter.SetCounter(subgroup,
-                           {{"cloud", cloudId}, {"folder", folderId}, {"database", dbId},
+                           {{"cloud_id", cloudId}, {"folder_id", folderId}, {"database_id", dbId},
                             {"topic", TopicConverter->GetFederationPath()},
                             {"consumer", User}, {"host", dcId}, {"partition", partition}},
                            {"name", "topic.awaiting_consume_milliseconds", true});
 
         ReadTimeLag.reset(new TPercentileCounter(
-                     NPersQueue::GetCountersForStream(AppData(ctx)->Counters), aggregates,
+                     NPersQueue::GetCountersForDataStream(AppData(ctx)->Counters), aggregates,
                      {{"consumer", User}, {"name", "topic.read_lag_milliseconds"}}, "bin",
                      TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
                                                         {1000, "1000"}, {2000, "2000"},

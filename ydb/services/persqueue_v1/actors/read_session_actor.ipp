@@ -812,8 +812,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
         const TString& cloudId, const TString& dbId, const TString& folderId)
 {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
-    auto subGroup = NPersQueue::GetCountersForStream(Counters);
-    auto aggr = NPersQueue::GetLabelsForStream(topic, cloudId, dbId, folderId);
+    auto subGroup = NPersQueue::GetCountersForDataStream(Counters);
+    auto aggr = NPersQueue::GetLabelsForTopic(topic, cloudId, dbId, folderId);
     const TVector<std::pair<TString, TString>> cons{{"consumer", ClientPath}};
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_locked_per_second"}, true, "name");

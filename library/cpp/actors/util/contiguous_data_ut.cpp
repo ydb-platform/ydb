@@ -164,26 +164,6 @@ Y_UNIT_TEST_SUITE(TContiguousData) {
         UNIT_ASSERT_EQUAL(otherData.Tailroom(), 0);
     }
 
-    Y_UNIT_TEST(Extract) {
-        TContiguousData data = TContiguousData::Uninitialized(10, 20, 30);
-        NActors::TSharedData extracted = data.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
-        UNIT_ASSERT_UNEQUAL(data.data(), extracted.data());
-        UNIT_ASSERT_UNEQUAL(data.data(), extracted.data() + 20);
-        data = TContiguousData::Uninitialized(10);
-        extracted = data.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
-        UNIT_ASSERT_EQUAL(data.data(), extracted.data());
-
-        TContiguousData data2 = TContiguousData::Uninitialized(10, 20, 30);
-        data2.GrowFront(20);
-        extracted = data2.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
-        UNIT_ASSERT_EQUAL(data2.data(), extracted.data());
-        UNIT_ASSERT_EQUAL(data2.size(), extracted.size());
-        data2.GrowBack(34);
-        extracted = data2.ExtractUnderlyingContainerOrCopy<NActors::TSharedData>();
-        UNIT_ASSERT_EQUAL(data2.data(), extracted.data());
-        UNIT_ASSERT_EQUAL(data2.size(), extracted.size());
-    }
-
     Y_UNIT_TEST(Reserve) {
         TContiguousData data = TContiguousData::Copy("test", 4, 5, 6);
         TContiguousData data2 = data;

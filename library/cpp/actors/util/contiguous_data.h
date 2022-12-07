@@ -14,6 +14,7 @@
 #include <util/system/sys_alloc.h>
 
 #include "shared_data.h"
+#include "contiguous_data_backend.h"
 
 #ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
 #include "shared_data_backtracing_owner.h"
@@ -291,12 +292,15 @@ class TRopeArena;
 class TContiguousData {
     friend class TRope;
     friend class TRopeArena;
+
+    using TInternalBackend = NDetail::TContiguousDataInternalBackend;
+
     class TBackend {
         enum class EType : uintptr_t {
             STRING,
             SHARED_DATA,
-            SHARED_DATA_CONTROLLED_BY_OWNER,
-            ROPE_CHUNK_BACKEND,
+            INTERNAL_BACKEND,
+            EXTERNAL_BACKEND,
         };
 
         struct TBackendHolder {
@@ -312,62 +316,13 @@ class TContiguousData {
         static_assert(sizeof(TBackendHolder) >= sizeof(TString));
 #endif
         static_assert(sizeof(TBackendHolder) >= sizeof(NActors::TSharedData));
+        static_assert(sizeof(TBackendHolder) >= sizeof(TInternalBackend));
 
         TBackendHolder Owner = TBackend::Empty; // lower bits contain type of the owner
 
     public:
-        struct TCookies {
-            using TSelf = TCookies;
-            std::atomic<const char*> Begin;
-            std::atomic<const char*> End;
+        using TCookies = TInternalBackend::TCookies;
 
-            static size_t BytesToAligned(size_t size) {
-                bool misaligned = size % alignof(TSelf);
-                return misaligned ? alignof(TSelf) - size % alignof(TSelf) : 0;
-            }
-
-            static size_t BytesToAlloc(size_t size) {
-                return size + BytesToAligned(size) + sizeof(TSelf);
-            }
-        };
-
-        struct TSharedDataControllingOwner : public NActors::TSharedData::IOwner {
-            enum : size_t {
-                PrivateHeaderSize = sizeof(TCookies),
-                HeaderSize = sizeof(NActors::TSharedData::THeader),
-                OverheadSize = PrivateHeaderSize + HeaderSize,
-                MaxDataSize = (std::numeric_limits<size_t>::max() - OverheadSize)
-            };
-
-            static char* Allocate(size_t size, size_t headroom = 0, size_t tailroom = 0);
-
-            static TCookies* GetCookies(char* data) noexcept {
-                if (data != nullptr) {
-                    return reinterpret_cast<TCookies*>(data - OverheadSize);
-                }
-                return nullptr;
-            }
-
-            static const TCookies* GetCookies(const char* data) noexcept {
-                if (data != nullptr) {
-                    return reinterpret_cast<const TCookies*>(data - OverheadSize);
-                }
-                return nullptr;
-            }
-
-            static bool CheckControlled(const char* data) noexcept;
-
-            void Deallocate(char* data) noexcept override {
-                if (data) {
-                    char* raw = data - OverheadSize;
-                    TCookies* cookies = reinterpret_cast<TCookies*>(raw);
-                    cookies->~TCookies();
-                    y_deallocate(raw);
-                }
-            }
-        };
-
-        inline static TSharedDataControllingOwner SharedDataOwner {};
         static constexpr struct TControlToken {} ControlToken;
         static constexpr size_t CookiesSize = sizeof(TCookies);
 
@@ -386,12 +341,15 @@ class TContiguousData {
         {}
 
         TBackend(NActors::TSharedData s)
-            : Owner(Construct<NActors::TSharedData>(
-                        TSharedDataControllingOwner::CheckControlled(s.data()) ? EType::SHARED_DATA_CONTROLLED_BY_OWNER : EType::SHARED_DATA, std::move(s)))
+            : Owner(Construct<NActors::TSharedData>(EType::SHARED_DATA, std::move(s)))
+        {}
+
+        TBackend(TInternalBackend backend)
+            : Owner(Construct<TInternalBackend>(EType::INTERNAL_BACKEND, std::move(backend)))
         {}
 
         TBackend(IContiguousChunk::TPtr backend)
-            : Owner(Construct<IContiguousChunk::TPtr>(EType::ROPE_CHUNK_BACKEND, std::move(backend)))
+            : Owner(Construct<IContiguousChunk::TPtr>(EType::EXTERNAL_BACKEND, std::move(backend)))
         {}
 
         ~TBackend() {
@@ -440,14 +398,10 @@ class TContiguousData {
             if(!Owner) {
                 return nullptr;
             }
-            return Visit(Owner, [](EType type, auto& value) -> TCookies* {
+            return Visit(Owner, [](EType, auto& value) -> TCookies* {
                 using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, NActors::TSharedData>) {
-                    if (type == EType::SHARED_DATA_CONTROLLED_BY_OWNER) {
-                        return TSharedDataControllingOwner::GetCookies(const_cast<char*>(value.data()));
-                    } else {
-                        return nullptr;
-                    }
+                if constexpr (std::is_same_v<T, TInternalBackend>) {
+                    return value.GetCookies();
                 } else {
                     return nullptr;
                 }
@@ -464,7 +418,7 @@ class TContiguousData {
             }
             return Visit(Owner, [](EType, auto& value) -> bool {
                 using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, NActors::TSharedData>) {
+                if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return value.IsPrivate();
                 } else {
                     return false;
@@ -480,7 +434,7 @@ class TContiguousData {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, TString>) {
                     return {&(*value.cbegin()), value.size()};
-                } else if constexpr (std::is_same_v<T, NActors::TSharedData>) {
+                } else if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return {value.data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->GetData();
@@ -503,6 +457,11 @@ class TContiguousData {
                         value = NActors::TSharedData::Copy(value.data(), value.size());
                     }
                     return {value.mutable_data(), value.size()};
+                } else if constexpr (std::is_same_v<T, TInternalBackend>) {
+                    if (value.IsShared()) {
+                        value = TInternalBackend::Copy(value.data(), value.size());
+                    }
+                    return {value.mutable_data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->GetDataMut();
                 } else {
@@ -519,7 +478,7 @@ class TContiguousData {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, TString>) {
                     return {const_cast<char*>(value.data()), value.size()};
-                } else if constexpr (std::is_same_v<T, NActors::TSharedData>) {
+                } else if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return {const_cast<char*>(value.data()), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->UnsafeGetDataMut();
@@ -537,7 +496,7 @@ class TContiguousData {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, TString>) {
                     return value.capacity();
-                } else if constexpr (std::is_same_v<T, NActors::TSharedData>) {
+                } else if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return value.size(); // There is no capacity
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->GetOccupiedMemorySize();
@@ -607,18 +566,6 @@ class TContiguousData {
                 return cookies->End.compare_exchange_weak(curEnd, contEnd);
             }
             return false;
-        }
-
-        void Disown() {
-            if (Owner) {
-                const EType type = static_cast<EType>(Owner.Data[0] & TypeMask);
-
-                if (type == EType::SHARED_DATA_CONTROLLED_BY_OWNER) {
-                    if (IsPrivate()) {
-                        Owner.Data[0] = (Owner.Data[0] & ValueMask) | static_cast<uintptr_t>(EType::SHARED_DATA);
-                    }
-                }
-            }
         }
 
         template <class TResult>
@@ -707,9 +654,9 @@ class TContiguousData {
             };
             switch (type) {
                 case EType::STRING:                          return wrapper(reinterpret_cast<std::conditional_t<IsConst, const TString&, TString&>>(value));
-                case EType::SHARED_DATA_CONTROLLED_BY_OWNER: [[fallthrough]];
                 case EType::SHARED_DATA:                     return wrapper(reinterpret_cast<std::conditional_t<IsConst, const NActors::TSharedData&, NActors::TSharedData&>>(value));
-                case EType::ROPE_CHUNK_BACKEND:              return wrapper(reinterpret_cast<std::conditional_t<IsConst, const IContiguousChunk::TPtr&, IContiguousChunk::TPtr&>>(value));
+                case EType::INTERNAL_BACKEND:                return wrapper(reinterpret_cast<std::conditional_t<IsConst, const TInternalBackend&, TInternalBackend&>>(value));
+                case EType::EXTERNAL_BACKEND:                return wrapper(reinterpret_cast<std::conditional_t<IsConst, const IContiguousChunk::TPtr&, IContiguousChunk::TPtr&>>(value));
             }
             Y_FAIL("Unexpected type# %" PRIu64, static_cast<ui64>(type));
         }
@@ -747,15 +694,21 @@ class TContiguousData {
     const char *Begin; // data start
     const char *End; // data end
 
-    explicit TContiguousData(NActors::TSharedData s, const char *data, size_t size, TBackend::TControlToken)
+    explicit TContiguousData(TInternalBackend s, const char *data, size_t size)
         : Backend(std::move(s))
     {
-        Y_VERIFY(s.data() == nullptr || TBackend::TSharedDataControllingOwner::CheckControlled(s.data()));
-        Y_VERIFY(s.data() == nullptr ||
-                 (TBackend::TSharedDataControllingOwner::GetCookies(s.data())->Begin == data
-              && TBackend::TSharedDataControllingOwner::GetCookies(s.data())->End == data + size));
+        Y_VERIFY(Backend.GetData().data() == nullptr ||
+                 (Backend.GetCookies() && Backend.GetCookies()->Begin == data && Backend.GetCookies()->End == data + size));
         Begin = data;
         End = data + size;
+    }
+
+    explicit TContiguousData(TInternalBackend s)
+        : Backend(std::move(s))
+    {
+        auto span = Backend.GetData();
+        Begin = span.data();
+        End = Begin + span.size();
     }
 
     TContiguousData(TOwnedSlice, const char *data, size_t size, const TContiguousData& from)
@@ -798,29 +751,16 @@ public:
     {}
 
     explicit TContiguousData(TString s)
-#ifndef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
         : Backend(std::move(s))
-#endif
     {
-#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
-        auto ss = NActors::TSharedData::Copy(s.data(), s.size());
-        TBackTracingOwner::FakeOwner(ss, TBackTracingOwner::INFO_COPIED_STRING);
-        Backend = TBackend(std::move(ss));
-#endif
         auto span = Backend.GetData();
         Begin = span.data();
         End = Begin + span.size();
     }
 
     explicit TContiguousData(NActors::TSharedData s)
-#ifndef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
         : Backend(std::move(s))
-#endif
     {
-#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
-        TBackTracingOwner::FakeOwner(s, TBackTracingOwner::INFO_FROM_SHARED_DATA);
-        Backend = TBackend(std::move(s));
-#endif
         auto span = Backend.GetData();
         Begin = span.data();
         End = Begin + span.size();
@@ -862,24 +802,18 @@ public:
         if (size == 0) {
             return TContiguousData();
         }
+
         if (headroom == 0 && tailroom == 0) {
-            NActors::TSharedData res = NActors::TSharedData::AttachUnsafe(TBackend::TSharedDataControllingOwner::Allocate(size), size);
-#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
-            TBackTracingOwner::FakeOwner(res, TBackTracingOwner::INFO_ALLOC_UNINITIALIZED);
-#endif
+            TInternalBackend res = TInternalBackend::Uninitialized(size);
             return TContiguousData(
                 OwnedSlice,
                 res.data(),
                 res.data() + res.size(),
                 TContiguousData(res));
-        } else {
-            auto fullSize = size + headroom + tailroom;
-            NActors::TSharedData res = NActors::TSharedData::AttachUnsafe(TBackend::TSharedDataControllingOwner::Allocate(size, headroom, tailroom), fullSize);
-#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
-            TBackTracingOwner::FakeOwner(res, TBackTracingOwner::INFO_ALLOC_UNINIT_ROOMS);
-#endif
-            return TContiguousData(res, res.data() + headroom, size, TBackend::ControlToken);
         }
+
+        TInternalBackend res = TInternalBackend::Uninitialized(size, headroom, tailroom);
+        return TContiguousData(res, res.data() + headroom, size);
     }
 
     static TContiguousData Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
@@ -890,10 +824,6 @@ public:
 
     static TContiguousData Copy(const char* data, size_t size, size_t headroom = 0, size_t tailroom = 0) {
         return Copy({data, size}, headroom, tailroom);
-    }
-
-    static NActors::TSharedData UninitializedSharedData(size_t size) {
-        return NActors::TSharedData::AttachUnsafe(TBackend::TSharedDataControllingOwner::Allocate(size), size);
     }
 
     template <class TType>
@@ -1077,13 +1007,6 @@ public:
             Begin -= size;
             return EResizeResult::NoAlloc;
         } else {
-#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
-            if (Backend.ContainsNativeType<NActors::TSharedData>()) {
-                Cerr << "GrowFront# " << size;
-                NActors::TSharedData data = GetRaw<NActors::TSharedData>();
-                TBackTracingOwner::UnsafePrintBackTrace(data);
-            }
-#endif
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
                 Y_FAIL("Fail on grow");
             }
@@ -1101,13 +1024,6 @@ public:
             End += size;
             return EResizeResult::NoAlloc;
         } else {
-#ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
-            if (Backend.ContainsNativeType<NActors::TSharedData>()) {
-                Cerr << "GrowBack# " << size;
-                NActors::TSharedData data = GetRaw<NActors::TSharedData>();
-                TBackTracingOwner::UnsafePrintBackTrace(data);
-            }
-#endif
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
                 Y_FAIL("Fail on grow");
             }

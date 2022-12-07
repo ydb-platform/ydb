@@ -234,7 +234,7 @@ public:
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new Kqp load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateKqpWriterTestLoad(
+                LoadActors.emplace(tag, ctx.Register(CreateKqpLoadActor(
                             cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }

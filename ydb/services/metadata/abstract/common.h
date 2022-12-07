@@ -26,6 +26,8 @@ enum EEvSubscribe {
     EvUnsubscribeExternal,
     EvYQLResponse,
     EvAlterObjects,
+    EvPrepareManager,
+    EvManagerPrepared,
     EvEnd
 };
 

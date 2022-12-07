@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(services-metadata-initializer)
 target_link_libraries(services-metadata-initializer PUBLIC

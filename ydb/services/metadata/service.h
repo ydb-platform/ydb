@@ -15,6 +15,26 @@ public:
     }
 };
 
+class TEvPrepareManager: public NActors::TEventLocal<TEvPrepareManager, EEvSubscribe::EvPrepareManager> {
+private:
+    YDB_READONLY_DEF(NMetadata::IOperationsManager::TPtr, Manager);
+public:
+    TEvPrepareManager(NMetadata::IOperationsManager::TPtr manager)
+        : Manager(manager) {
+        Y_VERIFY(!!Manager);
+    }
+};
+
+class TEvManagerPrepared: public NActors::TEventLocal<TEvManagerPrepared, EEvSubscribe::EvManagerPrepared> {
+private:
+    YDB_READONLY_DEF(NMetadata::IOperationsManager::TPtr, Manager);
+public:
+    TEvManagerPrepared(NMetadata::IOperationsManager::TPtr manager)
+        : Manager(manager) {
+        Y_VERIFY(!!Manager);
+    }
+};
+
 class TEvAskSnapshot: public NActors::TEventLocal<TEvAskSnapshot, EEvSubscribe::EvAskExternal> {
 private:
     YDB_READONLY_DEF(ISnapshotsFetcher::TPtr, Fetcher);

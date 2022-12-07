@@ -108,6 +108,7 @@ private:
     void Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev);
     void Handle(TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvAskSnapshot::TPtr& ev);
+    void Handle(TEvPrepareManager::TPtr& ev);
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvObjectsOperation::TPtr& ev);
@@ -142,6 +143,7 @@ public:
             hFunc(TEvObjectsOperation, Handle);
             hFunc(TEvRefreshSubscriberData, Handle);
             hFunc(TEvAskSnapshot, Handle);
+            hFunc(TEvPrepareManager, Handle);
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
             hFunc(NMetadataInitializer::TEvInitializationFinished, Handle);

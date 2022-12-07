@@ -88,6 +88,8 @@ public:
     public:
         TModificationContext() = default;
     };
+private:
+    mutable std::shared_ptr<IInitializationBehaviour> InitializationBehaviour;
 protected:
     virtual NThreading::TFuture<TObjectOperatorResult> DoCreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
         IOperationsManager::TPtr manager, const TModificationContext& context) const = 0;
@@ -114,7 +116,10 @@ public:
     }
 
     std::shared_ptr<IInitializationBehaviour> GetInitializationBehaviour() const {
-        return DoGetInitializationBehaviour();
+        if (!InitializationBehaviour) {
+            InitializationBehaviour = DoGetInitializationBehaviour();
+        }
+        return InitializationBehaviour;
     }
     virtual TString GetTypeId() const = 0;
     virtual TString GetTablePath() const = 0;

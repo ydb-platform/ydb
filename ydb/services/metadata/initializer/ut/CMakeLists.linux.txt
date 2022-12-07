@@ -7,21 +7,21 @@
 
 
 
-add_executable(ydb-services-metadata-secret-ut)
-target_compile_options(ydb-services-metadata-secret-ut PRIVATE
+add_executable(ydb-services-metadata-initializer-ut)
+target_compile_options(ydb-services-metadata-initializer-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-services-metadata-secret-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret
+target_include_directories(ydb-services-metadata-initializer-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer
 )
-target_link_libraries(ydb-services-metadata-secret-ut PUBLIC
+target_link_libraries(ydb-services-metadata-initializer-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  services-metadata-secret
+  services-metadata-initializer
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
@@ -29,7 +29,7 @@ target_link_libraries(ydb-services-metadata-secret-ut PUBLIC
   ydb-services-metadata
   public-lib-yson_value
 )
-target_link_options(ydb-services-metadata-secret-ut PRIVATE
+target_link_options(ydb-services-metadata-initializer-ut PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -39,18 +39,18 @@ target_link_options(ydb-services-metadata-secret-ut PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-services-metadata-secret-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/ut/ut_secret.cpp
+target_sources(ydb-services-metadata-initializer-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/ut/ut_init.cpp
 )
 add_test(
   NAME
-  ydb-services-metadata-secret-ut
+  ydb-services-metadata-initializer-ut
   COMMAND
-  ydb-services-metadata-secret-ut
+  ydb-services-metadata-initializer-ut
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
 )
-vcs_info(ydb-services-metadata-secret-ut)
+vcs_info(ydb-services-metadata-initializer-ut)

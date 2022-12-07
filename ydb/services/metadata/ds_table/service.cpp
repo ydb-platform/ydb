@@ -34,6 +34,16 @@ void TService::PrepareManagers(std::vector<NMetadata::IOperationsManager::TPtr> 
     EventsWaiting[id].emplace_back(ev, sender);
 }
 
+void TService::Handle(TEvPrepareManager::TPtr& ev) {
+    auto it = RegisteredManagers.find(ev->Get()->GetManager()->GetTypeId());
+    if (it != RegisteredManagers.end()) {
+        Send(ev->Sender, new TEvManagerPrepared(ev->Get()->GetManager()));
+    } else {
+        auto m = ev->Get()->GetManager();
+        PrepareManagers({ m }, ev->ReleaseBase(), ev->Sender);
+    }
+}
+
 void TService::Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev) {
     const TString& initId = ev->Get()->GetInitializationId();
 
@@ -69,6 +79,7 @@ void TService::Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev)
         EventsWaiting.emplace(i.first, std::move(i.second));
     }
 }
+
 void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
     const TActorId senderId = ev->Sender;
     ProcessEventWithFetcher(ev, [this, senderId](const TActorId& actorId) {
@@ -114,7 +125,7 @@ void TService::Handle(TEvRefreshSubscriberData::TPtr& ev) {
 }
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
-    ALS_INFO(0) << "metadata service started" << Endl;
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service started" << Endl;
     Become(&TService::StateMain);
     InternalController = std::make_shared<TServiceInternalController>(SelfId());
 }

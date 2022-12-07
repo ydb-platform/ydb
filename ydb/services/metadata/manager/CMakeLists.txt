@@ -27,6 +27,7 @@ target_sources(services-metadata-manager PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/restore.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/modification.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/generic_manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/init_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/preparation_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/restore_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/common.cpp

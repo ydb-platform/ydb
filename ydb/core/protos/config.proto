@@ -1447,7 +1447,7 @@ message THiveConfig {
     optional uint64 MaxResourceCPU = 4 [default = 10000000];
     optional uint64 MaxResourceMemory = 5 [default = 512000000000];
     optional uint64 MaxResourceNetwork = 6 [default = 1000000000];
-    optional double MinScatterToBalance = 7 [default = 1.01];
+    optional double MinScatterToBalance = 7 [default = 0.5];
     optional bool SpreadNeighbours = 8 [default = true];
     optional uint64 MaxBootBatchSize = 9 [default = 1000];
     optional uint64 DrainInflight = 10 [default = 10];
@@ -1462,7 +1462,7 @@ message THiveConfig {
     optional uint64 MinRequestSequenceSize = 19 [default = 1000];
     optional uint64 MaxRequestSequenceSize = 20 [default = 1000000];
     optional uint64 MetricsWindowSize = 21 [default = 60000]; // milliseconds
-    optional double MaxNodeUsageToKick = 22 [default = 1.01];
+    optional double MaxNodeUsageToKick = 22 [default = 0.9];
     optional uint64 ResourceChangeReactionPeriod = 23 [default = 10]; // seconds
     optional uint64 TabletKickCooldownPeriod = 24 [default = 1800]; // seconds
     optional double ResourceOvercommitment = 25 [default = 3.00];
@@ -1472,7 +1472,7 @@ message THiveConfig {
     optional double MinPeriodBetweenBalance = 29 [default = 1.0]; // seconds
     optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets
     optional bool ContinueAutoBalancer = 31 [default = true];
-    optional double MinNodeUsageToBalance = 32 [default = 1.01];
+    optional double MinNodeUsageToBalance = 32 [default = 0.3];
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
     optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds

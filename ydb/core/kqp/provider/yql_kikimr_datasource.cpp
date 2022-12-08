@@ -201,6 +201,11 @@ public:
         return TStatus::Ok;
     }
 
+    void Rewind() final {
+        LoadResults.clear();
+        AsyncFuture = {};
+    }
+
 private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;

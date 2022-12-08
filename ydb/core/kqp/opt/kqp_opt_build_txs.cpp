@@ -55,6 +55,9 @@ public:
         }
     }
 
+    void Rewind() final {
+    }
+
 private:
     EPhysicalTxType GetPhyTxType(bool allStagesArePure) {
         if (QueryType == EKikimrQueryType::Scan) {
@@ -549,7 +552,6 @@ public:
     }
 
     void Rewind() final {
-        TSyncTransformerBase::Rewind();
         DataTxTransformer->Rewind();
         ScanTxTransformer->Rewind();
     }

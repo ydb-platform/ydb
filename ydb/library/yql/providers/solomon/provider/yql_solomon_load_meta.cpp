@@ -33,6 +33,9 @@ public:
         return TStatus::Ok;
     }
 
+    void Rewind() final {
+    }
+
 private:
     TSolomonState::TPtr State_;
     NThreading::TFuture<void> AsyncFuture_;

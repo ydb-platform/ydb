@@ -308,6 +308,9 @@ public:
         return RemapExpr(input, output, replaces, ctx, settings);
     }
 
+    void Rewind() final {
+    }
+
 private:
     const bool AllowDependantConsumers;
 };
@@ -376,6 +379,8 @@ public:
         });
 #endif
         return status;
+    }
+    void Rewind() final {
     }
 };
 

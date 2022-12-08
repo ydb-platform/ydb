@@ -114,6 +114,8 @@ namespace {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Failed to execute node: " << input->Content()));
             return TStatus::Error;
         }
+        void Rewind() final {
+        }
 
     private:
         const TTypeAnnotationContext& Types;

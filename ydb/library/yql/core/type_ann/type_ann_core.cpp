@@ -11945,6 +11945,15 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return ret;
         }
 
+        void Rewind() final {
+            for (auto& x : Types.DataSources) {
+                x->GetIntentDeterminationTransformer().Rewind();
+            }
+            for (auto& x : Types.DataSinks) {
+                x->GetIntentDeterminationTransformer().Rewind();
+            }
+        }
+
     private:
         IGraphTransformer::TStatus DetermineIntents(IDataProvider& dataProvider,
             const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

@@ -422,6 +422,8 @@ public:
 
         return TStatus::Error;
     }
+    void Rewind() final {
+    }
 };
 
 class TPrepareDataQueryAstTransformer : public TGraphTransformerBase {

@@ -139,6 +139,12 @@ private:
         }
     }
 
+    void Rewind() final {
+        PendingWriteTopics_.clear();
+        PendingReadTopics_.clear();
+        AsyncFuture_ = {};
+    }
+
 private:
     TPqState::TPtr State_;
     // (cluster, topic) -> meta

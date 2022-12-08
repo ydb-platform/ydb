@@ -79,6 +79,13 @@ public:
         , Lister_(IS3Lister::Make(gateway, State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxInflightListsPerQuery, State_->Configuration->AllowLocalFiles))
     {}
 
+    void Rewind() final {
+        PendingRequests_.clear();
+        RequestsByNode_.clear();
+        GenColumnsByNode_.clear();
+        AllFuture_ = {};
+    }
+
 private:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;

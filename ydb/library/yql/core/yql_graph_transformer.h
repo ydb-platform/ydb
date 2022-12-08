@@ -100,7 +100,7 @@ public:
     virtual TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) = 0;
     virtual TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
-    virtual void Rewind() {}
+    virtual void Rewind() = 0;
 
     virtual TStatistics GetStatistics() const { return TStatistics::NotPresent(); }
 };
@@ -248,7 +248,7 @@ public:
     }
 };
 
-class TNullTransformer : public TSyncTransformerBase {
+class TNullTransformer final: public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -256,10 +256,12 @@ public:
 
         return IGraphTransformer::TStatus::Ok;
     }
+    void Rewind() final {
+    }
 };
 
 template <typename TFunctor>
-class TFunctorTransformer : public TSyncTransformerBase {
+class TFunctorTransformer final: public TSyncTransformerBase {
 public:
     TFunctorTransformer(TFunctor functor)
         : Functor(std::move(functor)) {}
@@ -269,6 +271,9 @@ public:
         YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Async);
 
         return status;
+    }
+
+    void Rewind() final {
     }
 
 private:

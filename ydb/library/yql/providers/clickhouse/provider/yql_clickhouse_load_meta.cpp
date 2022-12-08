@@ -190,6 +190,11 @@ public:
 
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
     }
+
+    void Rewind() final {
+        Results_.clear();
+        AsyncFuture_ = {};
+    }
 private:
     static void OnDiscovery(const TMapType::mapped_type& res, IHTTPGateway::TResult&& result, NThreading::TPromise<void>& promise) {
         *res = std::move(result);

@@ -18,6 +18,8 @@ public:
         const TString& provider, const THashSet<TStringBuf>& configureCallables = {});
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    void Rewind() final {
+    }
 
 protected:
     virtual bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name,

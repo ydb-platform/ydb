@@ -2621,6 +2621,9 @@ public:
         Y_UNUSED(ctx);
         return UpdateAllChildLambdasConstraints(*input);
     }
+
+    void Rewind() final {
+    }
 };
 
 class TConstraintTransformer : public TGraphTransformerBase {
@@ -2686,6 +2689,14 @@ public:
         }
 
         return combinedStatus;
+    }
+
+    void Rewind() final {
+        CallableTransformer->Rewind();
+        CallableInputs.clear();
+        Processed.clear();
+        HasRenames = false;
+        CurrentFunctions = {};
     }
 
 private:

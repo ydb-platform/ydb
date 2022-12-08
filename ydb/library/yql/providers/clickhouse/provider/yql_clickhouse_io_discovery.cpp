@@ -109,6 +109,12 @@ public:
         }
         return TStatus::Ok;
     }
+
+    void Rewind() final {
+        AsyncFuture_ = {};
+        FullResolvedIds_.clear();
+        DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
+    }
 private:
     const TClickHouseState::TPtr State_;
 

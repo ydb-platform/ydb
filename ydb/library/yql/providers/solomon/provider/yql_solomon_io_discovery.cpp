@@ -68,6 +68,8 @@ public:
         return status;
     }
 
+    void Rewind() final {
+    }
 private:
     TSolomonState::TPtr State_;
 };

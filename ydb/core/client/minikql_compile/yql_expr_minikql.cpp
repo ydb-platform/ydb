@@ -333,6 +333,9 @@ public:
         return CallableTransformer->Transform(input, output, ctx);
     }
 
+    void Rewind() final {
+    }
+
 private:
     static bool CheckKeyColumn(const TStringBuf& columnName, ui32 keyIndex, IDbSchemeResolver::TTableResult* lookup, TExprNode& node, TExprContext& ctx) {
         auto column = lookup->Columns.FindPtr(columnName);

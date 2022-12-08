@@ -264,6 +264,11 @@ public:
         return failed ? TStatus::Error : TStatus::Ok;
     }
 
+    void Rewind() final {
+        Clients_ = std::make_shared<TCluster2ClientPerSnapshotHandle>();
+        PendingTables_ = std::make_shared<TTableKey2DescribeTableResult>();
+        AsyncFuture_ = {};
+    }
 private:
     const NYdb::TDriver Driver_;
     const TYdbState::TPtr State_;

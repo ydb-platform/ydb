@@ -134,6 +134,10 @@ public:
         return status;
     }
 
+    void Rewind() override {
+        PendingNodes.clear();
+    }
+
 protected:
     IDataProvider* ParseCommit(const TExprNode& input, TExprContext& ctx) {
         if (!EnsureMinArgsCount(input, 2, ctx)) {

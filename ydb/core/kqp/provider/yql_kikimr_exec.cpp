@@ -218,6 +218,8 @@ public:
         return TStatus::Ok;
     }
 
+    void Rewind() final {
+    }
 private:
     struct TExecInfo {
         TKiExecDataQuery Node;

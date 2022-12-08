@@ -267,7 +267,21 @@ namespace {
             return status;
         }
 
-    private:
+        void Rewind() final {
+            DelegatedProvider = nullptr;
+            DelegatedNode = nullptr;
+            DelegatedNodeOutput = nullptr;
+
+            CommittedPullSize = 0;
+            PullOverflow = false;
+
+            CommittedFillSize = 0;
+            FillOverflow = false;
+
+            ResultWriter.Drop();
+        }
+
+   private:
         template <class TTarget>
         bool& GetOverflowFlagAndCommitedSize(ui64& committed);
 

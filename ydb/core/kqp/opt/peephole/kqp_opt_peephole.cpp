@@ -355,7 +355,6 @@ public:
     }
 
     void Rewind() final {
-        TSyncTransformerBase::Rewind();
         TxTransformer->Rewind();
     }
 

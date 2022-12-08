@@ -15,6 +15,8 @@ class TKiSourceVisitorTransformer: public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
+    void Rewind() override {
+    }
 private:
     virtual TStatus HandleKiRead(NNodes::TKiReadBase node, TExprContext& ctx) = 0;
     virtual TStatus HandleRead(NNodes::TExprBase node, TExprContext& ctx) = 0;
@@ -26,6 +28,8 @@ class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
+    void Rewind() override {
+    }
 private:
     virtual TStatus HandleWriteTable(NNodes::TKiWriteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;

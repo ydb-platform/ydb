@@ -67,6 +67,11 @@ public:
         return TStatus::Ok;
     }
 
+    void Rewind() final {
+        LastGcCount = 0;
+        CurrentThreshold = 0;
+    }
+
 private:
     ui64 LastGcCount = 0;
     ui64 CurrentThreshold = 0;

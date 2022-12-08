@@ -83,6 +83,11 @@ public:
         return TStatus::Ok;
     }
 
+    void Rewind() final {
+        ResolverContext.Reset();
+        AllFutures = {};
+    }
+
 private:
     TDqFunctionState::TPtr State;
     NThreading::TFuture<void> AllFutures;

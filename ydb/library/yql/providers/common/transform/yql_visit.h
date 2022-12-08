@@ -23,6 +23,9 @@ public:
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
+    void Rewind() final {
+    }
+
     bool CanParse(const TExprNode& node) const {
         return Handlers.contains(node.Content());
     }

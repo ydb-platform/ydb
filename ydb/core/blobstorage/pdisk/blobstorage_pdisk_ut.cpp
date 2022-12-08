@@ -780,6 +780,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             TActorTestContext testCtx({ 
                 .IsBad = false,
                 .DiskSize = diskSize,
+                .SmallDisk = true,
             });
         }
     }

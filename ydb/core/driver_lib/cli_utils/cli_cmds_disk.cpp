@@ -180,7 +180,7 @@ public:
 
     virtual int Run(TConfig&) override {
         FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey.back(), TextMessage,
-                IsErasureEncode);
+                IsErasureEncode, false, nullptr, true);
         return 0;
     }
 };

@@ -137,7 +137,7 @@ struct TPDiskFailureInjectionTest {
 
         // format pdisk
         NKikimr::FormatPDisk(PDiskFilePath, DiskSize, SectorSize, ChunkSize, PDiskGuid, 1, 1, 1, 1, "text message",
-                ErasureEncode);
+                ErasureEncode, false, nullptr, false);
 
         Cerr << "created pdisk at " << PDiskFilePath << Endl;
     }

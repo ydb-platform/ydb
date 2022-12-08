@@ -131,7 +131,8 @@ void SetupServices(TTestActorRuntime &runtime,
                         TString(""),
                         false,
                         false,
-                        sectorMap);
+                        sectorMap,
+                        false);
         }
 
         NodeWardenConfigs[nodeIndex] = nodeWardenConfig;

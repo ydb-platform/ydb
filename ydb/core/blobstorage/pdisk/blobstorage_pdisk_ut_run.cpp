@@ -86,6 +86,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         pDiskConfig->SectorMap = runCfg.TestContext->SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->UseT1ha0HashInFooter = runCfg.UseT1ha0Hasher;
+        pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(false);
 
         NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),

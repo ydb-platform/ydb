@@ -83,7 +83,8 @@ void FormatPDisk(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid, bool is
     }
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
-        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test");
+        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test", 
+        false, false, nullptr, false);
 }
 
 void SetupLogging(TTestActorRuntime& runtime) {
@@ -206,7 +207,7 @@ void SetupServices(TTestActorRuntime &runtime) {
             ++iteration;
             ::NKikimr::FormatPDisk(pDiskPath, 16000000000ull, 4 << 10, 32u << 20u, pDiskGuid,
                 0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
-                NPDisk::YdbDefaultPDiskSequence, "");
+                NPDisk::YdbDefaultPDiskSequence, "", false, false, nullptr, false);
         }
 
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig.Release());

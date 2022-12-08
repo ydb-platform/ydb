@@ -59,7 +59,8 @@ public:
             PDiskGuid = Now().GetValue();
             PDiskKey = 1;
             MainKey = {1};
-            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "incrhuge");
+            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "incrhuge", 
+                false, false, nullptr, false);
         }
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);

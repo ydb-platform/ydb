@@ -51,7 +51,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
     const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap)
+    TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization)
 {
     TActorSystemCreator creator;
 
@@ -75,15 +75,15 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 ->DetectFileParameters(path, diskSizeBytes, isBlockDevice);
         }
     }
-    if (diskSizeBytes > 0 && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize && 
+    if (enableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize && 
         userAccessibleChunkSizeBytes > NPDisk::SmallDiskMaximumChunkSize) {
         throw NPDisk::TPDiskFormatBigChunkException() << "diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
             " bool(sectorMap)# " << bool(sectorMap) <<
             " sectorMap->DeviceSize# " << (sectorMap ? sectorMap->DeviceSize : 0);
     }
-    Y_VERIFY_S(diskSizeBytes < NPDisk::FullSizeDiskMinimumSize || (diskSizeBytes > 0 && 
-            diskSizeBytes / userAccessibleChunkSizeBytes > 200),
+    Y_VERIFY_S((enableSmallDiskOptimization && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize) || (
+            diskSizeBytes > 0 && diskSizeBytes / userAccessibleChunkSizeBytes > 200),
             " diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
             " bool(sectorMap)# " << bool(sectorMap) <<

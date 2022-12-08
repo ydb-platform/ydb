@@ -210,7 +210,8 @@ namespace {
                     TString(""),
                     false,
                     false,
-                    sectorMap);
+                    sectorMap,
+                    false);
     }
 
     void SetupLocals(TTestActorRuntime &runtime, bool isLocalEnabled) {
@@ -428,7 +429,8 @@ void FormatPDiskForTest(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid,
     EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
-        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap);
+        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap, 
+        false);
 }
 
 void InitSchemeRoot(TTestBasicRuntime& runtime, const TActorId& sender) {

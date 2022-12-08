@@ -474,8 +474,8 @@ static void SetupServices(TTestActorRuntime &runtime,
                         TString(""),
                         false,
                         false,
-                        sectorMap
-                        );
+                        sectorMap,
+                        false);
         }
 
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);

@@ -31,7 +31,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
     ui64 guid = RandomNumber<ui64>();
     auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(pdiskSize);
     FormatPDisk(path, 0, 4096, chunkSize, guid, 0x1234567890 + 1, 0x4567890123 + 1, 0x7890123456 + 1,
-        NPDisk::YdbDefaultPDiskSequence, TString(), false, false, sectorMap);
+        NPDisk::YdbDefaultPDiskSequence, TString(), false, false, sectorMap, false);
 
     // per-node NodeWarden configurations; node 0 has the static group and the BS_CONTROLLER tablet
     THashMap<ui32, NKikimrBlobStorage::TNodeWardenServiceSet> configs;

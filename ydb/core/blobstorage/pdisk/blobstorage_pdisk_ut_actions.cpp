@@ -964,7 +964,7 @@ void TTestChunkLock::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvChunkLock from LOG");
-        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::LOG, 0, TColor::YELLOW));
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::LOG, 5, TColor::GREEN));
         break;
     case 20:
         TEST_RESPONSE(EvChunkLockResult, OK);
@@ -1019,7 +1019,7 @@ void TTestChunkUnlock::TestFSM(const TActorContext &ctx) {
         LockedNumLog = LastResponse.ChunkIds.size();
         ASSERT_YTHROW(LockedNumLog, "Didn't lock anything");
         VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA");
-        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 0, TColor::RED));
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 5, TColor::GREEN));
         break;
     case 30:
         TEST_RESPONSE(EvChunkLockResult, OK);

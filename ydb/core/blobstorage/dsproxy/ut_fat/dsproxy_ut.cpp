@@ -4218,7 +4218,7 @@ public:
                     SectorMapByPath[filePath].Reset(new NPDisk::TSectorMap(diskSizeBytes));
                     FormatPDisk(filePath, diskSizeBytes, 4 << 10, chunkSize, pDiskGuid,
                             0x123, 0x456, 0x789, isBad ? badMainKey : mainKey, "", false, false,
-                            SectorMapByPath[filePath]);
+                            SectorMapByPath[filePath], false);
                 }
 
                 TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(filePath, pDiskGuid, i + 1, pDiskCategory);

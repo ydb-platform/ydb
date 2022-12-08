@@ -365,11 +365,13 @@ public:
                             try {
                                 FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                     cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
-                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap);
+                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap, 
+                                    cfg->FeatureFlags.GetEnableSmallDiskOptimization());
                             } catch (NPDisk::TPDiskFormatBigChunkException) {
                                 FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                        cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
-                                        cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap);
+                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
+                                    cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
+                                    cfg->FeatureFlags.GetEnableSmallDiskOptimization());
                             }
                             actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                         } catch (yexception ex) {
@@ -987,8 +989,7 @@ public:
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
         const TCgiParameters &cgi = ev->Get()->Request.GetPostParams();
 
-        TAppData* app = NKikimr::AppData(TActivationContext::AsActorContext());
-        bool enableChunkLocking = app->FeatureFlags.GetEnableChunkLocking();
+        bool enableChunkLocking = Cfg->FeatureFlags.GetEnableChunkLocking();
 
         if (enableChunkLocking) {
             using TColor = NKikimrBlobStorage::TPDiskSpaceColor;

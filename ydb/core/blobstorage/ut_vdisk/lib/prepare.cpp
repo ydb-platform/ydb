@@ -84,7 +84,10 @@ void TOnePDisk::FormatDisk(bool force) {
                     sysLogKey,      // sysLogKey
                     NPDisk::YdbDefaultPDiskSequence,          // mainKey
                     "",             // textMessage
-                    false           // isErasureEncode
+                    false,          // isErasureEncode
+                    false,          // trimEntireDevice
+                    nullptr,        // sectorMap
+                    false           // enableSmallDiskOptimization
                     );
     }
 }

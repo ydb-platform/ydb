@@ -24,6 +24,7 @@ public:
         ui64 DiskSize = 0;
         EDiskMode DiskMode = EDiskMode::DM_NONE;
         ui32 ChunkSize = 128 * (1 << 20);
+        bool SmallDisk = false;
     };
 
 private:
@@ -43,9 +44,9 @@ public:
         EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
         if (Settings.DiskSize) {
-            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap);
+            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
         } else {
-            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap);
+            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap, Settings.SmallDisk);
         }
 
         ui64 pDiskCategory = 0;
@@ -55,6 +56,7 @@ public:
         pDiskConfig->ChunkSize = Settings.ChunkSize;
         pDiskConfig->SectorMap = TestCtx.SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+        pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         return pDiskConfig;
     }
 

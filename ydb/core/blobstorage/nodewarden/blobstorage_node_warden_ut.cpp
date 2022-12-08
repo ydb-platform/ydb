@@ -68,7 +68,7 @@ constexpr ui32 DOMAIN_ID = 1;
 using namespace NActors;
 
 void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 guid, bool isGuidValid,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization) {
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
@@ -83,7 +83,7 @@ void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 gui
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
             guid, chunkKey, logKey,
             sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test",
-            false, false, sectorMap);
+            false, false, sectorMap, enableSmallDiskOptimization);
 }
 
 void SetupLogging(TTestActorRuntime& runtime) {
@@ -225,7 +225,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             ++iteration;
             ::NKikimr::FormatPDisk(pDiskPath0, 0, 4 << 10, 32u << 20u, pDiskGuid,
                 0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
-                NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap);
+                NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap, false);
 
 
             // Magic path from testlib, do not change it
@@ -650,7 +650,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 //        TActorId sender1 = runtime.AllocateEdgeActor(1);
 
         VERBOSE_COUT(" Formatting pdisk");
-        FormatPDiskRandomKeys(tempDir() + "/new_pdisk.dat", sectorMap->DeviceSize, 32 << 20, 1, false, sectorMap);
+        FormatPDiskRandomKeys(tempDir() + "/new_pdisk.dat", sectorMap->DeviceSize, 32 << 20, 1, false, sectorMap, false);
 
         VERBOSE_COUT(" Creating PDisk");
         ui64 guid = 1;

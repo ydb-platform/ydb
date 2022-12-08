@@ -97,7 +97,7 @@ public:
     }
 
     static int PrepareConfigCredentials(NGRpcProxy::TGRpcClientConfig clientConfig, TConfig& commandConfig) {
-        int res = 0;
+        int res = grpc::StatusCode::OK;
 
         if (!commandConfig.StaticCredentials.User.empty()) {
             Ydb::Auth::LoginRequest request;
@@ -107,7 +107,7 @@ public:
             res = DoGRpcRequest<Ydb::Auth::V1::AuthService,
                                 Ydb::Auth::LoginRequest,
                                 Ydb::Auth::LoginResponse>(clientConfig, request, response, &Ydb::Auth::V1::AuthService::Stub::AsyncLogin, {});
-            if (res == 0 && response.status() == Ydb::StatusIds::SUCCESS) {
+            if (res == grpc::StatusCode::OK && response.status() == Ydb::StatusIds::SUCCESS) {
                 Ydb::Auth::LoginResult result;
                 if (response.result().UnpackTo(&result)) {
                     commandConfig.SecurityToken = result.token();
@@ -116,6 +116,9 @@ public:
                 Cerr << response.status() << Endl;
                 for (auto &issue : response.issues()) {
                     Cerr << issue.message() << Endl;
+                }
+                if (res == grpc::StatusCode::OK) {
+                    res = -2;
                 }
             }
         }
@@ -128,7 +131,7 @@ public:
         int res;
 
         res = PrepareConfigCredentials(ClientConfig, config);
-        if (!res) {
+        if (res != grpc::StatusCode::OK) {
             return res;
         }
 

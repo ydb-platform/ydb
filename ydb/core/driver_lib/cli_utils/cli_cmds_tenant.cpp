@@ -149,8 +149,7 @@ public:
         int res;
 
         res = TClientGRpcCommand<TService, TRequest, TResponse, TFunction, function>::PrepareConfigCredentials(ClientConfig, config);
-
-        if (!res) {
+        if (res != grpc::StatusCode::OK) {
             return res;
         }
 

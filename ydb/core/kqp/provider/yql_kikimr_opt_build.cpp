@@ -67,7 +67,7 @@ struct TKiExploreTxResults {
     struct TKiQueryBlock {
         TVector<TExprBase> Results;
         TVector<TExprBase> Effects;
-        THashSet<std::string_view> TablesWithEffects;
+        THashMap<std::string_view, TYdbOperations> TableOperations;
         bool HasUncommittedChangesRead = false;
     };
 
@@ -96,14 +96,19 @@ struct TKiExploreTxResults {
         }
     }
 
-    void AddEffect(const TExprBase& effect, std::string_view table) {
-        if (QueryBlocks.empty()) {
+    void AddEffect(const TExprBase& effect, TYdbOperation op, std::string_view table) {
+        auto readOp = op & KikimrReadOps();
+        auto uncommittedChangesRead = HasModifyOps(table) && readOp;
+
+        if (QueryBlocks.empty() || uncommittedChangesRead) {
             AddQueryBlock();
         }
 
         auto& curBlock = QueryBlocks.back();
         curBlock.Effects.push_back(effect);
-        curBlock.TablesWithEffects.insert(table);
+        curBlock.HasUncommittedChangesRead = uncommittedChangesRead;
+        auto& currentOps = curBlock.TableOperations[table];
+        currentOps |= op;
     }
 
     void AddResult(const TExprBase& result) {
@@ -115,13 +120,14 @@ struct TKiExploreTxResults {
         curBlock.Results.push_back(result);
     }
 
-    bool HasEffects(std::string_view table) {
+    bool HasModifyOps(std::string_view table) {
         if (QueryBlocks.empty()) {
             return false;
         }
 
         auto& curBlock = QueryBlocks.back();
-        return curBlock.TablesWithEffects.contains(table);
+        auto currentOps = curBlock.TableOperations[table];
+        return currentOps & KikimrModifyOps();
     }
 
     void AddQueryBlock() {
@@ -177,7 +183,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto result = ExploreTx(maybeRead.Cast().World(), ctx, dataSink, txRes);
 
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Select, read.Pos(), ctx));
-        if (txRes.HasEffects(table)) {
+        if (txRes.HasModifyOps(table)) {
             txRes.AddQueryBlock();
             txRes.SetBlockHasUncommittedChangesRead();
         }
@@ -195,7 +201,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto result = ExploreTx(write.World(), ctx, dataSink, txRes);
         auto tableOp = GetTableOp(write);
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
-        txRes.AddEffect(node, table);
+        txRes.AddEffect(node, tableOp, table);
         return result;
     }
 
@@ -209,7 +215,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(update.World(), ctx, dataSink, txRes);
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Update, update.Pos(), ctx));
-        txRes.AddEffect(node, table);
+        txRes.AddEffect(node, TYdbOperation::Update, table);
         return result;
     }
 
@@ -223,7 +229,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(del.World(), ctx, dataSink, txRes);
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Delete, del.Pos(), ctx));
-        txRes.AddEffect(node, table);
+        txRes.AddEffect(node, TYdbOperation::Delete, table);
         return result;
     }
 

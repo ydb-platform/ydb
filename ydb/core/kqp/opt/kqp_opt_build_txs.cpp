@@ -466,21 +466,23 @@ public:
     }
 
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
+        outputExpr = inputExpr;
+        
         if (TKqpPhysicalQuery::Match(inputExpr.Get())) {
-            outputExpr = inputExpr;
             return TStatus::Ok;
         }
 
         YQL_CLOG(DEBUG, ProviderKqp) << ">>> TKqpBuildTxsTransformer: " << KqpExprToPrettyString(*inputExpr, ctx);
 
         TKqlQuery query(inputExpr);
-
-        if (auto status = TryBuildPrecomputeTx(query, outputExpr, ctx)) {
-            return *status;
-        }
-
         TVector<TExprBase> queryResults;
-        for (const auto& block : query.Blocks()) {
+        for (; CurrentQueryBlockId < query.Blocks().Size(); ++CurrentQueryBlockId) {
+            const auto& block = query.Blocks().Item(CurrentQueryBlockId);
+
+            if (auto status = TryBuildPrecomputeTx(block, outputExpr, outputExpr, ctx)) {
+                return *status;
+            }
+
             if (!block.Results().Empty()) {
                 auto tx = BuildTx(block.Results().Ptr(), ctx, false);
                 if (!tx) {
@@ -585,7 +587,7 @@ private:
         return true;
     }
 
-    std::pair<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeDependencies(const TKqlQuery& query) {
+    std::pair<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeDependencies(const TKqlQueryBlock& queryBlock) {
         TNodeOnNodeOwnedMap precomputes;
         TNodeOnNodeOwnedMap dependencies;
 
@@ -632,14 +634,13 @@ private:
             return true;
         };
 
-        VisitExpr(query.Ptr(), filter, gather);
+        VisitExpr(queryBlock.Ptr(), filter, gather);
 
         return std::make_pair(std::move(precomputes), std::move(dependencies));
     }
 
-    TMaybe<TStatus> TryBuildPrecomputeTx(const TKqlQuery& query, TExprNode::TPtr& output, TExprContext& ctx) {
-        auto [precomputeStagesMap, dependantStagesMap] = GatherPrecomputeDependencies(query);
-
+    TMaybe<TStatus> TryBuildPrecomputeTx(const TKqlQueryBlock& queryBlock, TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+        auto [precomputeStagesMap, dependantStagesMap] = GatherPrecomputeDependencies(queryBlock);
         if (precomputeStagesMap.empty()) {
             return {};
         }
@@ -661,8 +662,8 @@ private:
         }
 
         if (phaseStagesMap.empty()) {
-            output = query.Ptr();
-            ctx.AddError(TIssue(ctx.GetPosition(query.Pos()), "Phase stages is empty"));
+            output = input;
+            ctx.AddError(TIssue(ctx.GetPosition(queryBlock.Pos()), "Phase stages is empty"));
             return TStatus::Error;
         }
 
@@ -695,7 +696,7 @@ private:
         }
         Y_VERIFY_DEBUG(phaseResults.size() == computedInputs.size());
 
-        auto phaseResultsNode = Build<TKqlQueryResultList>(ctx, query.Pos())
+        auto phaseResultsNode = Build<TKqlQueryResultList>(ctx, queryBlock.Pos())
             .Add(phaseResults)
             .Done();
 
@@ -720,7 +721,7 @@ private:
             replaceMap.emplace(input.Raw(), newInput.Ptr());
         }
 
-        output = ctx.ReplaceNodes(query.Ptr(), replaceMap);
+        output = ctx.ReplaceNodes(std::move(input), replaceMap);
 
         return TStatus(TStatus::Repeat, true);
     }
@@ -753,6 +754,7 @@ private:
     TAutoPtr<TKqpBuildTxTransformer> BuildTxTransformer;
     TAutoPtr<IGraphTransformer> DataTxTransformer;
     TAutoPtr<IGraphTransformer> ScanTxTransformer;
+    ui32 CurrentQueryBlockId = 0;
 };
 
 } // namespace

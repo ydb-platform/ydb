@@ -267,7 +267,6 @@ const TYdbOperations& KikimrSchemeOps();
 const TYdbOperations& KikimrDataOps();
 const TYdbOperations& KikimrModifyOps();
 const TYdbOperations& KikimrReadOps();
-const TYdbOperations& KikimrRequireUnmodifiedOps();
 
 bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
@@ -393,13 +392,6 @@ public:
             auto& currentOps = TableOperations[table];
             bool currentModify = currentOps & KikimrModifyOps();
             if (currentModify && !enableImmediateEffects) {
-                if (KikimrRequireUnmodifiedOps() & newOp) {
-                    TString message = TStringBuilder() << "Operation '" << newOp
-                        << "' can't be performed on previously modified table: " << table;
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                    return false;
-                }
-
                 if (KikimrReadOps() & newOp) {
                     TString message = TStringBuilder() << "Data modifications previously made to table '" << table
                         << "' in current transaction won't be seen by operation: '" << newOp << "'";
@@ -411,24 +403,6 @@ public:
                 if (info->GetHasIndexTables()) {
                     TString message = TStringBuilder() << "Multiple modification of table with secondary indexes is not supported yet";
                     ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                    return false;
-                }
-            }
-
-            if ((KikimrRequireUnmodifiedOps() & newOp) && isolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
-                TString message = TStringBuilder()
-                    << "Operation '" << newOp << "' is only supported with SERIALIZABLE isolation level";
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return false;
-            }
-
-            // TODO: KIKIMR-3206
-            bool currentDelete = currentOps & (TYdbOperation::Delete | TYdbOperation::DeleteOn);
-            bool newUpdate = newOp == TYdbOperation::Update;
-            if (currentDelete && newUpdate && !enableImmediateEffects) {
-                TString message = TStringBuilder() << "Operation '" << newOp
-                    << "' may lead to unexpected results when applied to table with deleted rows: " << table;
-                if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_UPDATE_TABLE_WITH_DELETES, message), ctx)) {
                     return false;
                 }
             }

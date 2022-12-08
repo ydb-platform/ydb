@@ -28,7 +28,6 @@ struct TKikimrData {
     TYdbOperations DataOps;
     TYdbOperations ModifyOps;
     TYdbOperations ReadOps;
-    TYdbOperations RequireUnmodifiedOps;
 
     TMap<TString, NKikimr::NUdf::EDataSlot> SystemColumns;
 
@@ -78,7 +77,10 @@ struct TKikimrData {
         ReadOps =
             TYdbOperation::Select |
             TYdbOperation::Update |
-            TYdbOperation::Delete;
+            TYdbOperation::Delete |
+            TYdbOperation::InsertRevert |
+            TYdbOperation::InsertAbort |
+            TYdbOperation::UpdateOn; // TODO: KIKIMR-3206
 
         DataOps = ModifyOps | ReadOps;
 
@@ -92,11 +94,6 @@ struct TKikimrData {
             TYdbOperation::CreateGroup |
             TYdbOperation::AlterGroup |
             TYdbOperation::DropGroup;
-
-        RequireUnmodifiedOps =
-            TYdbOperation::InsertRevert |
-            TYdbOperation::InsertAbort |
-            TYdbOperation::UpdateOn; // TODO: KIKIMR-3206
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -532,10 +529,6 @@ const TYdbOperations& KikimrModifyOps() {
 
 const TYdbOperations& KikimrReadOps() {
     return Singleton<TKikimrData>()->ReadOps;
-}
-
-const TYdbOperations& KikimrRequireUnmodifiedOps() {
-    return Singleton<TKikimrData>()->RequireUnmodifiedOps;
 }
 
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {

@@ -45,7 +45,7 @@ class TestInsertOperations(object):
             callee,
             raises(
                 ydb.GenericError,
-                "Operation .*InsertAbort.* can.*t be performed on previously modified table",
+                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
             )
         )
 
@@ -77,7 +77,7 @@ class TestInsertOperations(object):
             callee,
             raises(
                 ydb.GenericError,
-                "Operation .*InsertAbort.* can.*t be performed on previously modified table",
+                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
             )
         )
 
@@ -111,7 +111,7 @@ class TestInsertOperations(object):
             callee,
             raises(
                 ydb.GenericError,
-                "Operation .*InsertAbort.* can.*t be performed on previously modified table",
+                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
             )
         )
 
@@ -141,7 +141,7 @@ class TestInsertOperations(object):
             callee,
             raises(
                 ydb.GenericError,
-                "Operation .*InsertAbort.* can.*t be performed on previously modified table",
+                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
             )
         )
 
@@ -202,7 +202,7 @@ class TestInsertOperations(object):
             callee,
             raises(
                 ydb.GenericError,
-                "Operation .*InsertRevert.* can.*t be performed on previously modified table",
+                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
             )
         )
 

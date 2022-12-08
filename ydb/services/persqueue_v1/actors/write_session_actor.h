@@ -184,7 +184,7 @@ private:
     void SendRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
     void SetupCounters();
-    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId);
+    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
 private:
     std::unique_ptr<TEvStreamWriteRequest> Request;

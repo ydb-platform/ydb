@@ -38,6 +38,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& cloudId,
     const TString& dbId,
     const TString& dbPath,
+    const bool isServerless,
     const TString& folderId
 )
     : DCId(std::move(dcId))
@@ -48,6 +49,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , CloudId(cloudId)
     , DbId(dbId)
     , DbPath(dbPath)
+    , IsServerless(isServerless)
     , FolderId(folderId)
     , CurReadRuleGeneration(0)
 {
@@ -177,11 +179,10 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
 
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
-    TMaybe<TString> dbPath = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() ? TMaybe<TString>(DbPath) : Nothing();
 
     return {
         ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
-        session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, dbPath, FolderId,
+        session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, DbPath, IsServerless, FolderId,
         meterRead, burst, speed
     };
 }

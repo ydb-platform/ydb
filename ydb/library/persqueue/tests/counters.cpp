@@ -87,6 +87,7 @@ NJson::TJsonValue GetClientCountersLegacy(ui16 port, const TString& counters, co
 }
 
 NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
+                                      const TString& databasePath,
                                       const TString& cloudId, const TString& databaseId,
                                       const TString& folderId, const TString& topicName,
                                       const TString& consumer, const TString& host,
@@ -96,6 +97,7 @@ NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
     TStringBuilder queryBuilder;
     queryBuilder <<
         "/counters/counters=" << counters <<
+        "/database=" << databasePath <<
         "/cloud_id=" << cloudId <<
         "/folder_id=" << folderId <<
         "/database_id=" << databaseId <<

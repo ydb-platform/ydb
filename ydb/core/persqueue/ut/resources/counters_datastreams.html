@@ -1,10 +1,10 @@
 <pre>
 topic=topic:
-    name=api.topic_service.stream_write.bytes_per_second: 2700
-    name=api.topic_service.stream_write.messages_per_second: 150
-    name=topic.written_bytes_per_second: 2700
-    name=topic.written_messages_per_second: 150
-    name=topic.written_uncompressed_bytes_per_second: 1350
+    name=api.topic_service.stream_write.bytes_per_second: 3240
+    name=api.topic_service.stream_write.messages_per_second: 180
+    name=topic.written_bytes_per_second: 3240
+    name=topic.written_messages_per_second: 180
+    name=topic.written_uncompressed_bytes_per_second: 1620
 
     consumer=user:
         name=api.topic_service.stream_read.bytes_per_second: 0
@@ -42,7 +42,7 @@ topic=topic:
             name=api.topic_service.stream_write.buffer_brimmed_milliseconds: 0
 
     name=api.topic_service.stream_write.partition_throttled_milliseconds:
-        bin=0: 150
+        bin=0: 180
         bin=1: 0
         bin=10: 0
         bin=100: 0
@@ -57,7 +57,7 @@ topic=topic:
         bin=999999: 0
 
     name=topic.write_lag_milliseconds:
-        bin=100: 150
+        bin=100: 180
         bin=1000: 0
         bin=10000: 0
         bin=180000: 0
@@ -70,7 +70,7 @@ topic=topic:
         bin=999999: 0
 
     name=topic.written_message_size_bytes:
-        bin=1024: 150
+        bin=1024: 180
         bin=10240: 0
         bin=102400: 0
         bin=1048576: 0

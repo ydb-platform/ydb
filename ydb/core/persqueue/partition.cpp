@@ -458,7 +458,7 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
 }
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-                       const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId,
+                       const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                        bool newPartition)
     : TabletID(tabletId)
@@ -480,10 +480,12 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , GapSize(0)
     , CloudId(config.GetYcCloudId())
     , DbId(config.GetYdbDatabaseId())
+    , DbPath(config.GetYdbDatabasePath())
+    , IsServerless(isServerless)
     , FolderId(config.GetYcFolderId())
     , UsersInfoStorage(
             DCId, TabletID, TopicConverter, Partition, counters, Config,
-            CloudId, DbId, config.GetYdbDatabasePath(), FolderId
+            CloudId, DbId, config.GetYdbDatabasePath(), IsServerless, FolderId
     )
     , ReadingTimestamp(false)
     , Cookie(0)
@@ -851,11 +853,13 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     const auto topicName = TopicConverter->GetModernName();
     auto counters = AppData(ctx)->Counters;
-    auto labels = NPersQueue::GetLabelsForTopic(TopicConverter, CloudId, DbId, FolderId);
+    auto labels = NPersQueue::GetLabelsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
 
     WriteBufferIsFullCounter.SetCounter(
-        NPersQueue::GetCountersForDataStream(counters),
-        {{"cloud_id", CloudId},
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {
+         {"database", DbPath},
+         {"cloud_id", CloudId},
          {"folder_id", FolderId},
          {"database_id", DbId},
          {"topic", TopicConverter->GetFederationPath()},
@@ -864,7 +868,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         {"name", "api.topic_service.stream_write.buffer_brimmed_milliseconds", true});
 
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForDataStream(counters), labels,
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
                     {{"name", "topic.write_lag_milliseconds"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {100, "100"}, {200, "200"}, {500, "500"},
@@ -873,7 +877,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {180'000,"180000"}, {9'999'999, "999999"}}, true));
 
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForDataStream(counters), labels,
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
                     {{"name", "topic.written_message_size_bytes"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
@@ -883,17 +887,17 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
 
     BytesWritten = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForDataStream(counters), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
                     {"api.topic_service.stream_write.bytes_per_second",
                      "topic.written_bytes_per_second"} , true, "name");
     MsgsWritten = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForDataStream(counters), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
                     {"api.topic_service.stream_write.messages_per_second",
                      "topic.written_messages_per_second"}, true, "name");
 
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
 
-        NPersQueue::GetCountersForDataStream(counters), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
                     {"topic.written_uncompressed_bytes_per_second"}, true, "name");
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
@@ -907,7 +911,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     if (IsQuotingEnabled() && !TopicWriteQuotaResourcePath.empty()) {
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
-                NPersQueue::GetCountersForDataStream(counters), labels,
+                NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
                             {{"name", "api.topic_service.stream_write.topic_throttled_milliseconds"}}, "bin",
                             TVector<std::pair<ui64, TString>>{
                                 {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
@@ -918,7 +922,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
-            NPersQueue::GetCountersForDataStream(counters), labels,
+            NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
                         {{"name", "api.topic_service.stream_write.partition_throttled_milliseconds"}}, "bin",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},

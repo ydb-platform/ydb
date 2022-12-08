@@ -514,15 +514,15 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId)
+void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
     }
 
     //now topic is checked, can create group for real topic, not garbage
-    auto subGroup = NPersQueue::GetCountersForDataStream(Counters);
-    auto aggr = NPersQueue::GetLabelsForTopic(FullConverter, cloudId, dbId, folderId);
+    auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
+    auto aggr = NPersQueue::GetLabelsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
 
     SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.sessions_created_per_second"}, true, "name");
     SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.sessions_active_count"}, false, "name");
@@ -582,6 +582,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = description.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+                        tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {
         SetupCounters();

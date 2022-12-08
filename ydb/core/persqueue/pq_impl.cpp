@@ -658,7 +658,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
                 ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                            IsLocalDC, DCId, Config, *Counters,
+                                            IsLocalDC, DCId, IsServerless, Config, *Counters,
                                             true)),
                 GetPartitionKeyRange(partition),
                 true,
@@ -789,7 +789,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
-                                        IsLocalDC, DCId, Config, *Counters,
+                                        IsLocalDC, DCId, IsServerless, Config, *Counters,
                                         false)),
             GetPartitionKeyRange(partition),
             false,
@@ -2145,6 +2145,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
+
+    IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
 }
 

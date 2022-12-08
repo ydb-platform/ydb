@@ -280,7 +280,7 @@ private:
     void SetupCounters();
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic,
-        const TString& cloudId, const TString& dbId, const TString& folderId);
+        const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
     void ProcessReads(const TActorContext& ctx);
     ui64 PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse);

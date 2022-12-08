@@ -358,8 +358,9 @@ namespace NKikimr::NPersQueueTests {
                                                     const std::set<std::string>& canonicalSensorNames,
                                                     const TString& stream, const TString& consumer,
                                                     const TString& host, const TString& shard) {
-                        auto counters = GetCounters1stClass(monPort, "datastreams", cloudId, databaseId,
-                                                            folderId, stream, consumer, host, shard);
+                        auto counters = GetCounters1stClass(monPort, "datastreams", "%2FRoot", cloudId,
+                                                            databaseId, folderId, stream, consumer, host,
+                                                            shard);
                         const auto sensors = counters["sensors"].GetArray();
                         std::set<std::string> sensorNames;
                         std::transform(sensors.begin(), sensors.end(),

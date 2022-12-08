@@ -16,6 +16,7 @@ NJson::TJsonValue GetClientCountersLegacy(ui16 port, const TString& counters, co
                                           const TString& client, const TString& consumerPath);
 
 NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
+                                      const TString& databasePath,
                                       const TString& cloudId, const TString& databaseId,
                                       const TString& folderId, const TString& topicName,
                                       const TString& consumer, const TString& host,

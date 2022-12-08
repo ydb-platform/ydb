@@ -16,6 +16,8 @@ struct TTopicInitInfo {
     ui64 TabletID;
     TString CloudId;
     TString DbId;
+    TString DbPath;
+    bool IsServerless = false;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
 };
@@ -28,6 +30,8 @@ struct TTopicHolder {
     bool ACLRequestInfly = false;
     TString CloudId;
     TString DbId;
+    TString DbPath;
+    bool IsServerless;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
@@ -43,6 +47,8 @@ struct TTopicHolder {
             .ACLRequestInfly = false,
             .CloudId = info.CloudId,
             .DbId = info.DbId,
+            .DbPath = info.DbPath,
+            .IsServerless = info.IsServerless,
             .FolderId = info.FolderId,
             .MeteringMode = info.MeteringMode,
             .FullConverter = info.TopicNameConverter,

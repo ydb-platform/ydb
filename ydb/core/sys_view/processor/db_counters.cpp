@@ -240,6 +240,7 @@ static void SwapStatefulCounters(NKikimr::NSysView::TDbServiceCounters* dst,
         SwapSimpleCounters(dstReq->MutableRequestCounters(), *srcReq.MutableRequestCounters());
     }
 
+    dst->ClearLabeledCounters();
     for (auto& srcReq : *src.MutableLabeledCounters()) {
         auto* dstReq = dst->FindOrAddLabeledCounters(srcReq.GetAggregatedPerTablets().GetGroup());
         SwapLabeledCounters(dstReq->MutableAggregatedPerTablets(), *srcReq.MutableAggregatedPerTablets());
@@ -339,7 +340,7 @@ void TSysViewProcessor::AttachExternalCounters() {
         ->GetSubgroup("database_id", DatabaseId)
         ->RegisterSubgroup("host", "", ExternalGroup);
 
-    GetServiceCounters(AppData()->Counters, "labeled", false)
+    GetServiceCounters(AppData()->Counters, "labeled_serverless", false)
         ->GetSubgroup("database", Database)
         ->GetSubgroup("cloud_id", CloudId)
         ->GetSubgroup("folder_id", FolderId)
@@ -367,7 +368,7 @@ void TSysViewProcessor::DetachExternalCounters() {
     GetServiceCounters(AppData()->Counters, "ydb_serverless", false)
         ->RemoveSubgroup("database", Database);
 
-    GetServiceCounters(AppData()->Counters, "labeled", false)
+    GetServiceCounters(AppData()->Counters, "labeled_severless", false)
         ->RemoveSubgroup("database", Database);
 }
 
@@ -472,7 +473,6 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr
         incomingServicesSet.insert(service);
 
         auto& simpleState = state.Simple[service];
-        simpleState.ClearLabeledCounters();
         SwapStatefulCounters(&simpleState, *serviceCounters.MutableCounters());
     }
 

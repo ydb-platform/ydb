@@ -642,6 +642,7 @@ void TAggregatedLabeledCounters::Recalc(ui32 idx) const {
                 Y_FAIL("bad aggrFunc value");
         };
     }
+
     AggrCounters[idx] = aggrVal.first;
     Ids[idx] = aggrVal.second;
 }

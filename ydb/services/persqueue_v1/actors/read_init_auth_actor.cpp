@@ -98,6 +98,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.DbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
     topicsIter->second.FolderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
+    topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
+    topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
+
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
         TString errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503",
                                       topicsIter->second.DiscoveryConverter->GetPrintableString().c_str());
@@ -262,7 +265,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.FolderId, holder.MeteringMode
+            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

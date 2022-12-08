@@ -162,6 +162,7 @@ void TUserActionProcessorFixture::CreatePartitionActor(ui32 id, bool newPartitio
                                      topicConverter,
                                      true,
                                      "dcId",
+                                     false,
                                      config,
                                      *tabletCounters,
                                      newPartition);

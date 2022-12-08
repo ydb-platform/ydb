@@ -274,7 +274,7 @@ private:
     // interval of db counters processing
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
     // interval of db labeled counters processing
-    static constexpr TDuration ProcessLabeledCountersInterval = TDuration::Minutes(1);
+    static constexpr TDuration ProcessLabeledCountersInterval = TDuration::Seconds(60);
     // interval of sending next navigate request
     static constexpr TDuration SendNavigateInterval = TDuration::Seconds(5);
 

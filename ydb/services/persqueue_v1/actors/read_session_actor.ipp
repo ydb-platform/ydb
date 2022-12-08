@@ -809,11 +809,11 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic,
-        const TString& cloudId, const TString& dbId, const TString& folderId)
+        const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
-    auto subGroup = NPersQueue::GetCountersForDataStream(Counters);
-    auto aggr = NPersQueue::GetLabelsForTopic(topic, cloudId, dbId, folderId);
+    auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
+    auto aggr = NPersQueue::GetLabelsForTopic(topic, cloudId, dbId, dbPath, folderId);
     const TVector<std::pair<TString, TString>> cons{{"consumer", ClientPath}};
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_locked_per_second"}, true, "name");
@@ -1003,7 +1003,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         // TODO: counters
         if (NumPartitionsFromTopic[name]++ == 0) {
             if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                SetupTopicCounters(converterIter->second, it->second.CloudId, it->second.DbId, it->second.FolderId);
+                SetupTopicCounters(converterIter->second, it->second.CloudId, it->second.DbId, it->second.DbPath, it->second.IsServerless, it->second.FolderId);
             } else {
                 SetupTopicCounters(converterIter->second);
             }

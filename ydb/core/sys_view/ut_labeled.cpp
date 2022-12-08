@@ -36,6 +36,7 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName) {
 bool CheckCounter(::NMonitoring::TDynamicCounterPtr group, const char* sensorName, ui32 refValue,
                   bool isDerivative) {
     auto value = group->GetNamedCounter("name", sensorName, isDerivative)->Val();
+    Cerr << "CHECK COUNTER " << sensorName << " wait " << refValue << " got " << value << "\n";
     return (value == refValue);
 }
 
@@ -77,7 +78,7 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
 
         for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
             auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
-            auto labeledGroup = GetServiceCounters(counters, "labeled", false);
+            auto labeledGroup = GetServiceCounters(counters, "labeled_serverless", false);
             Y_VERIFY(labeledGroup);
 
             auto databaseGroup = labeledGroup->FindSubgroup("database", databasePath);
@@ -231,7 +232,7 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
                 return isGood;
             };
 
-            Sleep(TDuration::Minutes(1));
+            Sleep(TDuration::Seconds(30));
             GetCounters(env, databaseName, databasePath, check);
         }
     }

@@ -562,8 +562,12 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+
+        ui64 ts = GetCycleCountFast();
+        THolder<IHarmonizer> harmonizer(MakeHarmonizer(ts));
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
-            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic");
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.Get());
+            harmonizer->AddPool(setup->Executors[i].Get());
         }
         setup->Scheduler = new TBasicSchedulerThread;
 

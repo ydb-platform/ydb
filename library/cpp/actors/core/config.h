@@ -41,6 +41,9 @@ namespace NActors {
         ui32 EventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX;
         int RealtimePriority = 0;
         ui32 MaxActivityType = 5;
+        i16 MinThreadCount = 0;
+        i16 MaxThreadCount = 0;
+        i16 DefaultThreadCount = 0;
     };
 
     struct TIOExecutorPoolConfig {

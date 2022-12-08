@@ -2,8 +2,9 @@
 
 #include "probes.h"
 
-#include <library/cpp/actors/util/intrinsics.h>
+#include <library/cpp/actors/util/cpu_load_log.h>
 #include <library/cpp/actors/util/datetime.h>
+#include <library/cpp/actors/util/intrinsics.h>
 
 #include <util/system/spinlock.h>
 
@@ -27,11 +28,11 @@ namespace NActors {
 
         TLevel() {}
 
-        TLevel(const TBalancingConfig& cfg, TPoolId poolId, ui64 currentCpus, double cpuIdle) {
+        TLevel(const TBalancingConfig& cfg, TPoolId poolId, ui64 currentCpus, double cpuIdle, ui64 addLatencyUs, ui64 worstLatencyUs) {
             ScaleFactor = double(currentCpus) / cfg.Cpus;
-            if (cpuIdle > 1.3) { // TODO: add a better underload criterion, based on estimated latency w/o 1 cpu
+            if ((worstLatencyUs + addLatencyUs) < 2000 && cpuIdle > 1.0) { // Uderload criterion, based on estimated latency w/o 1 cpu
                 LoadClass = Underloaded;
-            } else if (cpuIdle < 0.2) { // TODO: add a better overload criterion, based on latency
+            } else if (worstLatencyUs > 2000 || cpuIdle < 0.2) { // Overload criterion, based on latency
                 LoadClass = Overloaded;
             } else {
                 LoadClass = Moderate;
@@ -82,6 +83,8 @@ namespace NActors {
         TBalancerConfig Config;
 
     public:
+
+        ui64 GetPeriodUs() override;
         // Setup
         TBalancer(const TBalancerConfig& config, const TVector<TUnitedExecutorPoolConfig>& unitedPools, ui64 ts);
         bool AddCpu(const TCpuAllocation& cpuAlloc, TCpuState* cpu) override;
@@ -238,9 +241,12 @@ namespace NActors {
             }
 
             // Compute levels
-            pool.CurLevel = TLevel(pool.Config, pool.PoolId, pool.CurrentCpus, pool.CpuIdle);
-            pool.AddLevel = TLevel(pool.Config, pool.PoolId, pool.CurrentCpus + 1, pool.CpuIdle); // we expect taken cpu to became utilized
-            pool.SubLevel = TLevel(pool.Config, pool.PoolId, pool.CurrentCpus - 1, pool.CpuIdle - 1);
+            pool.CurLevel = TLevel(pool.Config, pool.PoolId, pool.CurrentCpus, pool.CpuIdle,
+                    pool.Next.ExpectedLatencyIncreaseUs, pool.Next.WorstActivationTimeUs);
+            pool.AddLevel = TLevel(pool.Config, pool.PoolId, pool.CurrentCpus + 1, pool.CpuIdle,
+                    0, pool.Next.WorstActivationTimeUs); // we expect taken cpu to became utilized
+            pool.SubLevel = TLevel(pool.Config, pool.PoolId, pool.CurrentCpus - 1, pool.CpuIdle - 1,
+                    pool.Next.ExpectedLatencyIncreaseUs, pool.Next.WorstActivationTimeUs);
 
             // Prepare for balancing
             pool.PrevCpus = pool.CurrentCpus;
@@ -263,7 +269,7 @@ namespace NActors {
                     TPool& from = **fromIter;
                     if (from.CurrentCpus == from.PrevCpus && // if not balanced yet
                         from.CurrentCpus > from.Config.MinCpus && // and constraints would not be violated
-                        from.SubLevel.Importance < to.AddLevel.Importance) // and which of two pools is more important would not change after cpu movement
+                        from.SubLevel.Importance <= to.AddLevel.Importance) // and which of two pools is more important would not change after cpu movement
                     {
                         MoveCpu(from, to);
                         from.CurrentCpus--;
@@ -293,6 +299,10 @@ namespace NActors {
 
     void TBalancer::Unlock() {
         Lock.Release();
+    }
+
+    ui64 TBalancer::GetPeriodUs() {
+        return Config.PeriodUs;
     }
 
     IBalancer* MakeBalancer(const TBalancerConfig& config, const TVector<TUnitedExecutorPoolConfig>& unitedPools, ui64 ts) {

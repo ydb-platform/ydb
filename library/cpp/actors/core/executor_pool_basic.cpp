@@ -18,11 +18,15 @@ namespace NActors {
         ui32 threads,
         ui64 spinThreshold,
         const TString& poolName,
+        IHarmonizer *harmonizer,
         TAffinity* affinity,
         TDuration timePerMailbox,
         ui32 eventsPerMailbox,
         int realtimePriority,
-        ui32 maxActivityType)
+        ui32 maxActivityType,
+        i16 minThreadCount,
+        i16 maxThreadCount,
+        i16 defaultThreadCount)
         : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
         , SpinThreshold(spinThreshold)
         , SpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
@@ -35,22 +39,45 @@ namespace NActors {
         , MaxUtilizationCounter(0)
         , MaxUtilizationAccumulator(0)
         , ThreadCount(threads)
+        , MinThreadCount(minThreadCount)
+        , MaxThreadCount(maxThreadCount)
+        , DefaultThreadCount(defaultThreadCount)
+        , Harmonizer(harmonizer)
     {
+        i16 limit = Min(threads, (ui32)Max<i16>());
+        if (DefaultThreadCount) {
+            DefaultThreadCount = Min(DefaultThreadCount, limit);
+        } else {
+            DefaultThreadCount = limit;
+        }
+
+        MaxThreadCount = Min(Max(MaxThreadCount, DefaultThreadCount), limit);
+
+        if (MinThreadCount) {
+            MinThreadCount = Max((i16)1, Min(MinThreadCount, DefaultThreadCount));
+        } else {
+            MinThreadCount = DefaultThreadCount;
+        }
+        ThreadCount = MaxThreadCount;
         auto semaphore = TSemaphore();
         Semaphore = semaphore.ConverToI64();
     }
 
-    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg)
+    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
         : TBasicExecutorPool(
             cfg.PoolId,
             cfg.Threads,
             cfg.SpinThreshold,
             cfg.PoolName,
+            harmonizer,
             new TAffinity(cfg.Affinity),
             cfg.TimePerMailbox,
             cfg.EventsPerMailbox,
             cfg.RealtimePriority,
-            cfg.MaxActivityType
+            cfg.MaxActivityType,
+            cfg.MinThreadCount,
+            cfg.MaxThreadCount,
+            cfg.DefaultThreadCount
         )
     {}
 
@@ -178,6 +205,11 @@ namespace NActors {
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
         TTimers timers;
+
+        if (Harmonizer) {
+            LWPROBE(TryToHarmonize, PoolId, PoolName);
+            Harmonizer->Harmonize(timers.HPStart);
+        }
 
         TThreadCtx& threadCtx = Threads[workerId];
         AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_NONE);
@@ -399,12 +431,66 @@ namespace NActors {
         with_lock (ChangeThreadsLock) {
             size_t prevCount = GetThreadCount();
             AtomicSet(ThreadCount, threads);
-
             TSemaphore semaphore = TSemaphore::GetSemaphore(AtomicGet(Semaphore));
             i64 oldX = semaphore.ConverToI64();
-            semaphore.CurrentSleepThreadCount += threads - prevCount;
-            semaphore.OldSemaphore -= threads - prevCount;
+            if (threads > prevCount) {
+                semaphore.CurrentSleepThreadCount += (i64)threads - prevCount;
+                semaphore.OldSemaphore -= (i64)threads - prevCount;
+            } else {
+                semaphore.CurrentSleepThreadCount -= (i64)prevCount - threads;
+                semaphore.OldSemaphore += prevCount - threads;
+            }
             AtomicAdd(Semaphore, semaphore.ConverToI64() - oldX);
+            LWPROBE(ThreadCount, PoolId, PoolName, threads, MinThreadCount, MaxThreadCount, DefaultThreadCount);
         }
+    }
+
+    i16 TBasicExecutorPool::GetDefaultThreadCount() const {
+        return DefaultThreadCount;
+    }
+
+    i16 TBasicExecutorPool::GetMinThreadCount() const {
+        return MinThreadCount;
+    }
+
+    i16 TBasicExecutorPool::GetMaxThreadCount() const {
+        return MaxThreadCount;
+    }
+
+    bool TBasicExecutorPool::IsThreadBeingStopped(i16 threadIdx) const {
+        if ((ui32)threadIdx >= PoolThreads) {
+            return false;
+        }
+        auto blockedFlag = AtomicGet(Threads[threadIdx].BlockedFlag);
+        if (blockedFlag == TThreadCtx::BS_BLOCKING) {
+            return true;
+        }
+        return false;
+    }
+
+    double TBasicExecutorPool::GetThreadConsumedUs(i16 threadIdx) {
+        if ((ui32)threadIdx >= PoolThreads) {
+            return 0;
+        }
+        TThreadCtx& threadCtx = Threads[threadIdx];
+        TExecutorThreadStats stats;
+        threadCtx.Thread->GetCurrentStats(stats);
+        return Ts2Us(stats.ElapsedTicks);
+    }
+
+    double TBasicExecutorPool::GetThreadBookedUs(i16 threadIdx) {
+        if ((ui32)threadIdx >= PoolThreads) {
+            return 0;
+        }
+        TThreadCtx& threadCtx = Threads[threadIdx];
+        TExecutorThreadStats stats;
+        threadCtx.Thread->GetCurrentStats(stats);
+        return stats.CpuNs / 1000.0;
+    }
+
+    i16 TBasicExecutorPool::GetBlockingThreadCount() const {
+        TAtomic x = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        return -Min<i16>(semaphore.CurrentSleepThreadCount, 0);
     }
 }

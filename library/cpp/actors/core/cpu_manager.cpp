@@ -16,10 +16,14 @@ namespace NActors {
             UnitedWorkers.Reset(new TUnitedWorkers(Config.UnitedWorkers, Config.United, allocation, Balancer.Get()));
         }
 
+        ui64 ts = GetCycleCountFast();
+        Harmonizer.Reset(MakeHarmonizer(ts));
+
         Executors.Reset(new TAutoPtr<IExecutorPool>[ExecutorPoolCount]);
 
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
+            Harmonizer->AddPool(Executors[excIdx].Get());
         }
     }
 
@@ -89,7 +93,7 @@ namespace NActors {
     IExecutorPool* TCpuManager::CreateExecutorPool(ui32 poolId) {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
-                return new TBasicExecutorPool(cfg);
+                return new TBasicExecutorPool(cfg, Harmonizer.Get());
             }
         }
         for (TIOExecutorPoolConfig& cfg : Config.IO) {

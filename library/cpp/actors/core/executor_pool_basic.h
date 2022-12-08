@@ -4,6 +4,7 @@
 #include "executor_thread.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
+#include "harmonizer.h"
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -74,6 +75,11 @@ namespace NActors {
         TAtomic ThreadCount;
         TMutex ChangeThreadsLock;
 
+        i16 MinThreadCount;
+        i16 MaxThreadCount;
+        i16 DefaultThreadCount;
+        IHarmonizer *Harmonizer;
+
     public:
         struct TSemaphore {
             i64 OldSemaphore = 0; // 34 bits
@@ -107,12 +113,16 @@ namespace NActors {
                            ui32 threads,
                            ui64 spinThreshold,
                            const TString& poolName = "",
+                           IHarmonizer *harmonizer = nullptr,
                            TAffinity* affinity = nullptr,
                            TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                            ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX,
                            int realtimePriority = 0,
-                           ui32 maxActivityType = 1);
-        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg);
+                           ui32 maxActivityType = 1,
+                           i16 minThreadCount = 0,
+                           i16 maxThreadCount = 0,
+                           i16 defaultThreadCount = 0);
+        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
         ~TBasicExecutorPool();
 
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
@@ -135,8 +145,15 @@ namespace NActors {
 
         void SetRealTimeMode() const override;
 
-        ui32 GetThreadCount() const;
-        void SetThreadCount(ui32 threads);
+        ui32 GetThreadCount() const override;
+        void SetThreadCount(ui32 threads) override;
+        i16 GetDefaultThreadCount() const override;
+        i16 GetMinThreadCount() const override;
+        i16 GetMaxThreadCount() const override;
+        bool IsThreadBeingStopped(i16 threadIdx) const override;
+        double GetThreadConsumedUs(i16 threadIdx) override;
+        double GetThreadBookedUs(i16 threadIdx) override;
+        i16 GetBlockingThreadCount() const override;
 
     private:
         void WakeUpLoop();

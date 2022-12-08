@@ -69,6 +69,7 @@ namespace NActors {
         ui64 NonDeliveredEvents = 0;
         ui64 EmptyMailboxActivation = 0;
         ui64 CpuNs = 0; // nanoseconds thread was executing on CPU (accounts for preemtion)
+        ui64 WorstActivationTimeUs = 0;
         NHPTimer::STime ElapsedTicks = 0;
         NHPTimer::STime ParkedTicks = 0;
         NHPTimer::STime BlockedTicks = 0;
@@ -111,6 +112,9 @@ namespace NActors {
             NonDeliveredEvents += RelaxedLoad(&other.NonDeliveredEvents);
             EmptyMailboxActivation += RelaxedLoad(&other.EmptyMailboxActivation);
             CpuNs += RelaxedLoad(&other.CpuNs);
+            RelaxedStore(
+                &WorstActivationTimeUs,
+                std::max(RelaxedLoad(&WorstActivationTimeUs), RelaxedLoad(&other.WorstActivationTimeUs)));
             ElapsedTicks += RelaxedLoad(&other.ElapsedTicks);
             ParkedTicks += RelaxedLoad(&other.ParkedTicks);
             BlockedTicks += RelaxedLoad(&other.BlockedTicks);

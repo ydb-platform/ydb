@@ -166,6 +166,30 @@
     PROBE(MoveCpu, GROUPS("PoolCpuBalancer"),                                                                                         \
           TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \
           NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \
+    PROBE(ThreadCount, GROUPS("BasicThreadPool"),                                                                                     \
+          TYPES(ui32, TString, ui32, ui32, ui32, ui32),                                                                               \
+          NAMES("poolId", "pool", "threacCount", "minThreadCount", "maxThreadCount", "defaultThreadCount"))                           \
+    PROBE(HarmonizeCheckPool, GROUPS("Harmonizer"),                                                                                  \
+          TYPES(ui32, TString, double, double, ui32, ui32, bool, bool, bool),                                                         \
+          NAMES("poolId", "pool", "booked", "consumed", "threadCount", "maxThreadCount", "isStarved", "isNeedy", "isHoggish"))        \
+    PROBE(HarmonizeOperation, GROUPS("Harmonizer"),                                                                                  \
+          TYPES(ui32, TString, TString, ui32, ui32, ui32),                                                                            \
+          NAMES("poolId", "pool", "operation", "newCount", "minCount", "maxCount"))                                                   \
+    PROBE(TryToHarmonize, GROUPS("Harmonizer"),                                                                                      \
+          TYPES(ui32, TString),                                                                                                       \
+          NAMES("poolId", "pool"))                                                                                                    \
+    PROBE(SavedValues, GROUPS("Harmonizer"),                                                                                         \
+          TYPES(ui32, TString, TString, double, double, double, double, double, double, double, double),                              \
+          NAMES("poolId", "pool", "valueName", "[0]", "[1]", "[2]", "[3]", "[4]", "[5]", "[6]", "[7]"))                               \
+    PROBE(RegisterValue, GROUPS("Harmonizer"),                                                                                       \
+          TYPES(ui64, ui64, ui64, ui64, double, double, double),                                                                      \
+          NAMES("ts", "lastTs", "dTs", "8sTs", "us", "lastUs", "dUs"))                                                                \
+    PROBE(TryToHarmonizeFailed, GROUPS("Harmonizer"),                                                                                \
+          TYPES(ui64, ui64, bool, bool),                                                                      \
+          NAMES("ts", "nextHarmonizeTs", "isDisabled", "withLock"))                                                                \
+    PROBE(TryToHarmonizeSuccess, GROUPS("Harmonizer"),                                                                                \
+          TYPES(ui64, ui64, ui64),                                                                      \
+          NAMES("ts", "nextHarmonizeTs", "previousNextHarmonizeTs"))                                                                \
     /**/
 
 LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER)

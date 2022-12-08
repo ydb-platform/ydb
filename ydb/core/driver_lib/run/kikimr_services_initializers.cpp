@@ -249,7 +249,7 @@ void AddExecutorPool(
         TBasicExecutorPoolConfig basic;
         basic.PoolId = poolId;
         basic.PoolName = poolConfig.GetName();
-        basic.Threads = poolConfig.GetThreads();
+        basic.Threads = Max(poolConfig.GetThreads(), poolConfig.GetMaxThreads());
         basic.SpinThreshold = poolConfig.GetSpinThreshold();
         basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
         basic.RealtimePriority = poolConfig.GetRealtimePriority();
@@ -265,6 +265,9 @@ void AddExecutorPool(
             basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
         }
         Y_VERIFY(basic.EventsPerMailbox != 0);
+        basic.MinThreadCount = poolConfig.GetMinThreads();
+        basic.MaxThreadCount = poolConfig.GetMaxThreads();
+        basic.DefaultThreadCount = poolConfig.GetThreads();
         cpuManager.Basic.emplace_back(std::move(basic));
         break;
     }

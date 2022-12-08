@@ -322,12 +322,6 @@ bool ExtractGroupBy(const TContext& info, NSsa::TProgramStep& step, const NKikim
         return false;
     }
 
-    // It adds implicit projection with aggregates and keys. Remove non aggregated columns.
-    step.Projection.reserve(groupBy.KeyColumnsSize() + groupBy.AggregatesSize());
-    for (auto& col : groupBy.GetKeyColumns()) {
-        step.Projection.push_back(info.GetName(col));
-    }
-
     step.GroupBy.reserve(groupBy.AggregatesSize());
     step.GroupByKeys.reserve(groupBy.KeyColumnsSize());
     for (auto& agg : groupBy.GetAggregates()) {
@@ -339,7 +333,6 @@ bool ExtractGroupBy(const TContext& info, NSsa::TProgramStep& step, const NKikim
             return false;
         }
         step.GroupBy.push_back(std::move(func));
-        step.Projection.push_back(columnName);
     }
     for (auto& key : groupBy.GetKeyColumns()) {
         step.GroupByKeys.push_back(info.GetName(key));

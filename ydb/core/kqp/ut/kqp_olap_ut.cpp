@@ -396,7 +396,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
-    void CheckPlanForAggregatePushdown(const TString& query, NYdb::NTable::TTableClient& tableClient, const std::vector<std::string>& planNodes) {
+    void CheckPlanForAggregatePushdown(const TString& query, NYdb::NTable::TTableClient& tableClient, const std::vector<std::string>& planNodes,
+        const std::string& readNodeType)
+    {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
         auto res = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
@@ -411,6 +413,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         for (auto planNode : planNodes) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
                 TStringBuilder() << planNode << " was not pushed down. Query: " << query);
+        }
+
+        if (!readNodeType.empty()) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*planRes.PlanJson, &planJson, true);
+            auto readNode = FindPlanNodeByKv(planJson, "Node Type", readNodeType.c_str());
+            UNIT_ASSERT(readNode.IsDefined());
+
+            auto& operators = readNode.GetMapSafe().at("Operators").GetArraySafe();
+            for (auto& op : operators) {
+                if (op.GetMapSafe().at("Name") == "TableFullScan") {
+                    auto ssaProgram = op.GetMapSafe().at("SsaProgram");
+                    UNIT_ASSERT(ssaProgram.IsDefined());
+                    UNIT_ASSERT(FindPlanNodes(ssaProgram, "Projection").size());
+                    break;
+                }
+            }
         }
     }
 
@@ -1220,7 +1239,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" });
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
 
@@ -1264,7 +1283,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" });
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
 
@@ -1307,7 +1326,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" });
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
 
@@ -1417,6 +1436,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TString ExpectedReply;
         std::vector<std::string> ExpectedPlanOptions;
         bool Pushdown = true;
+        std::string ExpectedReadNodeType;
         TExpectedLimitChecker LimitChecker;
         TExpectedRecordChecker RecordChecker;
     public:
@@ -1470,6 +1490,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const std::vector<std::string>& GetExpectedPlanOptions() const {
             return ExpectedPlanOptions;
         }
+
+        TAggregationTestCase& SetExpectedReadNodeType(const std::string& value) {
+            ExpectedReadNodeType = value;
+            return *this;
+        }
+
+        const std::string& GetExpectedReadNodeType() const {
+            return ExpectedReadNodeType;
+        }
     };
 
     void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
@@ -1502,7 +1531,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     CompareYson(result, i.GetExpectedReply());
                 }
             }
-            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions());
+            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
         }
     }
 
@@ -1821,6 +1850,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )")
             .SetExpectedReply("[[[0];[\"40995\"]];[[1];[\"40996\"]];[[2];[\"40997\"]];[[3];[\"40998\"]];[[4];[\"40999\"]]]")
             .AddExpectedPlanOptions("TKqpOlapAgg");
+
+        TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_ProjectionOrder) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    resource_id, level, count(*) as c
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY resource_id, level
+                ORDER BY c, resource_id DESC LIMIT 3
+            )")
+            .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .SetExpectedReadNodeType("TableFullScan");
 
         TestAggregations({ testCase });
     }

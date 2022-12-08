@@ -27,10 +27,11 @@ struct TAggColInfo {
 class TKqpOlapCompileContext {
 public:
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
-        NKqpProto::TKqpPhyOpReadOlapRanges& readProto)
+        NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames)
         : Row(row)
         , MaxColumnId(0)
         , ReadProto(readProto)
+        , ResultColNames(resultColNames)
     {
         for (const auto& [_, columnMeta] : tableMeta.Columns) {
             YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
@@ -40,11 +41,16 @@ public:
         Program.SetVersion(OLAP_PROGRAM_VERSION);
     }
 
-    ui32 GetColumnId(const TStringBuf& name) const {
-        auto column = ReadColumns.FindPtr(name);
-        YQL_ENSURE(column);
+    ui32 GetColumnId(const std::string& name) const {
+        auto columnIt = ReadColumns.find(name);
+        if (columnIt == ReadColumns.end()) {
+            auto resColNameIt = std::find(ResultColNames.begin(), ResultColNames.end(), name);
+            YQL_ENSURE(resColNameIt != ResultColNames.end());
 
-        return *column;
+            columnIt = KqpAggColNameToId.find(*resColNameIt);
+            YQL_ENSURE(columnIt != KqpAggColNameToId.end());
+        }
+        return columnIt->second;
     }
 
     ui32 NewColumnId() {
@@ -91,14 +97,28 @@ public:
         return AggFuncTypesMap.at(funcName);
     }
 
+    void MapKqpAggColNameToId(const std::string& colName, ui32 id) {
+        KqpAggColNameToId.emplace(colName, id);
+    }
+
+    std::vector<std::string> GetResultColNames() {
+        return ResultColNames;
+    }
+
+    bool IsEmptyProgram() {
+        return Program.GetCommand().empty();
+    }
+
 private:
     static std::unordered_map<std::string, EAggFunctionType> AggFuncTypesMap;
 
     TCoArgument Row;
-    TMap<TString, ui32> ReadColumns;
+    std::unordered_map<std::string, ui32> ReadColumns;
     ui32 MaxColumnId;
     TProgram Program;
     NKqpProto::TKqpPhyOpReadOlapRanges& ReadProto;
+    const std::vector<std::string>& ResultColNames;
+    std::unordered_map<std::string, ui32> KqpAggColNameToId;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -232,7 +252,7 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     }
 
     if (auto maybeAtom = node.Maybe<TCoAtom>()) {
-        return ctx.GetColumnId(maybeAtom.Cast().Value());
+        return ctx.GetColumnId(maybeAtom.Cast().StringValue());
     }
 
     if (auto maybeParameter = node.Maybe<TCoParameter>()) {
@@ -393,6 +413,7 @@ std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKq
         colInfo.AggColId = ctx.NewColumnId();
         colInfo.BaseColName = aggKqp.Column().StringValue().c_str();
         colInfo.Operation = aggKqp.Type().StringValue();
+        ctx.MapKqpAggColNameToId(colInfo.AggColName, colInfo.AggColId);
 
         auto opType = aggKqp.Type().StringValue();
         if (opType != "count" || (opType == "count" && colInfo.BaseColName != "*")) {
@@ -406,25 +427,11 @@ std::vector<TAggColInfo> CollectAggregationInfos(const TKqpOlapAgg& aggNode, TKq
 void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) {
     std::vector<TAggColInfo> aggColInfos = CollectAggregationInfos(aggNode, ctx);
     auto* groupBy = ctx.CreateGroupBy();
-    auto* projection = ctx.CreateProjection();
-
-    for (auto keyCol : aggNode.KeyColumns()) {
-        auto aggKeyCol = groupBy->AddKeyColumns();
-        auto keyColName = keyCol.StringValue();
-        auto aggKeyColId = GetOrCreateColumnId(keyCol, ctx);
-        aggKeyCol->SetId(aggKeyColId);
-
-        auto* projCol = projection->AddColumns();
-        projCol->SetId(aggKeyColId);
-    }
 
     for (auto aggColInfo : aggColInfos) {
         auto* agg = groupBy->AddAggregates();
         auto* aggCol = agg->MutableColumn();
         aggCol->SetId(aggColInfo.AggColId);
-
-        auto* projCol = projection->AddColumns();
-        projCol->SetId(aggColInfo.AggColId);
 
         auto* aggFunc = agg->MutableFunction();
         aggFunc->SetId(ctx.GetAggFuncType(aggColInfo.Operation));
@@ -433,17 +440,22 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
             aggFunc->AddArguments()->SetId(aggColInfo.BaseColId);
         }
     }
+
+    for (auto keyCol : aggNode.KeyColumns()) {
+        auto aggKeyCol = groupBy->AddKeyColumns();
+        auto keyColName = keyCol.StringValue();
+        auto aggKeyColId = GetOrCreateColumnId(keyCol, ctx);
+        aggKeyCol->SetId(aggKeyColId);
+    }
 }
 
-void CompileProjection(const TKqpOlapExtractMembers& extractMembers, TKqpOlapCompileContext& ctx) {
-    if (extractMembers.Members().Size() == 0) {
-        // Case for single COUNT(*), no columns are extracted
-        return;
-    }
+void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
+    auto resultColNames = ctx.GetResultColNames();
+    YQL_ENSURE(!resultColNames.empty());
+
     auto* projection = ctx.CreateProjection();
-    for (auto col : extractMembers.Members()) {
-        auto colName = col.StringValue();
-        auto colId = GetOrCreateColumnId(col, ctx);
+    for (auto colName : resultColNames) {
+        auto colId = ctx.GetColumnId(colName);
 
         auto* projCol = projection->AddColumns();
         projCol->SetId(colId);
@@ -459,14 +471,10 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
         CompileOlapProgramImpl(maybeOlapOperation.Cast().Input(), ctx);
         if (auto maybeFilter = operation.Maybe<TKqpOlapFilter>()) {
             CompileFilter(maybeFilter.Cast(), ctx);
-            return;
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
-            return;
-        } else if (auto maybeExtractMembers = operation.Maybe<TKqpOlapExtractMembers>()) {
-            CompileProjection(maybeExtractMembers.Cast(), ctx);
-            return;
         }
+        return;
     }
 
     YQL_ENSURE(operation.Maybe<TCallable>(), "Unexpected OLAP operation node type: " << operation.Ref().Type());
@@ -476,13 +484,17 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 } // namespace
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
-    NKqpProto::TKqpPhyOpReadOlapRanges& readProto)
+    NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto);
+    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames);
 
     CompileOlapProgramImpl(lambda.Body(), ctx);
+    if (!ctx.IsEmptyProgram()) {
+        CompileFinalProjection(ctx);
+    }
+
     ctx.SerializeToProto();
 }
 

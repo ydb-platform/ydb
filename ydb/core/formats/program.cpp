@@ -678,21 +678,15 @@ arrow::Status TProgramStep::ApplyProjection(TDatumBatch& batch) const {
     if (Projection.empty()) {
         return arrow::Status::OK();
     }
-    std::unordered_set<std::string_view> projSet;
-    for (auto& str: Projection) {
-        projSet.insert(str);
-    }
     std::vector<std::shared_ptr<arrow::Field>> newFields;
     std::vector<arrow::Datum> newDatums;
-    for (int64_t i = 0; i < batch.Schema->num_fields(); ++i) {
-        auto& cur_field_name = batch.Schema->field(i)->name();
-        if (projSet.contains(cur_field_name)) {
-            newFields.push_back(batch.Schema->field(i));
-            if (!newFields.back()) {
-                return arrow::Status::Invalid("Wrong projection.");
-            }
-            newDatums.push_back(batch.Datums[i]);
+    for (size_t i = 0; i < Projection.size(); ++i) {
+        int schemaFieldIndex = batch.Schema->GetFieldIndex(Projection[i]);
+        if (schemaFieldIndex == -1) {
+            return arrow::Status::Invalid("Could not find column " + Projection[i] + " in record batch schema.");
         }
+        newFields.push_back(batch.Schema->field(schemaFieldIndex));
+        newDatums.push_back(batch.Datums[schemaFieldIndex]);
     }
     batch.Schema = std::make_shared<arrow::Schema>(newFields);
     batch.Datums = std::move(newDatums);

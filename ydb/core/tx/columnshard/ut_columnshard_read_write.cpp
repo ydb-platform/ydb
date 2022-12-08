@@ -261,16 +261,19 @@ bool CheckOrdered(const TString& blob, const TString& srtSchema) {
 
 bool CheckColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& colNames, size_t rowsCount) {
     UNIT_ASSERT(batch);
-    for (auto& col : colNames) {
-        if (!batch->GetColumnByName(col)) {
-            Cerr << "schema: " << batch->schema()->ToString() << "\n";
+    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_columns(), colNames.size());
+    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_rows(), rowsCount);
+    UNIT_ASSERT(batch->ValidateFull().ok());
+
+    for (size_t i = 0; i < colNames.size(); ++i) {
+        auto batchColName = batch->schema()->field(i)->name();
+        if (batchColName != colNames[i]) {
+            Cerr << "Incorrect order of columns. Expected: `" << colNames[i] << "` got: `" << batchColName << "`.\n";
+            Cerr << "Batch schema: " << batch->schema()->ToString() << "\n";
             return false;
         }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_columns(), colNames.size());
-    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_rows(), rowsCount);
-    UNIT_ASSERT(batch->ValidateFull().ok());
     return true;
 }
 
@@ -1068,11 +1071,11 @@ void TestCompactionInGranuleImpl(bool reboots,
 using TAssignment = NKikimrSSA::TProgram::TAssignment;
 using TAggAssignment = NKikimrSSA::TProgram::TAggregateAssignment;
 
-// SELECT timestamp FROM t WHERE timestamp <op> saved_at
+// SELECT level, timestamp FROM t WHERE timestamp <op> saved_at
 static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssignment::FUNC_CMP_EQUAL) {
     NKikimrSSA::TProgram ssa;
 
-    std::vector<ui32> columnIds = {1, 9};
+    std::vector<ui32> columnIds = {1, 9, 5};
     ui32 tmpColumnId = 100;
 
     auto* line1 = ssa.AddCommand();
@@ -1087,6 +1090,7 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
     line2->MutableFilter()->MutablePredicate()->SetId(tmpColumnId);
 
     auto* line3 = ssa.AddCommand();
+    line3->MutableProjection()->AddColumns()->SetId(columnIds[2]);
     line3->MutableProjection()->AddColumns()->SetId(columnIds[0]);
     return ssa;
 }
@@ -1321,11 +1325,11 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 
             switch (i) {
                 case 1:
-                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"timestamp"}));
+                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"level", "timestamp"}));
                     UNIT_ASSERT(DataHas(readData, schema, {0, 100}, true));
                     break;
                 case 2:
-                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"timestamp"}, 0));
+                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"level", "timestamp"}, 0));
                     break;
                 default:
                     break;

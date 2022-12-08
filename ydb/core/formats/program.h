@@ -192,7 +192,7 @@ struct TProgramStep {
     };
 
     bool Empty() const {
-        return Assignes.empty() && Filters.empty() && Projection.empty();
+        return Assignes.empty() && Filters.empty() && Projection.empty() && GroupBy.empty() && GroupByKeys.empty();
     }
 
     arrow::Status Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;

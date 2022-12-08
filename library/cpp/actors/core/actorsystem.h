@@ -126,6 +126,10 @@ namespace NActors {
             return 1;
         }
 
+        virtual i16 GetPriority() const {
+            return 0;
+        }
+
         // generic
         virtual TAffinity* Affinity() const = 0;
 

@@ -26,7 +26,8 @@ namespace NActors {
         ui32 maxActivityType,
         i16 minThreadCount,
         i16 maxThreadCount,
-        i16 defaultThreadCount)
+        i16 defaultThreadCount,
+        i16 priority)
         : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
         , SpinThreshold(spinThreshold)
         , SpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
@@ -43,6 +44,7 @@ namespace NActors {
         , MaxThreadCount(maxThreadCount)
         , DefaultThreadCount(defaultThreadCount)
         , Harmonizer(harmonizer)
+        , Priority(priority)
     {
         i16 limit = Min(threads, (ui32)Max<i16>());
         if (DefaultThreadCount) {
@@ -77,7 +79,8 @@ namespace NActors {
             cfg.MaxActivityType,
             cfg.MinThreadCount,
             cfg.MaxThreadCount,
-            cfg.DefaultThreadCount
+            cfg.DefaultThreadCount,
+            cfg.Priority
         )
     {}
 
@@ -492,5 +495,9 @@ namespace NActors {
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         return -Min<i16>(semaphore.CurrentSleepThreadCount, 0);
+    }
+
+    i16 TBasicExecutorPool::GetPriority() const {
+        return Priority;
     }
 }

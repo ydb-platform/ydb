@@ -80,6 +80,8 @@ namespace NActors {
         i16 DefaultThreadCount;
         IHarmonizer *Harmonizer;
 
+        const i16 Priority = 0;
+
     public:
         struct TSemaphore {
             i64 OldSemaphore = 0; // 34 bits
@@ -121,7 +123,8 @@ namespace NActors {
                            ui32 maxActivityType = 1,
                            i16 minThreadCount = 0,
                            i16 maxThreadCount = 0,
-                           i16 defaultThreadCount = 0);
+                           i16 defaultThreadCount = 0,
+                           i16 priority = 0);
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
         ~TBasicExecutorPool();
 
@@ -154,6 +157,7 @@ namespace NActors {
         double GetThreadConsumedUs(i16 threadIdx) override;
         double GetThreadBookedUs(i16 threadIdx) override;
         i16 GetBlockingThreadCount() const override;
+        i16 GetPriority() const override;
 
     private:
         void WakeUpLoop();

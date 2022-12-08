@@ -66,6 +66,10 @@ message TActorSystemConfig {
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
         optional uint32 BalancingPriority = 14; // Priority of pool to obtain cpu due to balancing (higher is better)
         optional uint64 ToleratedLatencyUs = 15; // p100-latency threshold indicating that more cpus are required by pool
+
+        // Actorsystem 1.4
+        optional int32 Priority = 16;
+        optional int32 MaxAvgPingDeviation = 17;
     }
 
     message TScheduler {

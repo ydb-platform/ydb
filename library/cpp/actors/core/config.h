@@ -44,6 +44,7 @@ namespace NActors {
         i16 MinThreadCount = 0;
         i16 MaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
+        i16 Priority = 0;
     };
 
     struct TIOExecutorPoolConfig {
@@ -91,11 +92,18 @@ namespace NActors {
         TBalancerConfig Balancer;
     };
 
+    struct TSelfPingInfo {
+        NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounterWithSmallWindow;
+        ui32 MaxAvgPingUs;
+    };
+
     struct TCpuManagerConfig {
         TUnitedWorkersConfig UnitedWorkers;
         TVector<TBasicExecutorPoolConfig> Basic;
         TVector<TIOExecutorPoolConfig> IO;
         TVector<TUnitedExecutorPoolConfig> United;
+        TVector<TSelfPingInfo> PingInfoByPool;
 
         ui32 GetExecutorsCount() const {
             return Basic.size() + IO.size() + United.size();

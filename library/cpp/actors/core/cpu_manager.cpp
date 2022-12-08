@@ -23,7 +23,11 @@ namespace NActors {
 
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
-            Harmonizer->AddPool(Executors[excIdx].Get());
+            if (excIdx < Config.PingInfoByPool.size()) {
+                Harmonizer->AddPool(Executors[excIdx].Get(), &Config.PingInfoByPool[excIdx]);
+            } else {
+                Harmonizer->AddPool(Executors[excIdx].Get());
+            }
         }
     }
 

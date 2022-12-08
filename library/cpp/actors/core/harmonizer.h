@@ -12,7 +12,7 @@ namespace NActors {
         virtual ~IHarmonizer() {}
         virtual void Harmonize(ui64 ts) = 0;
         virtual void DeclareEmergency(ui64 ts) = 0;
-        virtual void AddPool(IExecutorPool* pool) = 0;
+        virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr) = 0;
         virtual void Enable(bool enable) = 0;
     };
 

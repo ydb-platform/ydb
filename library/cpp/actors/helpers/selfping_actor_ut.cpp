@@ -22,13 +22,17 @@ Y_UNIT_TEST_SUITE(TSelfPingTest) {
 
         NMonitoring::TDynamicCounters::TCounterPtr counter(new NMonitoring::TCounterForPtr());
         NMonitoring::TDynamicCounters::TCounterPtr counter2(new NMonitoring::TCounterForPtr());
+        NMonitoring::TDynamicCounters::TCounterPtr counter3(new NMonitoring::TCounterForPtr());
+        NMonitoring::TDynamicCounters::TCounterPtr counter4(new NMonitoring::TCounterForPtr());
 
         auto actor = CreateSelfPingActor(
             TDuration::MilliSeconds(100), // sendInterval (unused in test)
-            counter, counter2);
+            counter, counter2, counter3, counter4);
 
         UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter3->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter4->Val(), 0);
 
         const TActorId actorId = runtime->Register(actor);
         Y_UNUSED(actorId);

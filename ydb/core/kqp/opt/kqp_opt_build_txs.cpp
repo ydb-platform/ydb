@@ -475,7 +475,6 @@ public:
         YQL_CLOG(DEBUG, ProviderKqp) << ">>> TKqpBuildTxsTransformer: " << KqpExprToPrettyString(*inputExpr, ctx);
 
         TKqlQuery query(inputExpr);
-        TVector<TExprBase> queryResults;
         for (; CurrentQueryBlockId < query.Blocks().Size(); ++CurrentQueryBlockId) {
             const auto& block = query.Blocks().Item(CurrentQueryBlockId);
 
@@ -501,7 +500,7 @@ public:
                             .Build(ToString(i))
                         .Done();
 
-                    queryResults.emplace_back(std::move(binding));
+                    QueryResults.emplace_back(std::move(binding));
                 }
             }
 
@@ -540,7 +539,7 @@ public:
                 .Add(BuildCtx->PhysicalTxs)
                 .Build()
             .Results()
-                .Add(queryResults)
+                .Add(QueryResults)
                 .Build()
             .Settings(querySettings.BuildNode(ctx, query.Pos()))
             .Done();
@@ -755,6 +754,7 @@ private:
     TAutoPtr<IGraphTransformer> DataTxTransformer;
     TAutoPtr<IGraphTransformer> ScanTxTransformer;
     ui32 CurrentQueryBlockId = 0;
+    TVector<TExprBase> QueryResults;
 };
 
 } // namespace

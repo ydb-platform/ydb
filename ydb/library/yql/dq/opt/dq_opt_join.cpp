@@ -951,14 +951,23 @@ bool PrepareJoinSide(
         .Seal().Build();
 
     if (filter) {
-        TExprNode::TListType check;
+        TExprNode::TListType check, unwrap;
         check.reserve(keys.size() + remap.size());
+        unwrap.reserve(remap.size());
         std::transform(keys.cbegin(), keys.cend(), std::back_inserter(check), [&](const TCoAtom& key) { return key.Ptr(); });
-        std::transform(remap.cbegin(), remap.cend(), std::back_inserter(check), [&](const TModifyKeysList::value_type& key) { return std::get<1>(key).Ptr(); });
+        std::for_each(remap.cbegin(), remap.cend(), [&](const TModifyKeysList::value_type& key) {
+            (ETypeAnnotationKind::Optional == std::get<const TTypeAnnotationNode*>(key)->GetKind() ? check : unwrap).emplace_back(std::get<1>(key).Ptr());
+        });
         preprocess = Build<TCoSkipNullMembers>(ctx, preprocess->Pos())
             .Input(std::move(preprocess))
             .Members().Add(std::move(check)).Build()
             .Done().Ptr();
+        if (!unwrap.empty()) {
+            preprocess = Build<TCoFilterNullMembers>(ctx, preprocess->Pos())
+                .Input(std::move(preprocess))
+                .Members().Add(std::move(unwrap)).Build()
+                .Done().Ptr();
+        }
     }
 
     const auto lambda = Build<TCoLambda>(ctx, preprocess->Pos())
@@ -1047,11 +1056,11 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         const auto keyType2 = rightStructType->FindItemType(rightJoinKeys[i]);
         const TTypeAnnotationNode* commonType = nullptr;
         if (leftKind) {
-            commonType = JoinDryKeyType(keyType1, keyType2, ctx);
+            commonType = JoinDryKeyType(!filter, keyType1, keyType2, ctx);
         } else if (rightKind){
-            commonType = JoinDryKeyType(keyType2, keyType1, ctx);
+            commonType = JoinDryKeyType(!filter, keyType2, keyType1, ctx);
         } else {
-            commonType = JoinCommonDryType(join.Pos(), keyType1, keyType2, ctx);
+            commonType = JoinCommonDryKeyType(join.Pos(), !filter, keyType1, keyType2, ctx);
         }
 
         if (commonType) {

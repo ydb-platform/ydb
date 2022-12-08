@@ -1625,10 +1625,11 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, TExprContext
     return nullptr;
 }
 
-const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx) {
-    if (const auto dry = DryType(primary, ctx))
+const TTypeAnnotationNode* JoinDryKeyType(bool outer, const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx) {
+    bool hasOptional = false;
+    if (const auto dry = DryType(primary, hasOptional, ctx))
         if (!((NUdf::ECastOptions::AnywayLoseData | NUdf::ECastOptions::Impossible) & CastResult<true>(secondary, dry)))
-            return dry;
+            return hasOptional && outer ? ctx.MakeType<TOptionalExprType>(dry) : dry;
     return nullptr;
 }
 
@@ -1639,17 +1640,18 @@ const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, co
     return nullptr;
 }
 
-const TTypeAnnotationNode* JoinCommonDryType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
-    auto dryOne = DryType(one, ctx);
-    auto dryTwo = DryType(two, ctx);
+const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
+    bool optOne = false, optTwo = false;
+    auto dryOne = DryType(one, optOne, ctx);
+    auto dryTwo = DryType(two, optTwo, ctx);
     if (!(dryOne && dryTwo))
         return nullptr;
 
-    if (dryOne->GetKind() == ETypeAnnotationKind::Optional && dryTwo->GetKind() != ETypeAnnotationKind::Optional)
-        dryTwo = ctx.MakeType<TOptionalExprType>(dryTwo);
-    else  if (dryOne->GetKind() != ETypeAnnotationKind::Optional && dryTwo->GetKind() == ETypeAnnotationKind::Optional)
+    if (outer && (optOne || optTwo)) {
         dryOne = ctx.MakeType<TOptionalExprType>(dryOne);
-
+        dryTwo = ctx.MakeType<TOptionalExprType>(dryTwo);
+    }
+    
     return CommonType<true>(position, dryOne, dryTwo, ctx);
 }
 

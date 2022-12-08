@@ -1,5 +1,9 @@
 #include "mkql_block_agg_count.h"
 
+#include <ydb/library/yql/minikql/arrow/arrow_defs.h>
+
+#include <arrow/array/builder_primitive.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -9,8 +13,33 @@ public:
         ui64 Count_ = 0;
     };
 
-    TCountAllBlockAggregator(std::optional<ui32> filterColumn)
-        : TBlockAggregatorBase(sizeof(TState), filterColumn)
+    class TColumnBuilder : public IAggColumnBuilder {
+    public:
+        TColumnBuilder(ui64 size, TComputationContext& ctx)
+            : Builder_(arrow::uint64(), &ctx.ArrowMemoryPool)
+            , Ctx_(ctx)
+        {
+            ARROW_OK(Builder_.Reserve(size));
+        }
+
+        void Add(const void* state) final {
+            auto typedState = static_cast<const TState*>(state);
+            Builder_.UnsafeAppend(typedState->Count_);
+        }
+
+        NUdf::TUnboxedValue Build() final {
+            std::shared_ptr<arrow::ArrayData> result;
+            ARROW_OK(Builder_.FinishInternal(&result));
+            return Ctx_.HolderFactory.CreateArrowBlock(result);
+        }
+
+    private:
+        arrow::UInt64Builder Builder_;
+        TComputationContext& Ctx_;
+    };
+
+    TCountAllBlockAggregator(std::optional<ui32> filterColumn, TComputationContext& ctx)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn, ctx)
     {
     }
 
@@ -32,6 +61,22 @@ public:
         auto typedState = static_cast<const TState*>(state);
         return NUdf::TUnboxedValuePod(typedState->Count_);
     }
+
+    void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        new(state) TState();
+        UpdateKey(state, columns, row);
+    }
+
+    void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(columns);
+        Y_UNUSED(row);
+        auto typedState = static_cast<TState*>(state);
+        typedState->Count_ += 1;
+    }
+
+    std::unique_ptr<IAggColumnBuilder> MakeBuilder(ui64 size) final {
+        return std::make_unique<TColumnBuilder>(size, Ctx_);
+    }
 };
 
 class TCountBlockAggregator : public TBlockAggregatorBase {
@@ -40,8 +85,33 @@ public:
         ui64 Count_ = 0;
     };
 
-    TCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
-        : TBlockAggregatorBase(sizeof(TState), filterColumn)
+    class TColumnBuilder : public IAggColumnBuilder {
+    public:
+        TColumnBuilder(ui64 size, TComputationContext& ctx)
+            : Builder_(arrow::uint64(), &ctx.ArrowMemoryPool)
+            , Ctx_(ctx)
+        {
+            ARROW_OK(Builder_.Reserve(size));
+        }
+
+        void Add(const void* state) final {
+            auto typedState = static_cast<const TState*>(state);
+            Builder_.UnsafeAppend(typedState->Count_);
+        }
+
+        NUdf::TUnboxedValue Build() final {
+            std::shared_ptr<arrow::ArrayData> result;
+            ARROW_OK(Builder_.FinishInternal(&result));
+            return Ctx_.HolderFactory.CreateArrowBlock(result);
+        }
+
+    private:
+        arrow::UInt64Builder Builder_;
+        TComputationContext& Ctx_;
+    };
+
+    TCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBlockAggregatorBase(sizeof(TState), filterColumn, ctx)
         , ArgColumn_(argColumn)
     {
     }
@@ -92,6 +162,35 @@ public:
         return NUdf::TUnboxedValuePod(typedState->Count_);
     }
 
+    void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        new(state) TState();
+        UpdateKey(state, columns, row);
+    }
+
+    void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        auto typedState = static_cast<TState*>(state);
+        const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
+        if (datum.is_scalar()) {
+            if (datum.scalar()->is_valid) {
+                typedState->Count_ += 1;
+            }
+        } else {
+            const auto& array = datum.array();
+            if (array->GetNullCount() == 0) {
+                typedState->Count_ += 1;
+            } else {
+                auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
+                auto fullIndex = row + array->offset;
+                auto bit = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                typedState->Count_ += bit;
+            }
+        }
+    }
+
+    std::unique_ptr<IAggColumnBuilder> MakeBuilder(ui64 size) final {
+        return std::make_unique<TColumnBuilder>(size, Ctx_);
+    }
+
 private:
     const ui32 ArgColumn_;
 };
@@ -102,11 +201,10 @@ public:
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       const THolderFactory& holderFactory) const final {
+       TComputationContext& ctx) const final {
        Y_UNUSED(tupleType);
        Y_UNUSED(argsColumns);
-       Y_UNUSED(holderFactory);
-       return std::make_unique<TCountAllBlockAggregator>(filterColumn);
+       return std::make_unique<TCountAllBlockAggregator>(filterColumn, ctx);
    }
 };
 
@@ -116,10 +214,9 @@ public:
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       const THolderFactory& holderFactory) const final {
+       TComputationContext& ctx) const final {
        Y_UNUSED(tupleType);
-       Y_UNUSED(holderFactory);
-       return std::make_unique<TCountBlockAggregator>(filterColumn, argsColumns[0]);
+       return std::make_unique<TCountBlockAggregator>(filterColumn, argsColumns[0], ctx);
    }
 };
 

@@ -282,6 +282,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockNot", &WrapBlockNot},
         {"BlockCompress", &WrapBlockCompress},
         {"BlockCombineAll", &WrapBlockCombineAll},
+        {"BlockCombineHashed", &WrapBlockCombineHashed},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},

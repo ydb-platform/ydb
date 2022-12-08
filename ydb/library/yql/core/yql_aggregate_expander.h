@@ -75,7 +75,7 @@ private:
     TExprNode::TPtr GeneratePhases();
     void GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField);
     TExprNode::TPtr GenerateJustOverStates(const TExprNode::TPtr& input, const TIdxSet& indicies);
-    TExprNode::TPtr TryGenerateBlockCombineAll();
+    TExprNode::TPtr TryGenerateBlockCombineAllOrHashed();
     TExprNode::TPtr TryGenerateBlockCombine();
 
 private:

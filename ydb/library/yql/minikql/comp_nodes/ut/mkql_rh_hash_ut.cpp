@@ -16,12 +16,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
             auto k = i % 1000;
             auto [it, inserted] = h.emplace(k, 0);
             bool isNew;
-            void* p = rh.Insert(k, isNew);
+            auto iter = rh.Insert(k, isNew);
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
             UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
             it->second += i;
-            *(i64*)p += i;
             if (isNew) {
+                *(i64*)rh.GetPayload(iter) = i;
                 rh.CheckGrow();
+            } else {
+                *(i64*)rh.GetPayload(iter) += i;
             }
 
             UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
@@ -49,8 +52,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
             auto k = i % 1000;
             auto[it, inserted] = h.emplace(k);
             bool isNew;
-            void* p = rh.Insert(k, isNew);
-            Y_UNUSED(p);
+            auto iter = rh.Insert(k, isNew);
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
             UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
             if (isNew) {
                 rh.CheckGrow();

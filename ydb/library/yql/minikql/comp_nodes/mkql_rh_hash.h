@@ -20,8 +20,8 @@ protected:
     }
 
 public:
-    // returns payload pointer for Map or nullptr for Set
-    Y_FORCE_INLINE void* Insert(TKey key, bool& isNew) {
+    // returns iterator
+    Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
         auto ret = InsertImpl(key, isNew, Capacity, Data);
         Size += isNew ? 1 : 0;
         return ret;
@@ -87,30 +87,30 @@ public:
     }
 
 private:
-    Y_FORCE_INLINE void* InsertImpl(TKey key, bool& isNew, ui64 capacity, std::vector<char>& data) {
+    Y_FORCE_INLINE char* InsertImpl(TKey key, bool& isNew, ui64 capacity, std::vector<char>& data) {
         isNew = false;
         ui64 bucket = THash()(key) & (capacity - 1);
         char* ptr = data.data() + AsDeriv().GetCellSize() * bucket;
         TPSLStorage distance = 0;
-        void* returnPayload;
+        char* returnPtr;
         for (;;) {
             if (GetPSL(ptr) < 0) {
                 isNew = true;
                 GetPSL(ptr) = distance;
                 GetKey(ptr) = key;
-                return GetPayload(ptr);
+                return ptr;
             }
 
             if (TEqual()(GetKey(ptr), key)) {
-                return GetPayload(ptr);
+                return ptr;
             }
 
             if (distance > GetPSL(ptr)) {
                 // swap keys & state
-                returnPayload = GetPayload(ptr);
+                returnPtr = ptr;
                 std::swap(distance, GetPSL(ptr));
                 std::swap(key, GetKey(ptr));
-                AsDeriv().SavePayload(returnPayload);
+                AsDeriv().SavePayload(GetPayload(ptr));
                 isNew = true;
 
                 ++distance;
@@ -127,7 +127,7 @@ private:
                 GetPSL(ptr) = distance;
                 GetKey(ptr) = key;
                 AsDeriv().RestorePayload(GetPayload(ptr));
-                return returnPayload; // for original key
+                return returnPtr; // for original key
             }
 
             if (distance > GetPSL(ptr)) {
@@ -152,8 +152,9 @@ private:
             }
 
             bool isNew;
-            auto payload = InsertImpl(GetKey(iter), isNew, newCapacity, newData);
-            AsDeriv().CopyPayload(payload, GetPayload(iter));
+            auto newIter = InsertImpl(GetKey(iter), isNew, newCapacity, newData);
+            Y_ASSERT(isNew);
+            AsDeriv().CopyPayload(GetPayload(newIter), GetPayload(iter));
         }
 
         Data.swap(newData);

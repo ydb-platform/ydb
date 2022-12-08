@@ -25,14 +25,14 @@ std::unique_ptr<IBlockAggregator> MakeBlockAggregator(
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    const THolderFactory& holderFactory) {
+    TComputationContext& ctx) {
     const auto& f = Singleton<TAggregatorFactories>()->Factories;
     auto it = f.find(name);
     if (it == f.end()) {
         throw yexception() << "Unsupported block aggregation function: " << name;
     }
 
-    return it->second->Make(tupleType, filterColumn, argsColumns, holderFactory);
+    return it->second->Make(tupleType, filterColumn, argsColumns, ctx);
 }
 
 }

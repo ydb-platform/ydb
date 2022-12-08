@@ -492,10 +492,12 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
         .Build();
 }
 
-TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAll() {
+TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     if (!TypesCtx.ArrowResolver) {
         return nullptr;
     }
+
+    const bool hashed = (KeyColumns->ChildrenSize() > 0);
 
     auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
     auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { streamArg });
@@ -514,6 +516,26 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAll() {
     TExprNode::TListType extractorRoots;
     TExprNode::TListType aggs;
     TVector<TString> outputColumns;
+    TExprNode::TListType keyIdxs;
+    TVector<const TTypeAnnotationNode*> allKeyTypes;
+    for (ui32 index = 0; index < KeyColumns->ChildrenSize(); ++index) {
+        auto keyName = KeyColumns->Child(index)->Content();
+        auto rowIndex = RowType->FindItem(keyName);
+        YQL_ENSURE(rowIndex, "Unknown column: " << keyName);
+        auto type = RowType->GetItems()[*rowIndex]->GetItemType();
+        extractorRoots.push_back(extractorArgs[*rowIndex]);
+
+        allKeyTypes.push_back(type);
+        keyIdxs.push_back(Ctx.NewAtom(Node->Pos(), ToString(index)));
+        outputColumns.push_back(TString(keyName));
+    }
+
+    bool supported = false;
+    YQL_ENSURE(TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allKeyTypes, supported, Ctx));
+    if (!supported) {
+        return nullptr;
+    }
+
     for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
         if (trait->Child(0)->Content() == "count_all") {
@@ -571,15 +593,31 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAll() {
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
     auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
-    auto aggWideFlow = Ctx.Builder(Node->Pos())
-        .Callable("BlockCombineAll")
-            .Add(0, blocks)
-            .Atom(1, ToString(mappedWidth))
-            .Callable(2, "Void")
+    TExprNode::TPtr aggWideFlow;
+    if (hashed) {
+        aggWideFlow = Ctx.Builder(Node->Pos())
+            .Callable("WideFromBlocks")
+                .Callable(0, "BlockCombineHashed")
+                    .Add(0, blocks)
+                    .Atom(1, ToString(mappedWidth))
+                    .Callable(2, "Void")
+                    .Seal()
+                    .Add(3, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(4, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                .Seal()
             .Seal()
-            .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
-        .Seal()
-        .Build();
+            .Build();
+    } else {
+        aggWideFlow = Ctx.Builder(Node->Pos())
+            .Callable("BlockCombineAll")
+                .Add(0, blocks)
+                .Atom(1, ToString(mappedWidth))
+                .Callable(2, "Void")
+                .Seal()
+                .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
+            .Seal()
+            .Build();
+    }
 
     auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);
     auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
@@ -2189,18 +2227,14 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
         return nullptr;
     }
 
-    if (KeyColumns->ChildrenSize() == 0) {
-        for (const auto& x : AggregatedColumns->Children()) {
-            auto trait = x->ChildPtr(1);
-            if (!trait->IsCallable("AggApply")) {
-                return nullptr;
-            }
+    for (const auto& x : AggregatedColumns->Children()) {
+        auto trait = x->ChildPtr(1);
+        if (!trait->IsCallable("AggApply")) {
+            return nullptr;
         }
-
-        return TryGenerateBlockCombineAll();
     }
 
-    return nullptr;
+    return TryGenerateBlockCombineAllOrHashed();
 }
 
 } // namespace NYql

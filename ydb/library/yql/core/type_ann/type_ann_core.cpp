@@ -11784,6 +11784,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
+        ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

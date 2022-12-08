@@ -33,7 +33,7 @@ struct TFinishedTestInfo {
     ui64 Tag;
     TString ErrorReason;
     TInstant FinishTime;
-    std::optional<TEvDataShardLoad::TLoadReport> Report;
+    NKikimrDataShardLoad::TLoadReport Report;
 };
 
 // TLoad
@@ -333,6 +333,9 @@ public:
         case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertProposeStart:
             cmd = Request.GetUpsertProposeStart();
             break;
+        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kReadIteratorStart:
+            cmd.SetRowCount(Request.GetReadIteratorStart().GetRowCount());
+            break;
         default:
             State = EState::RunLoad;
             return PrepareTable(ctx);
@@ -344,8 +347,8 @@ public:
             << " in dir# " << target.GetWorkingDir()
             << " with rows# " << cmd.GetRowCount());
 
-        // TODO: we need bulk upsert with normal batch size, not 1 row per request
         cmd.SetInflight(100);
+        cmd.SetBatchSize(100);
 
         LoadActors.insert(ctx.Register(
             CreateUpsertBulkActor(
@@ -405,7 +408,7 @@ public:
             break;
         default: {
             TStringStream ss;
-            ss << "TLoad: unexpected command case# " << ui32(Request.Command_case())
+            ss << "TLoad: unexpected command case# " << Request.Command_case()
                << ", proto# " << Request.DebugString();
             StopWithError(ctx, ss.Str());
             return;
@@ -413,18 +416,18 @@ public:
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag << " created load actor of type# "
-            << ui32(Request.Command_case())<<  " with tag# " << tag << ", proto# " << Request.DebugString());
+            << Request.Command_case() <<  " with tag# " << tag << ", proto# " << Request.DebugString());
 
         LoadActors.insert(ctx.Register(actor.release()));
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
-        const auto& msg = ev->Get();
+        const auto& record = ev->Get()->Record;
         LoadActors.erase(ev->Sender);
 
-        if (msg->ErrorReason || !msg->Report) {
+        if (record.HasErrorReason() || !record.HasReport()) {
             TStringStream ss;
-            ss <<  "error from actor# " << ev->Sender << " with tag# " << msg->Tag;
+            ss <<  "error from actor# " << ev->Sender << " with tag# " << record.GetTag();
             StopWithError(ctx, ss.Str());
             return;
         }
@@ -435,9 +438,9 @@ public:
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
-            << " received finished from actor# " << ev->Sender << " with tag# " << msg->Tag);
+            << " received finished from actor# " << ev->Sender << " with tag# " << record.GetTag());
 
-        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->Report});
+        FinishedTests.push_back({record.GetTag(), record.GetErrorReason(), TAppData::TimeProvider->Now(), record.GetReport()});
 
         if (LoadActors.empty()) {
             Finish(ctx);
@@ -448,20 +451,26 @@ public:
     void Finish(const TActorContext& ctx) {
         auto endTs = TAppData::TimeProvider->Now();
 
-        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>();
-        response->Tag = Tag;
-        response->Report = TEvDataShardLoad::TLoadReport();
-        response->Report->Duration = endTs - StartTs;
+        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+        auto& report = *response->Record.MutableReport();
+        report.SetTag(Tag);
+        report.SetDurationMs((endTs - StartTs).MilliSeconds());
 
+        ui64 oks = 0;
+        ui64 errors = 0;
+        ui64 subtestCount = 0;
         TStringStream ss;
         for (const auto& test: FinishedTests) {
-            Y_VERIFY(test.Report);
-            response->Report->OperationsOK += test.Report->OperationsOK;
-            response->Report->OperationsError += test.Report->OperationsError;
-            response->Report->SubtestCount += test.Report->SubtestCount;
-            if (test.Report->Info)
-                ss << test.Report->Info << Endl;
+            oks += test.Report.GetOperationsOK();
+            errors += test.Report.GetOperationsError();
+            subtestCount += test.Report.GetSubtestCount();
+            if (test.Report.HasInfo())
+                ss << test.Report.GetInfo() << Endl;
         }
+
+        report.SetOperationsOK(oks);
+        report.SetOperationsError(errors);
+        report.SetSubtestCount(subtestCount);
 
         ctx.Send(Parent, response.release());
         Die(ctx);
@@ -475,9 +484,9 @@ public:
                << ", in state# " << State;
 
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
-            auto* info = response->Record.AddInfos();
+            auto* info = response->Record.AddReports();
             info->SetTag(Tag);
-            info->SetData(ss.Str());
+            info->SetInfo(ss.Str());
             ctx.Send(ev->Sender, response.release());
             return;
         }
@@ -501,14 +510,14 @@ public:
            << ", finished# " << FinishedTests.size()
            << ", subactors infos: ";
 
-        for (auto& info: ev->Get()->Record.GetInfos()) {
-            ss << "{ tag: " << info.GetTag() << ", data: " << info.GetData() << " }";
+        for (auto& info: ev->Get()->Record.GetReports()) {
+            ss << "{ tag: " << info.GetTag() << ", info: " << info.GetInfo() << " }";
         }
 
         NKikimrDataShardLoad::TEvTestLoadInfoResponse record;
-        auto* info = record.AddInfos();
-        info->SetTag(Tag);
-        info->SetData(ss.Str());
+        auto* report = record.AddReports();
+        report->SetTag(Tag);
+        report->SetInfo(ss.Str());
 
         for (const auto& actorId: HttpInfoWaiters) {
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
@@ -674,23 +683,23 @@ public:
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
-        const auto& msg = ev->Get();
-        auto it = LoadActors.find(msg->Tag);
-        Y_VERIFY(it != LoadActors.end(), "%s", (TStringBuilder() << "failed to find actor with tag# " << msg->Tag
+        const auto& record = ev->Get()->Record;
+        auto it = LoadActors.find(record.GetTag());
+
+        Y_VERIFY(it != LoadActors.end(), "%s", (TStringBuilder() << "failed to find actor with tag# " << record.GetTag()
             << ", TEvTestLoadFinished from actor# " << ev->Sender).c_str());
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load actor# " << ev->Sender
-            << " with tag# " << msg->Tag << " finished");
+            << " with tag# " << record.GetTag() << " finished");
 
         if (it->second.Parent) {
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>();
-            response->Tag = ev->Get()->Tag;
-            response->ErrorReason = ev->Get()->ErrorReason;
-            response->Report = ev->Get()->Report;
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(record.GetTag());
+            response->Record = record;
             ctx.Send(it->second.Parent, response.release());
         }
 
         LoadActors.erase(it);
-        FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->Report});
+        FinishedTests.push_back(
+            {record.GetTag(), record.GetErrorReason(), TAppData::TimeProvider->Now(), record.GetReport()});
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -727,13 +736,13 @@ public:
                 }
             }
 
-            for (const auto& info: record.GetInfos()) {
+            for (const auto& info: record.GetReports()) {
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         str << "Tag# " << info.GetTag();
                     }
                     DIV_CLASS("panel-body") {
-                        str << info.GetData();
+                        str << info.GetInfo();
                     }
                 }
             }
@@ -746,8 +755,7 @@ public:
                         }
                         DIV_CLASS("panel-body") {
                             str << "<p>";
-                            if (req.Report)
-                                str << "Report# " << req.Report->ToString() << "<br/>";
+                            str << "Report# " << req.Report << "<br/>";
                             str << "Finish reason# " << req.ErrorReason << "<br/>";
                             str << "Finish time# " << req.FinishTime << "<br/>";
                             str << "</p>";

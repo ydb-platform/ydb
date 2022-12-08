@@ -357,10 +357,10 @@ private:
                 << ", read# " << Oks);
 
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(0);
-            response->Report = TEvDataShardLoad::TLoadReport();
-            response->Report->Duration = delta;
-            response->Report->OperationsOK = Oks;
-            response->Report->OperationsError = 0;
+            auto& report = *response->Record.MutableReport();
+            report.SetDurationMs(delta.MilliSeconds());
+            report.SetOperationsOK(Oks);
+            report.SetOperationsError(0);
             ctx.Send(Parent, response.release());
 
             return Die(ctx);
@@ -397,7 +397,6 @@ private:
 
 enum class EState {
     DescribePath,
-    Upsert,
     FullScan,
     FullScanGetKeys,
     ReadHeadPoints,
@@ -429,7 +428,7 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
 
     size_t Oks = 0;
     size_t Errors = 0;
-    TVector<TEvDataShardLoad::TLoadReport> Results;
+    TVector<NKikimrDataShardLoad::TLoadReport> Results;
 
     // accumulates results from read actors: between different inflights/chunks must be reset
     NHdr::THistogram HeadReadsHist;
@@ -499,9 +498,6 @@ private:
         case EState::DescribePath:
             DescribePath(ctx);
             return;
-        case EState::Upsert:
-            UpsertData(ctx);
-            return;
         case EState::FullScan:
             RunFullScan(ctx, 0);
             break;
@@ -553,30 +549,8 @@ private:
             << Target.GetWorkingDir() << "/" << Target.GetTableName()
             << " with columnsCount# " << AllColumnIds.size() << ", keyColumnCount# " << KeyColumnIds.size());
 
-        State = EState::Upsert;
+        State = EState::FullScan;
         Run(ctx);
-    }
-
-    void UpsertData(const TActorContext& ctx) {
-        NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart upsertConfig;
-        upsertConfig.SetRowCount(Config.GetRowCount());
-        upsertConfig.SetInflight(100); // some good value to upsert fast
-
-        NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard target;
-        target.SetTabletId(TabletId);
-        target.SetTableId(TableId);
-
-        auto* upsertActor = CreateUpsertBulkActor(
-            upsertConfig,
-            target,
-            SelfId(),
-            Counters,
-            /* meaningless tag */ 1000000);
-
-        StartedActors.emplace_back(ctx.Register(upsertActor));
-
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
-            << " started upsert actor with id# " << StartedActors.back());
     }
 
     void RunFullScan(const TActorContext& ctx, ui64 sampleKeys) {
@@ -613,31 +587,25 @@ private:
     }
 
     void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
-        const auto* msg = ev->Get();
-        if (msg->ErrorReason || !msg->Report) {
+        const auto& record = ev->Get()->Record;
+        if (record.HasErrorReason() || !record.HasReport()) {
             TStringStream ss;
-            ss << "read iterator actor# " << msg->Tag << " finished with error: " << msg->ErrorReason
+            ss << "read iterator actor# " << record.GetTag() << " finished with error: " << record.GetErrorReason()
                << " in State# " << (int)State;
-            if (msg->Report)
-                ss << ", report: " << msg->Report->ToString();
+            if (record.HasReport())
+                ss << ", report: " << ev->Get()->ToString();
 
             return StopWithError(ctx, ss.Str());
         }
 
         switch (State) {
-        case EState::Upsert: {
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "upsert actor# " << ev->Sender
-                << " finished: " << msg->Report->ToString());
-            State = EState::FullScan;
-            return Run(ctx);
-        }
         case EState::FullScan: {
             LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "fullscan actor# " << ev->Sender
                 << " with chunkSize# " << ChunkSizes[ChunkIndex]
-                << " finished: " << msg->Report->ToString());
-            Errors += msg->Report->OperationsError;
-            Oks += msg->Report->OperationsOK;
-            Results.emplace_back(*msg->Report);
+                << " finished: " << ev->Get()->ToString());
+            Errors += record.GetReport().GetOperationsError();
+            Oks += record.GetReport().GetOperationsOK();
+            Results.emplace_back(record.GetReport());
 
             auto& lastResult = Results.back();
             TStringStream ss;
@@ -647,7 +615,7 @@ private:
             } else {
                 ss << "inf";
             }
-            lastResult.PrefixInfo = ss.Str();
+            lastResult.SetPrefixInfo(ss.Str());
 
             ++ChunkIndex;
             if (ChunkIndex == ChunkSizes.size())
@@ -660,16 +628,16 @@ private:
         case EState::ReadHeadPoints: {
             Y_VERIFY(Inflight == 0);
             LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
-                << " finished: " << msg->Report->ToString());
-            Errors += msg->Report->OperationsError;
-            Oks += msg->Report->OperationsOK;
-            Results.emplace_back(*msg->Report);
+                << " finished: " << ev->Get()->ToString());
+            Errors += record.GetReport().GetOperationsError();
+            Oks += record.GetReport().GetOperationsOK();
+            Results.emplace_back(record.GetReport());
 
             auto& lastResult = Results.back();
             TStringStream ss;
             ss << "Test run# " << Results.size() << ", type# ReadHeadPoints with inflight# "
                << Inflights[InflightIndex];
-            lastResult.PrefixInfo = ss.Str();
+            lastResult.SetPrefixInfo(ss.Str());
 
             ++InflightIndex;
             if (InflightIndex == Inflights.size())
@@ -748,10 +716,10 @@ private:
             auto delta = ts - StartTsSubTest;
 
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(0);
-            response->Report = TEvDataShardLoad::TLoadReport();
-            response->Report->Duration = delta;
-            response->Report->OperationsOK = Inflights[InflightIndex] * ReadCount;
-            response->Report->OperationsError = 0;
+            auto& report = *response->Record.MutableReport();
+            report.SetDurationMs(delta.MilliSeconds());
+            report.SetOperationsOK(Inflights[InflightIndex] * ReadCount);
+            report.SetOperationsError(0);
 
             TStringStream ss;
             i64 v50 = HeadReadsHist.GetValueAtPercentile(50.0);
@@ -766,7 +734,7 @@ private:
                << "\n99.9%: " << v999
                << Endl;
 
-            response->Report->Info = ss.Str();
+            report.SetInfo(ss.Str());
             ctx.Send(SelfId(), response.release());
         }
     }
@@ -776,21 +744,22 @@ private:
         auto delta = ts - StartTs;
 
         auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
-        response->Report = TEvDataShardLoad::TLoadReport();
-        response->Report->Duration = delta;
-        response->Report->OperationsOK = Oks;
-        response->Report->OperationsError = 0;
+        auto& report = *response->Record.MutableReport();
+        report.SetTag(Tag);
+        report.SetDurationMs(delta.MilliSeconds());
+        report.SetOperationsOK(Oks);
+        report.SetOperationsError(0);
 
         TStringStream ss;
         for (const auto& report: Results) {
-            ss << report.ToString() << Endl;
+            ss << report << Endl;
         }
 
-        response->Report->Info = ss.Str();
-        response->Report->SubtestCount = Results.size();
+        report.SetInfo(ss.Str());
+        report.SetSubtestCount(Results.size());
 
         LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
-            << " finished in " << delta << " with report:\n" << response->Report->Info);
+            << " finished in " << delta << " with report:\n" << report.GetInfo());
 
         ctx.Send(Parent, response.release());
 
@@ -855,9 +824,6 @@ inline void Out<NKikimr::NDataShardLoad::EState>(IOutputStream& o, NKikimr::NDat
     case NKikimr::NDataShardLoad::EState::DescribePath:
         o << "describepath";
         break;
-    case NKikimr::NDataShardLoad::EState::Upsert:
-        o << "upsert";
-        break;
     case NKikimr::NDataShardLoad::EState::FullScan:
         o << "fullscan";
         break;
@@ -870,5 +836,27 @@ inline void Out<NKikimr::NDataShardLoad::EState>(IOutputStream& o, NKikimr::NDat
     default:
         o << (int)state;
         break;
+    }
+}
+
+template <>
+inline void Out<NKikimrDataShardLoad::TLoadReport>(IOutputStream& o, const NKikimrDataShardLoad::TLoadReport& report) {
+    if (report.HasPrefixInfo())
+        o << report.GetPrefixInfo() << ". ";
+
+    auto duration = TDuration::MilliSeconds(report.GetDurationMs());
+    o << "Load duration: " << duration
+      << ", OK=" << report.GetOperationsOK()
+      << ", Error=" << report.GetOperationsError();
+
+    if (report.GetOperationsOK() && duration.Seconds()) {
+        ui64 throughput = report.GetOperationsOK() / duration.Seconds();
+        o << ", throughput=" << throughput << " OK_ops/s";
+    }
+    if (report.HasSubtestCount()) {
+        o << ", subtests: " << report.GetSubtestCount();
+    }
+    if (report.HasInfo()) {
+        o << ", Info: " << report.GetInfo();
     }
 }

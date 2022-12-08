@@ -30,7 +30,7 @@ enum class ERequestType {
     UpsertLocalMkql,
 };
 
-TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyNum) {
+TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyStart, ui64 n) {
     TUploadRowsRequestPtr request(new TEvDataShard::TEvUploadRowsRequest());
     auto& record = request->Record;
     record.SetTableId(tableId);
@@ -41,20 +41,22 @@ TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyNum) {
     }
     rowScheme.AddKeyColumnIds(1);
 
-    TVector<TCell> keys;
-    keys.reserve(1);
-    TString key = GetKey(keyNum);
-    keys.emplace_back(key.data(), key.size());
+    for (size_t i = keyStart; i < keyStart + n; ++i) {
+        TVector<TCell> keys;
+        keys.reserve(1);
+        TString key = GetKey(i);
+        keys.emplace_back(key.data(), key.size());
 
-    TVector<TCell> values;
-    values.reserve(10);
-    for (size_t i = 2; i <= 11; ++i) {
-        values.emplace_back(Value.data(), Value.size());
+        TVector<TCell> values;
+        values.reserve(10);
+        for (size_t i = 2; i <= 11; ++i) {
+            values.emplace_back(Value.data(), Value.size());
+        }
+
+        auto& row = *record.AddRows();
+        row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
+        row.SetValueColumns(TSerializedCellVec::Serialize(values));
     }
-
-    auto& row = *record.AddRows();
-    row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
-    row.SetValueColumns(TSerializedCellVec::Serialize(values));
 
     return TUploadRequest(request.release());
 }
@@ -95,6 +97,7 @@ TRequestsVector GenerateRequests(
     ui64 tableId,
     ui64 keyFrom,
     ui64 n,
+    ui64 batchSize, // only bulk requests
     ERequestType requestType,
     const TString& table)
 {
@@ -103,9 +106,12 @@ TRequestsVector GenerateRequests(
 
     for (size_t i = keyFrom; i < keyFrom + n; ++i) {
         switch (requestType) {
-        case ERequestType::UpsertBulk:
-            requests.emplace_back(GenerateBulkRowRequest(tableId, i));
+        case ERequestType::UpsertBulk: {
+            auto keysLeft = keyFrom + n - i;
+            auto currentBatchSize = Max(Min(batchSize, keysLeft), ui64(1));
+            requests.emplace_back(GenerateBulkRowRequest(tableId, i, currentBatchSize));
             break;
+        }
         case ERequestType::UpsertLocalMkql:
             requests.emplace_back(GenerateMkqlRowRequest(tableId, i, table));
             break;
@@ -168,6 +174,7 @@ public:
             Target.GetTableId(),
             Config.GetKeyFrom(),
             Config.GetRowCount(),
+            Config.GetBatchSize(),
             RequestType,
             Target.GetTableName());
 
@@ -221,11 +228,14 @@ private:
         } else if (Inflight == 0) {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
+
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
-            response->Report = TEvDataShardLoad::TLoadReport();
-            response->Report->Duration = delta;
-            response->Report->OperationsOK = Requests.size() - Errors;
-            response->Report->OperationsError = Errors;
+            auto& report = *response->Record.MutableReport();
+            report.SetTag(Tag);
+            report.SetDurationMs(delta.MilliSeconds());
+            report.SetOperationsOK(Requests.size() - Errors);
+            report.SetOperationsError(Errors);
+
             ctx.Send(Parent, response.release());
 
             LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag

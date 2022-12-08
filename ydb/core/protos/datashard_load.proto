@@ -27,6 +27,9 @@ message TEvTestLoadRequest {
 
         // special mode: actor writes RowCount rows again and again
         optional bool Infinite = 4;
+
+        // only for bulk upsert
+        optional uint32 BatchSize = 5;
     }
 
     message TReadStart {
@@ -90,15 +93,29 @@ message TEvTestLoadResponse {
     optional uint64 Tag = 4;
 }
 
-message TLoadInfo {
+message TLoadReport {
     optional uint64 Tag = 1;
-    optional string Data = 2;
+
+    optional uint64 DurationMs = 2;
+    optional uint64 OperationsOK = 3;
+    optional uint64 OperationsError = 4;
+
+    // info might contain result for multiple subtests
+    optional string Info = 5;
+    optional uint64 SubtestCount = 6;
+    optional string PrefixInfo = 7;
 }
 
 message TEvTestLoadInfoRequest {
 }
 
-// collector puts Infos sorted by Tag
+// collector puts Reports sorted by Tag
 message TEvTestLoadInfoResponse {
-    repeated TLoadInfo Infos = 1;
+    repeated TLoadReport Reports = 1;
+}
+
+message TEvTestLoadFinished {
+    optional uint64 Tag = 1;
+    optional TLoadReport Report = 2;
+    optional string ErrorReason = 3;
 }

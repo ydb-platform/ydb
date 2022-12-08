@@ -157,6 +157,11 @@ generate_enum_serilization(ydb-core-protos
   INCLUDE_HEADERS
   ydb/core/protos/blobstorage_pdisk_config.pb.h
 )
+generate_enum_serilization(ydb-core-protos
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_load.pb.h
+  INCLUDE_HEADERS
+  ydb/core/protos/datashard_load.pb.h
+)
 target_proto_addincls(ydb-core-protos
   ./
   ${CMAKE_SOURCE_DIR}/

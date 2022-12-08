@@ -36,49 +36,32 @@ struct TEvDataShardLoad {
         TEvTestLoadResponse() = default;
     };
 
-    struct TLoadReport {
-        TDuration Duration;
-        ui64 OperationsOK = 0;
-        ui64 OperationsError = 0;
-
-        // info might contain result for multiple subtests
-        TString Info;
-        ui64 SubtestCount = 0;
-
-        // used by test launchers to specify params and test number
-        TString PrefixInfo;
-
-        TString ToString() const {
-            TStringStream ss;
-            if (PrefixInfo)
-                ss << PrefixInfo << ". ";
-
-            ss << "Load duration: " << Duration << ", OK=" << OperationsOK << ", Error=" << OperationsError;
-            if (OperationsOK && Duration.Seconds()) {
-                ui64 throughput = OperationsOK / Duration.Seconds();
-                ss << ", throughput=" << throughput << " OK_ops/s";
-            }
-            if (SubtestCount) {
-                ss << ", subtests: " << SubtestCount;
-            }
-            if (Info) {
-                ss << ", Info: " << Info;
-            }
-            return ss.Str();
-        }
-    };
-
-    struct TEvTestLoadFinished : public TEventLocal<TEvTestLoadFinished, EvTestLoadFinished> {
-        ui64 Tag;
-        std::optional<TLoadReport> Report;
-        TString ErrorReason;
+    struct TEvTestLoadFinished
+        : public TEventPB<TEvTestLoadFinished,
+                          NKikimrDataShardLoad::TEvTestLoadFinished,
+                          EvTestLoadFinished> {
 
         TEvTestLoadFinished() = default;
 
         TEvTestLoadFinished(ui64 tag, const TString& error = {})
-            : Tag(tag)
-            , ErrorReason(error)
-        {}
+        {
+            Record.SetTag(tag);
+            if (error)
+                Record.SetErrorReason(error);
+        }
+
+        TString ToString() const {
+            TStringStream ss;
+            ss << Record.GetTag();
+            if (Record.HasErrorReason()) {
+                ss << " failed: " << Record.GetErrorReason();
+            } else {
+                const auto& report = Record.GetReport();
+                ss << " " << report;
+            }
+
+           return ss.Str();
+        }
     };
 
     struct TEvTestLoadInfoRequest
@@ -97,9 +80,9 @@ struct TEvDataShardLoad {
         TEvTestLoadInfoResponse() = default;
 
         TEvTestLoadInfoResponse(ui64 tag, const TString& data) {
-            auto* info = Record.AddInfos();
-            info->SetTag(tag);
-            info->SetData(std::move(data));
+            auto* report = Record.AddReports();
+            report->SetTag(tag);
+            report->SetInfo(std::move(data));
         }
     };
 };

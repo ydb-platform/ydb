@@ -167,11 +167,14 @@ private:
         } else if (Inflight == 0) {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
+
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
-            response->Report = TEvDataShardLoad::TLoadReport();
-            response->Report->Duration = delta;
-            response->Report->OperationsOK = Requests.size() - Errors;
-            response->Report->OperationsError = Errors;
+            auto& report = *response->Record.MutableReport();
+            report.SetTag(Tag);
+            report.SetDurationMs(delta.MilliSeconds());
+            report.SetOperationsOK(Requests.size() - Errors);
+            report.SetOperationsError(Errors);
+
             ctx.Send(Parent, response.release());
 
             LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
@@ -348,31 +351,33 @@ private:
     }
 
     void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
-        const auto* msg = ev->Get();
-        if (msg->ErrorReason || !msg->Report) {
+        const auto& record = ev->Get()->Record;
+        if (record.HasErrorReason() || !record.HasReport()) {
             TStringStream ss;
-            ss << "kqp actor# " << msg->Tag << " finished with error: " << msg->ErrorReason;
-            if (msg->Report)
-                ss << ", report: " << msg->Report->ToString();
+            ss << "kqp actor# " << record.GetTag() << " finished with error: " << record.GetErrorReason();
+            if (record.HasReport())
+                ss << ", report: " << ev->Get()->ToString();
 
             StopWithError(ctx, ss.Str());
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Tag << " finished: " << msg->Report->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Tag << " finished: " << ev->Get()->ToString());
 
-        Errors += msg->Report->OperationsError;
-        Oks += msg->Report->OperationsOK;
+        Errors += record.GetReport().GetOperationsError();
+        Oks += record.GetReport().GetOperationsOK();
 
         --Inflight;
         if (Inflight == 0) {
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
+
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
-            response->Report = TEvDataShardLoad::TLoadReport();
-            response->Report->Duration = delta;
-            response->Report->OperationsOK = Oks;
-            response->Report->OperationsError = Errors;
+            auto& report = *response->Record.MutableReport();
+            report.SetTag(Tag);
+            report.SetDurationMs(delta.MilliSeconds());
+            report.SetOperationsOK(Oks);
+            report.SetOperationsError(Errors);
             ctx.Send(Parent, response.release());
 
             LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag

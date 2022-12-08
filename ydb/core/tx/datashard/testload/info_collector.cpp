@@ -11,7 +11,7 @@ class TInfoCollector : public TActorBootstrapped<TInfoCollector> {
     const TActorId Parent;
     TVector<TActorId> Actors;
 
-    TMap<ui64, NKikimrDataShardLoad::TLoadInfo> Results;
+    TMap<ui64, NKikimrDataShardLoad::TLoadReport> Results;
 
     ui64 ResponsesPending = 0;
 
@@ -35,8 +35,8 @@ public:
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        Y_VERIFY(record.InfosSize() == 1);
-        Results[record.GetInfos(0).GetTag()] = std::move(record.GetInfos(0));
+        Y_VERIFY(record.ReportsSize() == 1);
+        Results[record.GetReports(0).GetTag()] = std::move(record.GetReports(0));
 
         --ResponsesPending;
         if (ResponsesPending == 0) {
@@ -48,7 +48,7 @@ public:
     void Reply(const TActorContext& ctx) {
         auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
         for (auto& it: Results) {
-            *response->Record.AddInfos() = std::move(it.second);
+            *response->Record.AddReports() = std::move(it.second);
         }
 
         ctx.Send(Parent, response.release());

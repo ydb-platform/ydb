@@ -241,8 +241,8 @@ struct TTestHelper {
             runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadFinished>(handle);
             UNIT_ASSERT(handle);
             auto response = handle->Release<TEvDataShardLoad::TEvTestLoadFinished>();
-            UNIT_ASSERT(response->Report);
-            UNIT_ASSERT(!response->ErrorReason);
+            UNIT_ASSERT(response->Record.HasReport());
+            UNIT_ASSERT(!response->Record.HasErrorReason());
 
             return std::unique_ptr<TEvDataShardLoad::TEvTestLoadFinished>(response.Release());
         }
@@ -283,6 +283,28 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         command.SetRowCount(expectedRowCount);
         command.SetInflight(3);
+
+        auto& target = *record.MutableTargetShard();
+        target.SetTabletId(helper.Table.TabletId);
+        target.SetTableId(helper.Table.UserTable.GetPathId());
+        target.SetTableName(DefaultTableName);
+
+        helper.RunUpsertTestLoad(std::move(request), 0, expectedRowCount);
+    }
+
+    Y_UNIT_TEST(ShouldWriteDataBulkUpsertBatch) {
+        // same as ShouldWriteDataBulkUpsert, but with batch size
+        TTestHelper helper;
+
+        const ui64 expectedRowCount = 100;
+
+        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        auto& record = request->Record;
+        auto& command = *record.MutableUpsertBulkStart();
+
+        command.SetRowCount(expectedRowCount);
+        command.SetInflight(3);
+        command.SetBatchSize(7);
 
         auto& target = *record.MutableTargetShard();
         target.SetTabletId(helper.Table.TabletId);
@@ -571,10 +593,10 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
         setupTable.SetTableName("usertable");
 
         auto result = helper.RunTestLoad(std::move(request));
-        UNIT_ASSERT(result->Report);
+        UNIT_ASSERT(result->Record.HasReport());
 
-        UNIT_ASSERT_VALUES_EQUAL(result->Report->SubtestCount, 4);
-        UNIT_ASSERT_VALUES_EQUAL(result->Report->OperationsOK, (4 * expectedRowCount));
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReport().GetSubtestCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReport().GetOperationsOK(), (4 * expectedRowCount));
 
         // sanity check that there was data in table
         helper.CheckKeys(0, expectedRowCount);

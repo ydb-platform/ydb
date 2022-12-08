@@ -63,7 +63,7 @@ Currently, you can manage TTL settings using:
 
 * [YQL](../../yql/reference/index.md).
 * [{{ ydb-short-name }} console client](../../reference/ydb-cli/index.md).
-* {{ ydb-short-name }} {% if oss %}C++ and{% endif %} Python [SDK](../../reference/ydb-sdk/index.md).
+* {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go and Python [SDK](../../reference/ydb-sdk/index.md).
 
 ### Enabling TTL for an existing table {#enable-on-existent-table}
 
@@ -98,6 +98,16 @@ In the example below, the items of the `mytable` table will be deleted an hour a
    ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  err := session.AlterTable(ctx, "mytable",
+    options.WithSetTimeToLiveSettings(
+      options.NewTTLSettings().ColumnDateType("created_at").ExpireAfter(time.Hour),
+    ),
+  )
+  ```
 
 - Python
 
@@ -138,6 +148,16 @@ The example below shows how to use the `modified_at` column with a numeric type 
    ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  err := session.AlterTable(ctx, "mytable",
+    options.WithSetTimeToLiveSettings(
+      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+    ),
+  )
+  ```
 
 - Python
 
@@ -182,6 +202,18 @@ For a newly created table, you can pass TTL settings along with the table descri
    ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  err := session.CreateTable(ctx, "mytable",
+    options.WithColumn("id", types.Optional(types.TypeUint64)),
+    options.WithColumn("expire_at", types.Optional(types.TypeTimestamp)),
+    options.WithTimeToLiveSettings(
+      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+    ),
+  )
+  ```
 
 - Python
 
@@ -230,6 +262,14 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 {% endif %}
 
+- Go
+
+  ```go
+  err := session.AlterTable(ctx, "mytable",
+    options.WithDropTimeToLive(),
+  )
+  ```
+
 - Python
 
    ```python
@@ -260,6 +300,16 @@ The current TTL settings can be obtained from the table description:
    ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  desc, err := session.DescribeTable(ctx, "mytable")
+  if err != nil {
+    // process error
+  }
+  ttl := desc.TimeToLiveSettings
+  ```
 
 - Python
 

@@ -63,7 +63,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 * [YQL](../../yql/reference/index.md).
 * [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/index.md).
-* {{ ydb-short-name }} {% if oss %}C++ и{% endif %} Python [SDK](../../reference/ydb-sdk/index.md).
+* {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go и Python [SDK](../../reference/ydb-sdk/index.md).
 
 ### Включение TTL для существующей таблицы {#enable-on-existent-table}
 
@@ -98,6 +98,16 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  err := session.AlterTable(ctx, "mytable",
+    options.WithSetTimeToLiveSettings(
+      options.NewTTLSettings().ColumnDateType("created_at").ExpireAfter(time.Hour),
+    ),
+  )
+  ```
 
 - Python
 
@@ -138,6 +148,16 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  err := session.AlterTable(ctx, "mytable",
+    options.WithSetTimeToLiveSettings(
+      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+    ),
+  )
+  ```
 
 - Python
 
@@ -182,6 +202,18 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  err := session.CreateTable(ctx, "mytable",
+    options.WithColumn("id", types.Optional(types.TypeUint64)),
+    options.WithColumn("expire_at", types.Optional(types.TypeTimestamp)),
+    options.WithTimeToLiveSettings(
+      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+    ),
+  )
+  ```
 
 - Python
 
@@ -230,6 +262,14 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 {% endif %}
 
+- Go
+
+  ```go
+  err := session.AlterTable(ctx, "mytable",
+    options.WithDropTimeToLive(),
+  )
+  ```
+
 - Python
 
   ```python
@@ -260,6 +300,16 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```
 
 {% endif %}
+
+- Go
+
+  ```go
+  desc, err := session.DescribeTable(ctx, "mytable")
+  if err != nil {
+    // process error
+  }
+  ttl := desc.TimeToLiveSettings
+  ```
 
 - Python
 

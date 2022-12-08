@@ -41,6 +41,7 @@ struct TEvConsole {
         EvConfigSubscriptionCanceled,
         EvConfigSubscriptionNotification,
         EvUpdateTenantPoolConfig,
+        EvGetLogTailRequest,
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -70,6 +71,7 @@ struct TEvConsole {
         EvToggleConfigValidatorResponse,
         EvConfigSubscriptionResponse,
         EvConfigSubscriptionError,
+        EvGetLogTailResponse,
 
         EvEnd
     };
@@ -270,6 +272,13 @@ struct TEvConsole {
     struct TEvToggleConfigValidatorRequest : public TEventShortDebugPB<TEvToggleConfigValidatorRequest, NKikimrConsole::TToggleConfigValidatorRequest, EvToggleConfigValidatorRequest> {};
 
     struct TEvToggleConfigValidatorResponse : public TEventShortDebugPB<TEvToggleConfigValidatorResponse, NKikimrConsole::TToggleConfigValidatorResponse, EvToggleConfigValidatorResponse> {};
+
+    //////////////////////////////////////////////////
+    // AUDIT
+    //////////////////////////////////////////////////
+    struct TEvGetLogTailRequest : public TEventPB<TEvGetLogTailRequest, NKikimrConsole::TGetLogTailRequest, EvGetLogTailRequest> {};
+
+    struct TEvGetLogTailResponse : public TEventPB<TEvGetLogTailResponse, NKikimrConsole::TGetLogTailResponse, EvGetLogTailResponse> {};
 };
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info);

@@ -1,6 +1,8 @@
 #include "console_configs_manager.h"
 #include "modifications_validator.h"
 
+#include <ydb/library/aclib/aclib.h>
+
 namespace NKikimr {
 namespace NConsole {
 
@@ -196,7 +198,7 @@ public:
             return false;
         }
 
-        Self->PendingConfigModifications.RemovedItems.insert(item->Id);
+        Self->PendingConfigModifications.RemovedItems.emplace(item->Id, item);
 
         return true;
     }
@@ -208,7 +210,7 @@ public:
         for (auto &cookie : cookies.GetCookies())
             Self->ConfigIndex.CollectItemsByCookie(cookie, THashSet<ui32>(), items);
         for (auto &item : items)
-            Self->PendingConfigModifications.RemovedItems.insert(item->Id);
+            Self->PendingConfigModifications.RemovedItems.emplace(item->Id, item);
         return true;
     }
 
@@ -487,6 +489,8 @@ public:
         Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         // Fill affected configs.
+        auto LogData = NKikimrConsole::TLogRecordData{};
+
         TConfigsConfig config(Self->Config);
         config.ValidationLevel = NKikimrConsole::VALIDATE_TENANTS_AND_NODE_TYPES;
         TModificationsValidator affectedChecker(Self->ConfigIndex,
@@ -508,6 +512,9 @@ public:
                                              *entry.MutableNewConfig());
         }
 
+        // Collect actually affected config kinds
+        THashSet<ui32> AffectedKinds;
+
         // Dry run stops here. Further processing modifies internal state.
         if (rec.GetDryRun()) {
             Self->PendingConfigModifications.Clear();
@@ -519,15 +526,63 @@ public:
             item->Id = Self->NextConfigItemId++;
             item->Generation = 1;
             Response->Record.AddAddedItemIds(item->Id);
+
+            AffectedKinds.insert(item->Kind);
         }
 
         // Increment generation for modified items.
-        for (auto &pr : Self->PendingConfigModifications.ModifiedItems)
-            ++pr.second->Generation;
+        for (auto &[_, item] : Self->PendingConfigModifications.ModifiedItems) {
+            ++item->Generation;
+            //
+            AffectedKinds.insert(item->Kind);
+        }
+
+        for (auto &[_, item] : Self->PendingConfigModifications.RemovedItems) {
+            AffectedKinds.insert(item->Kind);
+        }
+
+        // Get user sid for audit and cleanup message
+        TString userSID;
+        if (Request->Get()->Record.HasUserToken()) {
+            NACLib::TUserToken userToken(Request->Get()->Record.GetUserToken());
+            userSID = userToken.GetUserSID();
+            Request->Get()->Record.ClearUserToken();
+        }
+
+
+        // Calculate actually affected configs for logging
+        TModificationsValidator actualAffectedChecker(Self->ConfigIndex,
+                                                      Self->PendingConfigModifications,
+                                                      config);
+
+        TDynBitMap kinds;
+
+        for (auto kind : AffectedKinds) {
+            kinds.Set(kind);
+            LogData.AddAffectedKinds(kind);
+        }
+
+        auto actualAffected = actualAffectedChecker.ComputeAffectedConfigs(kinds, true);
+
+        for (auto &item : actualAffected) {
+            auto &logEntry = *LogData.AddAffectedConfigs();
+            logEntry.SetTenant(item.Tenant);
+            logEntry.SetNodeType(item.NodeType);
+
+            actualAffectedChecker.BuildConfigs(kinds,
+                                               item.Tenant,
+                                               item.NodeType,
+                                               *logEntry.MutableOldConfig(),
+                                               *logEntry.MutableNewConfig());
+        }
 
         // Update database.
         Self->DbApplyPendingConfigModifications(txc, ctx);
         Self->DbUpdateNextConfigItemId(txc, ctx);
+
+        // Log command and changes
+        LogData.MutableAction()->Swap(&Request->Get()->Record);
+        Self->Logger.DbLogData(userSID, LogData, txc, ctx);
 
         return true;
     }

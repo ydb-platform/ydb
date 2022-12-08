@@ -29,7 +29,19 @@ function main() {
     initConfigsTab();
     initValidatorsTab();
     initCmsLogTab();
+    initConsoleLogTab();
     initCmsSentinelTab();
+
+    $('#popup').on('click', function(e) {
+        if (e.target !== this)
+            return;
+
+        togglePopup();
+    });
+}
+
+function togglePopup() {
+    $("#popup").toggle();
 }
 
 $(document).ready(main);

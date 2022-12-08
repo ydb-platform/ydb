@@ -583,7 +583,7 @@ void TConfigModifications::DeepCopyFrom(const TConfigModifications &other)
 
 void TConfigModifications::ApplyTo(TConfigIndex &index) const
 {
-    for (auto id : RemovedItems)
+    for (auto &[id, _] : RemovedItems)
         index.RemoveItem(id);
     for (auto &pr : ModifiedItems)
         index.RemoveItem(pr.first);

@@ -51,6 +51,8 @@ target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__create_tenant.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__init_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__load_state.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__get_log_tail.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__log_cleanup.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__remove_computational_units.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__remove_config_subscription.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__remove_config_subscriptions.cpp
@@ -70,6 +72,7 @@ target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/logger.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/modifications_validator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/net_classifier_updater.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/shared_cache_configurator.cpp

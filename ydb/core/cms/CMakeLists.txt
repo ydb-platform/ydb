@@ -93,15 +93,16 @@ target_link_libraries(ydb-core-cms.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/117417182f73c245478c9903130ed8f2.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/d9287e52aed5bc947231449c57c31fe9.cpp
 )
 resources(ydb-core-cms.global
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/117417182f73c245478c9903130ed8f2.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/d9287e52aed5bc947231449c57c31fe9.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/index.html
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms_log.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/console_log.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/common.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/common.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/configs.js
@@ -131,6 +132,7 @@ resources(ydb-core-cms.global
   cms/ui/cms.css
   cms/ui/cms.js
   cms/ui/cms_log.js
+  cms/ui/console_log.js
   cms/ui/common.css
   cms/ui/common.js
   cms/ui/configs.js

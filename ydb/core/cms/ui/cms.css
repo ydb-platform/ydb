@@ -37,7 +37,6 @@ label.cfg-form {
 
 .pending-update {
     background: #F08080 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' version='1.1' height='100px' width='300px'><text x='0' y='50' fill='red' font-size='30'>Pending Update</text></svg>") no-repeat center;
-
 }
 
 pre.cfg-item-hdr {
@@ -68,4 +67,194 @@ th {
 td {
     padding-left: 10px;
     padding-right: 10px;
+}
+
+.pointer {
+    cursor: pointer;
+}
+
+#popup-header {
+    margin-right: 32px;
+}
+
+#popup {
+    position: fixed;
+    top: 0%;
+    left: 0%;
+    height: 100%;
+    width: 100%;
+    background: #ffffff00;
+    z-index: 99;
+    display: none;
+}
+
+
+.popup-content {
+    position: fixed;
+    box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 500px;
+    max-width: 1000px;
+    min-height: 200px;
+    max-height: 85%;
+    overflow: scroll;
+    text-align: center;
+    background-color: #e8eae6;
+    box-sizing: border-box;
+    padding: 10px;
+    z-index: 100;
+}
+
+.popup-close-btn {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    cursor: pointer;
+}
+
+.crosssign {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  position: relative;
+  transform: rotate(45deg);
+}
+
+.crosssign_circle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background-color: rgb(0, 86, 179);
+  border-radius: 11px;
+  left: 0;
+  top: 0;
+}
+
+.crosssign_stem,
+.crosssign_stem2 {
+  position: absolute;
+  background-color: #fff;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.crosssign_stem {
+  width: 3px;
+  height: 9px;
+}
+
+.crosssign_stem2 {
+  width: 9px;
+  height: 3px;
+}
+
+#popup pre {
+    text-align: left;
+    outline: 1px solid #ccc; padding: 5px; margin: 5px;
+}
+
+#popup .string {
+    color: green;
+}
+
+#popup .number {
+    color: darkorange;
+}
+
+#popup .boolean {
+    color: blue;
+}
+
+#popup .null {
+    color: magenta;
+}
+
+#popup .key {
+    color: red;
+}
+
+.spoiler-wrap {
+    background: #fff;
+    margin: 0 0 8px;
+    border: 1px solid rgb(0, 86, 179)
+}
+
+.spoiler-head {
+    background: #efefef;
+    cursor: pointer;
+    padding: 5px;
+}
+
+.spoiler-body {
+    padding: 10px
+}
+
+.spoiler-wrap.disabled .spoiler-body {
+    display:none
+}
+
+.spoiler-wrap.active {
+    border-color: rgb(0, 86, 179);
+}
+
+.spoiler-wrap.active .spoiler-head {
+    background: rgb(0, 86, 179);
+    color: #fff
+}
+
+.icon-copy {
+    box-sizing: border-box;
+    position: relative;
+    display: block;
+    transform: scale(var(--ggs,1));
+    width: 14px;
+    height: 18px;
+    border: 2px solid;
+    margin-left: -5px;
+    margin-top: -4px
+}
+
+.icon-copy::after,
+.icon-copy::before {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    position: absolute
+}
+
+.icon-copy::before {
+    background:
+        linear-gradient( to left,
+            currentColor 5px, transparent 0)
+            no-repeat right top/5px 2px,
+        linear-gradient( to left,
+            currentColor 5px, transparent 0)
+            no-repeat left bottom/ 2px 5px;
+    box-shadow: inset -4px -4px 0 -2px;
+    bottom: -6px;
+    right: -6px;
+    width: 14px;
+    height: 18px
+}
+
+.icon-copy::after {
+    width: 6px;
+    height: 2px;
+    background: currentColor;
+    left: 2px;
+    top: 2px;
+    box-shadow: 0 4px 0,0 8px 0
+}
+
+#console-log a {
+    cursor: pointer;
+    color: rgb(0, 123, 255);
+}
+
+#console-log a:hover {
+    color: rgb(0, 86, 179);
 }

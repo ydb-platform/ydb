@@ -109,6 +109,7 @@ public:
         } else if (Request.HasConfigureRequest()) {
             auto request = MakeHolder<TEvConsole::TEvConfigureRequest>();
             request->Record.CopyFrom(Request.GetConfigureRequest());
+            request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigItemsRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();

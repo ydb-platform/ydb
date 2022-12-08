@@ -71,8 +71,8 @@ void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "Applying pending config modifications");
 
-    for (auto id : PendingConfigModifications.RemovedItems)
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Remove " << ConfigIndex.GetItem(id)->ToString());
+    for (auto &pr : PendingConfigModifications.RemovedItems)
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Remove " << ConfigIndex.GetItem(pr.first)->ToString());
     for (auto &pr : PendingConfigModifications.ModifiedItems)
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Remove modified " << pr.second->ToString());
     for (auto &pr : PendingConfigModifications.ModifiedItems)
@@ -272,7 +272,7 @@ void TConfigsManager::DbApplyPendingConfigModifications(TTransactionContext &txc
         DbUpdateItem(item, txc, ctx);
     for (auto &pr : PendingConfigModifications.ModifiedItems)
         DbUpdateItem(pr.second, txc, ctx);
-    for (auto id : PendingConfigModifications.RemovedItems)
+    for (auto &[id, _] : PendingConfigModifications.RemovedItems)
         DbRemoveItem(id, txc, ctx);
 }
 
@@ -295,6 +295,8 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     NIceDb::TNiceDb db(txc.DB);
     auto nextConfigItemIdRow = db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextConfigItemId).Select<Schema::Config::Value>();
     auto nextSubscriptionIdRow = db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextSubscriptionId).Select<Schema::Config::Value>();
+    auto nextLogItemIdRow = db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextLogItemId).Select<Schema::Config::Value>();
+    auto minLogItemIdRow = db.Table<Schema::Config>().Key(TConsole::ConfigKeyMinLogItemId).Select<Schema::Config::Value>();
     auto configItemRowset = db.Table<Schema::ConfigItems>().Range().Select<Schema::ConfigItems::TColumns>();
     auto subscriptionRowset = db.Table<Schema::ConfigSubscriptions>().Range().Select<Schema::ConfigSubscriptions::TColumns>();
     auto validatorsRowset = db.Table<Schema::DisabledValidators>().Range().Select<Schema::DisabledValidators::TColumns>();
@@ -318,6 +320,16 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         NextSubscriptionId = FromString<ui64>(value);
     } else {
         NextSubscriptionId = 1;
+    }
+
+    if (nextLogItemIdRow.IsValid()) {
+        TString value = nextLogItemIdRow.GetValue<Schema::Config::Value>();
+        Logger.SetNextLogItemId(FromString<ui64>(value));
+    }
+
+    if (minLogItemIdRow.IsValid()) {
+        TString value = minLogItemIdRow.GetValue<Schema::Config::Value>();
+        Logger.SetMinLogItemId(FromString<ui64>(value));
     }
 
     while (!configItemRowset.EndOfSet()) {
@@ -508,6 +520,11 @@ void TConfigsManager::DbUpdateSubscriptionLastProvidedConfig(ui64 id,
         .Update(NIceDb::TUpdate<Schema::ConfigSubscriptions::LastProvidedConfig>(configId.ItemIds));
 }
 
+void TConfigsManager::Handle(TEvConsole::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx)
+{
+    TxProcessor->ProcessTx(CreateTxGetLogTail(ev), ctx);
+}
+
 void TConfigsManager::Handle(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxAddConfigSubscription(ev), ctx);
@@ -574,6 +591,7 @@ void TConfigsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetConfigs(ConfigIndex.GetConfigItems()));
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetSubscriptions(SubscriptionIndex.GetSubscriptions()));
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+    ScheduleLogCleanup(ctx);
 }
 
 void TConfigsManager::Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &/*ev*/, const TActorContext &ctx)
@@ -594,6 +612,20 @@ void TConfigsManager::ScheduleSubscriptionsCleanup(const TActorContext &ctx)
                     new IEventHandle(SelfId(), SelfId(), event),
                     AppData(ctx)->SystemPoolId,
                     SubscriptionsCleanupTimerCookieHolder.Get());
+}
+
+void TConfigsManager::CleanupLog(const TActorContext &ctx)
+{
+    TxProcessor->ProcessTx(CreateTxLogCleanup(), ctx);
+}
+
+void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
+{
+    LogCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
+    CreateLongTimer(ctx, TDuration::Minutes(15),
+                    new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvCleanupLog),
+                    AppData(ctx)->SystemPoolId,
+                    LogCleanupTimerCookieHolder.Get());
 }
 
 } // namespace NConsole

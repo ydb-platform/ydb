@@ -5,6 +5,7 @@
 #include "config_index.h"
 #include "configs_config.h"
 #include "console.h"
+#include "logger.h"
 #include "tx_processor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -32,6 +33,7 @@ public:
         enum EEv {
             EvStateLoaded = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvCleanupSubscriptions,
+            EvCleanupLog,
             EvEnd
         };
 
@@ -40,6 +42,8 @@ public:
         struct TEvStateLoaded : public TEventLocal<TEvStateLoaded, EvStateLoaded> {};
 
         struct TEvCleanupSubscriptions : public TEventLocal<TEvCleanupSubscriptions, EvCleanupSubscriptions> {};
+
+        struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
     };
 
 public:
@@ -103,6 +107,8 @@ private:
     class TTxReplaceConfigSubscriptions;
     class TTxToggleConfigValidator;
     class TTxUpdateLastProvidedConfig;
+    class TTxGetLogTail;
+    class TTxLogCleanup;
 
     ITransaction *CreateTxAddConfigSubscription(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev);
     ITransaction *CreateTxCleanupSubscriptions(TEvInterconnect::TEvNodesInfo::TPtr &ev);
@@ -112,6 +118,8 @@ private:
     ITransaction *CreateTxReplaceConfigSubscriptions(TEvConsole::TEvReplaceConfigSubscriptionsRequest::TPtr &ev);
     ITransaction *CreateTxToggleConfigValidator(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev);
     ITransaction *CreateTxUpdateLastProvidedConfig(TEvConsole::TEvConfigNotificationResponse::TPtr &ev);
+    ITransaction *CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev);
+    ITransaction *CreateTxLogCleanup();
 
     void Handle(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx);
@@ -121,6 +129,7 @@ private:
     void Handle(TEvConsole::TEvRemoveConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvConsole::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvStateLoaded::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &ev, const TActorContext &ctx);
@@ -128,6 +137,8 @@ private:
     void ForwardToConfigsProvider(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
 
     void ScheduleSubscriptionsCleanup(const TActorContext &ctx);
+    void ScheduleLogCleanup(const TActorContext &ctx);
+    void CleanupLog(const TActorContext &ctx);
 
     STFUNC(StateWork)
     {
@@ -135,6 +146,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvConsole::TEvAddConfigSubscriptionRequest, Handle);
             FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsProvider);
+            HFunc(TEvConsole::TEvGetLogTailRequest, Handle);
             HFuncTraced(TEvConsole::TEvConfigNotificationResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigureRequest, Handle);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
@@ -152,6 +164,7 @@ private:
             HFuncTraced(TEvPrivate::TEvStateLoaded, Handle);
             FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsProvider);
             FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsProvider);
+            CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
 
         default:
             Y_FAIL("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
@@ -196,6 +209,8 @@ private:
 
     TActorId ConfigsProvider;
     TTxProcessor::TPtr TxProcessor;
+    TLogger Logger;
+    TSchedulerCookieHolder LogCleanupTimerCookieHolder;
 };
 
 } // namespace NConsole

@@ -23,10 +23,10 @@
 namespace NKikimr {
 namespace NCms {
 
-template <typename TRequestEvent, typename TResponseEvent>
-class TJsonProxyBase : public TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent>> {
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
+class TJsonProxyBase : public TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>> {
 private:
-    using TBase = TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent>>;
+    using TBase = TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>>;
 
 protected:
     using TRequest = TRequestEvent;
@@ -59,6 +59,11 @@ public:
             LOG_ERROR_S(ctx, NKikimrServices::CMS,
                         "TJsonProxyBase no request to send was built");
             return;
+        }
+
+        if constexpr (ForwardToken) {
+            NMon::TEvHttpInfo *msg = RequestEvent->Get();
+            request->Record.SetUserToken(msg->UserToken);
         }
 
         ui64 tid = GetTabletId(ctx);
@@ -185,14 +190,14 @@ protected:
     TActorId Pipe;
 };
 
-template <typename TRequestEvent, typename TResponseEvent>
-class TJsonProxy : public TJsonProxyBase<TRequestEvent, TResponseEvent> {
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
+class TJsonProxy : public TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken> {
 private:
-    using TBase = TJsonProxyBase<TRequestEvent, TResponseEvent>;
+    using TBase = TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>;
 
 public:
     TJsonProxy(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxyBase<TRequestEvent, TResponseEvent>(event)
+        : TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>(event)
     {
     }
 
@@ -214,11 +219,11 @@ public:
     }
 };
 
-template <typename TRequestEvent, typename TResponseEvent, bool useConsole>
-class TJsonProxyCmsBase : public TJsonProxy<TRequestEvent, TResponseEvent> {
+template <typename TRequestEvent, typename TResponseEvent, bool useConsole, bool ForwardToken = false>
+class TJsonProxyCmsBase : public TJsonProxy<TRequestEvent, TResponseEvent, ForwardToken> {
 public:
     TJsonProxyCmsBase(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxy<TRequestEvent, TResponseEvent>(event)
+        : TJsonProxy<TRequestEvent, TResponseEvent, ForwardToken>(event)
     {
     }
 
@@ -235,11 +240,11 @@ public:
     }
 };
 
-template <typename TRequestEvent, typename TResponseEvent>
-using TJsonProxyCms = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, false>;
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
+using TJsonProxyCms = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, false, ForwardToken>;
 
-template <typename TRequestEvent, typename TResponseEvent>
-using TJsonProxyConsole = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, true>;
+template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
+using TJsonProxyConsole = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, true, ForwardToken>;
 
 } // NCms
 } // NKikimr

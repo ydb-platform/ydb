@@ -42,6 +42,8 @@ public:
         ConfigKeyNextConfigItemId,
         ConfigKeyNextTxId,
         ConfigKeyNextSubscriptionId,
+        ConfigKeyNextLogItemId,
+        ConfigKeyMinLogItemId,
     };
 
 private:
@@ -90,6 +92,7 @@ private:
             FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigureRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvGetLogTailRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvCreateTenantRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvDescribeTenantOptionsRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);

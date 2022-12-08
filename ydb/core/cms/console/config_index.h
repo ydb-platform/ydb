@@ -548,7 +548,7 @@ struct TConfigModifications {
 
     TVector<TConfigItem::TPtr> AddedItems;
     THashMap<ui64, TConfigItem::TPtr> ModifiedItems;
-    THashSet<ui64> RemovedItems;
+    THashMap<ui64, TConfigItem::TPtr> RemovedItems;
 };
 
 struct TSubscription : public TThrRefBase {

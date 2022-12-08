@@ -25,3 +25,35 @@ message TSetConfigRequest {
 message TSetConfigResponse {
     optional TStatus Status = 1;
 }
+
+message TLogRecordData {
+    optional TConfigureRequest Action = 1;
+    repeated TConfigureResponse.TAffectedConfig AffectedConfigs = 2;
+    repeated uint32 AffectedKinds = 3;
+}
+
+message TLogRecord {
+    optional uint64 Id = 1;
+    optional uint64 Timestamp = 2;
+    optional string User = 3;
+    optional TLogRecordData Data = 4;
+}
+
+message TLogFilter {
+    optional uint64 FromId = 1;
+    optional uint64 FromTimestamp = 2;
+    optional uint32 Limit = 3 [default = 100];
+    repeated uint32 AffectedKinds = 4;
+    repeated string Users = 5;
+    repeated string ExcludeUsers = 6;
+    optional bool Reverse = 7;
+}
+
+message TGetLogTailRequest {
+    optional TLogFilter LogFilter = 1;
+}
+
+message TGetLogTailResponse {
+    optional TStatus Status = 1;
+    repeated TLogRecord LogRecords = 4;
+}

@@ -410,7 +410,7 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
     TSubscriptionSet subscriptions;
     TInMemorySubscriptionSet inMemorySubscriptions;
 
-    for (auto id : modifications.RemovedItems) {
+    for (auto &[id, _] : modifications.RemovedItems) {
         auto item = ConfigIndex.GetItem(id);
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: remove " << item->ToString());
         ConfigIndex.RemoveItem(id);

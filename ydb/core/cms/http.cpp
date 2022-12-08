@@ -4,6 +4,7 @@
 #include "json_proxy_config_updates.h"
 #include "json_proxy_config_validators.h"
 #include "json_proxy_log.h"
+#include "json_proxy_console_log.h"
 #include "json_proxy_operations.h"
 #include "json_proxy_proto.h"
 #include "json_proxy_toggle_config_validator.h"
@@ -66,8 +67,10 @@ public:
                                                                                                 TEvCms::TEvManageNotificationResponse>>;
 
             ApiHandlers["/api/console/configure"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvConfigureRequest,
-                                                                                            NConsole::TEvConsole::TEvConfigureResponse>>;
+                                                                                            NConsole::TEvConsole::TEvConfigureResponse,
+                                                                                            true>>;
             ApiHandlers["/api/json/log"] = new TApiMethodHandler<TJsonProxyLog>;
+            ApiHandlers["/api/json/console/log"] = new TApiMethodHandler<TJsonProxyConsoleLog>;
             ApiHandlers["/api/json/configitems"] = new TApiMethodHandler<TJsonProxyConfigItems>;
             ApiHandlers["/api/json/configvalidators"] = new TApiMethodHandler<TJsonProxyConfigValidators>;
             ApiHandlers["/api/json/toggleconfigvalidator"] = new TApiMethodHandler<TJsonProxyToggleConfigValidator>;

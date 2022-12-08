@@ -204,6 +204,9 @@ message TConfigureRequest {
     // (option is false) affected configs in response
     // have only Tenant and NodeType fields filled.
     optional bool FillAffectedConfigs = 3;
+    // For internal use only.
+    // Used for logging user requests
+    optional bytes UserToken = 4;
 }
 
 message TConfigureResponse {

@@ -86,9 +86,9 @@ TConfigModifications TModificationsValidator::BuildModificationsForValidation(co
 {
     TConfigModifications result;
 
-    for (auto id : diff.RemovedItems) {
+    for (auto &[id, item] : diff.RemovedItems) {
         if (Index.GetItem(id))
-            result.RemovedItems.insert(id);
+            result.RemovedItems.emplace(id, item);
     }
 
     ui64 newId = Max<ui64>();
@@ -99,7 +99,7 @@ TConfigModifications TModificationsValidator::BuildModificationsForValidation(co
                 ++newItem->Generation;
                 result.ModifiedItems.emplace(pr.first, newItem);
             } else {
-                result.RemovedItems.insert(pr.first);
+                result.RemovedItems.emplace(pr.first, pr.second);
             }
         } else if (IsValidationRequired(pr.second)) {
             TConfigItem::TPtr newItem = new TConfigItem(*pr.second);
@@ -122,7 +122,7 @@ TConfigModifications TModificationsValidator::BuildModificationsForValidation(co
 
 void TModificationsValidator::CollectModifiedItems(const TConfigModifications &diff)
 {
-    for (auto id : diff.RemovedItems)
+    for (auto &[id, _] : diff.RemovedItems)
         ModifiedItems.insert(Index.GetItem(id));
     for (auto &pr : diff.ModifiedItems) {
         ModifiedItems.insert(Index.GetItem(pr.first));

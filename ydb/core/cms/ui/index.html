@@ -15,6 +15,7 @@
     <script language="javascript" type="text/javascript" src="cms/enums.js"></script>
     <script language="javascript" type="text/javascript" src="cms/proto_types.js"></script>
     <script language="javascript" type="text/javascript" src="cms/cms_log.js"></script>
+    <script language="javascript" type="text/javascript" src="cms/console_log.js"></script>
     <script language="javascript" type="text/javascript" src="cms/sentinel_state.js"></script>
     <script language="javascript" type="text/javascript" src="cms/configs.js"></script>
     <script language="javascript" type="text/javascript" src="cms/config_forms.js"></script>
@@ -47,6 +48,9 @@
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#cms-log" data-toggle="tab">CMS Log</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#console-log" data-toggle="tab">Console Log</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="#sentinel-state" data-toggle="tab">
@@ -92,6 +96,63 @@
             </tbody>
           </table>
         </div>
+        <div id="console-log" class="tab-pane fade">
+          <div id="console-log-error" class="error"></div>
+          Show values
+          <input autocomplete="off" type="radio" id="console-normal"
+                 name="console-order" value="normal" checked />
+          <label for="console-normal">Less than id</label>
+          <input autocomplete="off"  type="radio" id="console-reverse"
+                 name="console-order" value="reverse" />
+          <label for="console-reverse">Greater than id</label>
+          <br/>
+          Per page:
+          <input autocomplete="off" type="text" id="console-limit"
+                 name="console-limit" required value="100"/>
+          <br/>
+          UserFilter:
+          <input autocomplete="off" type="text" id="console-user-filter"
+                 name="console-user-filter" placeholder="root@builtin,innokentii@staff"
+                 required value=""/>
+          <input autocomplete="off" type="checkbox" id="console-user-filter-exclude"
+                 name="console-user-filter-exclude" value="console-user-filter-exclude" />
+          <label for="console-user-filter-exclude">Exclude</label>
+          <br/>AffectedFilter:
+          <input autocomplete="off" type="text" id="console-affected-filter"
+                 name="console-affected-filter" placeholder="KQPConfigItem,CmsConfigItem"
+                 required value=""/>
+          <br/>
+          Search time (UTC):
+          <input type="datetime-local" id="console-datetime"
+                 name="console-datetime" autocomplete="off"/>
+          <input type="button" id="console-datetime-search" value="Search"/>
+          <br/>
+          <a id="console-first-page">First Page</a>
+          |
+          <a id="console-prev-page">Prev. Page</a>
+          |
+          From id:
+          <input autocomplete="off" type="text" id="console-from-id"
+                 name="console-from-id" required value="first"/>
+          <input type="button" id="console-from-id-fetch" value="Fetch"/>
+          |
+          <a id="console-next-page">Next Page</a>
+          |
+          <a id="console-last-page">Last Page</a>
+          <table id="console-log-table" class="tablesorter">
+            <thead>
+              <tr>
+                <th>Id</th>
+                <th>Timestamp (UTC)</th>
+                <th>UserSID</th>
+                <th>AffectedKinds</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="console-log-body">
+            </tbody>
+          </table>
+        </div>
         <div id="sentinel-state" class="tab-pane fade">
           <div id="sentinel-error" class="error"></div>
           <table id="sentinel-config"></table>
@@ -114,6 +175,19 @@
           </div>
           <table id="sentinel-nodes"></table>
         </div>
+      </div>
+    </div>
+    <div id="popup">
+      <div class="popup-content">
+        <div onclick="togglePopup()" class="popup-close-btn">
+          <span class="crosssign">
+            <div class="crosssign_circle"></div>
+            <div class="crosssign_stem"></div>
+            <div class="crosssign_stem2"></div>
+          </span>
+        </div>
+        <h3 id="popup-header">Popup header</h3>
+        <p id="popup-content">Popup content</p>
       </div>
     </div>
   </body>

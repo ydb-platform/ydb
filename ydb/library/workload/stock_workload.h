@@ -21,9 +21,6 @@ class TStockWorkloadGenerator : public IWorkloadQueryGenerator {
 public:
 
     static TStockWorkloadGenerator* New(const TStockWorkloadParams* params) {
-        if (!validateDbPath(params->DbPath)) {
-            throw yexception() << "Invalid path to database." << Endl;
-        }
         return new TStockWorkloadGenerator(params);
     }
 

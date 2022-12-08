@@ -40,18 +40,6 @@ public:
     virtual TQueryInfoList GetWorkload(int type) = 0;
 
     virtual TWorkloadParams* GetParams() = 0;
-
-protected:
-    static bool validateDbPath(const std::string& path) {
-        for (size_t i = 0; i < path.size(); ++i) {
-            char c = path[i];
-            if (!std::isalnum(c) && c != '/' && c != '_' && c != '-') {
-                return false;
-            }
-        }
-        return true;
-    }
-
 };
 
 } // namespace NYdbWorkload

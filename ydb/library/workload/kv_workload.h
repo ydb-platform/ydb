@@ -31,9 +31,6 @@ class TKvWorkloadGenerator : public IWorkloadQueryGenerator {
 public:
 
     static TKvWorkloadGenerator* New(const TKvWorkloadParams* params) {
-        if (!validateDbPath(params->DbPath)) {
-            throw yexception() << "Invalid path to database." << Endl;
-        }
         return new TKvWorkloadGenerator(params);
     }
 

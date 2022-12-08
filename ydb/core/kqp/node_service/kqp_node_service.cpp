@@ -257,9 +257,6 @@ private:
             runtimeSettingsBase.FailOnUndelivery = true;
         }
 
-        // TODO: fix me
-        YQL_ENSURE(runtimeSettingsBase.ExtraMemoryAllocationPool == NRm::EKqpMemoryPool::ScanQuery);
-
         runtimeSettingsBase.StatsMode = msgRtSettings.GetStatsMode();
         runtimeSettingsBase.UseLLVM = msgRtSettings.GetUseLLVM();
         runtimeSettingsBase.UseSpilling = msgRtSettings.GetUseSpilling();

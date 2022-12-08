@@ -1449,7 +1449,15 @@ private:
 
                 ReadOnlyTx &= !stage.GetIsEffectsStage();
 
-                if (stageInfo.Meta.ShardOperations.empty()) {
+                if (stage.SourcesSize() > 0) {
+                    switch (stage.GetSources(0).GetTypeCase()) {
+                        case NKqpProto::TKqpSource::kReadRangesSource:
+                            BuildScanTasksFromSource(stageInfo, holderFactory, typeEnv);
+                            break;
+                        default:
+                            YQL_ENSURE(false, "unknown source type");
+                    }
+                } else if (stageInfo.Meta.ShardOperations.empty()) {
                     BuildComputeTasks(stageInfo);
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo, holderFactory, typeEnv);
@@ -1907,6 +1915,7 @@ private:
             for (auto& taskDesc : tasks) {
                 remoteComputeTasksCnt += 1;
                 FillInputSettings(taskDesc, lockTxId);
+                PendingComputeTasks.insert(taskDesc.GetId());
                 tasksPerNode[it->second].emplace_back(std::move(taskDesc));
             }
         }

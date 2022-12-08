@@ -257,6 +257,7 @@ message TKqpReadRangesSourceSettings {
     optional EScanDataFormat DataFormat = 9;
     optional NKikimrProto.TRowVersion Snapshot = 10;
     optional uint64 ShardIdHint = 11;
+    optional bool Sorted = 12;
 }
 
 message TKqpTaskInfo {

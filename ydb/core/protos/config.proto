@@ -753,6 +753,7 @@ message TFeatureFlags {
     // enable alter database operation to create subdomain's system tablets
     // directly in subdomain's hive
     optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
+    optional bool EnableKqpDataQuerySourceRead = 83 [default = false];
 }
 
 

@@ -282,7 +282,7 @@ public:
     }
 
     bool StartTableScan() {
-        const ui32 maxAllowedInFlight = MaxInFlight;
+        const ui32 maxAllowedInFlight = Settings.GetSorted() ? 1 : MaxInFlight;
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
             if (isFirst) {
@@ -525,7 +525,7 @@ public:
             record.AddColumns(column.GetId());
         }
 
-        {
+        if (record.HasSnapshot()) {
             record.MutableSnapshot()->SetTxId(Settings.GetSnapshot().GetTxId());
             record.MutableSnapshot()->SetStep(Settings.GetSnapshot().GetStep());
         }

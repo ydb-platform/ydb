@@ -680,6 +680,105 @@ protected:
         }
     }
 
+    void BuildScanTasksFromSource(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
+        const NMiniKQL::TTypeEnvironment& typeEnv)
+    {
+        THashMap<ui64, std::vector<ui64>> nodeTasks;
+        THashMap<ui64, ui64> assignedShardsCount;
+
+        auto& stage = GetStage(stageInfo);
+
+        YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
+        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1, "multiple sources or sources mixed with connections");
+
+        auto& source = stage.GetSources(0).GetReadRangesSource();
+
+        const auto& table = TableKeys.GetTable(MakeTableId(source.GetTable()));
+        const auto& keyTypes = table.KeyColumnTypes;
+
+        YQL_ENSURE(table.TableKind != NKikimr::NKqp::ETableKind::Olap);
+
+        auto columns = BuildKqpColumns(source, table);
+        THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, source, stageInfo, holderFactory, typeEnv);
+
+        bool reverse = false;
+        ui64 itemsLimit = 0;
+
+        TString itemsLimitParamName;
+        NYql::NDqProto::TData itemsLimitBytes;
+        NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
+
+        YQL_ENSURE(!source.GetReverse(), "reverse not supported yet");
+
+        for (auto& [shardId, shardInfo] : partitions) {
+            YQL_ENSURE(!shardInfo.KeyWriteRanges);
+
+            auto& task = TasksGraph.AddTask(stageInfo);
+            if (auto ptr = ShardIdToNodeId.FindPtr(shardId)) {
+                task.Meta.NodeId = *ptr;
+            } else {
+                task.Meta.ShardId = shardId;
+            }
+
+            for (auto& [name, value] : shardInfo.Params) {
+                auto ret = task.Meta.Params.emplace(name, std::move(value));
+                YQL_ENSURE(ret.second);
+                auto typeIterator = shardInfo.ParamTypes.find(name);
+                YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
+                auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
+                YQL_ENSURE(retType.second);
+            }
+
+            NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
+            FillTableMeta(stageInfo, settings.MutableTable());
+            for (auto& key : source.GetSkipNullKeys()) {
+                settings.AddSkipNullKeys(key);
+            }
+
+            for (auto& keyColumn : keyTypes) {
+                settings.AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
+            }
+
+            for (auto& column : columns) {
+                auto* protoColumn = settings.AddColumns();
+                protoColumn->SetId(column.Id);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(column.Type);
+                protoColumn->SetType(columnType.TypeId);
+                if (columnType.TypeInfo) {
+                    *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                }
+                protoColumn->SetName(column.Name);
+            }
+
+            if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
+                settings.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+            } else {
+                settings.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+            }
+
+            settings.MutableSnapshot()->SetStep(Request.Snapshot.Step);
+            settings.MutableSnapshot()->SetTxId(Request.Snapshot.TxId);
+
+            shardInfo.KeyReadRanges->SerializeTo(&settings);
+            settings.SetReverse(reverse);
+            settings.SetSorted(source.GetSorted());
+
+            settings.SetShardIdHint(shardId);
+
+            ExtractItemsLimit(stageInfo, source.GetItemsLimit(), holderFactory,
+                typeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+            settings.SetItemsLimit(itemsLimit);
+
+            const auto& stageSource = stage.GetSources(0);
+            auto& input = task.Inputs[stageSource.GetInputIndex()];
+            auto& taskSourceSettings = input.SourceSettings;
+            input.ConnectionInfo = NYql::NDq::TSourceInput{};
+            taskSourceSettings.ConstructInPlace();
+            taskSourceSettings->PackFrom(settings);
+            input.SourceType = NYql::KqpReadRangesSourceName;
+        }
+    }
+
 protected:
     // in derived classes
     // void FillEndpointDesc(NYql::NDqProto::TEndpoint& endpoint, const TTask& task);

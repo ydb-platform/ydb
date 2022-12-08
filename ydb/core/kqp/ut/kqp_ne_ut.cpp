@@ -3425,6 +3425,57 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(DqSource) {
+        TKikimrSettings settings;
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForDataQueries(true);
+        flags.SetEnableKqpDataQuerySourceRead(true);
+        settings.SetFeatureFlags(flags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard` WHERE Key = 101 or (Key >= 202 and Key < 200+4) ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]];[[202u];[1]];[[203u];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(DqSourceLiteralRange) {
+        TKikimrSettings settings;
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForDataQueries(true);
+        flags.SetEnableKqpDataQuerySourceRead(true);
+        settings.SetFeatureFlags(flags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard` WHERE Key >= 101 and Key < 103 ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]];[[102u];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto params = TParamsBuilder().AddParam("$param").Uint64(101).Build().Build();
+
+            auto result = session.ExecuteDataQuery(R"(
+                DECLARE $param as Uint64;
+                SELECT Key, Data FROM `/Root/EightShard` WHERE Key >= $param and Key < 103 ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]];[[102u];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

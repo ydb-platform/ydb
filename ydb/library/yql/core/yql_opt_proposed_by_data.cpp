@@ -76,6 +76,9 @@ private:
                 GetTransformer(x.Get()).Rewind();
             }
         }
+        PendingProviders.clear();
+        HasRepeats = false;
+        NewRoots.clear();
     }
 
     TStatus HandleProvider(IDataProvider* provider, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -209,6 +212,8 @@ private:
                 GetTransformer(p->Get()).Rewind();
             }
         }
+        PendingProviders.clear();
+        NewRoots.clear();
     }
 
     TStatus HandleProvider(IDataProvider* provider, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

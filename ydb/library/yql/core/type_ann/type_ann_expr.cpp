@@ -99,6 +99,17 @@ public:
         return combinedStatus;
     }
 
+    void Rewind() {
+        CallableTransformer->Rewind();
+        CallableInputs.clear();
+        Processed.clear();
+        HasRenames = false;
+        RepeatCallableCount.clear();
+        CurrentFunctions = {};
+        CallableTimes.clear();
+    }
+
+
 private:
     void WriteRepeatCallableCount() {
         if (RepeatCallableCount.empty()) {

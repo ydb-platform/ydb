@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 
 #include <util/string/split.h>
@@ -146,6 +147,12 @@ public:
     {
         Ydb::Operations::Operation response;
         int res;
+
+        res = TClientGRpcCommand<TService, TRequest, TResponse, TFunction, function>::PrepareConfigCredentials(ClientConfig, config);
+
+        if (!res) {
+            return res;
+        }
 
         res = DoGRpcRequest<TService, TRequest, TResponse, TFunction>
             (ClientConfig, GRpcRequest, response, function, config.SecurityToken);

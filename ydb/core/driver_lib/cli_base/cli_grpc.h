@@ -7,6 +7,7 @@
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <util/string/split.h>
 #include <util/string/type.h>
 
@@ -95,10 +96,41 @@ public:
         ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
     }
 
+    static int PrepareConfigCredentials(NGRpcProxy::TGRpcClientConfig clientConfig, TConfig& commandConfig) {
+        int res = 0;
+
+        if (!commandConfig.StaticCredentials.User.empty()) {
+            Ydb::Auth::LoginRequest request;
+            Ydb::Operations::Operation response;
+            request.set_user(commandConfig.StaticCredentials.User);
+            request.set_password(commandConfig.StaticCredentials.Password);
+            res = DoGRpcRequest<Ydb::Auth::V1::AuthService,
+                                Ydb::Auth::LoginRequest,
+                                Ydb::Auth::LoginResponse>(clientConfig, request, response, &Ydb::Auth::V1::AuthService::Stub::AsyncLogin, {});
+            if (res == 0 && response.status() == Ydb::StatusIds::SUCCESS) {
+                Ydb::Auth::LoginResult result;
+                if (response.result().UnpackTo(&result)) {
+                    commandConfig.SecurityToken = result.token();
+                }
+            } else {
+                Cerr << response.status() << Endl;
+                for (auto &issue : response.issues()) {
+                    Cerr << issue.message() << Endl;
+                }
+            }
+        }
+        return res;
+    }
+
     int Run(TConfig& config) override
     {
         Ydb::Operations::Operation response;
         int res;
+
+        res = PrepareConfigCredentials(ClientConfig, config);
+        if (!res) {
+            return res;
+        }
 
         res = DoGRpcRequest<TService, TRequest, TResponse, TFunction>
             (ClientConfig, GRpcRequest, response, function, config.SecurityToken);

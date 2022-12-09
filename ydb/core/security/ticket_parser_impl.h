@@ -1,12 +1,21 @@
 #pragma once
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/ycloud/api/access_service.h>
+#include <ydb/library/ycloud/api/user_account_service.h>
+#include <ydb/library/ycloud/api/service_account_service.h>
+#include <ydb/library/ycloud/impl/user_account_service.h>
+#include <ydb/library/ycloud/impl/service_account_service.h>
+#include <ydb/library/ycloud/impl/access_service.h>
+#include <ydb/library/ycloud/impl/grpc_service_cache.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/library/security/util.h>
+#include <util/string/vector.h>
 #include <util/generic/queue.h>
 
 namespace NKikimr {
@@ -21,7 +30,14 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
     }
 
     static TString GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
-        TStringStream key(TDerived::GetKey(request));
+        TStringStream key;
+        if (request->Signature.AccessKeyId) {
+            const auto& sign = request->Signature;
+            key << sign.AccessKeyId << "-" << sign.Signature << ":" << sign.StringToSign << ":"
+                << sign.Service << ":" << sign.Region << ":" << sign.SignedAt.NanoSeconds();
+        } else {
+            key << request->Ticket;
+        }
         key << ':';
         if (request->Database) {
             key << request->Database;
@@ -45,10 +61,52 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
         return key.Str();
     }
 
-protected:
-    NKikimrProto::TAuthConfig Config;
-    TString DomainName;
+    static bool IsRetryableGrpcError(const NGrpc::TGrpcStatus& status) {
+        switch (status.GRpcStatusCode) {
+        case grpc::StatusCode::UNAUTHENTICATED:
+        case grpc::StatusCode::PERMISSION_DENIED:
+        case grpc::StatusCode::INVALID_ARGUMENT:
+        case grpc::StatusCode::NOT_FOUND:
+            return false;
+        }
+        return true;
+    }
 
+    struct TPermissionRecord {
+        TString Subject;
+        bool Required = false;
+        yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase SubjectType;
+        TEvTicketParser::TError Error;
+        TStackVec<std::pair<TString, TString>> Attributes;
+
+        bool IsPermissionReady() const {
+            return !Subject.empty() || !Error.empty();
+        }
+
+        bool IsPermissionOk() const {
+            return !Subject.empty();
+        }
+
+        bool IsRequired() const {
+            return Required;
+        }
+    };
+
+    template <typename TRequestType>
+    struct TEvRequestWithKey : TRequestType {
+        TString Key;
+
+        TEvRequestWithKey(const TString& key)
+            : Key(key)
+        {}
+    };
+
+    using TEvAccessServiceAuthenticateRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequest>;
+    using TEvAccessServiceAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequest>;
+    using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
+    using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
+
+    TString DomainName;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsSuccess;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrors;
@@ -56,6 +114,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsErrorsPermanent;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsBuiltin;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
     ::NMonitoring::THistogramPtr CounterTicketsBuildTime;
@@ -65,107 +124,13 @@ protected:
     TDuration MinErrorRefreshTime = TDuration::Seconds(1); // between this and next time we will try to refresh retryable error
     TDuration MaxErrorRefreshTime = TDuration::Minutes(1);
     TDuration LifeTime = TDuration::Hours(1); // for how long ticket will remain in the cache after last access
-    TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
 
-    auto ParseTokenType(const TStringBuf tokenType) const {
-        if (tokenType == "Login") {
-            if (UseLoginProvider) {
-                return TDerived::ETokenType::Login;
-            } else {
-                return TDerived::ETokenType::Unsupported;
-            }
-        }
-        return TDerived::ETokenType::Unknown;
-    }
-
-    struct TTokenRecordBase {
-        TTokenRecordBase(const TTokenRecordBase&) = delete;
-        TTokenRecordBase& operator =(const TTokenRecordBase&) = delete;
-
-        TString Ticket;
-        typename TDerived::ETokenType TokenType = TDerived::ETokenType::Unknown;
-        TString Subject; // login
-        TEvTicketParser::TError Error;
-        TIntrusivePtr<NACLib::TUserToken> Token;
-        TString SerializedToken;
-        TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
-        ui64 ResponsesLeft = 0;
-        TInstant InitTime;
-        TInstant RefreshTime;
-        TInstant ExpireTime;
-        TInstant AccessTime;
-        TDuration CurrentMaxRefreshTime = TDuration::Seconds(1);
-        TDuration CurrentMinRefreshTime = TDuration::Seconds(1);
-        TString PeerName;
-        TString Database;
-        TStackVec<TString> AdditionalSIDs;
-
-        TTokenRecordBase(const TStringBuf ticket)
-            : Ticket(ticket)
-        {}
-
-        template <typename T>
-        void SetErrorRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
-            if (Error.Retryable) {
-                if (CurrentMaxRefreshTime < ticketParser->MaxErrorRefreshTime) {
-                    CurrentMaxRefreshTime += ticketParser->MinErrorRefreshTime;
-                }
-                CurrentMinRefreshTime = ticketParser->MinErrorRefreshTime;
-            } else {
-                CurrentMaxRefreshTime = ticketParser->RefreshTime;
-                CurrentMinRefreshTime = CurrentMaxRefreshTime / 2;
-            }
-            SetRefreshTime(now);
-        }
-
-        template <typename T>
-        void SetOkRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
-            CurrentMaxRefreshTime = ticketParser->RefreshTime;
-            CurrentMinRefreshTime = CurrentMaxRefreshTime / 2;
-            SetRefreshTime(now);
-        }
-
-        void SetRefreshTime(TInstant now) {
-            if (CurrentMinRefreshTime < CurrentMaxRefreshTime) {
-                TDuration currentDuration = CurrentMaxRefreshTime - CurrentMinRefreshTime;
-                TDuration refreshDuration = CurrentMinRefreshTime + TDuration::MilliSeconds(RandomNumber<double>() * currentDuration.MilliSeconds());
-                RefreshTime = now + refreshDuration;
-            } else {
-                RefreshTime = now + CurrentMinRefreshTime;
-            }
-        }
-
-        TString GetSubject() const {
-            return Subject;
-        }
-
-        TString GetAuthType() const {
-            switch (TokenType) {
-                case TDerived::ETokenType::Unknown:
-                    return "Unknown";
-                case TDerived::ETokenType::Unsupported:
-                    return "Unsupported";
-                case TDerived::ETokenType::Builtin:
-                    return "Builtin";
-                case TDerived::ETokenType::Login:
-                    return "Login";
-            }
-        }
-
-        bool IsOfflineToken() const {
-            switch (TokenType) {
-                case TDerived::ETokenType::Builtin:
-                case TDerived::ETokenType::Login:
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        bool IsTokenReady() const {
-            return Token != nullptr;
-        }
-    };
+    TActorId AccessServiceValidator;
+    TActorId UserAccountService;
+    TActorId ServiceAccountService;
+    TString UserAccountDomain;
+    TString AccessServiceDomain;
+    TString ServiceDomain;
 
     struct TTokenRefreshRecord {
         TString Key;
@@ -180,10 +145,6 @@ protected:
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
 
-    static TStringBuf GetTicketFromKey(const TStringBuf key) {
-        return key.Before(':');
-    }
-
     TInstant GetExpireTime(TInstant now) const {
         return now + ExpireTime;
     }
@@ -196,21 +157,96 @@ protected:
         return LifeTime;
     }
 
-    static void EnrichUserTokenWithBuiltins(const TTokenRecordBase& tokenRecord) {
-        const TString& allAuthenticatedUsers = AppData()->AllAuthenticatedUsers;
-        if (!allAuthenticatedUsers.empty()) {
-            tokenRecord.Token->AddGroupSID(allAuthenticatedUsers);
-        }
-        for (const TString& sid : tokenRecord.AdditionalSIDs) {
-            tokenRecord.Token->AddGroupSID(sid);
+    template <typename TTokenRecord>
+    void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record, const TActorContext& ctx) const {
+        for (const auto& [perm, permRecord] : record.Permissions) {
+            const TString& permission(perm);
+            LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                        "Ticket " << MaskTicket(record.Ticket)
+                        << " asking for AccessServiceAuthorization(" << permission << ")");
+            THolder<TEvAccessServiceAuthorizeRequest> request = MakeHolder<TEvAccessServiceAuthorizeRequest>(key);
+            if (record.Signature.AccessKeyId) {
+                const auto& sign = record.Signature;
+                auto& signature = *request->Request.mutable_signature();
+                signature.set_access_key_id(sign.AccessKeyId);
+                signature.set_string_to_sign(sign.StringToSign);
+                signature.set_signature(sign.Signature);
+
+                auto& v4params = *signature.mutable_v4_parameters();
+                v4params.set_service(sign.Service);
+                v4params.set_region(sign.Region);
+
+                v4params.mutable_signed_at()->set_seconds(sign.SignedAt.Seconds());
+                v4params.mutable_signed_at()->set_nanos(sign.SignedAt.NanoSeconds() % 1000000000ull);
+            } else {
+                request->Request.set_iam_token(record.Ticket);
+            }
+            request->Request.set_permission(permission);
+
+            if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
+                auto* resourcePath = request->Request.add_resource_path();
+                resourcePath->set_id(databaseId);
+                resourcePath->set_type("ydb.database");
+            } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
+                auto* resourcePath = request->Request.add_resource_path();
+                resourcePath->set_id(serviceAccountId);
+                resourcePath->set_type("iam.serviceAccount");
+            }
+
+            if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
+                auto* resourcePath = request->Request.add_resource_path();
+                resourcePath->set_id(folderId);
+                resourcePath->set_type("resource-manager.folder");
+            }
+
+            if (const auto cloudId = record.GetAttributeValue(permission, "cloud_id"); cloudId) {
+                auto* resourcePath = request->Request.add_resource_path();
+                resourcePath->set_id(cloudId);
+                resourcePath->set_type("resource-manager.cloud");
+            }
+
+            record.ResponsesLeft++;
+            ctx.Send(AccessServiceValidator, request.Release());
         }
     }
 
     template <typename TTokenRecord>
-    void InitTokenRecord(const TString&, TTokenRecord& record, const TActorContext&, TInstant) {
-        if (record.TokenType == TDerived::ETokenType::Unknown && record.ResponsesLeft == 0) {
-            record.Error.Message = "Could not find correct token validator";
-            record.Error.Retryable = false;
+    void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record, const TActorContext& ctx) const {
+        LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                    "Ticket " << MaskTicket(record.Ticket)
+                    << " asking for AccessServiceAuthentication");
+        THolder<TEvAccessServiceAuthenticateRequest> request = MakeHolder<TEvAccessServiceAuthenticateRequest>(key);
+        if (record.Signature.AccessKeyId) {
+            const auto& sign = record.Signature;
+            auto& signature = *request->Request.mutable_signature();
+            signature.set_access_key_id(sign.AccessKeyId);
+            signature.set_string_to_sign(sign.StringToSign);
+            signature.set_signature(sign.Signature);
+
+            auto& v4params = *signature.mutable_v4_parameters();
+            v4params.set_service(sign.Service);
+            v4params.set_region(sign.Region);
+
+            v4params.mutable_signed_at()->set_seconds(sign.SignedAt.Seconds());
+            v4params.mutable_signed_at()->set_nanos(sign.SignedAt.NanoSeconds() % 1000000000ull);
+        } else {
+            request->Request.set_iam_token(record.Ticket);
+        }
+        record.ResponsesLeft++;
+        ctx.Send(AccessServiceValidator, request.Release());
+    }
+
+
+    TString GetSubjectName(const yandex::cloud::priv::servicecontrol::v1::Subject& subject) {
+        switch (subject.type_case()) {
+        case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
+            return subject.user_account().id() + "@" + AccessServiceDomain;
+        case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
+            return subject.service_account().id() + "@" + AccessServiceDomain;
+        case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kAnonymousAccount:
+            return "anonymous" "@" + AccessServiceDomain;
+        default:
+            return "Unknown subject type";
         }
     }
 
@@ -297,121 +333,12 @@ protected:
         return false;
     }
 
-    template <typename TTokenRecord>
-    void InitTokenRecord(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
-        TInstant now = ctx.Now();
-        record.InitTime = now;
-        record.AccessTime = now;
-        record.ExpireTime = GetExpireTime(now);
-        record.RefreshTime = GetRefreshTime(now);
-
-        if (record.Error) {
-            return;
-        }
-
-        if (CanInitBuiltinToken(key, record, ctx) ||
-            CanInitLoginToken(key, record, ctx)) {
-            return;
-        }
-
-        GetDerived()->InitTokenRecord(key, record, ctx, now);
-    }
-
-    template <typename TTokenRecord>
-    void EnrichUserToken(const TTokenRecord& record) const {
-        EnrichUserTokenWithBuiltins(record);
-    }
-
-    template <typename TTokenRecord>
-    void SetToken(const TString& key, TTokenRecord& record, TIntrusivePtr<NACLib::TUserToken> token, const TActorContext& ctx) {
-        TInstant now = ctx.Now();
-        record.Error.clear();
-        record.Token = token;
-        GetDerived()->EnrichUserToken(record);
-        if (!token->GetUserSID().empty()) {
-            record.Subject = token->GetUserSID();
-        }
-        record.SerializedToken = token->SerializeAsString();
-        if (!record.ExpireTime) {
-            record.ExpireTime = GetExpireTime(now);
-        }
-        if (record.IsOfflineToken()) {
-            record.RefreshTime = record.ExpireTime;
-        } else {
-            record.SetOkRefreshTime(this, now);
-        }
-        CounterTicketsSuccess->Inc();
-        CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
-        LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(record.Ticket) << " ("
-                    << record.PeerName << ") has now valid token of " << record.Subject);
-        RefreshQueue.push(GetDerived()->MakeTokenRefreshRecord(key, record));
-    }
-
-    template <typename TTokenRecord>
-    void SetError(const TString& key, TTokenRecord& record, const TEvTicketParser::TError& error, const TActorContext& ctx) {
-        record.Error = error;
-        if (record.Error.Retryable) {
-            record.ExpireTime = GetExpireTime(ctx.Now());
-            record.SetErrorRefreshTime(this, ctx.Now());
-            CounterTicketsErrorsRetryable->Inc();
-            LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(record.Ticket) << " ("
-                        << record.PeerName << ") has now retryable error message '" << error.Message << "'");
-        } else {
-            record.Token = nullptr;
-            record.SerializedToken.clear();
-            record.SetOkRefreshTime(this, ctx.Now());
-            CounterTicketsErrorsPermanent->Inc();
-            LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(record.Ticket) << " ("
-                        << record.PeerName << ") has now permanent error message '" << error.Message << "'");
-        }
-        CounterTicketsErrors->Inc();
-        RefreshQueue.push(GetDerived()->MakeTokenRefreshRecord(key, record));
-    }
-
-    void Respond(TTokenRecordBase& record, const TActorContext& ctx) {
-        if (record.IsTokenReady()) {
-            for (const auto& request : record.AuthorizeRequests) {
-                ctx.Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Token, record.SerializedToken), 0, request->Cookie);
-            }
-        } else {
-            for (const auto& request : record.AuthorizeRequests) {
-                ctx.Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error), 0, request->Cookie);
-            }
-        }
-        record.AuthorizeRequests.clear();
-    }
-
     void CrackTicket(const TString& ticketBody, TStringBuf& ticket, TStringBuf& ticketType) {
         ticket = ticketBody;
         ticketType = ticket.NextTok(' ');
         if (ticket.empty()) {
             ticket = ticketBody;
             ticketType.Clear();
-        }
-    }
-
-    template <typename TTokenRecord>
-    void TokenRecordSetup(TTokenRecord& record, TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-        record.PeerName = std::move(ev->Get()->PeerName);
-        record.Database = std::move(ev->Get()->Database);
-    }
-
-    template <typename TTokenRecord>
-    void SetTokenType(TTokenRecord& record, TStringBuf&, const TStringBuf ticketType) {
-        if (ticketType) {
-            record.TokenType = GetDerived()->ParseTokenType(ticketType);
-            switch (record.TokenType) {
-                case TDerived::ETokenType::Unsupported:
-                    record.Error.Message = "Token is not supported";
-                    record.Error.Retryable = false;
-                    break;
-                case TDerived::ETokenType::Unknown:
-                    record.Error.Message = "Unknown token";
-                    record.Error.Retryable = false;
-                    break;
-                default:
-                    break;
-            }
         }
     }
 
@@ -425,7 +352,8 @@ protected:
         ui64 cookie = ev->Cookie;
 
         CounterTicketsReceived->Inc();
-        if (GetDerived()->IsTicketEmpty(ticket, ev)) {
+        const auto& signature = ev->Get()->Signature;
+        if (ticket.empty() && !signature.AccessKeyId) {
             TEvTicketParser::TError error;
             error.Message = "Ticket is empty";
             error.Retryable = false;
@@ -458,9 +386,18 @@ protected:
         }
 
         auto& record = it->second;
-        GetDerived()->TokenRecordSetup(record, ev);
+        record.PeerName = std::move(ev->Get()->PeerName);
+        record.Database = std::move(ev->Get()->Database);
+        record.Signature = ev->Get()->Signature;
+        for (const auto& entry: ev->Get()->Entries) {
+            for (const auto& permission : entry.Permissions) {
+                auto& permissionRecord = record.Permissions[permission.Permission];
+                permissionRecord.Attributes = entry.Attributes;
+                permissionRecord.Required = permission.Required;
+            }
+        }
 
-        GetDerived()->SetTokenType(record, ticket, ticketType);
+        SetTokenType(record, ticket, ticketType);
 
         InitTokenRecord(key, record, ctx);
         if (record.Error) {
@@ -476,15 +413,270 @@ protected:
         record.AuthorizeRequests.emplace_back(ev.Release());
     }
 
-    static TString GetLoginProviderKeys(const NLogin::TLoginProvider& loginProvider) {
-        TStringBuilder keys;
-        for (const auto& [key, pubKey, privKey, expiresAt] : loginProvider.Keys) {
-            if (!keys.empty()) {
-                keys << ",";
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev, const TActorContext& ctx) {
+        NCloud::TEvAccessService::TEvAuthenticateResponse* response = ev->Get();
+        TEvAccessServiceAuthenticateRequest* request = response->Request->Get<TEvAccessServiceAuthenticateRequest>();
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(request->Key);
+        if (it == userTokens.end()) {
+            // wtf? it should be there
+            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(request->Request.iam_token()) << " has expired during build");
+        } else {
+            const auto& key = it->first;
+            auto& record = it->second;
+            record.ResponsesLeft--;
+            if (response->Status.Ok()) {
+                switch (response->Response.subject().type_case()) {
+                case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
+                case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
+                case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kAnonymousAccount:
+                    record.Subject = GetSubjectName(response->Response.subject());
+                    break;
+                default:
+                    record.Subject.clear();
+                    SetError(key, record, {"Unknown subject type", false}, ctx);
+                    break;
+                }
+                record.TokenType = TDerived::ETokenType::AccessService;
+                if (!record.Subject.empty()) {
+                    switch (response->Response.subject().type_case()) {
+                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
+                        if (UserAccountService) {
+                            LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                        "Ticket " << MaskTicket(record.Ticket)
+                                        << " asking for UserAccount(" << record.Subject << ")");
+                            THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                            request->Token = record.Ticket;
+                            request->Request.set_user_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
+                            ctx.Send(UserAccountService, request.Release());
+                            record.ResponsesLeft++;
+                            return;
+                        }
+                        break;
+                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
+                        if (ServiceAccountService) {
+                            LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                        "Ticket " << MaskTicket(record.Ticket)
+                                        << " asking for ServiceAccount(" << record.Subject << ")");
+                            THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                            request->Token = record.Ticket;
+                            request->Request.set_service_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
+                            ctx.Send(ServiceAccountService, request.Release());
+                            record.ResponsesLeft++;
+                            return;
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                    SetToken(key, record, new NACLib::TUserToken({
+                        .OriginalUserToken = record.Ticket,
+                        .UserSID = record.Subject,
+                        .AuthType = record.GetAuthType()
+                    }), ctx);
+                }
+            } else {
+                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService)) {
+                    bool retryable = IsRetryableGrpcError(response->Status);
+                    SetError(key, record, {response->Status.Msg, retryable}, ctx);
+                }
             }
-            keys << key;
+            if (record.ResponsesLeft == 0) {
+                Respond(record, ctx);
+            }
         }
-        return keys;
+    }
+
+    void Handle(NCloud::TEvUserAccountService::TEvGetUserAccountResponse::TPtr& ev, const TActorContext& ctx) {
+        TEvAccessServiceGetUserAccountRequest* request = ev->Get()->Request->Get<TEvAccessServiceGetUserAccountRequest>();
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(request->Key);
+        if (it == userTokens.end()) {
+            // wtf? it should be there
+            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket has expired during build (TEvGetUserAccountResponse)");
+        } else {
+            const auto& key = it->first;
+            auto& record = it->second;
+            record.ResponsesLeft--;
+            if (!ev->Get()->Status.Ok()) {
+                SetError(key, record, {ev->Get()->Status.Msg}, ctx);
+            } else {
+                GetDerived()->SetToken(key, record, ev, ctx);
+            }
+            if (record.ResponsesLeft == 0) {
+                Respond(record, ctx);
+            }
+        }
+    }
+
+    void Handle(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse::TPtr& ev, const TActorContext& ctx) {
+        TEvAccessServiceGetServiceAccountRequest* request = ev->Get()->Request->Get<TEvAccessServiceGetServiceAccountRequest>();
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(request->Key);
+        if (it == userTokens.end()) {
+            // wtf? it should be there
+            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket has expired during build (TEvGetServiceAccountResponse)");
+        } else {
+            const auto& key = it->first;
+            auto& record = it->second;
+            record.ResponsesLeft--;
+            if (!ev->Get()->Status.Ok()) {
+                SetError(key, record, {ev->Get()->Status.Msg}, ctx);
+            } else {
+                SetToken(key, record, new NACLib::TUserToken(record.Ticket, ev->Get()->Response.name() + "@" + ServiceDomain, {}), ctx);
+            }
+            if (record.ResponsesLeft == 0) {
+                Respond(record, ctx);
+            }
+        }
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev, const TActorContext& ctx) {
+        NCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
+        TEvAccessServiceAuthorizeRequest* request = response->Request->Get<TEvAccessServiceAuthorizeRequest>();
+        const TString& key(request->Key);
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto itToken = userTokens.find(key);
+        if (itToken == userTokens.end()) {
+            LOG_ERROR_S(ctx, NKikimrServices::TICKET_PARSER,
+                        "Ticket(key) "
+                        << MaskTicket(key)
+                        << " has expired during permission check");
+        } else {
+            auto& record = itToken->second;
+            TString permission = request->Request.permission();
+            TString subject;
+            yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase subjectType = yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::TYPE_NOT_SET;
+            auto itPermission = record.Permissions.find(permission);
+            if (itPermission != record.Permissions.end()) {
+                if (response->Status.Ok()) {
+                    subject = GetSubjectName(response->Response.subject());
+                    subjectType = response->Response.subject().type_case();
+                    itPermission->second.Subject = subject;
+                    itPermission->second.SubjectType = subjectType;
+                    itPermission->second.Error.clear();
+                    LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                "Ticket "
+                                << MaskTicket(record.Ticket)
+                                << " permission "
+                                << permission
+                                << " now has a valid subject \""
+                                << subject
+                                << "\"");
+                } else {
+                    bool retryable = IsRetryableGrpcError(response->Status);
+                    itPermission->second.Error = {response->Status.Msg, retryable};
+                    if (itPermission->second.Subject.empty() || !retryable) {
+                        itPermission->second.Subject.clear();
+                        LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                    "Ticket "
+                                    << MaskTicket(record.Ticket)
+                                    << " permission "
+                                    << permission
+                                    << " now has a permanent error \""
+                                    << itPermission->second.Error
+                                    << "\" "
+                                    << " retryable:"
+                                    << retryable);
+                    } else if (retryable) {
+                        LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                    "Ticket "
+                                    << MaskTicket(record.Ticket)
+                                    << " permission "
+                                    << permission
+                                    << " now has a retryable error \""
+                                    << response->Status.Msg
+                                    << "\"");
+                    }
+                }
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::TICKET_PARSER, "Received response for unknown permission " << permission << " for ticket " << MaskTicket(record.Ticket));
+            }
+            if (--record.ResponsesLeft == 0) {
+                ui32 permissionsOk = 0;
+                ui32 retryableErrors = 0;
+                bool requiredPermissionFailed = false;
+                TEvTicketParser::TError error;
+                for (const auto& [permission, rec] : record.Permissions) {
+                    if (rec.IsPermissionOk()) {
+                        ++permissionsOk;
+                        if (subject.empty()) {
+                            subject = rec.Subject;
+                            subjectType = rec.SubjectType;
+                        }
+                    } else if (rec.IsRequired()) {
+                        TString id;
+                        if (TString folderId = record.GetAttributeValue(permission, "folder_id")) {
+                            id += "folder_id " + folderId;
+                        } else if (TString cloudId = record.GetAttributeValue(permission, "cloud_id")) {
+                            id += "cloud_id " + cloudId;
+                        } else if (TString serviceAccountId = record.GetAttributeValue(permission, "service_account_id")) {
+                            id += "service_account_id " + serviceAccountId;
+                        }
+                        error = rec.Error;
+                        error.Message = permission + " for " + id + " - " + error.Message;
+                        requiredPermissionFailed = true;
+                        break;
+                    } else {
+                        if (rec.Error.Retryable) {
+                            ++retryableErrors;
+                            error = rec.Error;
+                            break;
+                        } else if (!error) {
+                            error = rec.Error;
+                        }
+                    }
+                }
+                if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
+                    record.TokenType = TDerived::ETokenType::AccessService;
+                    switch (subjectType) {
+                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
+                        if (UserAccountService) {
+                            LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                        "Ticket " << MaskTicket(record.Ticket)
+                                        << " asking for UserAccount(" << subject << ")");
+                            THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                            request->Token = record.Ticket;
+                            request->Request.set_user_account_id(TString(TStringBuf(subject).NextTok('@')));
+                            ctx.Send(UserAccountService, request.Release());
+                            record.ResponsesLeft++;
+                            return;
+                        }
+                        break;
+                    case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
+                        if (ServiceAccountService) {
+                            LOG_TRACE_S(ctx, NKikimrServices::TICKET_PARSER,
+                                        "Ticket " << MaskTicket(record.Ticket)
+                                        << " asking for ServiceAccount(" << subject << ")");
+                            THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                            request->Token = record.Ticket;
+                            request->Request.set_service_account_id(TString(TStringBuf(subject).NextTok('@')));
+                            ctx.Send(ServiceAccountService, request.Release());
+                            record.ResponsesLeft++;
+                            return;
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subject, {}), ctx);
+                } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService)) {
+                    SetError(request->Key, record, error, ctx);
+                }
+            }
+            if (record.ResponsesLeft == 0) {
+                Respond(record, ctx);
+            }
+        }
+    }
+
+    void Handle(TEvTicketParser::TEvRefreshTicket::TPtr& ev, const TActorContext& ctx) {
+        const TString& ticket(ev->Get()->Ticket);
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(ticket);
+        if (it != userTokens.end()) {
+            RefreshTicket(ticket, it->second, ctx);
+        }
     }
 
     void Handle(TEvTicketParser::TEvUpdateLoginSecurityState::TPtr& ev, const TActorContext& ctx) {
@@ -510,7 +702,10 @@ protected:
             }
             auto& record = it->second;
             if ((record.ExpireTime > ctx.Now()) && (record.AccessTime + GetLifeTime() > ctx.Now())) {
-                GetDerived()->Refresh(key, record, ctx);
+                LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Refreshing ticket " << MaskTicket(record.Ticket));
+                if (!RefreshTicket(key, record, ctx)) {
+                    RefreshQueue.push({key, record.RefreshTime});
+                }
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Expired ticket " << MaskTicket(record.Ticket));
                 if (!record.AuthorizeRequests.empty()) {
@@ -521,59 +716,6 @@ protected:
             }
         }
         ctx.Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
-    }
-
-    static TStringBuf HtmlBool(bool v) {
-        return v ? "<span style='font-weight:bold'>&#x2611;</span>" : "<span style='font-weight:bold'>&#x2610;</span>";
-    }
-
-    template <typename TTokenRecord>
-    static void WriteTokenRecordInfo(TStringBuilder& html, const TTokenRecord& record) {
-        html << "<tr><td>Subject</td><td>" << record.Subject << "</td></tr>";
-        html << "<tr><td>Additional SIDs</td><td>" << JoinStrings(record.AdditionalSIDs.begin(), record.AdditionalSIDs.end(), ", ") << "</td></tr>";
-        html << "<tr><td>Error</td><td>" << record.Error << "</td></tr>";
-        html << "<tr><td>Requests Infly</td><td>" << record.AuthorizeRequests.size() << "</td></tr>";
-        html << "<tr><td>Responses Left</td><td>" << record.ResponsesLeft << "</td></tr>";
-        TDerived::WriteTokenRecordTimesInfo(html, record);
-        html << "<tr><td>Peer Name</td><td>" << record.PeerName << "</td></tr>";
-        if (record.Token != nullptr) {
-            html << "<tr><td>User SID</td><td>" << record.Token->GetUserSID() << "</td></tr>";
-            for (const TString& group : record.Token->GetGroupSIDs()) {
-                html << "<tr><td>Group SID</td><td>" << group << "</td></tr>";
-            }
-        }
-    }
-
-    template <typename TTokenRecord>
-    static void WriteTokenRecordTimesInfo(TStringBuilder& html, const TTokenRecord& record) {
-        html << "<tr><td>Expire Time</td><td>" << record.ExpireTime << "</td></tr>";
-        html << "<tr><td>Access Time</td><td>" << record.AccessTime << "</td></tr>";
-    }
-
-    void WriteRefreshTimeValues(TStringBuilder& html) {
-        html << "<tr><td>Refresh Period</td><td>" << RefreshPeriod << "</td></tr>";
-    }
-
-    void WriteAuthorizeMethods(TStringBuilder& html) {
-        html << "<tr><td>Login</td><td>" << HtmlBool(UseLoginProvider) << "</td></tr>";
-    }
-
-    template <typename TTokenRecord>
-    static void WriteTokenRecordTimesValues(TStringBuilder& html, const TTokenRecord& record) {
-        html << "<td>" << record.ExpireTime << "</td>";
-        html << "<td>" << record.AccessTime << "</td>";
-    }
-
-    template <typename TTokenRecord>
-    static void WriteTokenRecordValues(TStringBuilder& html, const TString& key, const TTokenRecord& record) {
-        html << "<td>" << record.Database << "</td>";
-        html << "<td>" << record.Subject << "</td>";
-        html << "<td>" << record.Error << "</td>";
-        html << "<td>" << "<a href='ticket_parser?token=" << MD5::Calc(key) << "'>" << HtmlBool(record.Token != nullptr) << "</a>" << "</td>";
-        html << "<td>" << record.AuthorizeRequests.size() << "</td>";
-        html << "<td>" << record.ResponsesLeft << "</td>";
-        TDerived::WriteTokenRecordTimesValues(html, record);
-        html << "<td>" << record.PeerName << "</td>";
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -624,7 +766,7 @@ protected:
             html << "<head>";
             html << "<script>$('.container').css('width', 'auto');</script>";
             html << "<style>";
-            TDerived::MakeHtmlTable(html);
+            MakeHtmlTable(html);
             html << "</style>";
             html << "</head>";
             html << "<div style='margin-bottom: 10px; margin-left: 100px'>";
@@ -634,7 +776,7 @@ protected:
             if (!RefreshQueue.empty()) {
                 html << "<tr><td>Refresh Queue Time</td><td>" << RefreshQueue.top().RefreshTime << "</td></tr>";
             }
-            GetDerived()->WriteRefreshTimeValues(html);
+            WriteRefreshTimeValues(html);
             html << "<tr><td>Life Time</td><td>" << LifeTime << "</td></tr>";
             html << "<tr><td>Expire Time</td><td>" << ExpireTime << "</td></tr>";
             if (UseLoginProvider) {
@@ -676,6 +818,421 @@ protected:
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(html));
     }
 
+    static void MakeHtmlTable(TStringBuilder& html) {
+        html << "table.ticket-parser-proplist > tbody > tr > td { padding: 1px 3px; } ";
+        html << "table.ticket-parser-proplist > tbody > tr > td:first-child { font-weight: bold; text-align: right; } ";
+        html << "table.simple-table1 th { margin: 0px 3px; text-align: center; } ";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(2) { text-align: right; }";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(7) { text-align: right; }";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(8) { text-align: right; }";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(9) { white-space: nowrap; }";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(10) { white-space: nowrap; }";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(11) { white-space: nowrap; }";
+        html << "table.simple-table1 > tbody > tr > td:nth-child(12) { white-space: nowrap; }";
+        html << "table.table-hover tbody tr:hover > td { background-color: #9dddf2; }";
+    }
+
+    void WriteRefreshTimeValues(TStringBuilder& html) {
+        html << "<tr><td>Refresh Period</td><td>" << RefreshPeriod << "</td></tr>";
+        html << "<tr><td>Refresh Time</td><td>" << RefreshTime << "</td></tr>";
+        html << "<tr><td>Min Error Refresh Time</td><td>" << MinErrorRefreshTime << "</td></tr>";
+        html << "<tr><td>Max Error Refresh Time</td><td>" << MaxErrorRefreshTime << "</td></tr>";
+    }
+
+protected:
+    NKikimrProto::TAuthConfig Config;
+    TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
+
+    auto ParseTokenType(const TStringBuf tokenType) const {
+        if (tokenType == "Login") {
+            if (UseLoginProvider) {
+                return TDerived::ETokenType::Login;
+            } else {
+                return TDerived::ETokenType::Unsupported;
+            }
+        }
+        if (tokenType == "Bearer" || tokenType == "IAM") {
+            if (AccessServiceValidator) {
+                return TDerived::ETokenType::AccessService;
+            } else {
+                return TDerived::ETokenType::Unsupported;
+            }
+        }
+        return TDerived::ETokenType::Unknown;
+    }
+
+    struct TTokenRecordBase {
+        TTokenRecordBase(const TTokenRecordBase&) = delete;
+        TTokenRecordBase& operator =(const TTokenRecordBase&) = delete;
+
+        TString Ticket;
+        typename TDerived::ETokenType TokenType = TDerived::ETokenType::Unknown;
+        NKikimr::TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature Signature;
+        THashMap<TString, TPermissionRecord> Permissions;
+        TString Subject; // login
+        TEvTicketParser::TError Error;
+        TIntrusivePtr<NACLib::TUserToken> Token;
+        TString SerializedToken;
+        TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
+        ui64 ResponsesLeft = 0;
+        TInstant InitTime;
+        TInstant RefreshTime;
+        TInstant ExpireTime;
+        TInstant AccessTime;
+        TDuration CurrentMaxRefreshTime = TDuration::Seconds(1);
+        TDuration CurrentMinRefreshTime = TDuration::Seconds(1);
+        TString PeerName;
+        TString Database;
+        TStackVec<TString> AdditionalSIDs;
+
+        TTokenRecordBase(const TStringBuf ticket)
+            : Ticket(ticket)
+        {}
+
+        TString GetAttributeValue(const TString& permission, const TString& key) const {
+            if (auto it = Permissions.find(permission); it != Permissions.end()) {
+                for (const auto& pr : it->second.Attributes) {
+                    if (pr.first == key) {
+                        return pr.second;
+                    }
+                }
+            }
+            return TString();
+        }
+
+        template <typename T>
+        void SetErrorRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
+            if (Error.Retryable) {
+                if (CurrentMaxRefreshTime < ticketParser->MaxErrorRefreshTime) {
+                    CurrentMaxRefreshTime += ticketParser->MinErrorRefreshTime;
+                }
+                CurrentMinRefreshTime = ticketParser->MinErrorRefreshTime;
+            } else {
+                CurrentMaxRefreshTime = ticketParser->RefreshTime;
+                CurrentMinRefreshTime = CurrentMaxRefreshTime / 2;
+            }
+            SetRefreshTime(now);
+        }
+
+        template <typename T>
+        void SetOkRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
+            CurrentMaxRefreshTime = ticketParser->RefreshTime;
+            CurrentMinRefreshTime = CurrentMaxRefreshTime / 2;
+            SetRefreshTime(now);
+        }
+
+        void SetRefreshTime(TInstant now) {
+            if (CurrentMinRefreshTime < CurrentMaxRefreshTime) {
+                TDuration currentDuration = CurrentMaxRefreshTime - CurrentMinRefreshTime;
+                TDuration refreshDuration = CurrentMinRefreshTime + TDuration::MilliSeconds(RandomNumber<double>() * currentDuration.MilliSeconds());
+                RefreshTime = now + refreshDuration;
+            } else {
+                RefreshTime = now + CurrentMinRefreshTime;
+            }
+        }
+
+        TString GetSubject() const {
+            return Subject;
+        }
+
+        TString GetAuthType() const {
+            switch (TokenType) {
+                case TDerived::ETokenType::Unknown:
+                    return "Unknown";
+                case TDerived::ETokenType::Unsupported:
+                    return "Unsupported";
+                case TDerived::ETokenType::Builtin:
+                    return "Builtin";
+                case TDerived::ETokenType::Login:
+                    return "Login";
+                case TDerived::ETokenType::AccessService:
+                    return "AccessService";
+            }
+        }
+
+        bool IsOfflineToken() const {
+            switch (TokenType) {
+                case TDerived::ETokenType::Builtin:
+                case TDerived::ETokenType::Login:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        bool IsTokenReady() const {
+            return Token != nullptr;
+        }
+    };
+
+    static TStringBuf GetTicketFromKey(const TStringBuf key) {
+        return key.Before(':');
+    }
+
+    void EnrichUserTokenWithBuiltins(const TTokenRecordBase& record) {
+        const TString& allAuthenticatedUsers = AppData()->AllAuthenticatedUsers;
+        if (!allAuthenticatedUsers.empty()) {
+            record.Token->AddGroupSID(allAuthenticatedUsers);
+        }
+        for (const TString& sid : record.AdditionalSIDs) {
+            record.Token->AddGroupSID(sid);
+        }
+        if (!record.Permissions.empty()) {
+            TString subject;
+            TVector<TString> groups;
+            for (const auto& [permission, rec] : record.Permissions) {
+                if (rec.IsPermissionOk()) {
+                    subject = rec.Subject;
+                    AddPermissionSids(groups, record, permission);
+                }
+            }
+            if (subject) {
+                groups.emplace_back(subject);
+            }
+            if (record.Subject && record.Subject != subject) {
+                groups.emplace_back(record.Subject);
+            }
+
+            for (const TString& group : groups) {
+                record.Token->AddGroupSID(group);
+            }
+        }
+    }
+
+    void AddPermissionSids(TVector<TString>& sids, const TTokenRecordBase& record, const TString& permission) const {
+        sids.emplace_back(permission + '@' + AccessServiceDomain);
+        sids.emplace_back(permission + '-' + record.GetAttributeValue(permission, "database_id") + '@' + AccessServiceDomain);
+    }
+
+    template <typename TTokenRecord>
+    void InitTokenRecord(const TString& key, TTokenRecord& record, const TActorContext& ctx, TInstant) {
+        if (GetDerived()->CanInitAccessServiceToken(record)) {
+            if (AccessServiceValidator) {
+                if (record.Permissions) {
+                    RequestAccessServiceAuthorization(key, record, ctx);
+                } else {
+                    RequestAccessServiceAuthentication(key, record, ctx);
+                }
+                CounterTicketsAS->Inc();
+            }
+        }
+
+        if (record.TokenType == TDerived::ETokenType::Unknown && record.ResponsesLeft == 0) {
+            record.Error.Message = "Could not find correct token validator";
+            record.Error.Retryable = false;
+        }
+    }
+
+    template <typename TTokenRecord>
+    bool CanInitAccessServiceToken(const TTokenRecord& record) {
+        return record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService;
+    }
+
+    template <typename TTokenRecord>
+    void InitTokenRecord(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
+        TInstant now = ctx.Now();
+        record.InitTime = now;
+        record.AccessTime = now;
+        record.ExpireTime = GetExpireTime(now);
+        record.RefreshTime = GetRefreshTime(now);
+
+        if (record.Error) {
+            return;
+        }
+
+        if (CanInitBuiltinToken(key, record, ctx) ||
+            CanInitLoginToken(key, record, ctx)) {
+            return;
+        }
+
+        GetDerived()->InitTokenRecord(key, record, ctx, now);
+    }
+
+    template <typename TTokenRecord>
+    void SetToken(const TString& key, TTokenRecord& record, TIntrusivePtr<NACLib::TUserToken> token, const TActorContext& ctx) {
+        TInstant now = ctx.Now();
+        record.Error.clear();
+        record.Token = token;
+        EnrichUserTokenWithBuiltins(record);
+        if (!token->GetUserSID().empty()) {
+            record.Subject = token->GetUserSID();
+        }
+        record.SerializedToken = token->SerializeAsString();
+        if (!record.ExpireTime) {
+            record.ExpireTime = GetExpireTime(now);
+        }
+        if (record.IsOfflineToken()) {
+            record.RefreshTime = record.ExpireTime;
+        } else {
+            record.SetOkRefreshTime(this, now);
+        }
+        CounterTicketsSuccess->Inc();
+        CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
+        LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(record.Ticket) << " ("
+                    << record.PeerName << ") has now valid token of " << record.Subject);
+        RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
+    }
+
+    template <typename TTokenRecord>
+    void SetError(const TString& key, TTokenRecord& record, const TEvTicketParser::TError& error, const TActorContext& ctx) {
+        record.Error = error;
+        if (record.Error.Retryable) {
+            record.ExpireTime = GetExpireTime(ctx.Now());
+            record.SetErrorRefreshTime(this, ctx.Now());
+            CounterTicketsErrorsRetryable->Inc();
+            LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(record.Ticket) << " ("
+                        << record.PeerName << ") has now retryable error message '" << error.Message << "'");
+        } else {
+            record.Token = nullptr;
+            record.SerializedToken.clear();
+            record.SetOkRefreshTime(this, ctx.Now());
+            CounterTicketsErrorsPermanent->Inc();
+            LOG_DEBUG_S(ctx, NKikimrServices::TICKET_PARSER, "Ticket " << MaskTicket(record.Ticket) << " ("
+                        << record.PeerName << ") has now permanent error message '" << error.Message << "'");
+        }
+        CounterTicketsErrors->Inc();
+        RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
+    }
+
+    void Respond(TTokenRecordBase& record, const TActorContext& ctx) {
+        if (record.IsTokenReady()) {
+            for (const auto& request : record.AuthorizeRequests) {
+                ctx.Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Token, record.SerializedToken), 0, request->Cookie);
+            }
+        } else {
+            for (const auto& request : record.AuthorizeRequests) {
+                ctx.Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error), 0, request->Cookie);
+            }
+        }
+        record.AuthorizeRequests.clear();
+    }
+
+    template <typename TTokenRecord>
+    void SetTokenType(TTokenRecord& record, TStringBuf& ticket, const TStringBuf ticketType) {
+        if (ticketType) {
+            record.TokenType = GetDerived()->ParseTokenType(ticketType);
+            switch (record.TokenType) {
+                case TDerived::ETokenType::Unsupported:
+                    record.Error.Message = "Token is not supported";
+                    record.Error.Retryable = false;
+                    break;
+                case TDerived::ETokenType::Unknown:
+                    record.Error.Message = "Unknown token";
+                    record.Error.Retryable = false;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (record.Signature.AccessKeyId) {
+            ticket = record.Signature.AccessKeyId;
+            record.TokenType = TDerived::ETokenType::AccessService;
+        }
+    }
+
+    static TString GetLoginProviderKeys(const NLogin::TLoginProvider& loginProvider) {
+        TStringBuilder keys;
+        for (const auto& [key, pubKey, privKey, expiresAt] : loginProvider.Keys) {
+            if (!keys.empty()) {
+                keys << ",";
+            }
+            keys << key;
+        }
+        return keys;
+    }
+
+    template <typename TTokenRecord>
+    void SetToken(const TString& key, TTokenRecord& record, const NCloud::TEvUserAccountService::TEvGetUserAccountResponse::TPtr& ev, const TActorContext& ctx) {
+        SetToken(key, record, new NACLib::TUserToken({
+                .OriginalUserToken = record.Ticket,
+                .UserSID = ev->Get()->Response.yandex_passport_user_account().login() + "@" + UserAccountDomain,
+                .AuthType = record.GetAuthType()
+            }), ctx);
+    }
+
+    template <typename TTokenRecord>
+    void ResetTokenRecord(TTokenRecord& record, const TActorContext& ctx) {
+        record.Subject.clear();
+        record.InitTime = ctx.Now();
+    }
+
+    template <typename TTokenRecord>
+    bool CanRefreshTicket(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
+        if (AccessServiceValidator && (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::Unknown)) {
+            GetDerived()->ResetTokenRecord(record, ctx);
+            if (record.Permissions) {
+                RequestAccessServiceAuthorization(key, record, ctx);
+            } else {
+                RequestAccessServiceAuthentication(key, record, ctx);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    template <typename TTokenRecord>
+    bool RefreshTicket(const TString& key, TTokenRecord& record, const TActorContext& ctx) {
+        if (record.ResponsesLeft == 0 && record.AuthorizeRequests.empty()) {
+            if (GetDerived()->CanRefreshTicket(key, record, ctx)) {
+                return true;
+            }
+        }
+        record.RefreshTime = GetRefreshTime(ctx.Now());
+        return false;
+    }
+
+    static TStringBuf HtmlBool(bool v) {
+        return v ? "<span style='font-weight:bold'>&#x2611;</span>" : "<span style='font-weight:bold'>&#x2610;</span>";
+    }
+
+    template <typename TTokenRecord>
+    static void WriteTokenRecordInfo(TStringBuilder& html, const TTokenRecord& record) {
+        html << "<tr><td>Database</td><td>" << record.Database << "</td></tr>";
+        html << "<tr><td>Subject</td><td>" << record.Subject << "</td></tr>";
+        html << "<tr><td>Additional SIDs</td><td>" << JoinStrings(record.AdditionalSIDs.begin(), record.AdditionalSIDs.end(), ", ") << "</td></tr>";
+        html << "<tr><td>Error</td><td>" << record.Error << "</td></tr>";
+        html << "<tr><td>Requests Infly</td><td>" << record.AuthorizeRequests.size() << "</td></tr>";
+        html << "<tr><td>Responses Left</td><td>" << record.ResponsesLeft << "</td></tr>";
+        html << "<tr><td>Refresh Time</td><td>" << record.RefreshTime << "</td></tr>";
+        html << "<tr><td>Expire Time</td><td>" << record.ExpireTime << "</td></tr>";
+        html << "<tr><td>Access Time</td><td>" << record.AccessTime << "</td></tr>";
+        html << "<tr><td>Peer Name</td><td>" << record.PeerName << "</td></tr>";
+        if (record.Token != nullptr) {
+            html << "<tr><td>User SID</td><td>" << record.Token->GetUserSID() << "</td></tr>";
+            for (const TString& group : record.Token->GetGroupSIDs()) {
+                html << "<tr><td>Group SID</td><td>" << group << "</td></tr>";
+            }
+        }
+        for (const auto& [permissionName, perm] : record.Permissions) {
+            html << "<tr><td></td><td></td></tr>";
+            html << "<tr><td>Permission \"" << permissionName << (perm.Required ? " (required)" : "") << "\"</td><td>" << (perm.Error ? "Error:" + perm.Error.ToString() : perm.Subject) << "</td></tr>";
+            for (const auto& [attributeName, value] : perm.Attributes) {
+                html << "<tr><td>Attribute \"" << attributeName << "\"</td><td>" << value << "</td></tr>";
+            }
+        }
+    }
+
+    void WriteAuthorizeMethods(TStringBuilder& html) {
+        html << "<tr><td>Login</td><td>" << HtmlBool(UseLoginProvider) << "</td></tr>";
+        html << "<tr><td>Access Service</td><td>" << HtmlBool((bool)AccessServiceValidator) << "</td></tr>";
+        html << "<tr><td>User Account Service</td><td>" << HtmlBool((bool)UserAccountService) << "</td></tr>";
+        html << "<tr><td>Service Account Service</td><td>" << HtmlBool((bool)ServiceAccountService) << "</td></tr>";
+    }
+
+    template <typename TTokenRecord>
+    static void WriteTokenRecordValues(TStringBuilder& html, const TString& key, const TTokenRecord& record) {
+        html << "<td>" << record.Database << "</td>";
+        html << "<td>" << record.Subject << "</td>";
+        html << "<td>" << record.Error << "</td>";
+        html << "<td>" << "<a href='ticket_parser?token=" << MD5::Calc(key) << "'>" << HtmlBool(record.Token != nullptr) << "</a>" << "</td>";
+        html << "<td>" << record.AuthorizeRequests.size() << "</td>";
+        html << "<td>" << record.ResponsesLeft << "</td>";
+        html << "<td>" << record.RefreshTime << "</td>";
+        html << "<td>" << record.ExpireTime << "</td>";
+        html << "<td>" << record.AccessTime << "</td>";
+        html << "<td>" << record.PeerName << "</td>";
+    }
+
     void InitCounters(::NMonitoring::TDynamicCounterPtr counters) {
         CounterTicketsReceived = counters->GetCounter("TicketsReceived", true);
         CounterTicketsSuccess = counters->GetCounter("TicketsSuccess", true);
@@ -684,13 +1241,75 @@ protected:
         CounterTicketsErrorsPermanent = counters->GetCounter("TicketsErrorsPermanent", true);
         CounterTicketsBuiltin = counters->GetCounter("TicketsBuiltin", true);
         CounterTicketsLogin = counters->GetCounter("TicketsLogin", true);
+        CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
         CounterTicketsBuildTime = counters->GetHistogram("TicketsBuildTimeMs",
                                                          NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
-    void InitAuthProvider(const NActors::TActorContext&) {
+    void InitAuthProvider(const NActors::TActorContext& ctx) {
+        AccessServiceDomain = Config.GetAccessServiceDomain();
+        UserAccountDomain = Config.GetUserAccountDomain();
+        ServiceDomain = Config.GetServiceDomain();
+
+        if (Config.GetUseAccessService()) {
+            NCloud::TAccessServiceSettings settings;
+            settings.Endpoint = Config.GetAccessServiceEndpoint();
+            if (Config.GetUseAccessServiceTLS()) {
+                settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+            }
+            settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
+            settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
+            AccessServiceValidator = ctx.Register(NCloud::CreateAccessService(settings), TMailboxType::Simple, AppData(ctx)->IOPoolId);
+            if (Config.GetCacheAccessServiceAuthentication()) {
+                AccessServiceValidator = ctx.Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
+                                                          AccessServiceValidator,
+                                                          Config.GetGrpcCacheSize(),
+                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData(ctx)->UserPoolId);
+            }
+            if (Config.GetCacheAccessServiceAuthorization()) {
+                AccessServiceValidator = ctx.Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
+                                                          AccessServiceValidator,
+                                                          Config.GetGrpcCacheSize(),
+                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData(ctx)->UserPoolId);
+            }
+        }
+
+        if (Config.GetUseUserAccountService()) {
+            NCloud::TUserAccountServiceSettings settings;
+            settings.Endpoint = Config.GetUserAccountServiceEndpoint();
+            if (Config.GetUseUserAccountServiceTLS()) {
+                settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+            }
+            UserAccountService = ctx.Register(CreateUserAccountService(settings), TMailboxType::Simple, AppData(ctx)->IOPoolId);
+            if (Config.GetCacheUserAccountService()) {
+                UserAccountService = ctx.Register(NCloud::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
+                                                      UserAccountService,
+                                                      Config.GetGrpcCacheSize(),
+                                                      TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                      TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData(ctx)->UserPoolId);
+            }
+        }
+
+        if (Config.GetUseServiceAccountService()) {
+            NCloud::TServiceAccountServiceSettings settings;
+            settings.Endpoint = Config.GetServiceAccountServiceEndpoint();
+            if (Config.GetUseServiceAccountServiceTLS()) {
+                settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
+            }
+            ServiceAccountService = ctx.Register(NCloud::CreateServiceAccountService(settings), TMailboxType::Simple, AppData(ctx)->IOPoolId);
+            if (Config.GetCacheServiceAccountService()) {
+                ServiceAccountService = ctx.Register(NCloud::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
+                                                         ServiceAccountService,
+                                                         Config.GetGrpcCacheSize(),
+                                                         TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                         TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData(ctx)->UserPoolId);
+            }
+        }
+
         if (Config.GetUseLoginProvider()) {
             UseLoginProvider = true;
         }
@@ -703,6 +1322,19 @@ protected:
         MaxErrorRefreshTime = TDuration::Parse(Config.GetMaxErrorRefreshTime());
         LifeTime = TDuration::Parse(Config.GetLifeTime());
         ExpireTime = TDuration::Parse(Config.GetExpireTime());
+    }
+
+    void Die(const TActorContext& ctx) override {
+        if (AccessServiceValidator) {
+            ctx.Send(AccessServiceValidator, new TEvents::TEvPoisonPill);
+        }
+        if (UserAccountService) {
+            ctx.Send(UserAccountService, new TEvents::TEvPoisonPill);
+        }
+        if (ServiceAccountService) {
+            ctx.Send(ServiceAccountService, new TEvents::TEvPoisonPill);
+        }
+        TBase::Die(ctx);
     }
 
 public:
@@ -729,6 +1361,22 @@ public:
 
         ctx.Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
         TBase::Become(&TDerived::StateWork);
+    }
+
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+            HFunc(TEvTicketParser::TEvRefreshTicket, Handle);
+            HFunc(TEvTicketParser::TEvDiscardTicket, Handle);
+            HFunc(TEvTicketParser::TEvUpdateLoginSecurityState, Handle);
+            HFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
+            HFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
+            HFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);
+            HFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
+            HFunc(NMon::TEvHttpInfo, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleRefresh);
+            CFunc(TEvents::TSystem::PoisonPill, Die);
+        }
     }
 
     TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig)

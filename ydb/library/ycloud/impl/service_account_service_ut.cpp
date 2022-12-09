@@ -3,7 +3,6 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/testlib/service_mocks/service_account_service_mock.h>
-#include <ydb/core/grpc_services/grpc_helper.h>
 #include <library/cpp/grpc/server/grpc_server.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <library/cpp/testing/unittest/registar.h>

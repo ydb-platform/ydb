@@ -18,6 +18,8 @@ target_link_libraries(ydb-core-security PUBLIC
   cpp-openssl-io
   ydb-core-base
   ydb-core-protos
+  library-ycloud-api
+  library-ycloud-impl
   ydb-library-aclib
   library-aclib-protos
   ydb-library-login

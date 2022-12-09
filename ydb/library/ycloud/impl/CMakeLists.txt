@@ -18,7 +18,6 @@ target_link_libraries(library-ycloud-impl PUBLIC
   cpp-grpc-client
   library-cpp-json
   ydb-core-base
-  ydb-core-grpc_services
   lib-deprecated-client
   lib-deprecated-kicli
 )

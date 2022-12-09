@@ -14,13 +14,16 @@ namespace NScheme {
 TTypeRegistry::TTypeRegistry()
 {
     // move to 'init defaults?'
+    RegisterType<TInt8>();
+    RegisterType<TUint8>();
+    RegisterType<TInt16>();
+    RegisterType<TUint16>();
     RegisterType<TInt32>();
     RegisterType<TUint32>();
     RegisterType<TInt64>();
     RegisterType<TUint64>();
     RegisterType<TDouble>();
     RegisterType<TFloat>();
-    RegisterType<TUint8>();
     RegisterType<TBool>();
     RegisterType<TPairUi64Ui64>();
     RegisterType<TString>();

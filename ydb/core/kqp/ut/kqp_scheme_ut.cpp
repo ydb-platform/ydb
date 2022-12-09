@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -3315,6 +3316,169 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 #endif
+
+    Y_UNIT_TEST(Int8Int16) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString tableName("/Root/Types");
+        auto createTable = Sprintf(R"(
+            CREATE TABLE `%s` (
+                CUint8 Uint8,
+                CInt8 Int8,
+                CUint16 Uint16,
+                CInt16 Int16,
+                PRIMARY KEY (CUint8, CInt8, CUint16, CInt16))
+        )", tableName.c_str());
+
+        auto result = session.ExecuteSchemeQuery(createTable).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("CUint8").Uint8(i)
+                .AddMember("CInt8").Int8(i)
+                .AddMember("CUint16").Uint16(i)
+                .AddMember("CInt16").Int16(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        result = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto readSettings = TReadTableSettings()
+            .AppendColumns("CUint8")
+            .AppendColumns("CInt8")
+            .AppendColumns("CUint16")
+            .AppendColumns("CInt16");
+
+        auto it = session.ReadTable(tableName, readSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), result.GetIssues().ToString());
+
+        bool eos = false;
+        while (!eos) {
+            auto part = it.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                eos = true;
+                UNIT_ASSERT_C(part.EOS(), result.GetIssues().ToString());
+                continue;
+            }
+            auto resultSet = part.ExtractPart();
+            TResultSetParser parser(resultSet);
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                {
+                    auto& c = parser.ColumnParser("CUint8");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint8().Get());
+                }
+                {
+                    auto& c = parser.ColumnParser("CInt8");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt8().Get());
+                }
+                {
+                    auto& c = parser.ColumnParser("CUint16");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint16().Get());
+                }
+                {
+                    auto& c = parser.ColumnParser("CInt16");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt16().Get());
+                }
+            }
+        }
+
+        session.Close().GetValueSync();
+    }
+
+    Y_UNIT_TEST(Int8Int16Olap) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString tableName("/Root/Types");
+        auto createTable = Sprintf(R"(
+            CREATE TABLE `%s` (
+                CUint8 Uint8 NOT NULL,
+                CInt8 Int8 NOT NULL,
+                CUint16 Uint16 NOT NULL,
+                CInt16 Int16 NOT NULL,
+                PRIMARY KEY (CUint8, CInt8, CUint16, CInt16))
+            PARTITION BY HASH(CUint8, CInt8, CUint16, CInt16)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
+        )", tableName.c_str());
+
+        auto result = session.ExecuteSchemeQuery(createTable).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto schema = std::make_shared<arrow::Schema>(
+            std::vector<std::shared_ptr<arrow::Field>>{
+                arrow::field("CUint8", arrow::uint8()),
+                arrow::field("CInt8", arrow::int8()),
+                arrow::field("CUint16", arrow::uint16()),
+                arrow::field("CInt16", arrow::int16())
+            });
+
+        size_t rowsCount = 10;
+        auto builders = NArrow::MakeBuilders(schema, rowsCount);
+        for (size_t i = 0; i < rowsCount; ++i) {
+            Y_VERIFY(NArrow::Append<arrow::UInt8Type>(*builders[0], i));
+            Y_VERIFY(NArrow::Append<arrow::Int8Type>(*builders[1], i));
+            Y_VERIFY(NArrow::Append<arrow::UInt16Type>(*builders[2], i));
+            Y_VERIFY(NArrow::Append<arrow::Int16Type>(*builders[3], i));
+        }
+        auto batch = arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
+
+        TString strSchema = NArrow::SerializeSchema(*schema);
+        TString strBatch = NArrow::SerializeBatchNoCompression(batch);
+
+        result = db.BulkUpsert(tableName, NYdb::NTable::EDataFormat::ApacheArrow,
+            strBatch, strSchema).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto scan = Sprintf("SELECT * FROM `%s` ORDER BY CUint8", tableName.c_str());
+        auto it = db.StreamExecuteScanQuery(scan).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), result.GetIssues().ToString());
+
+        bool eos = false;
+        while (!eos) {
+            auto part = it.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                eos = true;
+                UNIT_ASSERT_C(part.EOS(), result.GetIssues().ToString());
+                continue;
+            }
+            auto resultSet = part.ExtractResultSet();
+            TResultSetParser parser(resultSet);
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                {
+                    auto& c = parser.ColumnParser("CUint8");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint8().Get());
+                }
+                {
+                    auto& c = parser.ColumnParser("CInt8");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt8().Get());
+                }
+                {
+                    auto& c = parser.ColumnParser("CUint16");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint16().Get());
+                }
+                {
+                    auto& c = parser.ColumnParser("CInt16");
+                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt16().Get());
+                }
+            }
+        }
+
+        session.Close().GetValueSync();
+    }
 }
 
 } // namespace NKqp

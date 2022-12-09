@@ -294,6 +294,22 @@ Y_UNIT_TEST_SUITE(Scheme) {
         for (NScheme::TTypeId typeId : yqlIds) {
             NScheme::TTypeInfo typeInfo(typeId);
             switch (typeId) {
+            case NScheme::NTypeIds::Int8:
+                GetValueHash(typeInfo, TCell(charArr, sizeof(i8)));
+                CompareTypedCells(TCell(charArr, sizeof(i8)), TCell(charArr, sizeof(i8)), typeInfo);
+                break;
+            case NScheme::NTypeIds::Uint8:
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui8)));
+                CompareTypedCells(TCell(charArr, sizeof(ui8)), TCell(charArr, sizeof(ui8)), typeInfo);
+                break;
+            case NScheme::NTypeIds::Int16:
+                GetValueHash(typeInfo, TCell(charArr, sizeof(i16)));
+                CompareTypedCells(TCell(charArr, sizeof(i16)), TCell(charArr, sizeof(i16)), typeInfo);
+                break;
+            case NScheme::NTypeIds::Uint16:
+                GetValueHash(typeInfo, TCell(charArr, sizeof(ui16)));
+                CompareTypedCells(TCell(charArr, sizeof(ui16)), TCell(charArr, sizeof(ui16)), typeInfo);
+                break;
             case NScheme::NTypeIds::Int32:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(i32)));
                 CompareTypedCells(TCell(charArr, sizeof(i32)), TCell(charArr, sizeof(i32)), typeInfo);
@@ -309,10 +325,6 @@ Y_UNIT_TEST_SUITE(Scheme) {
             case NScheme::NTypeIds::Uint64:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(ui64)));
                 CompareTypedCells(TCell(charArr, sizeof(ui64)), TCell(charArr, sizeof(ui64)), typeInfo);
-                break;
-            case NScheme::NTypeIds::Byte:
-                GetValueHash(typeInfo, TCell(charArr, sizeof(ui8)));
-                CompareTypedCells(TCell(charArr, sizeof(ui8)), TCell(charArr, sizeof(ui8)), typeInfo);
                 break;
             case NScheme::NTypeIds::Bool:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(ui8)));

@@ -56,11 +56,14 @@ static constexpr TTypeId Decimal = NYql::NProto::Decimal;
 static constexpr TTypeId Pg = 0x3000;
 
 static constexpr TTypeId YqlIds[] = {
+    Int8,
+    Uint8,
+    Int16,
+    Uint16,
     Int32,
     Uint32,
     Int64,
     Uint64,
-    Byte,
     Bool,
     Double,
     Float,

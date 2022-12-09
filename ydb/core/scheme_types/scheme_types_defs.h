@@ -84,10 +84,25 @@ class TUint64 : public IIntegerTypeWithKeyString<ui64, NTypeIds::Uint64, NNames:
 // upyachka to get around undefined tryfromstring for chars
 
 namespace NNames {
+    extern const char Int8[5];
     extern const char Uint8[6];
+    extern const char Int16[6];
+    extern const char Uint16[7];
 }
 
+class TInt8 : public TTypedType<i8, TInt8, NTypeIds::Int8, NNames::Int8> {
+public:
+};
+
 class TUint8 : public TTypedType<ui8, TUint8, NTypeIds::Uint8, NNames::Uint8> {
+public:
+};
+
+class TInt16 : public TTypedType<i16, TInt16, NTypeIds::Int16, NNames::Int16> {
+public:
+};
+
+class TUint16 : public TTypedType<ui16, TUint16, NTypeIds::Uint16, NNames::Uint16> {
 public:
 };
 
@@ -233,11 +248,14 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
 #define KIKIMR_FOREACH_MINIKQL_TYPE_I(name, size, macro, ...) macro(name, T##name, __VA_ARGS__)
 
 #define KIKIMR_FOREACH_MINIKQL_TYPE(xx, ...) \
+    xx(Int8, TInt8, __VA_ARGS__) \
+    xx(Uint8, TUint8, __VA_ARGS__) \
+    xx(Int16, TInt16, __VA_ARGS__) \
+    xx(Uint16, TUint16, __VA_ARGS__) \
     xx(Int32, TInt32, __VA_ARGS__) \
     xx(Uint32, TUint32, __VA_ARGS__) \
     xx(Int64, TInt64, __VA_ARGS__) \
     xx(Uint64, TUint64, __VA_ARGS__) \
-    xx(Uint8, TUint8, __VA_ARGS__) \
     xx(Bool, TBool, __VA_ARGS__) \
     xx(Double, TDouble, __VA_ARGS__) \
     xx(Float, TFloat, __VA_ARGS__) \

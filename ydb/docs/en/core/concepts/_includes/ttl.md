@@ -210,7 +210,7 @@ For a newly created table, you can pass TTL settings along with the table descri
     options.WithColumn("id", types.Optional(types.TypeUint64)),
     options.WithColumn("expire_at", types.Optional(types.TypeTimestamp)),
     options.WithTimeToLiveSettings(
-      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+      options.NewTTLSettings().ColumnDateType("expire_at"),
     ),
   )
   ```

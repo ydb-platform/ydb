@@ -295,57 +295,33 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
 
 IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 4U, ctx.Expr)) {
+    if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+    TTypeAnnotationNode::TListType blockItemTypes;
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
-    TTypeAnnotationNode::TListType inputItems;
-    for (const auto& type : multiType->GetItems()) {
-        if (!EnsureBlockOrScalarType(input->Pos(), *type, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        bool isScalar;
-        inputItems.push_back(GetBlockItemType(*type, isScalar));
-    }
-
-    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    ui32 countColumnIndex;
-    if (!TryFromString(input->Child(1)->Content(), countColumnIndex) || countColumnIndex >= inputItems.size()) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad count column index"));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureSpecificDataType(input->Child(1)->Pos(), *inputItems[countColumnIndex], EDataSlot::Uint64, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!input->Child(2)->IsCallable("Void")) {
-        if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+    if (!input->Child(1)->IsCallable("Void")) {
+        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         ui32 filterColumnIndex;
-        if (!TryFromString(input->Child(2)->Content(), filterColumnIndex) || filterColumnIndex >= inputItems.size()) {
+        if (!TryFromString(input->Child(1)->Content(), filterColumnIndex) || filterColumnIndex >= blockItemTypes.size()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad filter column index"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureSpecificDataType(input->Child(2)->Pos(), *inputItems[filterColumnIndex], EDataSlot::Bool, ctx.Expr)) {
+        if (!EnsureSpecificDataType(input->Child(1)->Pos(), *blockItemTypes[filterColumnIndex], EDataSlot::Bool, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    if (!ValidateBlockAggs(input->Pos(), inputItems, *input->Child(3), retMultiType, ctx.Expr)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -356,75 +332,51 @@ IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, 
 
 IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 5U, ctx.Expr)) {
+    if (!EnsureArgsCount(*input, 4U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+    TTypeAnnotationNode::TListType blockItemTypes;
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
-    TTypeAnnotationNode::TListType inputItems;
-    for (const auto& type : multiType->GetItems()) {
-        if (!EnsureBlockOrScalarType(input->Pos(), *type, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        bool isScalar;
-        inputItems.push_back(GetBlockItemType(*type, isScalar));
-    }
-
-    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    ui32 countColumnIndex;
-    if (!TryFromString(input->Child(1)->Content(), countColumnIndex) || countColumnIndex >= inputItems.size()) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad count column index"));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureSpecificDataType(input->Child(1)->Pos(), *inputItems[countColumnIndex], EDataSlot::Uint64, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!input->Child(2)->IsCallable("Void")) {
-        if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+    if (!input->Child(1)->IsCallable("Void")) {
+        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         ui32 filterColumnIndex;
-        if (!TryFromString(input->Child(2)->Content(), filterColumnIndex) || filterColumnIndex >= inputItems.size()) {
+        if (!TryFromString(input->Child(1)->Content(), filterColumnIndex) || filterColumnIndex >= blockItemTypes.size()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad filter column index"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureSpecificDataType(input->Child(2)->Pos(), *inputItems[filterColumnIndex], EDataSlot::Bool, ctx.Expr)) {
+        if (!EnsureSpecificDataType(input->Child(1)->Pos(), *blockItemTypes[filterColumnIndex], EDataSlot::Bool, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
     }
 
-    if (!EnsureTupleMinSize(*input->Child(3), 1, ctx.Expr)) {
+    if (!EnsureTupleMinSize(*input->Child(2), 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    for (auto child : input->Child(3)->Children()) {
+    for (auto child : input->Child(2)->Children()) {
         if (!EnsureAtom(*child, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         ui32 keyColumnIndex;
-        if (!TryFromString(child->Content(), keyColumnIndex) || keyColumnIndex >= inputItems.size()) {
+        if (!TryFromString(child->Content(), keyColumnIndex) || keyColumnIndex >= blockItemTypes.size()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad key column index"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        retMultiType.push_back(inputItems[keyColumnIndex]);
+        retMultiType.push_back(blockItemTypes[keyColumnIndex]);
     }
 
-    if (!ValidateBlockAggs(input->Pos(), inputItems, *input->Child(4), retMultiType, ctx.Expr)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

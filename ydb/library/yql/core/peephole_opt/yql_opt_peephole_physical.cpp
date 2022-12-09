@@ -4884,17 +4884,16 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
 TExprNode::TPtr UpdateBlockCombineAllColumns(const TExprNode::TPtr& node, std::optional<ui32> filterColumn, const TVector<ui32>& argIndices, TExprContext& ctx) {
     auto combineChildren = node->ChildrenList();
     combineChildren[0] = node->Head().HeadPtr();
-    combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(combineChildren[1]->Content())]));
     if (filterColumn) {
-        YQL_ENSURE(combineChildren[2]->IsCallable("Void"), "Filter column is already used");
-        combineChildren[2] = ctx.NewAtom(node->Pos(), ToString(*filterColumn));
+        YQL_ENSURE(combineChildren[1]->IsCallable("Void"), "Filter column is already used");
+        combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(*filterColumn));
     } else {
-        if (!combineChildren[2]->IsCallable("Void")) {
-            combineChildren[2] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(combineChildren[2]->Content())]));
+        if (!combineChildren[1]->IsCallable("Void")) {
+            combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(combineChildren[2]->Content())]));
         }
     }
 
-    auto payloadNodes = combineChildren[3]->ChildrenList();
+    auto payloadNodes = combineChildren[2]->ChildrenList();
     for (auto& p : payloadNodes) {
         YQL_ENSURE(p->IsList() && p->ChildrenSize() >= 1 && p->Head().IsCallable("AggBlockApply"), "Expected AggBlockApply");
         auto payloadArgs = p->ChildrenList();
@@ -4905,7 +4904,7 @@ TExprNode::TPtr UpdateBlockCombineAllColumns(const TExprNode::TPtr& node, std::o
         p = ctx.ChangeChildren(*p, std::move(payloadArgs));
     }
 
-    combineChildren[3] = ctx.ChangeChildren(*combineChildren[3], std::move(payloadNodes));
+    combineChildren[2] = ctx.ChangeChildren(*combineChildren[2], std::move(payloadNodes));
     return ctx.ChangeChildren(*node, std::move(combineChildren));
 }
 
@@ -4921,7 +4920,7 @@ TExprNode::TPtr OptimizeBlockCombineAll(const TExprNode::TPtr& node, TExprContex
         }
     }
 
-    if (node->Head().IsCallable("BlockCompress") && node->Child(2)->IsCallable("Void")) {
+    if (node->Head().IsCallable("BlockCompress") && node->Child(1)->IsCallable("Void")) {
         auto filterIndex = FromString<ui32>(node->Head().Child(1)->Content());
         TVector<ui32> argIndices;
         argIndices.resize(node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize());

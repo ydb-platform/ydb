@@ -589,7 +589,6 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         outputColumns.push_back(TString(FinalColumnNames[index]->Content()));
     }
 
-    auto mappedWidth = extractorRoots.size();
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
     auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
@@ -599,11 +598,10 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
             .Callable("WideFromBlocks")
                 .Callable(0, "BlockCombineHashed")
                     .Add(0, blocks)
-                    .Atom(1, ToString(mappedWidth))
-                    .Callable(2, "Void")
+                    .Callable(1, "Void")
                     .Seal()
-                    .Add(3, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                    .Add(4, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
                 .Seal()
             .Seal()
             .Build();
@@ -611,10 +609,9 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("BlockCombineAll")
                 .Add(0, blocks)
-                .Atom(1, ToString(mappedWidth))
-                .Callable(2, "Void")
+                .Callable(1, "Void")
                 .Seal()
-                .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
             .Seal()
             .Build();
     }

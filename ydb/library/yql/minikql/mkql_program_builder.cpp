@@ -5308,7 +5308,7 @@ TRuntimeNode TProgramBuilder::BlockBitCast(TRuntimeNode value, TType* targetType
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, ui32 countColumn, std::optional<ui32> filterColumn,
+TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5316,7 +5316,6 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, ui32 countColum
 
     TCallableBuilder builder(Env, __func__, returnType);
     builder.Add(flow);
-    builder.Add(NewDataLiteral<ui32>(countColumn));
     if (!filterColumn) {
         builder.Add(NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
     } else {
@@ -5338,7 +5337,7 @@ TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, ui32 countColum
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, ui32 countColumn, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
     const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
     if constexpr (RuntimeVersion < 31U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5346,7 +5345,6 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, ui32 countCo
 
     TCallableBuilder builder(Env, __func__, returnType);
     builder.Add(flow);
-    builder.Add(NewDataLiteral<ui32>(countColumn));
     if (!filterColumn) {
         builder.Add(NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id));
     } else {

@@ -8,10 +8,12 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 //TODO: only POD key & payloads are now supported
-template <typename TKey, typename TEqual, typename THash, typename TDeriv>
+template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv>
 class TRobinHoodHashBase {
 protected:
     using TPSLStorage = i32;
+
+    using TVec = std::vector<char, TAllocator>;
 
     explicit TRobinHoodHashBase(ui64 initialCapacity = 1u << 8)
         : Capacity(initialCapacity)
@@ -87,7 +89,7 @@ public:
     }
 
 private:
-    Y_FORCE_INLINE char* InsertImpl(TKey key, bool& isNew, ui64 capacity, std::vector<char>& data) {
+    Y_FORCE_INLINE char* InsertImpl(TKey key, bool& isNew, ui64 capacity, TVec& data) {
         isNew = false;
         ui64 bucket = THash()(key) & (capacity - 1);
         char* ptr = data.data() + AsDeriv().GetCellSize() * bucket;
@@ -143,7 +145,7 @@ private:
     }
 
     void Grow() {
-        std::vector<char> newData;
+        TVec newData;
         auto newCapacity = Capacity * 2;
         Allocate(newCapacity, newData);
         for (auto iter = Begin(); iter != End(); Advance(iter)) {
@@ -161,7 +163,7 @@ private:
         Capacity = newCapacity;
     }
 
-    void AdvancePointer(char*& ptr, std::vector<char>& data) const {
+    void AdvancePointer(char*& ptr, TVec& data) const {
         ptr += AsDeriv().GetCellSize();
         ptr = (ptr == data.data() + data.size()) ? data.data() : ptr;
     }
@@ -172,7 +174,7 @@ protected:
     }
 
 private:
-    void Allocate(ui64 capacity, std::vector<char>& data) const {
+    void Allocate(ui64 capacity, TVec& data) const {
         data.resize(AsDeriv().GetCellSize() * capacity);
         char* ptr = data.data();
         for (ui64 i = 0; i < capacity; ++i) {
@@ -192,14 +194,14 @@ private:
 private:
     ui64 Size = 0;
     ui64 Capacity;
-    std::vector<char> Data;
+    TVec Data;
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>>
-class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TRobinHoodHashMap<TKey, TEqual, THash>> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
+class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator>> {
 public:
-    using TSelf = TRobinHoodHashMap<TKey, TEqual, THash>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TSelf>;
+    using TSelf = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
 
     explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
         : TBase(initialCapacity)
@@ -244,14 +246,14 @@ public:
 private:
     const ui32 CellSize;
     const ui32 PayloadSize;
-    std::vector<char> TmpPayload, TmpPayload2;
+    typename TBase::TVec TmpPayload, TmpPayload2;
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>>
-class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TRobinHoodHashSet<TKey, TEqual, THash>> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
+class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator>> {
 public:
-    using TSelf = TRobinHoodHashSet<TKey, TEqual, THash>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TSelf>;
+    using TSelf = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
 
     explicit TRobinHoodHashSet(ui64 initialCapacity = 1u << 8)
         : TBase(initialCapacity)

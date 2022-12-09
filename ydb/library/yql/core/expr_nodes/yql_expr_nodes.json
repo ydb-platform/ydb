@@ -2247,9 +2247,8 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "BlockCombineAll"},
             "Children": [
-                {"Index": 1, "Name": "CountColumn", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "FilterColumn", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Aggregations", "Type": "TExprList"}
+                {"Index": 1, "Name": "FilterColumn", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Aggregations", "Type": "TExprList"}
             ]
         },
         {
@@ -2257,10 +2256,9 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "BlockCombineHashed"},
             "Children": [
-                {"Index": 1, "Name": "CountColumn", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "FilterColumn", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Keys", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "Aggregations", "Type": "TExprList"}
+                {"Index": 1, "Name": "FilterColumn", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Keys", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Aggregations", "Type": "TExprList"}
             ]
         }
     ]

@@ -6,9 +6,9 @@ Prepare a configuration file for {{ ydb-short-name }}:
    * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml): For a cross-data center cluster consisting of 9 nodes.
    * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-data center cluster consisting of 3 nodes.
 
-1. In the `host_configs` section, specify all disks and their types on each cluster node. Possible disk types are:
-   * ROT: rotational, HDD devices.
-   * SSD: SSD or NVMe devices.
+1. In the `host_configs` section, specify all disks and their types on each cluster node. Possible disk types:
+   * ROT: Rotational, HDD.
+   * SSD: SSD or NVMe.
 
    ```json
    host_configs:
@@ -42,24 +42,24 @@ Prepare a configuration file for {{ ydb-short-name }}:
        rack: '1'
    ```
 
-1. Enable user authentication (optional). 
+1. Enable user authentication (optional).
 
-    If you plan to use the authentication and authorization capabilities in the {{ ydb-short-name }} cluster being created, add the following additional parameters to the `domains_config` section:
+   If you plan to use authentication and user access differentiation features in the {{ ydb-short-name }} cluster, add the following parameters to the `domains_config` section:
 
-    ```json
-    domains_config:
-      security_config:
-        enforce_user_token_requirement: true
-        monitoring_allowed_sids:
-        - "root"
-        - "ADMINS"
-        - "DATABASE-ADMINS"
-        administration_allowed_sids:
-        - "root"
-        - "ADMINS"
-        - "DATABASE-ADMINS"
-        viewer_allowed_sids:
-        - "root"
-        - "ADMINS"
-        - "DATABASE-ADMINS"
-    ```
+   ```json
+   domains_config:
+     security_config:
+       enforce_user_token_requirement: true
+       monitoring_allowed_sids:
+       - "root"
+       - "ADMINS"
+       - "DATABASE-ADMINS"
+       administration_allowed_sids:
+       - "root"
+       - "ADMINS"
+       - "DATABASE-ADMINS"
+       viewer_allowed_sids:
+       - "root"
+       - "ADMINS"
+       - "DATABASE-ADMINS"
+   ```

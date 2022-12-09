@@ -1,12 +1,12 @@
 # Deploying a {{ ydb-short-name }} cluster on virtual or bare-metal servers
 
-This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on several bare-metal or virtual servers.
+This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on multiple bare-metal or virtual servers.
 
 ## Before you begin {#before-start}
 
 ### Prerequisites {#requirements}
 
-Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} binary. The network configuration must allow TCP connections on the following ports (by default):
+Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable. The network configuration must allow TCP connections on the following ports (by default):
 
 * 2135, 2136: GRPC for client-cluster interaction.
 * 19001, 19002: Interconnect for intra-cluster node interaction.
@@ -81,7 +81,7 @@ We don't recommend storing data on disks used by other processes (including the 
    sudo chown -R ydb:ydb /opt/ydb
    ```
 
-1. Copy the binary file, and libraries to the appropriate directories:
+1. Copy the executable and libraries to the appropriate directories:
 
    ```bash
    sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
@@ -102,13 +102,13 @@ We don't recommend storing data on disks used by other processes (including the 
 
 - Unprotected mode
 
-   In the unprotected mode, traffic between cluster nodes and between client and cluster uses  unencrypted connections. Use this mode for testing purposes only.
+   In unprotected mode, traffic between cluster nodes and between the client and cluster uses an unencrypted connection. Use this mode for testing purposes.
 
    {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
 - Protected mode
 
-   In the protected mode, traffic between cluster nodes and between the client and cluster is encrypted using the TLS protocol.
+   In protected mode, traffic between cluster nodes and between the client and cluster is encrypted using the TLS protocol.
 
    {% note info %}
 
@@ -234,7 +234,7 @@ We don't recommend storing data on disks used by other processes (including the 
          sudo chmod 0750 /opt/ydb/certs
          ```
 
-      1. Copy the node certificates and keys to the installation directory:
+      1. Copy the certificates and node keys to the installation folder:
 
          ```bash
          sudo -u ydb cp certs/ca.crt certs/node.crt certs/node.key /opt/ydb/certs/

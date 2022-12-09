@@ -1,6 +1,6 @@
-For YDB to work efficiently, we recommend using physical (not virtual) disks larger than 800 GB as block devices.
+For {{ ydb-short-name }} to work efficiently, we recommend using physical (not virtual) disks larger than 800 GB as block devices.
 
-The minimum disk size must be at least 80 GB, otherwise the node won't be able to use the block store volume. Correct and uninterrupted operation with minimum-size disks is not guaranteed. We recommend using such disks exclusively for informational purposes.
+The minimum disk size is 80 GB, otherwise the {{ ydb-short-name }} node won't be able to use the device. Correct and uninterrupted operation with minimum-size disks is not guaranteed. We recommend using such disks exclusively for informational purposes.
 
 {% note warning %}
 

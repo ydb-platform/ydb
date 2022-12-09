@@ -347,9 +347,11 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
         Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
     }
 
+    const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(pathId);
+
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
-    if (table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge)) {
+    if (table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex)) {
         TTxId txId = Self->GetCachedTxId(ctx);
 
         if (!txId) {
@@ -387,7 +389,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         return true;
-    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex)) {
         collectKeySample = true;
     } else {
         return true;

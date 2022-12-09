@@ -311,12 +311,14 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
 
+    const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(tableId);
+
     ESplitReason splitReason = ESplitReason::NO_SPLIT;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         splitReason = ESplitReason::SPLIT_BY_SIZE;
     }
 
-    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
+    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex)) {
         splitReason = ESplitReason::SPLIT_BY_LOAD;
     }
 

@@ -363,12 +363,19 @@ private:
     }
 
     TStatus AssumeUniqueWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        std::vector<std::string_view> columns;
-        columns.reserve(input->Child(1)->ChildrenSize());
-        for (const auto& column: input->Child(1)->Children()) {
-            columns.emplace_back(column->Content());
+        TUniqueConstraintNode::TFullSetType sets;
+        for (auto i = 1U; i < input->ChildrenSize(); ++i) {
+            TUniqueConstraintNode::TSetType columns;
+            columns.reserve(input->Child(i)->ChildrenSize());
+            for (const auto& column: input->Child(i)->Children())
+                columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+            sets.insert_unique(std::move(columns));
         }
-        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+
+        if (sets.empty())
+            sets.insert_unique(TUniqueConstraintNode::TSetType{TConstraintNode::TPathType()});
+
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets)));
         return FromFirst<TPassthroughConstraintNode, TSortedConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
@@ -777,7 +784,7 @@ private:
                         break;
                 }
 
-                if (auto mapping = TPartOfUniqueConstraintNode::GetCommonMapping(node.Head().GetConstraint<TUniqueConstraintNode>(), node.Head().GetConstraint<TPartOfUniqueConstraintNode>()); !mapping.empty()) {
+                if (auto mapping = TPartOfUniqueConstraintNode::GetCommonMapping(GetDetailedUinique(node.Head().GetConstraint<TUniqueConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfUniqueConstraintNode>()); !mapping.empty()) {
                     constraints.emplace_back(ctx.MakeConstraint<TPartOfUniqueConstraintNode>(std::move(mapping)));
                 }
                 if (const auto groupBy = node.Head().GetConstraint<TGroupByConstraintNode>()) {
@@ -846,7 +853,7 @@ private:
         }
 
         if (const auto lambdaUnique = GetConstraintFromLambda<TPartOfUniqueConstraintNode, WideOutput>(input->Tail(), ctx)) {
-            if (const auto unique = input->Head().GetConstraint<TUniqueConstraintNode>()) {
+            if (const auto unique = GetDetailedUinique(input->Head().GetConstraint<TUniqueConstraintNode>(), *input->Head().GetTypeAnn(), ctx)) {
                 if (const auto complete = TPartOfUniqueConstraintNode::MakeComplete(ctx, lambdaUnique->GetColumnMapping(), unique)) {
                     input->AddConstraint(complete);
                 }
@@ -2460,6 +2467,17 @@ private:
             }
         }
         return fields;
+    }
+
+    static const TUniqueConstraintNode* GetDetailedUinique(const TUniqueConstraintNode* unique,  const TTypeAnnotationNode& type, TExprContext& ctx) {
+        if (!unique)
+            return nullptr;
+
+        if (const auto& sets = unique->GetAllSets(); sets.size() != 1U || sets.cbegin()->size() != 1U || !sets.cbegin()->cbegin()->empty())
+            return unique;
+
+        const auto& columns = GetAllItemTypeFields(type, ctx);
+        return columns.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNode>(columns);
     }
 
     static const TStructExprType* GetNonEmptyStructItemType(const TTypeAnnotationNode& type) {

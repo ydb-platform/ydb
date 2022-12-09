@@ -1632,10 +1632,10 @@
         },
         {
             "Name": "TCoAssumeUnique",
-            "Base": "TCoInputBase",
+            "Base": "TFreeArgCallable",
             "Match": {"Type": "Callable", "Name": "AssumeUnique"},
             "Children": [
-                {"Index": 1, "Name": "UniqueBy", "Type": "TCoAtomList"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
             ]
         },
         {

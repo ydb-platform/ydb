@@ -4241,13 +4241,8 @@ namespace {
     }
 
     IGraphTransformer::TStatus AssumeUniqueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
-        }
-
-        const auto status = NormalizeTupleOfAtoms(input, 1, output, ctx.Expr);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            return status;
         }
 
         const TTypeAnnotationNode* inputItemType = nullptr;
@@ -4255,16 +4250,23 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        const auto structType = inputItemType->Cast<TStructExprType>();
-        for (auto& x : input->Tail().Children()) {
-            YQL_ENSURE(x->IsAtom());
-            auto pos = FindOrReportMissingMember(x->Content(), input->Head().Pos(), *structType, ctx.Expr);
-            if (!pos) {
+        if (input->ChildrenSize() > 1U) {
+            if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
+            }
+
+            for (auto i = 1U; i < input->ChildrenSize(); ++i) {
+                if (const auto status = NormalizeTupleOfAtoms(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                    return status;
+                }
+
+                const auto structType = inputItemType->Cast<TStructExprType>();
+                for (const auto& x : input->Child(i)->Children()) {
+                    YQL_ENSURE(x->IsAtom());
+                    if (!FindOrReportMissingMember(x->Content(), x->Pos(), *structType, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
             }
         }
 

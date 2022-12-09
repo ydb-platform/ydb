@@ -140,8 +140,9 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
             for (const auto& path : set)
                 if (!path.empty())
                     columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
-        if (!columns.empty()) { // TODO: AssumeUnique must support any set of columns.
-            res = ctx.Builder(node->Pos())
+        res = columns.empty() ?
+            ctx.NewCallable(node->Pos(), "AssumeUnique", {std::move(res)}):
+            ctx.Builder(node->Pos())
                 .Callable("AssumeUnique")
                     .Add(0, std::move(res))
                     .List(1)
@@ -149,7 +150,6 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
                     .Seal()
                 .Seal()
                 .Build();
-        }
     }
     return res;
 }

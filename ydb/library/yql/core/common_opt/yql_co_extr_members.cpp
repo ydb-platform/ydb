@@ -237,31 +237,24 @@ TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TEx
 }
 
 TExprNode::TPtr ApplyExtractMembersToAssumeUnique(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoAssumeUnique assumeUnique(node);
-    TSet<TStringBuf> extractFields;
+    std::unordered_set<std::string_view> extractFields(members->ChildrenSize());
     for (const auto& x : members->ChildrenList()) {
         extractFields.emplace(x->Content());
     }
-    const bool allExist = AllOf(assumeUnique.UniqueBy(), [&extractFields] (const TCoAtom& u) { return extractFields.contains(u.Value()); });
-    if (allExist) {
+
+    auto children = node->ChildrenList();
+    children.front() = ctx.NewCallable(node->Pos(), TCoExtractMembers::CallableName(), {std::move(children.front()), members});
+    auto it = children.begin();
+    it = std::remove_if(++it, children.end(), [&extractFields](const TExprNode::TPtr& list) { return AnyOf(list->Children(), [&extractFields] (const TExprNode::TPtr& u) { return !extractFields.contains(u->Content()); }); });
+    children.erase(it, children.cend());
+
+    if (children.size() > 1U) {
         YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
-        return ctx.Builder(assumeUnique.Pos())
-            .Callable(node->Content())
-                .Callable(0, TCoExtractMembers::CallableName())
-                    .Add(0, assumeUnique.Input().Ptr())
-                    .Add(1, members)
-                .Seal()
-                .Add(1, assumeUnique.UniqueBy().Ptr())
-            .Seal()
-            .Build();
+        return ctx.ChangeChildren(*node, std::move(children));
+    } else {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " after ExtractMembers" << logSuffix;
+        return std::move(children.front());
     }
-    YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " after ExtractMembers" << logSuffix;
-    return ctx.Builder(assumeUnique.Pos())
-        .Callable(TCoExtractMembers::CallableName())
-            .Add(0, assumeUnique.Input().Ptr())
-            .Add(1, members)
-        .Seal()
-        .Build();
 }
 
 TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {

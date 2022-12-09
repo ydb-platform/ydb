@@ -451,10 +451,13 @@ namespace NTypeAnnImpl {
     void TExtContext::RegisterResolvedImport(const IUdfResolver::TImport& import) {
         YQL_ENSURE(import.Modules);
         for (auto& m : *import.Modules) {
-            auto p = Types.UdfModules.emplace(m, import.FileAlias);
+            auto p = Types.UdfModules.emplace(m, TUdfInfo{import.FileAlias, import.CustomUdfPrefix});
             // rework this place when user tries to override another module
-            if (!p.second && p.first->second != import.FileAlias) {
-                ythrow yexception() << "Module name duplicated : module = " << m << ", existing alias = " << p.first->second << ", new alis = " << import.FileAlias;
+            if (!p.second && p.first->second.FileAlias != import.FileAlias) {
+                ythrow yexception()
+                                << "Module name duplicated : module = " << m
+                                << ", existing alias = " << p.first->second.FileAlias
+                                << ", new alis = " << import.FileAlias;
             }
         }
     }
@@ -7120,8 +7123,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
             }
 
-            auto foundAlias = ctx.Types.UdfModules.FindPtr(moduleName);
-            TStringBuf fileAlias = foundAlias ? *foundAlias : "";
+            auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
+            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : "";
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
                     .Add(0, input->HeadPtr())

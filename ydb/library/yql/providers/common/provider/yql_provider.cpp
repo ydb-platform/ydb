@@ -558,7 +558,7 @@ bool FillUsedFilesImpl(
             auto iterator = types.UdfModules.find(moduleName);
             // we have external UdfModule (not in preinstalled udfs)
             if (iterator != types.UdfModules.end()) {
-                fileAlias = iterator->second;
+                fileAlias = iterator->second.FileAlias;
             }
         }
 

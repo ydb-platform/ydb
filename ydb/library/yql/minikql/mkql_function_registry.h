@@ -103,7 +103,8 @@ public:
     virtual void LoadUdfs(
             const TString& libraryPath,
             const TUdfModuleRemappings& remmapings,
-            ui32 flags = 0) = 0;
+            ui32 flags = 0,
+            const TString& customUdfPrefix = {}) = 0;
 
     virtual void AddModule(
             const TStringBuf& libraryPath,

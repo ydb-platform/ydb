@@ -118,7 +118,12 @@ private:
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
 
-using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file
+struct TUdfInfo {
+    TString FileAlias;
+    TString Prefix;
+};
+// external module name -> alias of file and prefix
+using TUdfModulesTable = THashMap<TString, TUdfInfo>;
 
 struct TYqlOperationOptions {
     TString Runner;

@@ -269,6 +269,7 @@ private:
         auto importRequest = request.AddImports();
         importRequest->SetFileAlias(import.FileAlias);
         importRequest->SetPath(hiddenPath);
+        importRequest->SetCustomUdfPrefix(import.CustomUdfPrefix);
     }
 
     TResolveResult RunResolverAndParseResult(const TResolve& request, const TVector<TString>& additionalArgs, TFilesBox& filesBox) const {

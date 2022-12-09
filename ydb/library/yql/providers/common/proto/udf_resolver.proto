@@ -33,6 +33,7 @@ message TImport {
     required string FileAlias = 1;
     required string Path = 2;
     optional bool System = 3 [default = false];
+    optional string CustomUdfPrefix = 4;
 };
 
 message TImportResult {

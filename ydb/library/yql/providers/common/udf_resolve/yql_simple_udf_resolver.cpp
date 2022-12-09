@@ -75,12 +75,16 @@ public:
                 } else {
                     import->Modules.ConstructInPlace();
                 }
-
+                const TString& customUdfPrefix = import->CustomUdfPrefix;
                 try {
                     if (FileStorage_) {
                         auto link = holdingFileStorage.FreezeFile(*import->Block);
                         auto path = link->GetPath().GetPath();
-                        newRegistry->LoadUdfs(path, {}, NUdf::IRegistrator::TFlags::TypesOnly);
+                        newRegistry->LoadUdfs(
+                                path,
+                                {},
+                                NUdf::IRegistrator::TFlags::TypesOnly,
+                                customUdfPrefix);
                         path2import[path] = import;
                     } else {
                         if (import->Block->Type != EUserDataType::PATH) {
@@ -89,7 +93,11 @@ public:
                             hasErrors = true;
                             continue;
                         }
-                        newRegistry->LoadUdfs(import->Block->Data, {}, NUdf::IRegistrator::TFlags::TypesOnly);
+                        newRegistry->LoadUdfs(
+                                import->Block->Data,
+                                {},
+                                NUdf::IRegistrator::TFlags::TypesOnly,
+                                customUdfPrefix);
                         path2import[import->Block->Data] = import;
                     }
                 }

@@ -51,11 +51,13 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 TUdfModulesMap& modulesMap,
                 const TString& libraryPath,
                 const TUdfModuleRemappings& remappings,
-                ui32 abiVersion)
+                ui32 abiVersion,
+                const TString& customUdfPrefix = {})
             : ModulesMap(modulesMap)
             , LibraryPath(libraryPath)
             , Remappings(remappings)
             , AbiVersion(NUdf::AbiVersionToStr(abiVersion))
+            , CustomUdfPrefix(customUdfPrefix)
         {
         }
 
@@ -71,9 +73,10 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 m.Impl.reset(module.Release());
 
                 auto it = Remappings.find(name);
-                const TString& newName = (it == Remappings.end())
+                const TString& newName = CustomUdfPrefix
+                        + ((it == Remappings.end())
                         ? TString(name)
-                        : it->second;
+                        : it->second);
 
                 auto i = ModulesMap.insert({ newName, std::move(m) });
                 if (!i.second) {
@@ -96,6 +99,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
         const TUdfModuleRemappings& Remappings;
         const TString AbiVersion;
         TString Error;
+        const TString CustomUdfPrefix;
     };
 
 public:
@@ -121,7 +125,8 @@ public:
     void LoadUdfs(
             const TString& libraryPath,
             const TUdfModuleRemappings& remmapings,
-            ui32 flags /* = 0 */) override
+            ui32 flags /* = 0 */,
+            const TString& customUdfPrefix = {}) override
     {
         TUdfLibraryPtr lib;
 
@@ -181,7 +186,10 @@ public:
 
         // (3) do load
         TUdfModuleLoader loader(
-                    UdfModules_, libraryPath, remmapings, lib->AbiVersion);
+                    UdfModules_,
+                    libraryPath,
+                    remmapings,
+                    lib->AbiVersion, customUdfPrefix);
         registerFunc(loader, flags);
         Y_ENSURE(!loader.HasError(), loader.GetError());
     }

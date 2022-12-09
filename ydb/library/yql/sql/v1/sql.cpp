@@ -9634,7 +9634,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.PragmaAllowDotInAlias = true;
             Ctx.IncrementMonCounter("sql_pragma", "AllowDotInAlias");
         } else if (normalizedPragma == "udf") {
-            if (values.size() != 1 || pragmaValueDefault) {
+            if ((values.size() != 1 && values.size() != 2) || pragmaValueDefault) {
                 Error() << "Expected file alias as pragma value";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};

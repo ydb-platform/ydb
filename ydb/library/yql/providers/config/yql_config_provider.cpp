@@ -783,8 +783,9 @@ namespace {
         }
 
         bool ImportUdfs(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
-            if (args.size() != 1) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+            if (args.size() != 1 && args.size() != 2) {
+                ctx.AddError(TIssue(pos, TStringBuilder()
+                        << "Expected 1 or 2 arguments, but got " << args.size()));
                 return false;
             }
 
@@ -807,6 +808,9 @@ namespace {
             import.Pos = pos;
             import.FileAlias = fileAlias;
             import.Block = udfSource;
+            if (args.size() == 2) {
+                import.CustomUdfPrefix = TString(args[1]);
+            }
             Types.UdfImports.insert({ TString(fileAlias), import });
             return true;
         }

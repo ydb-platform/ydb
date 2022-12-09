@@ -1003,25 +1003,22 @@ NUdf::TCastResultOptions CastResult(const TDictExprType* source, const TDictExpr
 
 template <bool Strong, bool AllOrAnyElements = true>
 NUdf::TCastResultOptions CastResult(const TTupleExprType* source, const TTupleExprType* target) {
-    if (!target->GetSize()) {
-        return source->GetSize() ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::Complete;
-    }
-
     const auto& sItems = source->GetItems();
     const auto& tItems = target->GetItems();
 
     NUdf::TCastResultOptions result = NUdf::ECastOptions::Complete;
     for (size_t i = 0U; i < std::max(sItems.size(), tItems.size()); ++i) {
         if (i >= sItems.size()) {
-            if (AllOrAnyElements && !tItems[i]->IsOptionalOrNull()) {
-                return NUdf::ECastOptions::Impossible;
+            if constexpr (AllOrAnyElements) {
+                if (!tItems[i]->IsOptionalOrNull())
+                    return NUdf::ECastOptions::Impossible;
             }
         } else if (i >= tItems.size()) {
             if (sItems[i]->GetKind() != ETypeAnnotationKind::Null) {
                 if (sItems[i]->IsOptionalOrNull()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
-                    if (Strong && AllOrAnyElements) {
+                    if constexpr (Strong && AllOrAnyElements) {
                         return NUdf::ECastOptions::Impossible;
                     } else {
                         result |= AllOrAnyElements ? NUdf::ECastOptions::AnywayLoseData : NUdf::ECastOptions::MayFail;
@@ -1046,18 +1043,18 @@ NUdf::TCastResultOptions CastResult(const TStructExprType* source, const TStruct
     }
 
     NUdf::TCastResultOptions result = NUdf::ECastOptions::Complete;
-    bool hasCommon = false;
     for (const auto& field : fields) {
         if (!field.second.front()) {
-            if (AllOrAnyMembers && !field.second.back()->IsOptionalOrNull()) {
-                return NUdf::ECastOptions::Impossible;
+            if constexpr (AllOrAnyMembers) {
+                if (!field.second.back()->IsOptionalOrNull())
+                    return NUdf::ECastOptions::Impossible;
             }
         } else if (!field.second.back()) {
             if (field.second.front()->GetKind() != ETypeAnnotationKind::Null) {
                 if (field.second.front()->IsOptionalOrNull()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
-                    if (Strong && AllOrAnyMembers) {
+                    if constexpr (Strong && AllOrAnyMembers) {
                         return NUdf::ECastOptions::Impossible;
                     } else {
                         result |= AllOrAnyMembers ? NUdf::ECastOptions::AnywayLoseData : NUdf::ECastOptions::MayFail;
@@ -1065,7 +1062,6 @@ NUdf::TCastResultOptions CastResult(const TStructExprType* source, const TStruct
                 }
             }
         } else {
-            hasCommon = true;
             result |= CastResult<Strong>(field.second.front(), field.second.back());
         }
 
@@ -1073,7 +1069,7 @@ NUdf::TCastResultOptions CastResult(const TStructExprType* source, const TStruct
             return NUdf::ECastOptions::Impossible;
         }
     }
-    return hasCommon ? result : NUdf::ECastOptions::Impossible;
+    return result;
 }
 
 template <bool Strong>
@@ -1651,7 +1647,7 @@ const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool o
         dryOne = ctx.MakeType<TOptionalExprType>(dryOne);
         dryTwo = ctx.MakeType<TOptionalExprType>(dryTwo);
     }
-    
+
     return CommonType<true>(position, dryOne, dryTwo, ctx);
 }
 

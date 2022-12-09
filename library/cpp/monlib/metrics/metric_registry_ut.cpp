@@ -37,10 +37,20 @@ void Out<NMonitoring::NProto::TSingleSample::ValueCase>(IOutputStream& os, NMoni
     }
 }
 
+namespace {
+    template<typename F>
+    auto EnsureIdempotent(F&& f) {
+        auto firstResult = f();
+        auto secondResult = f();
+        UNIT_ASSERT_VALUES_EQUAL(firstResult, secondResult);
+        return secondResult;
+    }
+}
+
 Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
     Y_UNIT_TEST(Gauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
-        TGauge* g = registry.Gauge({{"my", "gauge"}});
+        TGauge* g = EnsureIdempotent([&] { return registry.Gauge({{"my", "gauge"}}); });
 
         UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 0.0, 1E-6);
         g->Set(12.34);
@@ -60,7 +70,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
     Y_UNIT_TEST(LazyGauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         double val = 0.0;
-        TLazyGauge* g = registry.LazyGauge({{"my", "lazyGauge"}}, [&val](){return val;});
+        TLazyGauge* g = EnsureIdempotent([&] { return registry.LazyGauge({{"my", "lazyGauge"}}, [&val](){return val;}); });
 
         UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 0.0, 1E-6);
         val = 12.34;
@@ -77,7 +87,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
 
     Y_UNIT_TEST(IntGauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
-        TIntGauge* g = registry.IntGauge({{"my", "gauge"}});
+        TIntGauge* g = EnsureIdempotent([&] { return registry.IntGauge({{"my", "gauge"}}); });
 
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
 
@@ -107,7 +117,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
     Y_UNIT_TEST(LazyIntGauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         i64 val = 0;
-        TLazyIntGauge* g = registry.LazyIntGauge({{"my", "gauge"}}, [&val](){return val;});
+        TLazyIntGauge* g = EnsureIdempotent([&] { return registry.LazyIntGauge({{"my", "gauge"}}, [&val](){return val;}); });
 
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
         val += 1;
@@ -124,7 +134,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
 
     Y_UNIT_TEST(Counter) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
-        TCounter* c = registry.Counter({{"my", "counter"}});
+        TCounter* c = EnsureIdempotent([&] { return registry.Counter({{"my", "counter"}}); });
 
         UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0);
         UNIT_ASSERT_VALUES_EQUAL(c->Inc(), 1);
@@ -137,7 +147,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         ui64 val = 0;
 
-        TLazyCounter* c = registry.LazyCounter({{"my", "counter"}}, [&val](){return val;});
+        TLazyCounter* c = EnsureIdempotent([&] { return registry.LazyCounter({{"my", "counter"}}, [&val](){return val;}); });
 
         UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0);
         val = 42;
@@ -148,7 +158,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         ui64 val = 0;
 
-        TLazyRate* r = registry.LazyRate({{"my", "rate"}}, [&val](){return val;});
+        TLazyRate* r = EnsureIdempotent([&] { return registry.LazyRate({{"my", "rate"}}, [&val](){return val;}); });
 
         UNIT_ASSERT_VALUES_EQUAL(r->Get(), 0);
         val = 42;
@@ -216,13 +226,17 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
     Y_UNIT_TEST(Histograms) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
 
-        THistogram* h1 = registry.HistogramCounter(
+        THistogram* h1 = EnsureIdempotent([&] {
+            return registry.HistogramCounter(
                 {{"sensor", "readTimeMillis"}},
                 ExponentialHistogram(5, 2));
+        });
 
-        THistogram* h2 = registry.HistogramRate(
+        THistogram* h2 = EnsureIdempotent([&] {
+            return registry.HistogramRate(
                 {{"sensor", "writeTimeMillis"}},
                 ExplicitHistogram({1, 5, 15, 20, 25}));
+        });
 
         for (i64 i = 0; i < 100; i++) {
             h1->Record(i);

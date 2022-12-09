@@ -77,11 +77,11 @@ namespace NMonitoring {
     }
 
     TLazyIntGauge* TMetricRegistry::LazyIntGauge(TLabels labels, std::function<i64()> supplier) {
-        return Metric<TLazyIntGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
+        return Metric<TLazyIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(supplier));
     }
 
     TLazyIntGauge* TMetricRegistry::LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) {
-        return Metric<TLazyIntGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
+        return Metric<TLazyIntGauge, EMetricType::IGAUGE>(std::move(labels), std::move(supplier));
     }
 
     TCounter* TMetricRegistry::Counter(TLabels labels) {

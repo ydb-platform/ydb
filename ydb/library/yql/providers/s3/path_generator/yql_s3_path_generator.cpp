@@ -539,24 +539,28 @@ private:
             vars.insert((word->begin() + 1)->str());
         }
 
-        TSet<TString> columns;
+        TSet<TString> partitionedByColumns;
         for (const auto& columnName: partitionedBy) {
-            columns.insert(columnName);
+            partitionedByColumns.insert(columnName);
             if (!vars.contains(columnName)) {
                 ythrow yexception() << "Template " << Config.LocationTemplate << " must include ${" << columnName << "}";
             }
         }
 
+        TSet<TString> rulesColumns;
         for (const auto& rule: Config.Rules) {
-            columns.insert(rule.Name);
+            rulesColumns.insert(rule.Name);
             if (!vars.contains(rule.Name)) {
                 ythrow yexception() << "Template " << Config.LocationTemplate << " must include ${" << rule.Name << "}";
             }
         }
 
         for (const auto& var: vars) {
-            if (!columns.contains(var)) {
-                ythrow yexception() << "Colum named " << var << " does not exist for template " << Config.LocationTemplate;
+            if (!partitionedByColumns.contains(var)) {
+                ythrow yexception() << "Partitioned by column named " << var << " does not exist for template " << Config.LocationTemplate;
+            }
+            if (!rulesColumns.contains(var)) {
+                ythrow yexception() << "Projection column named " << var << " does not exist for template " << Config.LocationTemplate;
             }
         }
     }

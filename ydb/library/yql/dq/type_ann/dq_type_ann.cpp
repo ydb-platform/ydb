@@ -219,7 +219,8 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
         } else {
             column = member->GetName();
         }
-        if (label.empty() && tableLabel.empty()) {
+        const bool isSystemKeyColumn = column.starts_with("_yql_dq_key_");
+        if (label.empty() && tableLabel.empty() && !isSystemKeyColumn) {
             ctx.AddError(TIssue(TStringBuilder() << "Invalid join input type " << FormatType(&rowType)));
             result.clear();
             return result;
@@ -228,7 +229,7 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
         if (optional && !memberType->IsOptionalOrNull()) {
             memberType = ctx.MakeType<TOptionalExprType>(memberType);
         }
-        if (!tableLabel.empty()) {
+        if (!(tableLabel.empty() || isSystemKeyColumn)) {
             result[tableLabel][member->GetName()] = memberType;
         } else {
             result[label][column] = memberType;
@@ -291,14 +292,14 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
             return nullptr;
         }
 
-        auto maybeLeftKeyType = leftType[leftKeyLabel].FindPtr(leftKeyColumn);
+        auto maybeLeftKeyType = leftType[leftKeyColumn.starts_with("_yql_dq_key_left_") ? "" : leftKeyLabel].FindPtr(leftKeyColumn);
         if (!maybeLeftKeyType) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                 << "Left key " << leftKeyLabel << "." << leftKeyColumn << " not found"));
             return nullptr;
         }
 
-        auto maybeRightKeyType = rightType[rightKeyLabel].FindPtr(rightKeyColumn);
+        auto maybeRightKeyType = rightType[rightKeyColumn.starts_with("_yql_dq_key_right_") ? "" : rightKeyLabel].FindPtr(rightKeyColumn);
         if (!maybeRightKeyType) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                 << "Right key " << rightKeyLabel << "." << rightKeyColumn << " not found"));

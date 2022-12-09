@@ -73,6 +73,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     ESort Sort = ESort::NodeId;
     bool ReverseSort = false;
     bool SortedNodeList = false;
+    bool LimitApplied = false;
 
     bool Storage = true;
     bool Tablets = true;
@@ -205,15 +206,18 @@ public:
     void SendNodeRequest(TNodeId nodeId) {
         if (nodeId >= MinAllowedNodeId && nodeId <= MaxAllowedNodeId) {
             if (PassedNodeIds.insert(nodeId).second) {
-                // optimization for paging with default sort
-                if (SortedNodeList && Offset.has_value()) {
-                    if (PassedNodeIds.size() <= Offset.value()) {
-                        return;
+                if (SortedNodeList && With == EWith::Everything) {
+                    // optimization for paging with default sort
+                    LimitApplied = true;
+                    if (Offset.has_value()) {
+                        if (PassedNodeIds.size() <= Offset.value()) {
+                            return;
+                        }
                     }
-                }
-                if (SortedNodeList && Limit.has_value()) {
-                    if (NodeIds.size() >= Limit.value()) {
-                        return;
+                    if (Limit.has_value()) {
+                        if (NodeIds.size() >= Limit.value()) {
+                            return;
+                        }
                     }
                 }
                 NodeIds.push_back(nodeId);
@@ -473,8 +477,6 @@ public:
             }
         }
 
-        ui64 totalNodes = NodeIds.size();
-
         for (TNodeId nodeId : NodeIds) {
             if (Storage) {
                 if (With == EWith::MissingDisks) {
@@ -531,42 +533,66 @@ public:
             }
         }
 
+        ui64 totalNodes = PassedNodeIds.size();
+        ui64 foundNodes;
         bool reverse = ReverseSort;
 
-        switch (Sort) {
-            case ESort::NodeId:
-            case ESort::Host:
-            case ESort::DC:
-                // already sorted
-                break;
-            case ESort::Version:
-                ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                    return reverse ^ (a.GetSystemState().GetVersion() < b.GetSystemState().GetVersion());
-                });
-                break;
-            case ESort::Uptime:
-                ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                    return reverse ^ !(a.GetSystemState().GetStartTime() < b.GetSystemState().GetStartTime());
-                });
-                break;
-            case ESort::Memory:
-                ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                    return reverse ^ (a.GetSystemState().GetMemoryUsed() < b.GetSystemState().GetMemoryUsed());
-                });
-                break;
-            case ESort::CPU:
-                ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                    return reverse ^ (GetCPU(a.GetSystemState()) < GetCPU(b.GetSystemState()));
-                });
-                break;
-            case ESort::LoadAverage:
-                ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                    return reverse ^ (GetLoadAverage(a.GetSystemState()) < GetLoadAverage(b.GetSystemState()));
-                });
-                break;
+        if (With == EWith::Everything) {
+            foundNodes = totalNodes;
+        } else {
+            foundNodes = Result.NodesSize();
         }
 
-        ui64 foundNodes = Result.NodesSize();
+        if (!SortedNodeList) {
+            switch (Sort) {
+                case ESort::NodeId:
+                case ESort::Host:
+                case ESort::DC:
+                    // already sorted
+                    break;
+                case ESort::Version:
+                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                        return reverse ^ (a.GetSystemState().GetVersion() < b.GetSystemState().GetVersion());
+                    });
+                    break;
+                case ESort::Uptime:
+                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                        return reverse ^ !(a.GetSystemState().GetStartTime() < b.GetSystemState().GetStartTime());
+                    });
+                    break;
+                case ESort::Memory:
+                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                        return reverse ^ (a.GetSystemState().GetMemoryUsed() < b.GetSystemState().GetMemoryUsed());
+                    });
+                    break;
+                case ESort::CPU:
+                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                        return reverse ^ (GetCPU(a.GetSystemState()) < GetCPU(b.GetSystemState()));
+                    });
+                    break;
+                case ESort::LoadAverage:
+                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                        return reverse ^ (GetLoadAverage(a.GetSystemState()) < GetLoadAverage(b.GetSystemState()));
+                    });
+                    break;
+            }
+        }
+
+        if (!LimitApplied) {
+            auto& result = *Result.MutableNodes();
+            if (Offset.has_value()) {
+                if (size_t(result.size()) > Offset.value()) {
+                    result.erase(result.begin(), std::next(result.begin(), Offset.value()));
+                } else {
+                    result.Clear();
+                }
+            }
+            if (Limit.has_value()) {
+                if (size_t(result.size()) > Limit.value()) {
+                    result.erase(std::next(result.begin(), Limit.value()), result.end());
+                }
+            }
+        }
 
         Result.SetTotalNodes(totalNodes);
         Result.SetFoundNodes(foundNodes);

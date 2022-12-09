@@ -13,7 +13,7 @@
 //#include "rope_cont_list.h"
 //#include "rope_cont_deque.h"
 
-#include "contiguous_data.h"
+#include "rc_buf.h"
 
 class TRopeAlignedBuffer : public IContiguousChunk {
     static constexpr size_t Alignment = 16;
@@ -102,7 +102,7 @@ struct always_false : std::false_type {};
 class TRope {
     friend class TRopeArena;
 
-    using TChunkList = NRopeDetails::TChunkList<TContiguousData>;
+    using TChunkList = NRopeDetails::TChunkList<TRcBuf>;
 
 private:
     // we use list here to store chain items as we have to keep valid iterators when erase/insert operations are invoked;
@@ -310,13 +310,13 @@ private:
             return Iter;
         }
 
-        const TContiguousData& GetChunk() const {
+        const TRcBuf& GetChunk() const {
             CheckValid();
             return *Iter;
         }
 
         template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
-        TContiguousData& GetChunk() {
+        TRcBuf& GetChunk() {
             CheckValid();
             return *Iter;
         }
@@ -354,7 +354,7 @@ public:
     TRope() = default;
     TRope(const TRope& rope) = default;
 
-    TRope(const TContiguousData& data) {
+    TRope(const TRcBuf& data) {
         if(!data.HasBuffer()) {
             return;
         }
@@ -362,7 +362,7 @@ public:
         Chain.PutToEnd(data);
     }
 
-    TRope(TContiguousData&& data) {
+    TRope(TRcBuf&& data) {
         if(!data.HasBuffer()) {
             return;
         }
@@ -407,13 +407,13 @@ public:
 
         while (begin.Iter != end.Iter) {
             const size_t size = begin.ContiguousSize();
-            Chain.PutToEnd(TContiguousData::Slice, begin.ContiguousData(), size, begin.GetChunk());
+            Chain.PutToEnd(TRcBuf::Slice, begin.ContiguousData(), size, begin.GetChunk());
             begin.AdvanceToNextContiguousBlock();
             Size += size;
         }
 
         if (begin != end && end.PointsToChunkMiddle()) {
-            Chain.PutToEnd(TContiguousData::Slice, begin.Ptr, end.Ptr, begin.GetChunk());
+            Chain.PutToEnd(TRcBuf::Slice, begin.Ptr, end.Ptr, begin.GetChunk());
             Size += end.Ptr - begin.Ptr;
         }
     }
@@ -534,7 +534,7 @@ public:
                     return;
                 }
             }
-            dest->Chain.PutToEnd(TContiguousData::Slice, first->Begin, first->Begin + num, *first);
+            dest->Chain.PutToEnd(TRcBuf::Slice, first->Begin, first->Begin + num, *first);
             first->Begin += num;
         }
     }
@@ -552,14 +552,14 @@ public:
 
         // check if we have to split the block
         if (pos.PointsToChunkMiddle()) {
-            pos.Iter = Chain.InsertBefore(pos.Iter, TContiguousData::Slice, pos->Begin, pos.Ptr, pos.GetChunk());
+            pos.Iter = Chain.InsertBefore(pos.Iter, TRcBuf::Slice, pos->Begin, pos.Ptr, pos.GetChunk());
             ++pos.Iter;
             pos->Begin = pos.Ptr;
         }
 
         // perform glueing if possible
-        TContiguousData *ropeLeft = &rope.Chain.GetFirstChunk();
-        TContiguousData *ropeRight = &rope.Chain.GetLastChunk();
+        TRcBuf *ropeLeft = &rope.Chain.GetFirstChunk();
+        TRcBuf *ropeRight = &rope.Chain.GetLastChunk();
         bool gluedLeft = false, gluedRight = false;
         if (pos.Iter != Chain.begin()) { // glue left part whenever possible
             // obtain iterator to previous chunk
@@ -600,7 +600,7 @@ public:
 
         while (len) {
             Y_VERIFY_DEBUG(Chain);
-            TContiguousData& item = Chain.GetFirstChunk();
+            TRcBuf& item = Chain.GetFirstChunk();
             const size_t itemSize = item.GetSize();
             if (len >= itemSize) {
                 Chain.EraseFront();
@@ -620,7 +620,7 @@ public:
 
         while (len) {
             Y_VERIFY_DEBUG(Chain);
-            TContiguousData& item = Chain.GetLastChunk();
+            TRcBuf& item = Chain.GetLastChunk();
             const size_t itemSize = item.GetSize();
             if (len >= itemSize) {
                 Chain.EraseBack();
@@ -734,7 +734,7 @@ public:
     void Compact(size_t headroom = 0, size_t tailroom = 0) {
         if(!IsContiguous()) {
             // TODO(innokentii): use better container, when most outer users stop use TString
-            TContiguousData res = TContiguousData::Uninitialized(GetSize(), headroom, tailroom);
+            TRcBuf res = TRcBuf::Uninitialized(GetSize(), headroom, tailroom);
             Begin().ExtractPlainDataAndAdvance(res.UnsafeGetDataMut(), res.size());
             Erase(Begin(), End());
             Insert(End(), TRope(res));
@@ -743,7 +743,7 @@ public:
 
     static TRope Uninitialized(size_t size)
     {
-        TContiguousData res = TContiguousData::Uninitialized(size);
+        TRcBuf res = TRcBuf::Uninitialized(size);
         return TRope(res);
     }
 
@@ -796,12 +796,12 @@ public:
         return s.Str();
     }
 
-    explicit operator TContiguousData() {
+    explicit operator TRcBuf() {
         if(GetSize() == 0) {
-            return TContiguousData();
+            return TRcBuf();
         }
         Compact();
-        return TContiguousData(Begin().GetChunk());
+        return TRcBuf(Begin().GetChunk());
     }
 
     friend bool operator==(const TRope& x, const TRope& y) { return Compare(x, y) == 0; }
@@ -826,19 +826,19 @@ public:
     friend bool operator>=(const TContiguousSpan& x, const TRope& y) { return Compare(x, y) >= 0; }
 
     // FIXME(innokentii) temporary hack
-    friend bool operator==(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) == 0; }
-    friend bool operator!=(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) != 0; }
-    friend bool operator< (const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) <  0; }
-    friend bool operator<=(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) <= 0; }
-    friend bool operator> (const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) >  0; }
-    friend bool operator>=(const TRope& x, const TContiguousData& y) { return Compare(x, y.GetContiguousSpan()) >= 0; }
+    friend bool operator==(const TRope& x, const TRcBuf& y) { return Compare(x, y.GetContiguousSpan()) == 0; }
+    friend bool operator!=(const TRope& x, const TRcBuf& y) { return Compare(x, y.GetContiguousSpan()) != 0; }
+    friend bool operator< (const TRope& x, const TRcBuf& y) { return Compare(x, y.GetContiguousSpan()) <  0; }
+    friend bool operator<=(const TRope& x, const TRcBuf& y) { return Compare(x, y.GetContiguousSpan()) <= 0; }
+    friend bool operator> (const TRope& x, const TRcBuf& y) { return Compare(x, y.GetContiguousSpan()) >  0; }
+    friend bool operator>=(const TRope& x, const TRcBuf& y) { return Compare(x, y.GetContiguousSpan()) >= 0; }
 
-    friend bool operator==(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) == 0; }
-    friend bool operator!=(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) != 0; }
-    friend bool operator< (const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) <  0; }
-    friend bool operator<=(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) <= 0; }
-    friend bool operator> (const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) >  0; }
-    friend bool operator>=(const TContiguousData& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) >= 0; }
+    friend bool operator==(const TRcBuf& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) == 0; }
+    friend bool operator!=(const TRcBuf& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) != 0; }
+    friend bool operator< (const TRcBuf& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) <  0; }
+    friend bool operator<=(const TRcBuf& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) <= 0; }
+    friend bool operator> (const TRcBuf& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) >  0; }
+    friend bool operator>=(const TRcBuf& x, const TRope& y) { return Compare(x.GetContiguousSpan(), y) >= 0; }
 
 
 private:
@@ -852,9 +852,9 @@ private:
             return;
         }
 
-        auto addBlock = [&](const TContiguousData& from, const char *begin, const char *end) {
+        auto addBlock = [&](const TRcBuf& from, const char *begin, const char *end) {
             if (target) {
-                target->Chain.PutToEnd(TContiguousData::Slice, begin, end, from);
+                target->Chain.PutToEnd(TRcBuf::Slice, begin, end, from);
                 target->Size += end - begin;
             }
             Size -= end - begin;
@@ -863,12 +863,12 @@ private:
         // consider special case -- when begin and end point to the same block; in this case we have to split up this
         // block into two parts
         if (begin.Iter == end.Iter) {
-            TContiguousData chunkToSplit = begin.GetChunk();
+            TRcBuf chunkToSplit = begin.GetChunk();
             addBlock(chunkToSplit, begin.Ptr, end.Ptr);
             const char *firstChunkBegin = begin.PointsToChunkMiddle() ? begin->Begin : nullptr;
             begin->Begin = end.Ptr; // this affects both begin and end iterator pointed values
             if (firstChunkBegin) {
-                Chain.InsertBefore(begin.Iter, TContiguousData::Slice, firstChunkBegin, begin.Ptr, chunkToSplit);
+                Chain.InsertBefore(begin.Iter, TRcBuf::Slice, firstChunkBegin, begin.Ptr, chunkToSplit);
             }
         } else {
             // check the first iterator -- if it starts not from the begin of the block, we have to adjust end of the
@@ -950,7 +950,7 @@ public:
         return Size;
     }
 
-    void AccountChunk(const TContiguousData& chunk) {
+    void AccountChunk(const TRcBuf& chunk) {
         if (AccountedBuffers.insert(chunk.Backend.UniqueId()).second) {
             Size += chunk.GetOccupiedMemorySize();
         }
@@ -1083,7 +1083,7 @@ public:
 
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
-    for (TContiguousData& chunk : origin.Chain) {
+    for (TRcBuf& chunk : origin.Chain) {
         size_t ratio = chunk.GetSize() * 1024 / chunk.GetOccupiedMemorySize();
         if (ratio < 1024 - worstRatioPer1k) {
             res.Insert(res.End(), arena.CreateRope(chunk.Begin, chunk.GetSize()));
@@ -1093,7 +1093,7 @@ inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, T
     }
     res.Size = origin.Size;
     origin = TRope();
-    for (const TContiguousData& chunk : res.Chain) {
+    for (const TRcBuf& chunk : res.Chain) {
         arena.AccountChunk(chunk);
     }
     return res;

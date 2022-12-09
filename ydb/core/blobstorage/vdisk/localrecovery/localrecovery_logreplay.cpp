@@ -727,7 +727,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus HandlePhantomLogoBlobs(const TActorContext& ctx, const NPDisk::TLogRecord& record) {
-            const TContiguousData& data = record.Data;
+            const TRcBuf& data = record.Data;
             if (!PhantomLogoBlobs.ParseFromArray(data.GetData(), data.GetSize())) {
                 return EDispatchStatus::Error;
             }

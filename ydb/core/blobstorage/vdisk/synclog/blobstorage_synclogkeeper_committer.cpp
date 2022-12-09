@@ -43,7 +43,7 @@ namespace NKikimr {
                 // commit msg
                 auto commitMsg = std::make_unique<NPDisk::TEvLog>(SlCtx->PDiskCtx->Dsk->Owner,
                         SlCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncLogIdx,
-                        CommitRecord, TContiguousData(EntryPointSerializer.GetSerializedData()), seg, nullptr);
+                        CommitRecord, TRcBuf(EntryPointSerializer.GetSerializedData()), seg, nullptr);
 
                 if (CommitRecord.CommitChunks || CommitRecord.DeleteChunks) {
                     LOG_INFO(ctx, NKikimrServices::BS_SKELETON,

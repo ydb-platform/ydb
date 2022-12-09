@@ -32,14 +32,14 @@ namespace NKikimr {
         return res;
     }
 
-    TContiguousData TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
+    TRcBuf TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
             TRope &&rope) {
         rope.Compact(24);
-        return SerializeZeroCopy(gtype, id, TContiguousData(rope));
+        return SerializeZeroCopy(gtype, id, TRcBuf(rope));
     }
 
-    TContiguousData TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
-            TContiguousData &&data) {
+    TRcBuf TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
+            TRcBuf &&data) {
         Y_VERIFY(id.PartId() && data.GetSize() == gtype.PartSize(id),
             "id# %s rope.GetSize()# %zu", id.ToString().data(), data.GetSize());
 

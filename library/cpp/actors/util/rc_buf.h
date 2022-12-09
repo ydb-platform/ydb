@@ -14,7 +14,7 @@
 #include <util/system/sys_alloc.h>
 
 #include "shared_data.h"
-#include "contiguous_data_backend.h"
+#include "rc_buf_backend.h"
 
 #ifdef KIKIMR_TRACE_CONTIGUOUS_DATA_GROW
 #include "shared_data_backtracing_owner.h"
@@ -289,11 +289,11 @@ struct IContiguousChunk : TThrRefBase {
 class TRope;
 class TRopeArena;
 
-class TContiguousData {
+class TRcBuf {
     friend class TRope;
     friend class TRopeArena;
 
-    using TInternalBackend = NDetail::TContiguousDataInternalBackend;
+    using TInternalBackend = NDetail::TRcBufInternalBackend;
 
     class TBackend {
         enum class EType : uintptr_t {
@@ -694,7 +694,7 @@ class TContiguousData {
     const char *Begin; // data start
     const char *End; // data end
 
-    explicit TContiguousData(TInternalBackend s, const char *data, size_t size)
+    explicit TRcBuf(TInternalBackend s, const char *data, size_t size)
         : Backend(std::move(s))
     {
         Y_VERIFY(Backend.GetData().data() == nullptr ||
@@ -703,7 +703,7 @@ class TContiguousData {
         End = data + size;
     }
 
-    explicit TContiguousData(TInternalBackend s)
+    explicit TRcBuf(TInternalBackend s)
         : Backend(std::move(s))
     {
         auto span = Backend.GetData();
@@ -711,8 +711,8 @@ class TContiguousData {
         End = Begin + span.size();
     }
 
-    TContiguousData(TOwnedSlice, const char *data, size_t size, const TContiguousData& from)
-        : TContiguousData(from.Backend, {data, size})
+    TRcBuf(TOwnedSlice, const char *data, size_t size, const TRcBuf& from)
+        : TRcBuf(from.Backend, {data, size})
     {
         Y_VERIFY(data >= from.GetData());
         Y_VERIFY(data < from.GetData() + from.GetSize());
@@ -720,8 +720,8 @@ class TContiguousData {
         Backend.UpdateCookiesUnsafe(Begin, End);
     }
 
-    TContiguousData(TOwnedSlice, const char *begin, const char *end, const TContiguousData& from)
-        : TContiguousData(OwnedSlice, begin, end - begin, from)
+    TRcBuf(TOwnedSlice, const char *begin, const char *end, const TRcBuf& from)
+        : TRcBuf(OwnedSlice, begin, end - begin, from)
     {}
 
 public:
@@ -738,19 +738,19 @@ public:
         // SaveAllocs, // Move data if there is enough space in (headroom + size + tailroom)
     };
 
-    TContiguousData()
+    TRcBuf()
         : Begin(nullptr)
         , End(nullptr)
     {}
 
     template<typename T>
-    TContiguousData(T&& backend, const TContiguousSpan& data)
+    TRcBuf(T&& backend, const TContiguousSpan& data)
         : Backend(std::forward<T>(backend))
         , Begin(data.data())
         , End(Begin + data.size())
     {}
 
-    explicit TContiguousData(TString s)
+    explicit TRcBuf(TString s)
         : Backend(std::move(s))
     {
         auto span = Backend.GetData();
@@ -758,7 +758,7 @@ public:
         End = Begin + span.size();
     }
 
-    explicit TContiguousData(NActors::TSharedData s)
+    explicit TRcBuf(NActors::TSharedData s)
         : Backend(std::move(s))
     {
         auto span = Backend.GetData();
@@ -766,63 +766,63 @@ public:
         End = Begin + span.size();
     }
 
-    TContiguousData(IContiguousChunk::TPtr backend)
-        : TContiguousData(backend, backend->GetData())
+    TRcBuf(IContiguousChunk::TPtr backend)
+        : TRcBuf(backend, backend->GetData())
     {}
 
-    TContiguousData(TSlice, const char *data, size_t size, const TContiguousData& from)
-        : TContiguousData(from.Backend, {data, size})
+    TRcBuf(TSlice, const char *data, size_t size, const TRcBuf& from)
+        : TRcBuf(from.Backend, {data, size})
     {
         Y_VERIFY(data >= from.GetData());
         Y_VERIFY(data < from.GetData() + from.GetSize());
         Y_VERIFY(data + size <= from.GetData() + from.GetSize());
     }
 
-    TContiguousData(TSlice, const char *begin, const char *end, const TContiguousData& from)
-        : TContiguousData(Slice, begin, end - begin, from)
+    TRcBuf(TSlice, const char *begin, const char *end, const TRcBuf& from)
+        : TRcBuf(Slice, begin, end - begin, from)
     {}
 
-    TContiguousData(const TContiguousData& other)
+    TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
         , Begin(other.Begin)
         , End(other.End)
     {}
 
-    TContiguousData(TContiguousData&& other)
+    TRcBuf(TRcBuf&& other)
         : Backend(std::move(other.Backend))
         , Begin(other.Begin)
         , End(other.End)
     {}
 
-    TContiguousData& operator =(const TContiguousData&) = default;
-    TContiguousData& operator =(TContiguousData&&) = default;
+    TRcBuf& operator =(const TRcBuf&) = default;
+    TRcBuf& operator =(TRcBuf&&) = default;
 
-    static TContiguousData Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)
+    static TRcBuf Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)
     {
         if (size == 0) {
-            return TContiguousData();
+            return TRcBuf();
         }
 
         if (headroom == 0 && tailroom == 0) {
             TInternalBackend res = TInternalBackend::Uninitialized(size);
-            return TContiguousData(
+            return TRcBuf(
                 OwnedSlice,
                 res.data(),
                 res.data() + res.size(),
-                TContiguousData(res));
+                TRcBuf(res));
         }
 
         TInternalBackend res = TInternalBackend::Uninitialized(size, headroom, tailroom);
-        return TContiguousData(res, res.data() + headroom, size);
+        return TRcBuf(res, res.data() + headroom, size);
     }
 
-    static TContiguousData Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
-        TContiguousData res = Uninitialized(data.size(), headroom, tailroom);
+    static TRcBuf Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
+        TRcBuf res = Uninitialized(data.size(), headroom, tailroom);
         std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
         return res;
     }
 
-    static TContiguousData Copy(const char* data, size_t size, size_t headroom = 0, size_t tailroom = 0) {
+    static TRcBuf Copy(const char* data, size_t size, size_t headroom = 0, size_t tailroom = 0) {
         return Copy({data, size}, headroom, tailroom);
     }
 
@@ -970,7 +970,7 @@ public:
         if (Headroom() >= size) {
             return;
         }
-        auto newData = TContiguousData::Uninitialized(GetSize(), size, UnsafeTailroom());
+        auto newData = TRcBuf::Uninitialized(GetSize(), size, UnsafeTailroom());
         if (auto data = GetData(); data) {
             std::memcpy(newData.UnsafeGetDataMut(), GetData(), GetSize());
         }
@@ -981,7 +981,7 @@ public:
         if (Tailroom() >= size) {
             return;
         }
-        auto newData = TContiguousData::Uninitialized(GetSize(), UnsafeHeadroom(), size);
+        auto newData = TRcBuf::Uninitialized(GetSize(), UnsafeHeadroom(), size);
         if (auto data = GetData(); data) {
             std::memcpy(newData.UnsafeGetDataMut(), GetData(), GetSize());
         }
@@ -992,7 +992,7 @@ public:
         if (Headroom() >= headroom && Tailroom() >= tailroom) {
             return;
         }
-        auto newData = TContiguousData::Uninitialized(
+        auto newData = TRcBuf::Uninitialized(
                 GetSize(),
                 std::max(UnsafeHeadroom(), headroom),
                 std::max(UnsafeTailroom(), tailroom));
@@ -1010,7 +1010,7 @@ public:
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
                 Y_FAIL("Fail on grow");
             }
-            auto newData = TContiguousData::Uninitialized(size + GetSize(), UnsafeHeadroom() > size ? UnsafeHeadroom() - size : 0, UnsafeTailroom());
+            auto newData = TRcBuf::Uninitialized(size + GetSize(), UnsafeHeadroom() > size ? UnsafeHeadroom() - size : 0, UnsafeTailroom());
             if (auto data = GetData(); data) {
                 std::memcpy(newData.UnsafeGetDataMut() + size, GetData(), GetSize());
             }
@@ -1027,7 +1027,7 @@ public:
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
                 Y_FAIL("Fail on grow");
             }
-            auto newData = TContiguousData::Uninitialized(size + GetSize(), UnsafeHeadroom(), UnsafeTailroom() > size ? UnsafeTailroom() - size : 0);
+            auto newData = TRcBuf::Uninitialized(size + GetSize(), UnsafeHeadroom(), UnsafeTailroom() > size ? UnsafeTailroom() - size : 0);
             if (auto data = GetData(); data) {
                 std::memcpy(newData.UnsafeGetDataMut(), GetData(), GetSize());
             }

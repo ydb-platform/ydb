@@ -208,7 +208,7 @@ namespace NKikimr {
             state.CorruptedPart.SerializeToProto(*pb->MutableCorruptedPart());
         }
 
-        TContiguousData data(TContiguousData::Uninitialized(ScrubEntrypoint.ByteSizeLong()));
+        TRcBuf data(TRcBuf::Uninitialized(ScrubEntrypoint.ByteSizeLong()));
         //FIXME(innokentii): better use SerializeWithCachedSizesToArray + check that all fields are set
         const bool success = ScrubEntrypoint.SerializeToArray(reinterpret_cast<uint8_t*>(data.UnsafeGetDataMut()), data.GetSize());
         Y_VERIFY(success);

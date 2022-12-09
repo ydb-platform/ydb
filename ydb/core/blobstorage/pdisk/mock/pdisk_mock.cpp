@@ -492,7 +492,7 @@ public:
                     }
                     isStartingPoint = cr.IsStartingPoint;
                 }
-                owner.Log.emplace_back(msg->Signature.GetUnmasked(), TContiguousData(msg->Data), msg->Lsn);
+                owner.Log.emplace_back(msg->Signature.GetUnmasked(), TRcBuf(msg->Data), msg->Lsn);
                 owner.LogDataSize += msg->Data.size();
                 if (isStartingPoint) {
                     owner.StartingPoints[msg->Signature.GetUnmasked()] = owner.Log.back();

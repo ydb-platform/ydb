@@ -94,10 +94,10 @@ struct TCommitRecord {
 class TLogRecord {
 public:
     TLogSignature Signature;
-    TContiguousData Data;
+    TRcBuf Data;
     ui64 Lsn;
 
-    TLogRecord(TLogSignature signature, const TContiguousData &data, ui64 lsn)
+    TLogRecord(TLogSignature signature, const TRcBuf &data, ui64 lsn)
         : Signature(signature)
         , Data(data)
         , Lsn(lsn)
@@ -248,7 +248,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     using TCallback = std::unique_ptr<ICallback>;
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
-                    const TContiguousData &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Signature(signature)
@@ -269,7 +269,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TCommitRecord &commitRecord,
-                    const TContiguousData &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Signature(signature, /*commitRecord*/ true)
@@ -315,7 +315,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     TOwner Owner;
     TOwnerRound OwnerRound;
     TLogSignature Signature;
-    TContiguousData Data;
+    TRcBuf Data;
     ui64 LsnSegmentStart;   // we may write a log record for diapason of lsns [LsnSegmentStart, Lsn];
                             // usually LsnSegmentStart=Lsn and this diapason is a single point
     ui64 Lsn;

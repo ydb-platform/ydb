@@ -68,7 +68,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
             TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.IsExtendedFormat());
             ctx.Send(TestCtx->LoggerId,
                      new NPDisk::TEvLog(TestCtx->PDiskCtx->Dsk->Owner, TestCtx->PDiskCtx->Dsk->OwnerRound,
-                                        TLogSignature::SignatureBlock, TContiguousData(buffers->GetString()), seg, nullptr));
+                                        TLogSignature::SignatureBlock, TRcBuf(buffers->GetString()), seg, nullptr));
             // FIXME: problems on reboot
             ctx.Send(TestCtx->SyncLogId, new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, Generation, 0));
         }

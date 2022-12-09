@@ -57,7 +57,7 @@ class TWorker {
     ui64 StartingPoint = 0;
     ui64 NextStartingPoint = Lsn;
 
-    TContiguousData DataBuffer;
+    TRcBuf DataBuffer;
     TReallyFastRng32 *Gen;
 
     TIntrusivePtr<TPDiskParams> PDiskParams;
@@ -86,7 +86,7 @@ public:
         SizeMin = cmd.GetSizeIntervalMin();
         VERIFY_PARAM(SizeIntervalMax);
         SizeMax = cmd.GetSizeIntervalMax();
-        DataBuffer = TContiguousData::Uninitialized(SizeMax);
+        DataBuffer = TRcBuf::Uninitialized(SizeMax);
         ::memset(DataBuffer.UnsafeGetDataMut(), 0, SizeMax);
 
         VERIFY_PARAM(VDiskId);

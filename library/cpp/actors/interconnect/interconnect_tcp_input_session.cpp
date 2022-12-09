@@ -428,7 +428,7 @@ namespace NActors {
             Y_VERIFY(!Buffers.empty());
             auto& buffer = Buffers.front();
             const size_t bytes = Min<size_t>(recvres, buffer->GetCapacity() - FirstBufferOffset);
-            IncomingData.Insert(IncomingData.End(), TContiguousData{buffer, {buffer->GetBuffer() + FirstBufferOffset, bytes}});
+            IncomingData.Insert(IncomingData.End(), TRcBuf{buffer, {buffer->GetBuffer() + FirstBufferOffset, bytes}});
             recvres -= bytes;
             FirstBufferOffset += bytes;
             if (FirstBufferOffset == buffer->GetCapacity()) {

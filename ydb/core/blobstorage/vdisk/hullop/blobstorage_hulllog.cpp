@@ -57,7 +57,7 @@ namespace NKikimr {
         return std::make_unique<NPDisk::TEvLog>(hullLogCtx->PDiskCtx->Dsk->Owner,
                                   hullLogCtx->PDiskCtx->Dsk->OwnerRound,
                                   signature,
-                                  TContiguousData(data), //FIXME(innokentii) wrapping
+                                  TRcBuf(data), //FIXME(innokentii) wrapping
                                   seg,
                                   cookie,
                                   std::move(callback));
@@ -79,14 +79,14 @@ namespace NKikimr {
                                   hullLogCtx->PDiskCtx->Dsk->OwnerRound,
                                   signature,
                                   commitRecord,
-                                  TContiguousData(data), //FIXME(innokentii) wrapping
+                                  TRcBuf(data), //FIXME(innokentii) wrapping
                                   seg,
                                   cookie,
                                   std::move(callback));
     }
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
-                                             const TContiguousData &data,
+                                             const TRcBuf &data,
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg,
@@ -109,7 +109,7 @@ namespace NKikimr {
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
                                              const NPDisk::TCommitRecord &commitRecord,
-                                             const TContiguousData &data,
+                                             const TRcBuf &data,
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg)

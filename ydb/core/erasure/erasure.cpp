@@ -46,7 +46,7 @@ namespace NKikimr {
 
 static void Refurbish(TRope &str, ui64 size, ui64 headroom = 0, ui64 tailroom = 0) {
     if (str.size() != size) {
-        str = TRope(TContiguousData::Uninitialized(size, headroom, tailroom));
+        str = TRope(TRcBuf::Uninitialized(size, headroom, tailroom));
     }
 }
 
@@ -2518,7 +2518,7 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope
     case TErasureType::CrcModeWholePart:
         {
             ui64 partSize = type.PartSize(crcMode, buffer.size());
-            TContiguousData part(buffer);
+            TRcBuf part(buffer);
             part.GrowBack(partSize - buffer.GetSize());
             char *dst = part.GetContiguousSpanMut().data();
             if (buffer.size() || part.size()) {
@@ -2559,7 +2559,7 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
                         TRope outBuffer = partSet.Parts[partIdx].OwnedString;
                         outBuffer.GetContiguousSpanMut(); // Detach
                         if(outBuffer.size() != partSet.FullDataSize) {
-                            TContiguousData newOutBuffer(outBuffer);
+                            TRcBuf newOutBuffer(outBuffer);
                             Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
                                     " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
                             newOutBuffer.TrimBack(partSet.FullDataSize); // To pad with zeroes!
@@ -2687,7 +2687,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 Y_VERIFY(bufferSize);
                 Y_VERIFY_S(diffShift + bufferSize <= diff.Buffer.size(), "diffShift# " << diffShift
                         << " bufferSize# " << bufferSize << " diff.GetDiffLength()# " << diff.GetDiffLength());
-                TContiguousData newBuffer(diff.Buffer);
+                TRcBuf newBuffer(diff.Buffer);
                 newBuffer.TrimBack(bufferSize + diffShift);
                 newBuffer.TrimFront(bufferSize);
                 part.Diffs.emplace_back(newBuffer, 0, false, true);
@@ -2698,7 +2698,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                     break;
                 }
             } else if (diffEnd <= nextOffset) {
-                TContiguousData buffer;
+                TRcBuf buffer;
                 ui32 bufferSize = 0;
                 if (lineOffset && !diff.IsAligned) {
                     bufferSize = diff.GetDiffLength() + lineOffset;
@@ -2713,7 +2713,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 diffIdx++;
             } else if (diff.Offset < nextOffset) {
                 ui32 bufferSize = nextOffset - diff.Offset + lineOffset;
-                TContiguousData newBuffer = diff.Buffer;
+                TRcBuf newBuffer = diff.Buffer;
                 newBuffer.GrowFront(lineOffset); // FIXME(innokentii) should the [0..lineOffset) be zeroed?
                 newBuffer.TrimBack(bufferSize);
                 Y_VERIFY(bufferSize);
@@ -2774,7 +2774,7 @@ void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type
 
         ui32 bufferSize = upperEndPos - lowerStartPos;
         Y_VERIFY(bufferSize);
-        TContiguousData xorDiffBuffer = TContiguousData::Uninitialized(bufferSize); // FIXME(innokentii) candidate
+        TRcBuf xorDiffBuffer = TRcBuf::Uninitialized(bufferSize); // FIXME(innokentii) candidate
         ui8 *xorDiffBufferBytes = reinterpret_cast<ui8*>(const_cast<char*>(xorDiffBuffer.data()));
 
         if (lowerEndPos == lowerStartPos) {

@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TContiguousData(PrepareData(1)),
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TContiguousData(PrepareData(1)),
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TContiguousData(PrepareData(1)),
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);

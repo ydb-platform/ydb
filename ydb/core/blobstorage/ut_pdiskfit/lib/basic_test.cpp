@@ -499,7 +499,7 @@ public:
 
     void IssueLogMessage(TLogSignature signature, const TActorContext& ctx) {
         ui32 size = Params.SizeMin + RandomNumber<ui32>(Params.SizeMax - Params.SizeMin + 1);
-        TContiguousData data = TContiguousData(GenerateRandomDataBuffer(size));
+        TRcBuf data = TRcBuf(GenerateRandomDataBuffer(size));
 
         auto *info = new TLogRecord;
         info->Signature = signature;

@@ -11,7 +11,7 @@
 
 namespace NDetail {
 
-struct TContiguousDataInternalBackend {
+struct TRcBufInternalBackend {
 public:
     struct TCookies {
         using TSelf = TCookies;
@@ -41,23 +41,23 @@ private:
     };
 
 public:
-    TContiguousDataInternalBackend() noexcept
+    TRcBufInternalBackend() noexcept
         : Data_(nullptr)
         , Size_(0)
     { }
 
-    ~TContiguousDataInternalBackend() noexcept {
+    ~TRcBufInternalBackend() noexcept {
         Release();
     }
 
-    TContiguousDataInternalBackend(const TContiguousDataInternalBackend& other) noexcept
+    TRcBufInternalBackend(const TRcBufInternalBackend& other) noexcept
         : Data_(other.Data_)
         , Size_(other.Size_)
     {
         AddRef();
     }
 
-    TContiguousDataInternalBackend(TContiguousDataInternalBackend&& other) noexcept
+    TRcBufInternalBackend(TRcBufInternalBackend&& other) noexcept
         : Data_(other.Data_)
         , Size_(other.Size_)
     {
@@ -65,7 +65,7 @@ public:
         other.Size_ = 0;
     }
 
-    TContiguousDataInternalBackend& operator=(const TContiguousDataInternalBackend& other) noexcept {
+    TRcBufInternalBackend& operator=(const TRcBufInternalBackend& other) noexcept {
         if (this != &other) {
             Release();
             Data_ = other.Data_;
@@ -75,7 +75,7 @@ public:
         return *this;
     }
 
-    TContiguousDataInternalBackend& operator=(TContiguousDataInternalBackend&& other) noexcept {
+    TRcBufInternalBackend& operator=(TRcBufInternalBackend&& other) noexcept {
         if (this != &other) {
             Release();
             Data_ = other.Data_;
@@ -105,7 +105,7 @@ public:
      */
     char* Detach() {
         if (IsShared()) {
-            *this = TContiguousDataInternalBackend::Copy(data(), size());
+            *this = TRcBufInternalBackend::Copy(data(), size());
         }
         return Data_;
     }
@@ -129,8 +129,8 @@ public:
     /**
      * Attach to pre-allocated data with a preceding THeader
      */
-    static TContiguousDataInternalBackend AttachUnsafe(char* data, size_t size) noexcept {
-        TContiguousDataInternalBackend result;
+    static TRcBufInternalBackend AttachUnsafe(char* data, size_t size) noexcept {
+        TRcBufInternalBackend result;
         result.Data_ = data;
         result.Size_ = size;
         return result;
@@ -139,7 +139,7 @@ public:
     /**
      * Make uninitialized buffer of the specified size
      */
-    static TContiguousDataInternalBackend Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0) {
+    static TRcBufInternalBackend Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0) {
         size_t fullSize = checkedSum(size, checkedSum(headroom, tailroom));
         return AttachUnsafe(Allocate(size, headroom, tailroom), fullSize);
     }
@@ -147,8 +147,8 @@ public:
     /**
      * Make a copy of the specified data
      */
-    static TContiguousDataInternalBackend Copy(const void* data, size_t size) {
-        TContiguousDataInternalBackend result = Uninitialized(size);
+    static TRcBufInternalBackend Copy(const void* data, size_t size) {
+        TRcBufInternalBackend result = Uninitialized(size);
         if (size) {
             ::memcpy(result.Data(), data, size);
         }

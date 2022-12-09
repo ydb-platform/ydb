@@ -373,7 +373,7 @@ namespace NKikimr {
             // regions
 
             // prepare message to recovery log
-            TContiguousData dataToWrite = TPutRecoveryLogRecOpt::SerializeZeroCopy(Db->GType, id, TRope(buffer));
+            TRcBuf dataToWrite = TPutRecoveryLogRecOpt::SerializeZeroCopy(Db->GType, id, TRope(buffer));
             LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
                     << evPrefix << ": userDataSize# " << buffer.GetSize()
                     << " writtenSize# " << dataToWrite.size()

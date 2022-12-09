@@ -357,7 +357,7 @@ void TSysLogReader::FindMaxNonce() {
 
 void TSysLogReader::PrepareResult() {
     TSectorSetInfo &info = SectorSetInfo[BestRecordFirstOffset % SectorSetInfo.size()];
-    TContiguousData payload(TContiguousData::Uninitialized(info.FullPayloadSize));
+    TRcBuf payload(TRcBuf::Uninitialized(info.FullPayloadSize));
     VerboseCheck(info.FullPayloadSize >= info.PayloadPartSize, "First payload part too large. Marker# BPS04");
     if (IsReplied) {
         return;

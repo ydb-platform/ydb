@@ -189,9 +189,9 @@ namespace NKikimr {
 
         static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope);
         // Will serialize inplace if container has enough headroom and right (single) underlying type
-        static TContiguousData SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRope &&rope);
+        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRope &&rope);
         // Will serialize inplace if container has enough headroom
-        static TContiguousData SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TContiguousData &&data);
+        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRcBuf &&data);
         bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data);
         bool ParseFromArray(const TBlobStorageGroupType &gtype, const char* data, size_t size);
         TString ToString() const;

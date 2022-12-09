@@ -104,7 +104,7 @@ do { \
 do { \
     ASSERT_YTHROW((record).Lsn == (lsn), "Unexpected Lsn == " << (record).Lsn << " instead of: " << (lsn)); \
     ASSERT_YTHROW((record).Signature == (signature), "Unexpected Signature == " << (ui32)(record).Signature); \
-    TEST_DATA_EQUALS(TContiguousData((record).Data).ExtractUnderlyingContainerOrCopy<TString>(), (data)); \
+    TEST_DATA_EQUALS(TRcBuf((record).Data).ExtractUnderlyingContainerOrCopy<TString>(), (data)); \
 } while(false)
 
 #define TEST_PDISK_STATUS(s) \

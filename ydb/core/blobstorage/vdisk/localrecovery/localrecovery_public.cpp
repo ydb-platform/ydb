@@ -252,7 +252,7 @@ namespace NKikimr {
                 // read existing one
                 emptyDb = false;
                 counter = 0;
-                const TContiguousData &data = it->second.Data;
+                const TRcBuf &data = it->second.Data;
                 TString explanation;
                 NKikimrVDiskData::THullDbEntryPoint pb;
                 const bool good = THullDbSignatureRoutines::ParseArray(pb, data.GetData(), data.GetSize(), explanation);
@@ -317,7 +317,7 @@ namespace NKikimr {
         bool InitSyncLogData(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             TStartingPoints::const_iterator it;
             it = startingPoints.find(TLogSignature::SignatureSyncLogIdx);
-            TContiguousData entryPoint;
+            TRcBuf entryPoint;
             ui64 entryPointLsn = 0;
 
             if (it == startingPoints.end()) {
@@ -372,7 +372,7 @@ namespace NKikimr {
             } else {
                 // read existing one
                 LocRecCtx->RecovInfo->EmptySyncer = false;
-                const TContiguousData &entryPoint = it->second.Data;
+                const TRcBuf &entryPoint = it->second.Data;
                 if (!TSyncerData::CheckEntryPoint(LocRecCtx->VCtx->VDiskLogPrefix, SkeletonId,
                                                   LocRecCtx->VCtx->ShortSelfVDisk, LocRecCtx->VCtx->Top, entryPoint)) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for Syncer check failed");
@@ -424,7 +424,7 @@ namespace NKikimr {
                 LocRecCtx->RecovInfo->EmptyHuge = false;
 
                 const ui64 lsn = it->second.Lsn;
-                const TContiguousData &entryPoint = it->second.Data;
+                const TRcBuf &entryPoint = it->second.Data;
                 if (!THullHugeKeeperPersState::CheckEntryPoint(entryPoint)) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for HugeKeeper check failed");
                     return false;

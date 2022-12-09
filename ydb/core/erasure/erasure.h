@@ -17,7 +17,7 @@
 namespace NKikimr {
 
 struct TDiff {
-    TContiguousData Buffer;
+    TRcBuf Buffer;
     ui32 Offset = 0;
     bool IsXor = false;
     bool IsAligned = false;
@@ -35,7 +35,7 @@ struct TDiff {
     {
     }
 
-    TDiff(const TContiguousData &buffer, ui32 offset, bool isXor, bool isAligned)
+    TDiff(const TRcBuf &buffer, ui32 offset, bool isXor, bool isAligned)
         : Buffer(buffer)
         , Offset(offset)
         , IsXor(isXor)
@@ -43,7 +43,7 @@ struct TDiff {
     {
     }
 
-    TDiff(const TContiguousData &buffer, ui32 offset)
+    TDiff(const TRcBuf &buffer, ui32 offset)
         : TDiff(buffer, offset, false, false)
     {
     }
@@ -90,7 +90,7 @@ struct TPartFragment {
     }
 
     void UninitializedOwnedWhole(ui64 size, ui64 headroom = 0, ui64 tailroom = 0) {
-        OwnedString = TRope(TContiguousData::Uninitialized(size, headroom, tailroom));
+        OwnedString = TRope(TRcBuf::Uninitialized(size, headroom, tailroom));
         Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = 0;
         Size = size;

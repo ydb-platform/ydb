@@ -289,7 +289,7 @@ struct TVDiskMock {
 
 private:
     void SendEvLogImpl(const ui64 size, TMaybe<NPDisk::TCommitRecord> commitRec) {
-        auto evLog = MakeHolder<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 0, TContiguousData(PrepareData(size)),
+        auto evLog = MakeHolder<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(size)),
                 GetLsnSeg(), nullptr);
 
         if (commitRec) {

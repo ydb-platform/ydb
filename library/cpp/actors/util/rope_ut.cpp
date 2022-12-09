@@ -140,11 +140,11 @@ Y_UNIT_TEST_SUITE(TRope) {
 
     Y_UNIT_TEST(ContiguousDataInterop) {
         TString string = "Some long-long text needed for not sharing data and testing";
-        TContiguousData data(string);
+        TRcBuf data(string);
         UNIT_ASSERT_EQUAL(data.UnsafeGetDataMut(), &(*string.cbegin()));
         TRope rope(data); // check operator TRope
         UNIT_ASSERT_EQUAL(rope.UnsafeGetContiguousSpanMut().data(), &(*string.cbegin()));
-        TContiguousData otherData(rope);
+        TRcBuf otherData(rope);
         UNIT_ASSERT_EQUAL(otherData.UnsafeGetDataMut(), &(*string.cbegin()));
         TString extractedBack = otherData.ExtractUnderlyingContainerOrCopy<TString>();
         UNIT_ASSERT_EQUAL(extractedBack.data(), &(*string.cbegin()));
@@ -159,8 +159,8 @@ Y_UNIT_TEST_SUITE(TRope) {
         const TContiguousSpan constSpan(str);
         TMutableContiguousSpan mutableSpan(const_cast<char*>(str.data()), str.size());
         const TMutableContiguousSpan constMutableSpan(const_cast<char*>(str.data()), str.size());
-        TContiguousData data(str);
-        const TContiguousData constData(str);
+        TRcBuf data(str);
+        const TRcBuf constData(str);
         TArrayRef<char> arrRef(const_cast<char*>(str.data()), str.size());
         const TArrayRef<char> constArrRef(const_cast<char*>(str.data()), str.size());
         TArrayRef<const char> arrConstRef(const_cast<char*>(str.data()), str.size());

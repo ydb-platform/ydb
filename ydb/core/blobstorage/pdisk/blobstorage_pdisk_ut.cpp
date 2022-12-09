@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 new NPDisk::TEvCheckSpace(1, 1),
                 NKikimrProto::CORRUPTED);
         testCtx.TestResponse<NPDisk::TEvLogResult>(
-                new NPDisk::TEvLog(1, 1, 0, TContiguousData(TString()), TLsnSeg(1, 1), nullptr),
+                new NPDisk::TEvLog(1, 1, 0, TRcBuf(TString()), TLsnSeg(1, 1), nullptr),
                 NKikimrProto::CORRUPTED);
         testCtx.TestResponse<NPDisk::TEvReadLogResult>(
                 new NPDisk::TEvReadLog(1, 1, NPDisk::TLogPosition{0, 0}),
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ui32 lsn = 2;
         for (ui32 i = 0; i < 100'000; ++i) {
             testCtx.Send(new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0,
-                        TContiguousData(TString("abc")), TLsnSeg(lsn, lsn), nullptr));
+                        TRcBuf(TString("abc")), TLsnSeg(lsn, lsn), nullptr));
             ++lsn;
             const auto logRes = testCtx.Recv<NPDisk::TEvLogResult>();
             if (logRes->Status != NKikimrProto::OK) {
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         //ui32 errors = 0;
         ui32 lsn = 2;
-        TContiguousData logData = TContiguousData(PrepareData(4096));
+        TRcBuf logData = TRcBuf(PrepareData(4096));
         for (ui32 i = 0; i < 1000; ++i) {
             testCtx.Send(new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0,
                         logData, TLsnSeg(lsn, lsn), nullptr));

@@ -422,7 +422,7 @@ namespace NKikimr {
             TChunkQueueItem& item = ChunkQueue.back();
 
             // serialize it into string
-            TContiguousData data = TContiguousData(std::visit([](const auto& content) { return TChunkRecordMerger::Serialize(content); }, item.Content));
+            TRcBuf data = TRcBuf(std::visit([](const auto& content) { return TChunkRecordMerger::Serialize(content); }, item.Content));
 
             // generate LSN
             item.Lsn = Lsn++;
@@ -650,7 +650,7 @@ namespace NKikimr {
             };
 
             // serialize it into string, depending on its type
-            TContiguousData data = TContiguousData(std::visit([](const auto& content) { return TDeleteRecordMerger::Serialize(content); }, item.Content));
+            TRcBuf data = TRcBuf(std::visit([](const auto& content) { return TDeleteRecordMerger::Serialize(content); }, item.Content));
 
             // format commit record
             NPDisk::TCommitRecord commit;

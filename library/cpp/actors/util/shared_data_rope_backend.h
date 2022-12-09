@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/util/contiguous_data.h>
+#include <library/cpp/actors/util/rc_buf.h>
 
 #include "shared_data.h"
 

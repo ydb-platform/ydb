@@ -164,7 +164,7 @@ class TTestLogWriteRead : public TBaseTest {
     NPDisk::TOwnerRound OwnerRound;
 
     void TestFSM(const TActorContext &ctx) {
-        TContiguousData data = TContiguousData(PrepareData(Size));
+        TRcBuf data = TRcBuf(PrepareData(Size));
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
         case 0:
@@ -219,7 +219,7 @@ class TTestLogWrite : public TBaseTest {
     NPDisk::TOwnerRound OwnerRound;
 
     void TestFSM(const TActorContext &ctx) {
-        TContiguousData data = TContiguousData(PrepareData(Size));
+        TRcBuf data = TRcBuf(PrepareData(Size));
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
         case 0:
@@ -370,7 +370,7 @@ private:
                 "Unexpected ChunkIds.size() == " << ev->ChunkIds.size());
             ReservedChunks = std::move(ev->ChunkIds);
             ui32 logRecordSize = LogRecordSizeMin + RandGen.GenRand() % (LogRecordSizeMax - LogRecordSizeMin);
-            TContiguousData data = TContiguousData(PrepareData(logRecordSize));
+            TRcBuf data = TRcBuf(PrepareData(logRecordSize));
             NPDisk::TCommitRecord comRec{};
             comRec.FirstLsnToKeep = Lsn;
             comRec.IsStartingPoint = true;
@@ -401,7 +401,7 @@ private:
                 TestStep -= 10;
             }
             ui32 logRecordSize = LogRecordSizeMin + RandGen.GenRand() % (LogRecordSizeMax - LogRecordSizeMin);
-            TContiguousData data = TContiguousData(PrepareData(logRecordSize));
+            TRcBuf data = TRcBuf(PrepareData(logRecordSize));
             if (Lsn % LogRecordsToKeep == 0) {
                 NPDisk::TCommitRecord comRec{};
                 comRec.FirstLsnToKeep = Lsn - LogRecordsToKeep;
@@ -504,7 +504,7 @@ class TTestLogWriteLsnConsistency : public TBaseTest {
 
 
     void TestFSM(const TActorContext &ctx) {
-        TContiguousData data = TContiguousData(PrepareData(2000));
+        TRcBuf data = TRcBuf(PrepareData(2000));
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
         case 0:
@@ -607,9 +607,9 @@ class TTestLog3Write : public TBaseTest {
     ui32 RecordsRemaining;
 
     void TestFSM(const TActorContext &ctx) {
-        TContiguousData data1 = TContiguousData(PrepareData(Size1));
-        TContiguousData data2 = TContiguousData(PrepareData(Size2));
-        TContiguousData data3 = TContiguousData(PrepareData(Size3));
+        TRcBuf data1 = TRcBuf(PrepareData(Size1));
+        TRcBuf data2 = TRcBuf(PrepareData(Size2));
+        TRcBuf data3 = TRcBuf(PrepareData(Size3));
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
         case 0:
@@ -705,7 +705,7 @@ class TTestChunkReadRandomOffset : public TBaseTest {
             VERBOSE_COUT(" Sending TEvLog to commit");
             NPDisk::TCommitRecord commitRecord;
             commitRecord.CommitChunks.push_back(ChunkIdx);
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(TString("")), TLsnSeg(1, 1), nullptr));
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TRcBuf(TString("")), TLsnSeg(1, 1), nullptr));
             break;
         }
         case 30:
@@ -753,7 +753,7 @@ class TTestChunkWriteRead : public TBaseTest {
     TVector<ui32> ReservedChunks;
 
     void TestFSM(const TActorContext &ctx) {
-        TContiguousData data2(TString("testdata2"));
+        TRcBuf data2(TString("testdata2"));
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
         case 0:
@@ -937,7 +937,7 @@ class TTestChunkWrite20Read02 : public TBaseTest {
     ui32 ChunkIdx;
     ui32 BlockSize;
     TVector<ui32> ReservedChunks;
-    TContiguousData CommitData;
+    TRcBuf CommitData;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -954,8 +954,8 @@ class TTestChunkRecommit : public TBaseTest {
     NPDisk::TOwnerRound OwnerRound;
     TString ChunkWriteData1;
     TString ChunkWriteData2;
-    TContiguousData Commit1Data;
-    TContiguousData Commit2Data;
+    TRcBuf Commit1Data;
+    TRcBuf Commit2Data;
     TString ChunkData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx;
@@ -973,7 +973,7 @@ class TTestChunkRestartRecommit1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     TString ChunkWriteData1;
-    TContiguousData Commit1Data;
+    TRcBuf Commit1Data;
     TString ChunkData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx;
@@ -990,7 +990,7 @@ class TTestChunkRestartRecommit2 : public TBaseTest {
     NPDisk::TOwnerRound OwnerRound;
     TString ChunkWriteData1;
     TString ChunkWriteData2;
-    TContiguousData Commit2Data;
+    TRcBuf Commit2Data;
     TString ChunkData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx;
@@ -1006,7 +1006,7 @@ class TTestChunkDelete1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     TString ChunkWriteData;
-    TContiguousData CommitData;
+    TRcBuf CommitData;
     TVector<ui32> ReservedChunks;
 
     void TestFSM(const TActorContext &ctx);
@@ -1019,7 +1019,7 @@ public:
 class TTestChunkDelete2 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData CommitData;
+    TRcBuf CommitData;
     TString ChunkData;
     TVector<ui32> ReservedChunks;
 
@@ -1034,7 +1034,7 @@ class TTestChunkForget1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     TString ChunkWriteData;
-    TContiguousData CommitData;
+    TRcBuf CommitData;
     TVector<ui32> ReservedChunks;
 
     void TestFSM(const TActorContext &ctx);
@@ -1101,7 +1101,7 @@ class TTestChunk3WriteRead : public TBaseTest {
             VERBOSE_COUT(" Sending TEvLog to commit");
             NPDisk::TCommitRecord commitRecord;
             commitRecord.CommitChunks.push_back(LastResponse.ChunkIdx);
-            TContiguousData data = TContiguousData(PrepareData(32));
+            TRcBuf data = TRcBuf(PrepareData(32));
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data, TLsnSeg(1, 1), (void*)43));
             break;
         }
@@ -1168,7 +1168,7 @@ class TTestLogMultipleWriteRead : public TBaseTest {
                 TEST_RESPONSE(EvLogResult, OK);
             }
             VERBOSE_COUT(" Sending TEvLog Lsn: " << Lsn);
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, TContiguousData(PrepareData(CurrentSize)), TLsnSeg(Lsn, Lsn),
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, TRcBuf(PrepareData(CurrentSize)), TLsnSeg(Lsn, Lsn),
                         (void*)456));
             ++Lsn;
             ++CurrentSize;
@@ -1362,7 +1362,7 @@ class TTestFirstRecordToKeepWriteAB : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui64 Lsn;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -1376,7 +1376,7 @@ public:
 class TTestFirstRecordToKeepReadB : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -1388,7 +1388,7 @@ public:
 class TTestLotsOfTinyAsyncLogLatency : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 MessagesToSend;
     ui32 Responses;
     TInstant PreviousTime;
@@ -1409,7 +1409,7 @@ public:
 class TTestLogLatency : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 MessagesToSend;
     ui32 Responses;
     TInstant PreviousTime;
@@ -1430,14 +1430,14 @@ public:
 class TTestHugeChunkAndLotsOfTinyAsyncLogOrder : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 MessagesToSend;
     ui32 Responses;
     ui32 TotalDataSize;
     ui32 ChunkIdx;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
-    TContiguousData Commit1Data;
+    TRcBuf Commit1Data;
 
     TInstant PreviousTime;
     TInstant StartTime;
@@ -1474,7 +1474,7 @@ class TTestLog2Records3Sectors : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
 
@@ -1489,13 +1489,13 @@ template<int Size>
 class TTestLogMoreSectors : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
         case 0:
-            Data = TContiguousData(PrepareData(Size));
+            Data = TRcBuf(PrepareData(Size));
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
@@ -1505,7 +1505,7 @@ class TTestLogMoreSectors : public TBaseTest {
             Owner = LastResponse.Owner;
             OwnerRound = LastResponse.OwnerRound;
             VERBOSE_COUT(" Sending 1 TEvLog");
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, TContiguousData(Data), TLsnSeg((ui64)100500, (ui64)100500),
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 7, TRcBuf(Data), TLsnSeg((ui64)100500, (ui64)100500),
                         (void*)456));
             break;
         case 20:
@@ -1528,7 +1528,7 @@ public:
 class TTestLogDamageSector3Append1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -1554,7 +1554,7 @@ class TTestLogFillChunkPlus1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -1568,7 +1568,7 @@ public:
 class TTestLogKeep5Plus1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 ChunkSize;
 
     void TestFSM(const TActorContext &ctx);
@@ -1583,7 +1583,7 @@ public:
 class TTestLogReadRecords2To5 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 ChunkSize;
 
     void TestFSM(const TActorContext &ctx);
@@ -1642,7 +1642,7 @@ private:
         return {Lsn, Lsn};
     }
 
-    void SendEvLog(const TActorContext& ctx, TMaybe<NPDisk::TCommitRecord> commit, TContiguousData data) {
+    void SendEvLog(const TActorContext& ctx, TMaybe<NPDisk::TCommitRecord> commit, TRcBuf data) {
         if (commit) {
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, *commit, data, GenLsnSeg(), nullptr));
         } else {
@@ -1691,7 +1691,7 @@ private:
             ++LogRecordsWritten;
 
             if (LogRecordsWritten < LogRecordsToWrite) {
-                SendEvLog(ctx, {}, TContiguousData(Garbage));
+                SendEvLog(ctx, {}, TRcBuf(Garbage));
                 TestStep -= 10;
             } else {
                 TLogRecAboutChunks log;
@@ -1699,7 +1699,7 @@ private:
                 for (ui32 i = 0; i < CommittedChunks.size(); ++i) {
                     log.Data.CommittedChunks[i] = CommittedChunks[i];
                 }
-                TContiguousData commitedChunksList = TContiguousData::Uninitialized(sizeof(log));
+                TRcBuf commitedChunksList = TRcBuf::Uninitialized(sizeof(log));
                 memcpy(commitedChunksList.UnsafeGetDataMut(), &log, sizeof(log));
                 NPDisk::TCommitRecord commitRecord;
                 commitRecord.IsStartingPoint = true;
@@ -1720,7 +1720,7 @@ private:
                 log.Type = EDeleteChunk;
                 log.Data.DeletedChunk = CommittedChunks.back();
                 Ctest << "MyNum# " << MyNum << " Delete chunk# " << CommittedChunks.back() << Endl;
-                TContiguousData deleteChunkLog = TContiguousData::Uninitialized(sizeof(log));
+                TRcBuf deleteChunkLog = TRcBuf::Uninitialized(sizeof(log));
                 memcpy(deleteChunkLog.UnsafeGetDataMut(), &log, sizeof(log));
                 commitRecord.DeleteChunks.push_back(CommittedChunks.back());
                 CommittedChunks.pop_back();
@@ -1861,7 +1861,7 @@ template <ui32 Size>
 class TTestCommitChunks : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Commit1Data;
+    TRcBuf Commit1Data;
     TString ChunkData;
     ui32 ChunkIdx;
 
@@ -1893,7 +1893,7 @@ class TTestCommitChunks : public TBaseTest {
                 commitRecord.CommitChunks.push_back(LastResponse.ChunkIds[i]);
             }
             commitRecord.IsStartingPoint = true;
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TContiguousData(Commit1Data), TLsnSeg(1, 1),
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TRcBuf(Commit1Data), TLsnSeg(1, 1),
                         (void*)43));
             break;
         }
@@ -1922,7 +1922,7 @@ class TTestWriteAndReleaseChunk2A : public TBaseTest {
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx;
-    TContiguousData commitData;
+    TRcBuf commitData;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -1939,7 +1939,7 @@ class TTestWriteAndCheckChunk2B : public TBaseTest {
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -1973,7 +1973,7 @@ class TTestWriteChunksAndLog : public TBaseTest {
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx2;
     ui32 ChunkIdx3;
-    TContiguousData commitData;
+    TRcBuf commitData;
     ui64 Lsn;
 
     ui64 NextLsn() {
@@ -2028,7 +2028,7 @@ class TTestCheckLog : public TBaseTest {
     ui32 ChunkSize;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
-    TContiguousData commitData;
+    TRcBuf commitData;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2044,7 +2044,7 @@ class TTestChunkFlush : public TBaseTest {
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
     ui32 ChunkIdx;
-    TContiguousData commitData;
+    TRcBuf commitData;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2083,7 +2083,7 @@ class TTestFillDiskPhase1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 MessageIdx;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
@@ -2100,7 +2100,7 @@ class TTestFillDiskPhase2 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 MessageIdx;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
@@ -2201,7 +2201,7 @@ class TActorTestSlayLogWriteRace final : public TCommonBaseTest {
                 if (i == LogWriteCount - 10) {
                     ctx.Send(Yard, new NPDisk::TEvSlay(VDiskID, OwnerRound + 1, 1, 1));
                 }
-                TContiguousData data = TContiguousData(PrepareData(842));
+                TRcBuf data = TRcBuf(PrepareData(842));
                 if (i == 0) {
                     NPDisk::TCommitRecord commit;
                     commit.IsStartingPoint = true;
@@ -2288,7 +2288,7 @@ class TTestDestructionWhileWritingChunk : public TBaseTest {
     ui32 ChunkSize;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
-    TContiguousData commitData;
+    TRcBuf commitData;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2317,7 +2317,7 @@ class TTestDestructionWhileWritingLog : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2330,7 +2330,7 @@ class TTestDestructionWhileReadingLog : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2359,7 +2359,7 @@ class TTestAllocateAllChunks : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
     ui32 MessageIdx;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
@@ -2378,7 +2378,7 @@ class TTestCutMultipleLogChunks1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2391,7 +2391,7 @@ class TTestCutMultipleLogChunks2 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2404,7 +2404,7 @@ class TTestLogOwerwrite1 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2417,7 +2417,7 @@ class TTestLogOwerwrite2 : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 ChunkSize;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2430,7 +2430,7 @@ class TTestWriteAndCutLogChunk : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui64 Lsn;
-    TContiguousData Data;
+    TRcBuf Data;
 
     void TestFSM(const TActorContext &ctx);
 public:
@@ -2445,7 +2445,7 @@ public:
 class TTestStartingPointRebootsIteration : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
-    TContiguousData Commit1Data;
+    TRcBuf Commit1Data;
     ui64 FirstLsn;
     ui64 StartingPointLsn;
     ui64 NextLsn;

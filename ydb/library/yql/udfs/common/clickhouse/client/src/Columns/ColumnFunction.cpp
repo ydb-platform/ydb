@@ -237,7 +237,7 @@ ColumnWithTypeAndName ColumnFunction::reduce() const
     if (is_function_compiled)
         ProfileEvents::increment(ProfileEvents::CompiledFunctionExecute);
 
-    res.column = function->execute(columns, res.type, size_);
+    res.column = function->execute(columns, res.type, size_, {});
     return res;
 }
 

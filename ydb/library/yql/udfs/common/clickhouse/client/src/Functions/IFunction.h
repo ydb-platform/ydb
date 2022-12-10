@@ -4,6 +4,7 @@
 #include <Core/ColumnsWithTypeAndName.h>
 #include <Core/Names.h>
 #include <DataTypes/IDataType.h>
+#include <Formats/FormatSettings.h>
 
 //#if !defined(ARCADIA_BUILD)
 //#    include "config_core.h"
@@ -46,15 +47,15 @@ public:
     /// Get the main function name.
     virtual String getName() const = 0;
 
-    ColumnPtr execute(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const;
+    ColumnPtr execute(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const;
 
 protected:
 
-    virtual ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const = 0;
+    virtual ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings) const = 0;
 
-    virtual ColumnPtr executeDryRunImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const
+    virtual ColumnPtr executeDryRunImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings) const
     {
-        return executeImpl(arguments, result_type, input_rows_count);
+        return executeImpl(arguments, result_type, input_rows_count, format_settings);
     }
 
     /** Default implementation in presence of Nullable arguments or NULL constants as arguments is the following:
@@ -90,13 +91,13 @@ protected:
 private:
 
     ColumnPtr defaultImplementationForConstantArguments(
-            const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const;
+            const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const;
 
     ColumnPtr defaultImplementationForNulls(
-            const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const;
+            const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const;
 
     ColumnPtr executeWithoutLowCardinalityColumns(
-            const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const;
+            const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const;
 
 };
 
@@ -114,9 +115,9 @@ public:
     virtual ~IFunctionBase() = default;
 
     virtual ColumnPtr execute(
-        const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run = false) const
+        const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run = false) const
     {
-        return prepare(arguments)->execute(arguments, result_type, input_rows_count, dry_run);
+        return prepare(arguments, format_settings)->execute(arguments, result_type, input_rows_count, format_settings, dry_run);
     }
 
     /// Get the main function name.
@@ -127,7 +128,7 @@ public:
 
     /// Do preparations and return executable.
     /// sample_columns should contain data types of arguments and values of constants, if relevant.
-    virtual ExecutableFunctionPtr prepare(const ColumnsWithTypeAndName & arguments) const = 0;
+    virtual ExecutableFunctionPtr prepare(const ColumnsWithTypeAndName & arguments, const FormatSettings & format_settings = {}) const = 0;
 
 #if USE_EMBEDDED_COMPILER
 
@@ -375,10 +376,10 @@ public:
 
     virtual String getName() const = 0;
 
-    virtual ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const = 0;
-    virtual ColumnPtr executeImplDryRun(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const
+    virtual ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings = {}) const = 0;
+    virtual ColumnPtr executeImplDryRun(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings = {}) const
     {
-        return executeImpl(arguments, result_type, input_rows_count);
+        return executeImpl(arguments, result_type, input_rows_count, format_settings);
     }
 
     /** Default implementation in presence of Nullable arguments or NULL constants as arguments is the following:

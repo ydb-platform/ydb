@@ -886,6 +886,18 @@ inline void readDateTimeText(LocalDateTime & datetime, ReadBuffer & buf)
     datetime.second((s[17] - '0') * 10 + (s[18] - '0'));
 }
 
+void readDateTimeTextISO(time_t & x, ReadBuffer & istr);
+
+void readDateTimeTextFormat(time_t & x, ReadBuffer & istr, const String& format);
+
+void readDateTimeTextPOSIX(time_t & x, ReadBuffer & istr);
+
+void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr);
+
+void readTimestampTextFormat(DateTime64 & x, ReadBuffer & istr, const String& format);
+
+void readTimestampTextPOSIX(DateTime64 & x, ReadBuffer & istr);
+
 
 /// Generic methods to read value in native binary format.
 template <typename T>

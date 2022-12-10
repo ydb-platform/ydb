@@ -189,7 +189,7 @@ std::pair<TString, TString> SplitId(const TString& id, char delim) {
 }
 
 bool IsValidIntervalUnit(const TString& unit) {
-    static constexpr std::array<std::string_view, 10> IntervalUnits = {
+    static constexpr std::array<std::string_view, 7> IntervalUnits = {
         "MICROSECONDS"sv,
         "MILLISECONDS"sv,
         "SECONDS"sv,
@@ -199,6 +199,25 @@ bool IsValidIntervalUnit(const TString& unit) {
         "WEEKS"sv
     };
     return IsIn(IntervalUnits, unit);
+}
+
+bool IsValidDateTimeFormatName(const TString& formatName) {
+    static constexpr std::array<std::string_view, 2> FormatNames = {
+        "POSIX"sv,
+        "ISO"sv
+    };
+    return IsIn(FormatNames, formatName);
+}
+
+bool IsValidTimestampFormatName(const TString& formatName) {
+    static constexpr std::array<std::string_view, 5> FormatNames = {
+        "POSIX"sv,
+        "ISO"sv,
+        "UNIX_TIME_MILLISECONDS"sv,
+        "UNIX_TIME_SECONDS"sv,
+        "UNIX_TIME_MICROSECONDS"sv
+    };
+    return IsIn(FormatNames, formatName);
 }
 
 } //namespace NYq

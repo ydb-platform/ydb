@@ -293,6 +293,10 @@ public:
         if (input->ChildrenSize() > TS3Object::idx_Settings) {
             bool haveProjection = false;
             bool havePartitionedBy = false;
+            bool hasDateTimeFormat = false;
+            bool hasDateTimeFormatName = false;
+            bool hasTimestampFormat = false;
+            bool hasTimestampFormatName = false;
             auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
                 if (name != "partitionedby"sv && name != "directories"sv && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
@@ -337,6 +341,42 @@ public:
                         return false;
                     }
                     return NCommon::ValidateIntervalUnit(unit, ctx);
+                }
+
+                if (name == "data.datetime.formatname"sv) {
+                    hasDateTimeFormatName = true;
+                    TStringBuf formatName;
+                    if (!ExtractSettingValue(setting.Tail(), "data.datetime.format_name"sv, format, {}, ctx, formatName)) {
+                        return false;
+                    }
+                    return NCommon::ValidateDateTimeFormatName(formatName, ctx);
+                }
+
+                if (name == "data.datetime.format"sv) {
+                    hasDateTimeFormat = true;
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "data.datetime.format"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                if (name == "data.timestamp.formatname"sv) {
+                    hasTimestampFormatName = true;
+                    TStringBuf formatName;
+                    if (!ExtractSettingValue(setting.Tail(), "data.timestamp.format_name"sv, format, {}, ctx, formatName)) {
+                        return false;
+                    }
+                    return NCommon::ValidateTimestampFormatName(formatName, ctx);
+                }
+
+                if (name == "data.timestamp.format"sv) {
+                    hasTimestampFormat = true;
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "data.timestamp.format"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
                 }
 
                 if (name == "readmaxbytes"sv) {
@@ -392,12 +432,23 @@ public:
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv,
-                                       "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv }, validator, ctx))
+                                        "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv,
+                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv }, validator, ctx))
             {
                 return TStatus::Error;
             }
             if (haveProjection && !havePartitionedBy) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Missing partitioned_by setting for projection"));
+                return TStatus::Error;
+            }
+
+            if (hasDateTimeFormat && hasDateTimeFormatName) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Don't use data.datetime.format_name and data.datetime.format together"));
+                return TStatus::Error;
+            }
+
+            if (hasTimestampFormat && hasTimestampFormatName) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
                 return TStatus::Error;
             }
         }

@@ -85,7 +85,7 @@ public:
     }
 
     TStatus HandleReadTopic(TExprBase input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(input.Ref(), 6, 7, ctx)) {
+        if (!EnsureMinMaxArgsCount(input.Ref(), 6, 8, ctx)) {
             return TStatus::Error;
         }
 

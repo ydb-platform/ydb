@@ -51,6 +51,22 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 Compression = readSettings->Child(i)->Child(1)->Content();
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("data.datetime.formatname")) {
+                DateTimeFormatName = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("data.datetime.format")) {
+                DateTimeFormat = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("data.timestamp.formatname")) {
+                TimestampFormatName = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("data.timestamp.format")) {
+                TimestampFormat = readSettings->Child(i);
+                continue;
+            }
         }
     }
 

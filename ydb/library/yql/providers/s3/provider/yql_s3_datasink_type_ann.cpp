@@ -115,6 +115,10 @@ private:
             if (!EnsureTuple(*input->Child(TS3Target::idx_Settings), ctx))
                 return TStatus::Error;
 
+            bool hasDateTimeFormat = false;
+            bool hasDateTimeFormatName = false;
+            bool hasTimestampFormat = false;
+            bool hasTimestampFormatName = false;
             const auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
                 if (name == "compression") {
                     const auto& value = setting.Tail();
@@ -151,6 +155,46 @@ private:
                     return EnsureValidUserSchemaSetting(setting, ctx);
                 }
 
+                if (name == "data.datetime.formatname") {
+                    hasDateTimeFormatName = true;
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return NCommon::ValidateDateTimeFormatName(value.Content(), ctx);
+                }
+
+                if (name == "data.timestamp.formatname") {
+                    hasTimestampFormatName = true;
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return NCommon::ValidateTimestampFormatName(value.Content(), ctx);
+                }
+
+                if (name == "data.datetime.format") {
+                    hasDateTimeFormat = true;
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                if (name == "data.timestamp.format") {
+                    hasTimestampFormat = true;
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return true;
+                }
+
                 if (name == "csvdelimiter") {
                     const auto& value = setting.Tail();
                     if (!EnsureAtom(value, ctx)) {
@@ -172,7 +216,17 @@ private:
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (hasDateTimeFormat && hasDateTimeFormatName) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Don't use data.datetime.format_name and data.datetime.format together"));
+                return TStatus::Error;
+            }
+
+            if (hasTimestampFormat && hasTimestampFormatName) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
                 return TStatus::Error;
             }
         }

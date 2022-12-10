@@ -20,6 +20,7 @@ NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
     std::unordered_map<TString, ui32>&& metadataColumns,
     const std::string_view& format,
     const std::string_view& compression,
+    const std::vector<std::pair<std::string_view, std::string_view>>& formatSettings,
     NKikimr::NMiniKQL::TType* inputType,
     NKikimr::NMiniKQL::TType* parseItemType,
     NKikimr::NMiniKQL::TType* finalItemType,

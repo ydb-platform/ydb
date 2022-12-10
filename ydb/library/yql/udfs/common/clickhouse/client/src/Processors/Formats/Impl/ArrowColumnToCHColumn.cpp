@@ -515,7 +515,7 @@ ArrowColumnToCHColumn::ArrowColumnToCHColumn(
 {
 }
 
-void ArrowColumnToCHColumn::arrowTableToCHChunk(Chunk & res, std::shared_ptr<arrow::Table> & table)
+void ArrowColumnToCHColumn::arrowTableToCHChunk(Chunk & res, std::shared_ptr<arrow::Table> & table, const FormatSettings & format_settings)
 {
     Columns columns_list;
     UInt64 num_rows = 0;
@@ -571,7 +571,7 @@ void ArrowColumnToCHColumn::arrowTableToCHChunk(Chunk & res, std::shared_ptr<arr
         else
             column = readColumnFromArrowColumn(arrow_column, header_column.name, format_name, false, dictionary_values);
 
-        column.column = castColumn(column, header_column.type);
+        column.column = castColumn(column, header_column.type, format_settings);
         column.type = header_column.type;
         num_rows = column.column->size();
         columns_list.push_back(std::move(column.column));

@@ -125,12 +125,69 @@ public:
             format = "raw";
         }
 
+        auto settings = Build<TExprList>(ctx, read.Pos());
+        bool hasDateTimeFormat = false;
+        bool hasDateTimeFormatName = false;
+        bool hasTimestampFormat = false;
+        bool hasTimestampFormatName = false;
+        if (topicKeyParser.GetDateTimeFormatName()) {
+            settings.Add(topicKeyParser.GetDateTimeFormatName());
+            hasDateTimeFormatName = true;
+            if (!NCommon::ValidateDateTimeFormatName(topicKeyParser.GetDateTimeFormatName()->Child(1)->Content(), ctx)) {
+                return nullptr;
+            }
+        }
+
+        if (topicKeyParser.GetDateTimeFormat()) {
+            settings.Add(topicKeyParser.GetDateTimeFormat());
+            hasDateTimeFormat = true;
+        }
+
+        if (topicKeyParser.GetTimestampFormatName()) {
+            settings.Add(topicKeyParser.GetTimestampFormatName());
+            hasDateTimeFormatName = true;
+            if (!NCommon::ValidateTimestampFormatName(topicKeyParser.GetTimestampFormatName()->Child(1)->Content(), ctx)) {
+                return nullptr;
+            }
+        }
+
+        if (topicKeyParser.GetTimestampFormat()) {
+            settings.Add(topicKeyParser.GetTimestampFormat());
+            hasTimestampFormat = true;
+        }
+
+        if (hasDateTimeFormat && hasDateTimeFormatName) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Don't use data.datetime.format_name and data.datetime.format together"));
+            return nullptr;
+        }
+
+        if (hasTimestampFormat && hasTimestampFormatName) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
+            return nullptr;
+        }
+
+        if (!hasDateTimeFormat && !hasDateTimeFormatName) {
+            TExprNode::TListType pair;
+            pair.push_back(ctx.NewAtom(read.Pos(), "data.datetime.formatname"));
+            pair.push_back(ctx.NewAtom(read.Pos(), "POSIX"));
+            settings.Add(ctx.NewList(read.Pos(), std::move(pair)));
+        }
+
+        if (!hasTimestampFormat && !hasTimestampFormatName) {
+            TExprNode::TListType pair;
+            pair.push_back(ctx.NewAtom(read.Pos(), "data.timestamp.formatname"));
+            pair.push_back(ctx.NewAtom(read.Pos(), "POSIX"));
+            settings.Add(ctx.NewList(read.Pos(), std::move(pair)));
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
             .Topic(std::move(topicNode))
             .Format().Value(format).Build()
-            .Compression().Value(topicKeyParser.GetCompression()).Build();
+            .Compression().Value(topicKeyParser.GetCompression()).Build()
+            .LimitHint<TCoVoid>().Build()
+            .Settings(settings.Done());
 
         if (topicKeyParser.GetColumnOrder()) {
             builder.Columns(topicKeyParser.GetColumnOrder());

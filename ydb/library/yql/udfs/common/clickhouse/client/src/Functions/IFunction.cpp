@@ -115,7 +115,7 @@ void convertLowCardinalityColumnsToFull(ColumnsWithTypeAndName & args)
 }
 
 ColumnPtr IExecutableFunction::defaultImplementationForConstantArguments(
-    const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const
+    const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const
 {
     ColumnNumbers arguments_to_remain_constants = getArgumentsThatAreAlwaysConstant();
 
@@ -158,7 +158,7 @@ ColumnPtr IExecutableFunction::defaultImplementationForConstantArguments(
             "Number of arguments for function {} doesn't match: the function requires more arguments",
             getName());
 
-    ColumnPtr result_column = executeWithoutLowCardinalityColumns(temporary_columns, result_type, 1, dry_run);
+    ColumnPtr result_column = executeWithoutLowCardinalityColumns(temporary_columns, result_type, 1, format_settings, dry_run);
 
     /// extremely rare case, when we have function with completely const arguments
     /// but some of them produced by non isDeterministic function
@@ -170,7 +170,7 @@ ColumnPtr IExecutableFunction::defaultImplementationForConstantArguments(
 
 
 ColumnPtr IExecutableFunction::defaultImplementationForNulls(
-    const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const
+    const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const
 {
     if (args.empty() || !useDefaultImplementationForNulls())
         return nullptr;
@@ -194,7 +194,7 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
         ColumnsWithTypeAndName temporary_columns = createBlockWithNestedColumns(args);
         auto temporary_result_type = removeNullable(result_type);
 
-        auto res = executeWithoutLowCardinalityColumns(temporary_columns, temporary_result_type, input_rows_count, dry_run);
+        auto res = executeWithoutLowCardinalityColumns(temporary_columns, temporary_result_type, input_rows_count, format_settings, dry_run);
         return wrapInNullable(res, args, result_type, input_rows_count);
     }
 
@@ -202,19 +202,19 @@ ColumnPtr IExecutableFunction::defaultImplementationForNulls(
 }
 
 ColumnPtr IExecutableFunction::executeWithoutLowCardinalityColumns(
-    const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const
+    const ColumnsWithTypeAndName & args, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const
 {
-    if (auto res = defaultImplementationForConstantArguments(args, result_type, input_rows_count, dry_run))
+    if (auto res = defaultImplementationForConstantArguments(args, result_type, input_rows_count, format_settings, dry_run))
         return res;
 
-    if (auto res = defaultImplementationForNulls(args, result_type, input_rows_count, dry_run))
+    if (auto res = defaultImplementationForNulls(args, result_type, input_rows_count, format_settings, dry_run))
         return res;
 
     ColumnPtr res;
     if (dry_run)
-        res = executeDryRunImpl(args, result_type, input_rows_count);
+        res = executeDryRunImpl(args, result_type, input_rows_count, format_settings);
     else
-        res = executeImpl(args, result_type, input_rows_count);
+        res = executeImpl(args, result_type, input_rows_count, format_settings);
 
     if (!res)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Empty column was returned by function {}", getName());
@@ -222,7 +222,7 @@ ColumnPtr IExecutableFunction::executeWithoutLowCardinalityColumns(
     return res;
 }
 
-ColumnPtr IExecutableFunction::execute(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, bool dry_run) const
+ColumnPtr IExecutableFunction::execute(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings, bool dry_run) const
 {
     ColumnPtr result;
 
@@ -242,7 +242,7 @@ ColumnPtr IExecutableFunction::execute(const ColumnsWithTypeAndName & arguments,
                                         ? input_rows_count
                                         : columns_without_low_cardinality.front().column->size();
 
-            auto res = executeWithoutLowCardinalityColumns(columns_without_low_cardinality, dictionary_type, new_input_rows_count, dry_run);
+            auto res = executeWithoutLowCardinalityColumns(columns_without_low_cardinality, dictionary_type, new_input_rows_count, format_settings, dry_run);
             auto keys = res->convertToFullColumnIfConst();
 
             auto res_mut_dictionary = DataTypeLowCardinality::createColumnUnique(*res_low_cardinality_type->getDictionaryType());
@@ -257,11 +257,11 @@ ColumnPtr IExecutableFunction::execute(const ColumnsWithTypeAndName & arguments,
         else
         {
             convertLowCardinalityColumnsToFull(columns_without_low_cardinality);
-            result = executeWithoutLowCardinalityColumns(columns_without_low_cardinality, result_type, input_rows_count, dry_run);
+            result = executeWithoutLowCardinalityColumns(columns_without_low_cardinality, result_type, input_rows_count, format_settings, dry_run);
         }
     }
     else
-        result = executeWithoutLowCardinalityColumns(arguments, result_type, input_rows_count, dry_run);
+        result = executeWithoutLowCardinalityColumns(arguments, result_type, input_rows_count, format_settings, dry_run);
 
     return result;
 }

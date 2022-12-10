@@ -1231,6 +1231,31 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
     return nullptr;
 }
 
+NDB::FormatSettings::DateTimeFormat ToDateTimeFormat(const TString& formatName) {
+    static TMap<TString, NDB::FormatSettings::DateTimeFormat> formats{
+        {"POSIX", NDB::FormatSettings::DateTimeFormat::POSIX},
+        {"ISO", NDB::FormatSettings::DateTimeFormat::ISO}
+    };
+    if (auto it = formats.find(formatName); it != formats.end()) {
+        return it->second;
+    }
+    return NDB::FormatSettings::DateTimeFormat::Unspecified;
+}
+
+NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName) {
+    static TMap<TString, NDB::FormatSettings::TimestampFormat> formats{
+        {"POSIX", NDB::FormatSettings::TimestampFormat::POSIX},
+        {"ISO", NDB::FormatSettings::TimestampFormat::ISO},
+        {"UNIX_TIME_MILLISECONDS", NDB::FormatSettings::TimestampFormat::UnixTimeMilliseconds},
+        {"UNIX_TIME_SECONDS", NDB::FormatSettings::TimestampFormat::UnixTimeSeconds},
+        {"UNIX_TIME_MICROSECONDS", NDB::FormatSettings::TimestampFormat::UnixTimeMicroSeconds}
+    };
+    if (auto it = formats.find(formatName); it != formats.end()) {
+        return it->second;
+    }
+    return NDB::FormatSettings::TimestampFormat::Unspecified;
+}
+
 } // namespace
 
 using namespace NKikimr::NMiniKQL;
@@ -1316,6 +1341,30 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty())
             readSpec->Settings.csv.delimiter = it->second[0];
+
+        if (const auto it = settings.find("data.datetime.formatname"); settings.cend() != it) {
+            readSpec->Settings.date_time_format_name = ToDateTimeFormat(it->second);
+        }
+
+        if (const auto it = settings.find("data.datetime.format"); settings.cend() != it) {
+            readSpec->Settings.date_time_format = it->second;
+        }
+
+        if (const auto it = settings.find("data.timestamp.formatname"); settings.cend() != it) {
+            readSpec->Settings.timestamp_format_name = ToTimestampFormat(it->second);
+        }
+
+        if (const auto it = settings.find("data.timestamp.format"); settings.cend() != it) {
+            readSpec->Settings.timestamp_format = it->second;
+        }
+
+        if (readSpec->Settings.date_time_format_name == NDB::FormatSettings::DateTimeFormat::Unspecified && readSpec->Settings.date_time_format.empty()) {
+            readSpec->Settings.date_time_format_name = NDB::FormatSettings::DateTimeFormat::POSIX;
+        }
+
+        if (readSpec->Settings.timestamp_format_name == NDB::FormatSettings::TimestampFormat::Unspecified && readSpec->Settings.timestamp_format.empty()) {
+            readSpec->Settings.timestamp_format_name = NDB::FormatSettings::TimestampFormat::POSIX;
+        }
 
 #define SUPPORTED_FLAGS(xx) \
         xx(skip_unknown_fields, true) \

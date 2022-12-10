@@ -111,6 +111,12 @@ public:
                 .Value(ctx.NewList(pqReadTopic.Pos(), std::move(metadataFieldsList)))
                 .Done());
 
+
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
+                .Name().Build("formatSettings")
+                .Value(std::move(pqReadTopic.Settings()))
+                .Done());
+
             const auto token = "cluster:default_" + clusterName;
             auto columns = pqReadTopic.Columns().Ptr();
             if (!columns->IsList()) {

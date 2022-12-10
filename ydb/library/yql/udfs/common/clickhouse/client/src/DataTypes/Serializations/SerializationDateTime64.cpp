@@ -26,6 +26,31 @@ SerializationDateTime64::SerializationDateTime64(
 void SerializationDateTime64::serializeText(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const
 {
     auto value = assert_cast<const ColumnType &>(column).getData()[row_num];
+    if (!settings.timestamp_format.empty()) {
+        writeTimestampTextFormat(value, ostr, settings.timestamp_format);
+        return;
+    }
+
+    switch (settings.timestamp_format_name) {
+        case FormatSettings::TimestampFormat::Unspecified:
+            break;
+        case FormatSettings::TimestampFormat::ISO:
+            writeDateTimeTextISO(value, scale, ostr, utc_time_zone);
+            return;
+        case FormatSettings::TimestampFormat::POSIX:
+            writeTimestampTextPOSIX(value, ostr);
+            return;
+        case FormatSettings::TimestampFormat::UnixTimeMicroSeconds:
+            writeIntText(value.value, ostr);
+            return;
+        case FormatSettings::TimestampFormat::UnixTimeMilliseconds:
+            writeIntText(value.value / 1000, ostr);
+            return;
+        case FormatSettings::TimestampFormat::UnixTimeSeconds:
+            writeIntText(value.value / 1000000, ostr);
+            return;
+    }
+
     switch (settings.date_time_output_format)
     {
         case FormatSettings::DateTimeOutputFormat::Simple:
@@ -59,6 +84,35 @@ void SerializationDateTime64::serializeTextEscaped(const IColumn & column, size_
 
 static inline void readText(DateTime64 & x, UInt32 scale, ReadBuffer & istr, const FormatSettings & settings, const DateLUTImpl & time_zone, const DateLUTImpl & utc_time_zone)
 {
+    if (!settings.timestamp_format.empty()) {
+        readTimestampTextFormat(x, istr, settings.timestamp_format);
+        return;
+    }
+
+    switch (settings.timestamp_format_name) {
+        case FormatSettings::TimestampFormat::Unspecified:
+            break;
+        case FormatSettings::TimestampFormat::ISO:
+            readTimestampTextISO(x, istr);
+            return;
+        case FormatSettings::TimestampFormat::POSIX:
+            readTimestampTextPOSIX(x, istr);
+            return;
+        case FormatSettings::TimestampFormat::UnixTimeMicroSeconds:
+            readIntText(x, istr);
+            return;
+        case FormatSettings::TimestampFormat::UnixTimeMilliseconds: {
+            readIntText(x, istr);
+            x *= 1000;
+            return;
+        }
+        case FormatSettings::TimestampFormat::UnixTimeSeconds: {
+            readIntText(x, istr);
+            x *= 1000000;
+            return;
+        }
+    }
+
     switch (settings.date_time_input_format)
     {
         case FormatSettings::DateTimeInputFormat::Basic:

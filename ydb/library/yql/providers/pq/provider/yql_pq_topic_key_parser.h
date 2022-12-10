@@ -30,6 +30,22 @@ public:
         return Compression;
     }
 
+    TExprNode::TPtr GetDateTimeFormatName() const {
+        return DateTimeFormatName;
+    }
+
+    TExprNode::TPtr GetDateTimeFormat() {
+        return DateTimeFormat;
+    }
+
+    TExprNode::TPtr GetTimestampFormatName() {
+        return TimestampFormatName;
+    }
+
+    TExprNode::TPtr GetTimestampFormat() {
+        return TimestampFormat;
+    }
+
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
 private:
@@ -40,6 +56,10 @@ private:
     TString TopicPath;
     TString Format;
     TString Compression;
+    TExprNode::TPtr DateTimeFormatName;
+    TExprNode::TPtr DateTimeFormat;
+    TExprNode::TPtr TimestampFormatName;
+    TExprNode::TPtr TimestampFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
 };

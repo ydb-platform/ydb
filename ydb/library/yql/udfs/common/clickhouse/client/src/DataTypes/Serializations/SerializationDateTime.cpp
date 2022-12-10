@@ -19,6 +19,22 @@ namespace
 
 inline void readText(time_t & x, ReadBuffer & istr, const FormatSettings & settings, const DateLUTImpl & time_zone, const DateLUTImpl & utc_time_zone)
 {
+    if (!settings.date_time_format.empty()) {
+        readDateTimeTextFormat(x, istr, settings.date_time_format);
+        return;
+    }
+
+    switch (settings.date_time_format_name) {
+        case FormatSettings::DateTimeFormat::Unspecified:
+            break;
+        case FormatSettings::DateTimeFormat::ISO:
+            readDateTimeTextISO(x, istr);
+            return;
+        case FormatSettings::DateTimeFormat::POSIX:
+            readDateTimeTextPOSIX(x, istr);
+            return;
+    }
+
     switch (settings.date_time_input_format)
     {
         case FormatSettings::DateTimeInputFormat::Basic:
@@ -41,6 +57,22 @@ SerializationDateTime::SerializationDateTime(
 void SerializationDateTime::serializeText(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings & settings) const
 {
     auto value = assert_cast<const ColumnType &>(column).getData()[row_num];
+    if (!settings.date_time_format.empty()) {
+        writeDateTimeTextFormat(value, ostr, settings.date_time_format);
+        return;
+    }
+
+    switch (settings.date_time_format_name) {
+        case FormatSettings::DateTimeFormat::Unspecified:
+            break;
+        case FormatSettings::DateTimeFormat::ISO:
+            writeDateTimeTextISO(value, ostr, utc_time_zone);
+            return;
+        case FormatSettings::DateTimeFormat::POSIX:
+            writeDateTimeTextPOSIX(value, ostr);
+            return;
+    }
+
     switch (settings.date_time_output_format)
     {
         case FormatSettings::DateTimeOutputFormat::Simple:

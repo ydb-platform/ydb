@@ -58,7 +58,8 @@
                 {"Index": 3, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Format", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "Compression", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "LimitHint", "Type": "TExprBase", "Optional": true}
+                {"Index": 6, "Name": "LimitHint", "Type": "TExprBase", "Optional": true},
+                {"Index": 7, "Name": "Settings", "Type": "TExprList", "Optional": true}
             ]
         },
         {

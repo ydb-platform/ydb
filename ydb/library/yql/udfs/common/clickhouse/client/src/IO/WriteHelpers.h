@@ -858,6 +858,14 @@ inline void writeDateTimeUnixTimestamp(DateTime64 datetime64, UInt32 scale, Writ
     }
 }
 
+void writeDateTimeTextFormat(time_t datetime, WriteBuffer & buf, const String& format);
+
+void writeDateTimeTextPOSIX(time_t datetime, WriteBuffer & buf);
+
+void writeTimestampTextFormat(DateTime64 datetime64, WriteBuffer & buf, const String& format);
+
+void writeTimestampTextPOSIX(DateTime64 datetime, WriteBuffer & buf);
+
 /// Methods for output in binary format.
 template <typename T>
 inline std::enable_if_t<is_arithmetic_v<T>, void>

@@ -16,14 +16,14 @@ public:
 
 protected:
 
-    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const final
+    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings) const final
     {
-        return function->executeImpl(arguments, result_type, input_rows_count);
+        return function->executeImpl(arguments, result_type, input_rows_count, format_settings);
     }
 
-    ColumnPtr executeDryRunImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const final
+    ColumnPtr executeDryRunImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings) const final
     {
-        return function->executeImplDryRun(arguments, result_type, input_rows_count);
+        return function->executeImplDryRun(arguments, result_type, input_rows_count, format_settings);
     }
 
     bool useDefaultImplementationForNulls() const final { return function->useDefaultImplementationForNulls(); }
@@ -60,7 +60,7 @@ public:
 
 #endif
 
-    ExecutableFunctionPtr prepare(const ColumnsWithTypeAndName & /*arguments*/) const override
+    ExecutableFunctionPtr prepare(const ColumnsWithTypeAndName & /*arguments*/, const FormatSettings & format_settings = {}) const override
     {
         return std::make_unique<FunctionToExecutableFunctionAdaptor>(function);
     }

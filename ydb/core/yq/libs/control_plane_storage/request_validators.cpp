@@ -105,8 +105,60 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
     return issues;
 }
 
+NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings) {
+    NYql::TIssues issues;
+    TSet<TString> conflictingKeys;
+    for (const auto& [key, value]: formatSetting) {
+        if (key == "data.datetime.format_name"sv) {
+            if (!IsValidDateTimeFormatName(value)) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown value for data.datetime.format_name " + value));
+            }
+            if (conflictingKeys.contains("data.datetime.format")) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Don't use data.datetime.format_name and data.datetime.format together"));
+            }
+            conflictingKeys.insert("data.datetime.format_name");
+            continue;
+        }
+
+        if (key == "data.datetime.format"sv) {
+            if (conflictingKeys.contains("data.datetime.format_name")) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Don't use data.datetime.format_name and data.datetime.format together"));
+            }
+            conflictingKeys.insert("data.datetime.format");
+            continue;
+        }
+
+        if (key == "data.timestamp.format_name"sv) {
+            if (!IsValidTimestampFormatName(value)) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown value for data.timestamp.format_name " + value));
+            }
+            if (conflictingKeys.contains("data.timestamp.format")) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Don't use data.timestamp.format_name and data.timestamp.format together"));
+            }
+            conflictingKeys.insert("data.timestamp.format_name");
+            continue;
+        }
+
+        if (key == "data.timestamp.format"sv) {
+            if (conflictingKeys.contains("data.timestamp.format_name")) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Don't use data.timestamp.format_name and data.timestamp.format together"));
+            }
+            conflictingKeys.insert("data.timestamp.format");
+            continue;
+        }
+
+        if (matchAllSettings) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown format setting " + key));
+        }
+    }
+    return issues;
+}
+
+
 NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting) {
     NYql::TIssues issues;
+    TSet<TString> conflictingKeys;
+    issues.AddIssues(ValidateDateFormatSetting(formatSetting));
     for (const auto& [key, value]: formatSetting) {
         if (key == "file_pattern"sv) {
             continue;
@@ -118,6 +170,11 @@ NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobu
             }
             continue;
         }
+
+        if (IsIn({ "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv}, key)) {
+            continue;
+        }
+
         if (key == "csv_delimiter"sv) {
             if (format != "csv_with_names"sv) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "csv_delimiter should be used only with format csv_with_names"));

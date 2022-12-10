@@ -477,7 +477,7 @@ JSON::Pos JSON::searchField(const char * data, size_t size) const
         {
             if (static_cast<int>(size) + 2 > it->dataEnd() - it->data())
                 continue;
-            if (!strncmp(data, it->data() + 1, size))
+            if (!strncmp(data, it->data() + 1, size) && *(it->data() + size + 1) == '"')
                 break;
         }
         else

@@ -48,4 +48,8 @@ std::pair<TString, TString> SplitId(const TString& id, char delim = '-');
 
 bool IsValidIntervalUnit(const TString& unit);
 
+bool IsValidDateTimeFormatName(const TString& formatName);
+
+bool IsValidTimestampFormatName(const TString& formatName);
+
 } // namespace NYq

@@ -10,6 +10,8 @@
 #include <common/find_symbols.h>
 #include <stdlib.h>
 
+#include <util/datetime/base.h>
+
 #ifdef __SSE2__
     #include <emmintrin.h>
 #endif
@@ -1164,6 +1166,70 @@ bool loadAtPosition(ReadBuffer & in, Memory<> & memory, char * & current)
     current = in.position();
 
     return loaded_more;
+}
+
+void readDateTimeTextISO(time_t & x, ReadBuffer & istr) {
+    for (const auto& offset: {25, 20}) {
+        if (istr.position() + offset <= istr.buffer().end()) {
+            TInstant result;
+            if (TInstant::TryParseIso8601(TStringBuf{istr.position(), istr.position() + offset}, result)) {
+                x = result.GetValue() / 1000000;
+                istr.position() += offset;
+                return;
+            }
+        }
+    }
+    throw yexception() << "error in datetime parsing. Input data: " << istr.position();
+}
+
+void readDateTimeTextFormat(time_t & x, ReadBuffer & istr, const String& format)
+{
+    struct tm input_tm;
+    memset(&input_tm, 0, sizeof(tm));
+    input_tm.tm_mday = 1;
+    auto ptr = strptime(istr.position(), format.c_str(), &input_tm);
+    if (ptr == nullptr) {
+        ythrow yexception() << "Can't parse date " << istr.position() << " in " << format << " format";
+    }
+    istr.position() = ptr;
+    x = TimeGM(&input_tm);
+}
+
+void readDateTimeTextPOSIX(time_t & x, ReadBuffer & istr)
+{
+    readDateTimeTextFormat(x, istr, "%Y-%m-%d %H:%M:%S");
+}
+
+void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr) {
+    for (const auto& offset: {27, 25, 24, 20}) {
+        if (istr.position() + offset <= istr.buffer().end()) {
+            TInstant result;
+            if (TInstant::TryParseIso8601(TStringBuf{istr.position(), istr.position() + offset}, result)) {
+                x = result.GetValue();
+                istr.position() += offset;
+                return;
+            }
+        }
+    }
+    throw yexception() << "error in datetime parsing. Input data: " << istr.position();
+}
+
+void readTimestampTextFormat(DateTime64 & x, ReadBuffer & istr, const String& format)
+{
+    struct tm input_tm;
+    memset(&input_tm, 0, sizeof(tm));
+    input_tm.tm_mday = 1;
+    auto ptr = strptime(istr.position(), format.c_str(), &input_tm);
+    if (ptr == nullptr) {
+        ythrow yexception() << "Can't parse date " << istr.position() << " in " << format << " format";
+    }
+    istr.position() = ptr;
+    x = TimeGM(&input_tm) * 1000000;
+}
+
+void readTimestampTextPOSIX(DateTime64 & x, ReadBuffer & istr)
+{
+    readTimestampTextFormat(x, istr, "%Y-%m-%d %H:%M:%S");
 }
 
 }

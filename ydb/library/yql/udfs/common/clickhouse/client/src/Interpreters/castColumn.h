@@ -5,8 +5,8 @@
 namespace NDB
 {
 
-ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type);
-ColumnPtr castColumnAccurate(const ColumnWithTypeAndName & arg, const DataTypePtr & type);
-ColumnPtr castColumnAccurateOrNull(const ColumnWithTypeAndName & arg, const DataTypePtr & type);
+ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings);
+ColumnPtr castColumnAccurate(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings);
+ColumnPtr castColumnAccurateOrNull(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings);
 
 }

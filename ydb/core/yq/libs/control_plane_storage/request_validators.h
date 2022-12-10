@@ -78,6 +78,8 @@ NYql::TIssues ValidateQuery(const T& ev, size_t maxSize)
 
 NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobuf::Map<TString, TString>& formatSetting);
 
+
+NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 NYql::TIssues ValidateProjectionColumns(const YandexQuery::Schema& schema, const TVector<TString>& partitionedBy);
 
 template<typename T>
@@ -111,7 +113,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<YandexQuer
             if (!dataStreams.has_schema()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
-            issues.AddIssues(ValidateFormatSetting(dataStreams.format(), dataStreams.format_setting()));
+            issues.AddIssues(ValidateDateFormatSetting(dataStreams.format_setting(), true));
             break;
         }
         case YandexQuery::BindingSetting::BINDING_NOT_SET: {

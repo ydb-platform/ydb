@@ -141,7 +141,9 @@ bool ValidateCompressionForOutput(std::string_view compression, TExprContext& ct
 bool ValidateFormatForInput(std::string_view format, TExprContext& ctx);
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx);
 
-bool ValidateIntervalUnit(std::string_view format, TExprContext& ctx);
+bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx);
+bool ValidateDateTimeFormatName(std::string_view formatName, TExprContext& ctx);
+bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx);
 
 } // namespace NCommon
 } // namespace NYql

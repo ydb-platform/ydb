@@ -29,6 +29,26 @@ struct FormatSettings
     bool import_nested_json = false;
     bool null_as_default = true;
     bool decimal_trailing_zeros = false;
+    String date_time_format;
+    String timestamp_format;
+
+    enum class DateTimeFormat {
+        Unspecified,
+        ISO,
+        POSIX
+    };
+
+    enum class TimestampFormat {
+        Unspecified,
+        ISO,
+        POSIX,
+        UnixTimeMilliseconds,
+        UnixTimeSeconds,
+        UnixTimeMicroSeconds
+    };
+
+    DateTimeFormat date_time_format_name = DateTimeFormat::Unspecified;
+    TimestampFormat timestamp_format_name = TimestampFormat::Unspecified;
 
     enum class DateTimeInputFormat
     {

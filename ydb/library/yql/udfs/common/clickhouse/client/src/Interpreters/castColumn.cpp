@@ -7,7 +7,7 @@ namespace NDB
 {
 
 template <CastType cast_type = CastType::nonAccurate>
-static ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type)
+static ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings)
 {
     if (arg.type->equals(*type))
         return arg.column;
@@ -28,27 +28,27 @@ static ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr
 
     if constexpr (cast_type == CastType::accurateOrNull)
     {
-        return func_cast->execute(arguments, makeNullable(type), arg.column->size());
+        return func_cast->execute(arguments, makeNullable(type), arg.column->size(), format_settings);
     }
     else
     {
-        return func_cast->execute(arguments, type, arg.column->size());
+        return func_cast->execute(arguments, type, arg.column->size(), format_settings);
     }
 }
 
-ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type)
+ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings)
 {
-    return castColumn<CastType::nonAccurate>(arg, type);
+    return castColumn<CastType::nonAccurate>(arg, type, format_settings);
 }
 
-ColumnPtr castColumnAccurate(const ColumnWithTypeAndName & arg, const DataTypePtr & type)
+ColumnPtr castColumnAccurate(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings)
 {
-    return castColumn<CastType::accurate>(arg, type);
+    return castColumn<CastType::accurate>(arg, type, {});
 }
 
-ColumnPtr castColumnAccurateOrNull(const ColumnWithTypeAndName & arg, const DataTypePtr & type)
+ColumnPtr castColumnAccurateOrNull(const ColumnWithTypeAndName & arg, const DataTypePtr & type, const FormatSettings & format_settings)
 {
-    return castColumn<CastType::accurateOrNull>(arg, type);
+    return castColumn<CastType::accurateOrNull>(arg, type, {});
 }
 
 }

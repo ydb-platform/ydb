@@ -37,6 +37,22 @@ TExprNode::TPtr GetCsvDelimiter(const TExprNode& settings) {
     return FindChild(settings, "csvdelimiter"sv);
 }
 
+TExprNode::TPtr GetDateTimeFormatName(const TExprNode& settings) {
+    return FindChild(settings, "data.datetime.formatname"sv);
+}
+
+TExprNode::TPtr GetDateTimeFormat(const TExprNode& settings) {
+    return FindChild(settings, "data.datetime.format"sv);
+}
+
+TExprNode::TPtr GetTimestampFormatName(const TExprNode& settings) {
+    return FindChild(settings, "data.timestamp.formatname"sv);
+}
+
+TExprNode::TPtr GetTimestampFormat(const TExprNode& settings) {
+    return FindChild(settings, "data.timestamp.format"sv);
+}
+
 TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
     if (partBy) {
         auto children = partBy->ChildrenList();
@@ -109,6 +125,44 @@ public:
         auto sinkOutputSettingsBuilder = Build<TExprList>(ctx, targetNode.Pos());
         if (auto csvDelimiter = GetCsvDelimiter(settings)) {
             sinkOutputSettingsBuilder.Add(std::move(csvDelimiter));
+        }
+
+        bool hasDateTimeFormat = false;
+        bool hasDateTimeFormatName = false;
+        bool hasTimestampFormat = false;
+        bool hasTimestampFormatName = false;
+        if (auto dateTimeFormatName = GetDateTimeFormatName(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(dateTimeFormatName));
+            hasDateTimeFormatName = true;
+        }
+
+        if (auto dateTimeFormat = GetDateTimeFormat(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(dateTimeFormat));
+            hasDateTimeFormat = true;
+        }
+
+        if (auto timestampFormatName = GetTimestampFormatName(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(timestampFormatName));
+            hasTimestampFormatName = true;
+        }
+
+        if (auto timestampFormat = GetTimestampFormat(settings)) {
+            sinkOutputSettingsBuilder.Add(std::move(timestampFormat));
+            hasTimestampFormat = true;
+        }
+
+        if (!hasDateTimeFormat && !hasDateTimeFormatName) {
+            TExprNode::TListType pair;
+            pair.push_back(ctx.NewAtom(targetNode.Pos(), "data.datetime.formatname"));
+            pair.push_back(ctx.NewAtom(targetNode.Pos(), "POSIX"));
+            sinkOutputSettingsBuilder.Add(ctx.NewList(targetNode.Pos(), std::move(pair)));
+        }
+
+        if (!hasTimestampFormat && !hasTimestampFormatName) {
+            TExprNode::TListType pair;
+            pair.push_back(ctx.NewAtom(targetNode.Pos(), "data.timestamp.formatname"));
+            pair.push_back(ctx.NewAtom(targetNode.Pos(), "POSIX"));
+            sinkOutputSettingsBuilder.Add(ctx.NewList(targetNode.Pos(), std::move(pair)));
         }
 
         if (!FindNode(write.Input().Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {

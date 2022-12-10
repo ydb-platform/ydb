@@ -49,7 +49,7 @@ namespace {
         "bzip2"sv,
         "xz"sv
     };
-    constexpr std::array<std::string_view, 10> IntervalUnits = {
+    constexpr std::array<std::string_view, 7> IntervalUnits = {
         "MICROSECONDS"sv,
         "MILLISECONDS"sv,
         "SECONDS"sv,
@@ -57,6 +57,18 @@ namespace {
         "HOURS"sv,
         "DAYS"sv,
         "WEEKS"sv
+    };
+    constexpr std::array<std::string_view, 2> DateTimeFormatNames = {
+        "POSIX"sv,
+        "ISO"sv
+    };
+
+    constexpr std::array<std::string_view, 5> TimestampFormatNames = {
+        "POSIX"sv,
+        "ISO"sv,
+        "UNIX_TIME_MILLISECONDS"sv,
+        "UNIX_TIME_SECONDS"sv,
+        "UNIX_TIME_MICROSECONDS"sv
     };
 } // namespace
 
@@ -1163,13 +1175,26 @@ bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {
     return false;
 }
 
-bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx) {
-    if (unit.empty() || IsIn(IntervalUnits, unit)) {
+template<typename T>
+bool ValidateValueInDictionary(std::string_view value, TExprContext& ctx, const T& dictionary) {
+    if (value.empty() || IsIn(dictionary, value)) {
         return true;
     }
-    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << unit
-        << ". Use one of: " << JoinSeq(", ", IntervalUnits)));
+    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << value
+        << ". Use one of: " << JoinSeq(", ", dictionary)));
     return false;
+}
+
+bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx) {
+    return ValidateValueInDictionary(unit, ctx, IntervalUnits);
+}
+
+bool ValidateDateTimeFormatName(std::string_view formatName, TExprContext& ctx) {
+    return ValidateValueInDictionary(formatName, ctx, DateTimeFormatNames);
+}
+
+bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx) {
+    return ValidateValueInDictionary(formatName, ctx, TimestampFormatNames);
 }
 
 } // namespace NCommon

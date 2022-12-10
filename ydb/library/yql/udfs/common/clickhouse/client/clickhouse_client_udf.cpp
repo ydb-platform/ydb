@@ -798,6 +798,31 @@ private:
     size_t CurrentRow = 0U;
 };
 
+static NDB::FormatSettings::DateTimeFormat ToDateTimeFormat(const std::string& formatName) {
+    static std::map<std::string, NDB::FormatSettings::DateTimeFormat> formats{
+        {"POSIX", NDB::FormatSettings::DateTimeFormat::POSIX},
+        {"ISO", NDB::FormatSettings::DateTimeFormat::ISO}
+    };
+    if (auto it = formats.find(formatName); it != formats.end()) {
+        return it->second;
+    }
+    return NDB::FormatSettings::DateTimeFormat::Unspecified;
+}
+
+static NDB::FormatSettings::TimestampFormat ToTimestampFormat(const std::string& formatName) {
+    static std::map<std::string, NDB::FormatSettings::TimestampFormat> formats{
+        {"POSIX", NDB::FormatSettings::TimestampFormat::POSIX},
+        {"ISO", NDB::FormatSettings::TimestampFormat::ISO},
+        {"UNIX_TIME_MILLISECONDS", NDB::FormatSettings::TimestampFormat::UnixTimeMilliseconds},
+        {"UNIX_TIME_SECONDS", NDB::FormatSettings::TimestampFormat::UnixTimeSeconds},
+        {"UNIX_TIME_MICROSECONDS", NDB::FormatSettings::TimestampFormat::UnixTimeMicroSeconds}
+    };
+    if (auto it = formats.find(formatName); it != formats.end()) {
+        return it->second;
+    }
+    return NDB::FormatSettings::TimestampFormat::Unspecified;
+}
+
 NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
     NDB::FormatSettings settings;
     settings.skip_unknown_fields = true;
@@ -825,6 +850,26 @@ NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
                 throw yexception() << "CSV delimiter should contain only one symbol. Specified delimiter '" << delimiter << "' is not allowed";
             }
             settings.csv.delimiter = delimiter[0];
+        }
+
+        if (json.has("data.datetime.formatname")) {
+            auto formatName = json["data.datetime.formatname"].getString();
+            settings.date_time_format_name = ToDateTimeFormat(formatName);
+        }
+
+        if (json.has("data.datetime.format")) {
+            auto format = json["data.datetime.format"].getString();
+            settings.date_time_format = format;
+        }
+
+        if (json.has("data.timestamp.formatname")) {
+            auto formatName = json["data.timestamp.formatname"].getString();
+            settings.timestamp_format_name = ToTimestampFormat(formatName);
+        }
+
+        if (json.has("data.timestamp.format")) {
+            auto format = json["data.timestamp.format"].getString();
+            settings.timestamp_format = format;
         }
     }
     return settings;

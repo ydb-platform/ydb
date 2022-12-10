@@ -143,6 +143,7 @@ TRuntimeNode BuildParseCall(
     std::unordered_map<TString, ui32>&& metadataColumns,
     const std::string_view& format,
     const std::string_view& compression,
+    const std::vector<std::pair<std::string_view, std::string_view>>& formatSettings,
     TType* inputType,
     TType* parseItemType,
     TType* finalItemType,
@@ -274,13 +275,28 @@ TRuntimeNode BuildParseCall(
             inputDataType = inputItemTuple->GetElementType(0);
         }
 
+        TString settingsAsJson;
+        TStringOutput stream(settingsAsJson);
+        NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
+        writer.OpenMap();
+
+        for (const auto& v : formatSettings) {
+            writer.Write(v.first, v.second);
+        }
+
+        writer.CloseMap();
+        writer.Flush();
+        if (settingsAsJson == "{}") {
+            settingsAsJson.clear();
+        }
+
         const auto userType = ctx.ProgramBuilder.NewTupleType({
             ctx.ProgramBuilder.NewTupleType({inputType}),
             ctx.ProgramBuilder.NewStructType({}),
             userOutputType});
         input = TType::EKind::Resource == inputDataType->GetKind() ?
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input}));
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format + settingsAsJson), {input}));
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,
@@ -348,6 +364,13 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
         }
     }
 
+    std::vector<std::pair<std::string_view, std::string_view>> formatSettings;
+    if (auto settings = GetSetting(wrapper.Settings().Cast().Ref(), "formatSettings")) {
+        settings->Tail().ForEachChild([&](const TExprNode& v) {
+            formatSettings.emplace_back(v.Child(0)->Content(), v.Child(1)->Content());
+        });
+    }
+
     auto parsedItems = rowType->GetItems();
     EraseIf(parsedItems, [extraType, &metadataColumns](const auto& item) {
         return extraType && extraType->FindItem(item->GetName()) || metadataColumns.contains(TString(item->GetName()));
@@ -372,6 +395,7 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
         std::move(metadataColumns),
         format.Content() + settings.front(),
         settings.back(),
+        formatSettings,
         inputType,
         parseItemType,
         finalItemType,

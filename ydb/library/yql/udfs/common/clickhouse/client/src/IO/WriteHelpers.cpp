@@ -3,6 +3,9 @@
 #include <Common/hex.h>
 #include <Common/StringUtils/StringUtils.h>
 
+#include <util/datetime/base.h>
+#include <util/generic/yexception.h>
+#include <util/memory/tempbuf.h>
 
 namespace NDB
 {
@@ -96,6 +99,45 @@ void writePointerHex(const void * ptr, WriteBuffer & buf)
     char hex_str[2 * sizeof(ptr)];
     writeHexUIntLowercase(reinterpret_cast<uintptr_t>(ptr), hex_str);
     buf.write(hex_str, 2 * sizeof(ptr));
+}
+
+void writeDateTimeTextFormat(time_t datetime, WriteBuffer & buf, const String& format)
+{
+    struct tm tm{};
+    gmtime_r(&datetime, &tm);
+    size_t size = Max<size_t>(format.size() * 2 + 1, 107);
+    TTempBuf tmp(size);
+    int r = strftime(tmp.Data(), tmp.Size(), format.c_str(), &tm);
+    if (r > 0) {
+        buf.write(tmp.Data(), r);
+        return;
+    }
+    ythrow yexception() << "Can't format date in format " << format;
+}
+
+void writeDateTimeTextPOSIX(time_t datetime, WriteBuffer & buf)
+{
+    writeDateTimeTextFormat(datetime, buf, "%Y-%m-%d %H:%M:%S");
+}
+
+void writeTimestampTextFormat(DateTime64 datetime64, WriteBuffer & buf, const String& format)
+{
+    struct tm tm{};
+    time_t t = datetime64 / 1000000;
+    gmtime_r(&t, &tm);
+    size_t size = Max<size_t>(format.size() * 2 + 1, 107);
+    TTempBuf tmp(size);
+    int r = strftime(tmp.Data(), tmp.Size(), format.c_str(), &tm);
+    if (r > 0) {
+        buf.write(tmp.Data(), r);
+        return;
+    }
+    ythrow yexception() << "Can't format date in format " << format;
+}
+
+void writeTimestampTextPOSIX(DateTime64 datetime, WriteBuffer & buf)
+{
+    writeTimestampTextFormat(datetime, buf, "%Y-%m-%d %H:%M:%S");
 }
 
 }

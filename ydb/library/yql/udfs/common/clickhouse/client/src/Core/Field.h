@@ -788,7 +788,8 @@ template <> struct Field::EnumToType<Field::Types::AggregateFunctionState> { usi
 inline constexpr bool isInt64OrUInt64FieldType(Field::Types::Which t)
 {
     return t == Field::Types::Int64
-        || t == Field::Types::UInt64;
+        || t == Field::Types::UInt64
+        || t == Field::Types::Decimal64;
 }
 
 // Field value getter with type checking in debug builds.

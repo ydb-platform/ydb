@@ -60,7 +60,7 @@ public:
     bool useDefaultImplementationForConstants() const override { return true; }
     ColumnNumbers getArgumentsThatAreAlwaysConstant() const override { return {1}; }
 
-    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t /*input_rows_count*/) const override
+    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t /*input_rows_count*/, const FormatSettings & format_settings) const override
     {
         const auto n = arguments[1].column->getUInt(0);
         return executeForN<ConvertToFixedStringExceptionMode::Throw>(arguments, n);

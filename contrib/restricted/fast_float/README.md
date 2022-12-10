@@ -70,7 +70,7 @@ Furthermore, we have the following restrictions:
 
 We support Visual Studio, macOS, Linux, freeBSD. We support big and little endian. We support 32-bit and 64-bit systems.
 
-
+We assume that the rounding mode is set to nearest (`std::fegetround() == FE_TONEAREST`).
 
 ## Using commas as decimal separator
 
@@ -126,13 +126,13 @@ You can parse delimited numbers:
 
 ## Reference
 
-- Daniel Lemire, [Number Parsing at a Gigabyte per Second](https://arxiv.org/abs/2101.11408), Software: Pratice and Experience 51 (8), 2021.
+- Daniel Lemire, [Number Parsing at a Gigabyte per Second](https://arxiv.org/abs/2101.11408), Software: Practice and Experience 51 (8), 2021.
 
 ## Other programming languages
 
 - [There is an R binding](https://github.com/eddelbuettel/rcppfastfloat) called `rcppfastfloat`.
 - [There is a Rust port of the fast_float library](https://github.com/aldanor/fast-float-rust/) called `fast-float-rust`.
-- [There is a Java port of the fast_float library](https://github.com/wrandelshofer/FastDoubleParser) called `FastDoubleParser`.
+- [There is a Java port of the fast_float library](https://github.com/wrandelshofer/FastDoubleParser) called `FastDoubleParser`. It used for important systems such as [Jackson](https://github.com/FasterXML/jackson-core).
 - [There is a C# port of the fast_float library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
 
 

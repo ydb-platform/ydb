@@ -59,8 +59,8 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         return node;
     }
     const TKqlReadTable& read = node.Cast<TKqlReadTable>();
-    bool useSource = kqpCtx.Config->FeatureFlags.GetEnableKqpScanQuerySourceRead() && kqpCtx.IsScanQuery();
-    useSource = useSource || (kqpCtx.Config->FeatureFlags.GetEnableKqpDataQuerySourceRead() && kqpCtx.IsDataQuery());
+    bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
+    useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -225,8 +225,8 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     auto ranges = read.Ranges();
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
-    bool useSource = kqpCtx.Config->FeatureFlags.GetEnableKqpScanQuerySourceRead() && kqpCtx.IsScanQuery();
-    useSource = useSource || (kqpCtx.Config->FeatureFlags.GetEnableKqpDataQuerySourceRead() && kqpCtx.IsDataQuery());
+    bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
+    useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
     bool fullScan = TCoVoid::Match(ranges.Raw());
 
     TVector<TExprBase> input;

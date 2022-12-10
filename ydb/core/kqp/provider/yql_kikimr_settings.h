@@ -127,6 +127,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     TKikimrSettings::TConstPtr Snapshot() const;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
+
+    bool EnableKqpScanQuerySourceRead = false;
+    bool EnableKqpDataQuerySourceRead = false;
 };
 
 }

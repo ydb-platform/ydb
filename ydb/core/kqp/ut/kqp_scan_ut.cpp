@@ -1973,11 +1973,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(DqSource) {
         TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         TFeatureFlags flags;
-        flags.SetEnablePredicateExtractForDataQueries(true);
-        flags.SetEnableKqpScanQuerySourceRead(true);
+        flags.SetEnablePredicateExtractForScanQueries(true);
         settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
@@ -1993,11 +1996,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(DqSourceLiteralRange) {
         TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         TFeatureFlags flags;
         flags.SetEnablePredicateExtractForDataQueries(true);
-        flags.SetEnableKqpScanQuerySourceRead(true);
         settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);

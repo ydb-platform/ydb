@@ -3428,11 +3428,14 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSource) {
         TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         TFeatureFlags flags;
         flags.SetEnablePredicateExtractForDataQueries(true);
-        flags.SetEnableKqpDataQuerySourceRead(true);
         settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3448,11 +3451,14 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSourceLiteralRange) {
         TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         TFeatureFlags flags;
         flags.SetEnablePredicateExtractForDataQueries(true);
-        flags.SetEnableKqpDataQuerySourceRead(true);
         settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

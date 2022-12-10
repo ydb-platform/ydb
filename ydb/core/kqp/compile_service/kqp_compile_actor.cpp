@@ -56,6 +56,8 @@ public:
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), Query.Cluster, kqpSettings->Settings, false);
+        Config->EnableKqpDataQuerySourceRead = serviceConfig.GetEnableKqpDataQuerySourceRead();
+        Config->EnableKqpScanQuerySourceRead = serviceConfig.GetEnableKqpScanQuerySourceRead();
 
         if (!Query.Database.empty()) {
             Config->_KqpTablePathPrefix = Query.Database;

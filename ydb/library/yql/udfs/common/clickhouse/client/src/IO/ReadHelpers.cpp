@@ -1182,22 +1182,29 @@ void readDateTimeTextISO(time_t & x, ReadBuffer & istr) {
     throw yexception() << "error in datetime parsing. Input data: " << istr.position();
 }
 
-void readDateTimeTextFormat(time_t & x, ReadBuffer & istr, const String& format)
+char* readDateTimeTextFormat(time_t & x, char* str, const String& format)
 {
     struct tm input_tm;
     memset(&input_tm, 0, sizeof(tm));
     input_tm.tm_mday = 1;
-    auto ptr = strptime(istr.position(), format.c_str(), &input_tm);
+    auto ptr = strptime(str, format.c_str(), &input_tm);
     if (ptr == nullptr) {
-        ythrow yexception() << "Can't parse date " << istr.position() << " in " << format << " format";
+        ythrow yexception() << "Can't parse date " << str << " in " << format << " format";
     }
-    istr.position() = ptr;
     x = TimeGM(&input_tm);
+    return ptr;
+}
+
+void readDateTimeTextFormat(time_t & x, ReadBuffer & istr, const String& format)
+{
+    istr.position() = readDateTimeTextFormat(x, istr.position(), format);
 }
 
 void readDateTimeTextPOSIX(time_t & x, ReadBuffer & istr)
 {
-    readDateTimeTextFormat(x, istr, "%Y-%m-%d %H:%M:%S");
+    char prefix[20] = {};
+    istr.readStrict(prefix, 19);
+    readDateTimeTextFormat(x, prefix, "%Y-%m-%d %H:%M:%S");
 }
 
 void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr) {
@@ -1214,22 +1221,29 @@ void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr) {
     throw yexception() << "error in datetime parsing. Input data: " << istr.position();
 }
 
-void readTimestampTextFormat(DateTime64 & x, ReadBuffer & istr, const String& format)
+char* readTimestampTextFormat(DateTime64 & x, char* str, const String& format)
 {
     struct tm input_tm;
     memset(&input_tm, 0, sizeof(tm));
     input_tm.tm_mday = 1;
-    auto ptr = strptime(istr.position(), format.c_str(), &input_tm);
+    auto ptr = strptime(str, format.c_str(), &input_tm);
     if (ptr == nullptr) {
-        ythrow yexception() << "Can't parse date " << istr.position() << " in " << format << " format";
+        ythrow yexception() << "Can't parse date " << str << " in " << format << " format";
     }
-    istr.position() = ptr;
     x = TimeGM(&input_tm) * 1000000;
+    return ptr;
+}
+
+void readTimestampTextFormat(DateTime64 & x, ReadBuffer & istr, const String& format)
+{
+    istr.position() = readTimestampTextFormat(x, istr.position(), format);
 }
 
 void readTimestampTextPOSIX(DateTime64 & x, ReadBuffer & istr)
 {
-    readTimestampTextFormat(x, istr, "%Y-%m-%d %H:%M:%S");
+    char prefix[20] = {};
+    istr.readStrict(prefix, 19);
+    readTimestampTextFormat(x, prefix, "%Y-%m-%d %H:%M:%S");
 }
 
 }

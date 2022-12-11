@@ -64,6 +64,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
   * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные.
   * `JSON` — структура записи приведена на странице [описания changefeed](../../../../concepts/cdc#record-structure).
+* `RETENTION_PERIOD` — время хранения записей. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 
 Приведенный ниже код добавит поток изменений с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
 
@@ -71,6 +72,16 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES'
+);
+```
+
+Записи в таком потоке изменений будут храниться в течение 24 часов (значение по умолчанию). Код из следующего примера создаст поток изменений с хранением записей в течение 12 часов:
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    RETENTION_PERIOD = Interval('PT12H')
 );
 ```
 

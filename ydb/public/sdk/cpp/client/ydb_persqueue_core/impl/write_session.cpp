@@ -311,12 +311,12 @@ ui64 TWriteSession::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
                 "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode"
             );
 
-            //! Disable SeqNo shift for manual SeqNo mode;
-            OnSeqNoShift = false;
-            SeqNoShift = 0;
         } else {
             seqNoValue = *seqNo;
         }
+        //! Disable SeqNo shift for manual SeqNo mode;
+        OnSeqNoShift = false;
+        SeqNoShift = 0;
     } else if (!(*AutoSeqNoMode)) {
         DbDriverState->Log.Write(
             TLOG_ERR,

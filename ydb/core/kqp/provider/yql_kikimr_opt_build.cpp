@@ -67,7 +67,7 @@ struct TKiExploreTxResults {
     struct TKiQueryBlock {
         TVector<TExprBase> Results;
         TVector<TExprBase> Effects;
-        THashMap<std::string_view, TYdbOperations> TableOperations;
+        THashMap<TString, TYdbOperations> TableOperations;
         bool HasUncommittedChangesRead = false;
     };
 

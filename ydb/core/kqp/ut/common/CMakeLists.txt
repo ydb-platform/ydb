@@ -22,6 +22,7 @@ target_link_libraries(kqp-ut-common PUBLIC
   cpp-client-ydb_proto
   cpp-client-ydb_scheme
   cpp-client-ydb_table
+  cpp-client-ydb_topic
 )
 target_sources(kqp-ut-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.cpp

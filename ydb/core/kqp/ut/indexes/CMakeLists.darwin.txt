@@ -1,0 +1,50 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-kqp-ut-indexes)
+target_compile_options(ydb-core-kqp-ut-indexes PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-kqp-ut-indexes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
+)
+target_link_libraries(ydb-core-kqp-ut-indexes PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-kqp
+  cpp-threading-local_executor
+  kqp-ut-common
+  yql-sql-pg_dummy
+)
+target_link_options(ydb-core-kqp-ut-indexes PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
+target_sources(ydb-core-kqp-ut-indexes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/indexes/kqp_indexes_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/indexes/kqp_indexes_multishard_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-kqp-ut-indexes
+  COMMAND
+  ydb-core-kqp-ut-indexes
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-kqp-ut-indexes)

@@ -337,7 +337,7 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
 
 } // anonymous namespace end
 
-Y_UNIT_TEST_SUITE(KqpTablePredicate) {
+Y_UNIT_TEST_SUITE(KqpRanges) {
     Y_UNIT_TEST(IsNull) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

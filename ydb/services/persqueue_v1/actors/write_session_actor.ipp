@@ -524,9 +524,9 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
     auto aggr = NPersQueue::GetLabelsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
 
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.sessions_created_per_second"}, true, "name");
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.sessions_active_count"}, false, "name");
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.topic_service.stream_write.errors_per_second"}, true, "name");
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.errors"}, true, "name");
 
 
     SessionsCreated.Inc();

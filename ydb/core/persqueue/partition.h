@@ -527,10 +527,12 @@ private:
 
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter WritesTotal;
-    NKikimr::NPQ::TMultiCounter BytesWritten;
+    NKikimr::NPQ::TMultiCounter BytesWrittenTotal;
+    NKikimr::NPQ::TMultiCounter BytesWrittenGrpc;
     NKikimr::NPQ::TMultiCounter BytesWrittenUncompressed;
     NKikimr::NPQ::TMultiCounter BytesWrittenComp;
-    NKikimr::NPQ::TMultiCounter MsgsWritten;
+    NKikimr::NPQ::TMultiCounter MsgsWrittenTotal;
+    NKikimr::NPQ::TMultiCounter MsgsWrittenGrpc;;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

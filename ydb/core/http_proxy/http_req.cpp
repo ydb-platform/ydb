@@ -402,9 +402,9 @@ namespace NKikimr::NHttpProxy {
                               {"database_id", HttpContext.DatabaseId},
                               {"topic", HttpContext.StreamName},
                               {"code", TStringBuilder() << (int)StatusToHttpCode(status)},
-                              {"name", "api.data_streams.errors_per_second"}}
+                              {"name", "api.http.data_streams.response.count"}}
                          });
-
+                //TODO: add api.http.response.count
                 HttpContext.ResponseData.Status = status;
                 HttpContext.ResponseData.ErrorText = errorText;
                 HttpContext.DoReply(ctx);
@@ -434,8 +434,9 @@ namespace NKikimr::NHttpProxy {
                     FillInputCustomMetrics<TProtoRequest>(Request, HttpContext, ctx);
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.data_streams.requests_per_second")
+                                 BuildLabels(Method, HttpContext, "api.http.data_streams.request.count")
                              });
+                    //TODO: add api.http.request.count
                     CreateClient(ctx);
                     return;
                 }
@@ -447,8 +448,9 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.data_streams.requests_duration_milliseconds")
+                             BuildLabels(Method, HttpContext, "api.http.data_streams.response.duration_milliseconds")
                         });
+                //TODO: add api.http.response.duration_milliseconds
             }
 
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
@@ -460,10 +462,17 @@ namespace NKikimr::NHttpProxy {
                     ReportLatencyCounters(ctx);
 
                     ctx.Send(MakeMetricsServiceID(),
-                             new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.data_streams.success_per_second")
-                             });
-
+                             new TEvServerlessProxy::TEvCounter{
+                                 1, true, true,
+                                 {{"database", HttpContext.DatabaseName},
+                                  {"method", Method},
+                                  {"cloud_id", HttpContext.CloudId},
+                                  {"folder_id", HttpContext.FolderId},
+                                  {"database_id", HttpContext.DatabaseId},
+                                  {"topic", HttpContext.StreamName},
+                                  {"code", "200"},
+                                  {"name", "api.http.data_streams.response.count"}}
+                         });
                     HttpContext.DoReply(ctx);
                 } else {
                     auto retryClass =
@@ -646,7 +655,7 @@ namespace NKikimr::NHttpProxy {
         if (DatabaseName == "/") {
            DatabaseName = "";
         }
-
+        //TODO: find out databaseId
         ParseHeaders(Request->Headers);
     }
 

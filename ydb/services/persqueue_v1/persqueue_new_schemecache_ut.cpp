@@ -388,76 +388,72 @@ namespace NKikimr::NPersQueueTests {
 
                     checkCounters(monPort,
                                   {
-                                      "api.topic_service.stream_read.commits_per_second",
-                                      "api.topic_service.stream_read.partitions_errors_per_second",
-                                      "api.topic_service.stream_read.partitions_locked_count",
-                                      "api.topic_service.stream_read.partitions_locked_per_second",
-                                      "api.topic_service.stream_read.partitions_released_per_second",
-                                      "api.topic_service.stream_read.partitions_to_be_locked_count",
-                                      "api.topic_service.stream_read.partitions_to_be_released_count",
-                                      "api.topic_service.stream_write.errors_per_second",
-                                      "api.topic_service.stream_write.sessions_active_count",
-                                      "api.topic_service.stream_write.sessions_created_per_second",
+                                      "api.grpc.topic.stream_read.commits",
+                                      "api.grpc.topic.stream_read.partition.errors",
+                                      "api.grpc.topic.stream_read.partition.locked_inflight_count",
+                                      "api.grpc.topic.stream_read.partition.locked",
+                                      "api.grpc.topic.stream_read.partition.released",
+                                      "api.grpc.topic.stream_read.partition.to_be_locked_inflight_count",
+                                      "api.grpc.topic.stream_read.partition.to_be_released_inflight_count",
+                                      "api.grpc.topic.stream_write.errors",
+                                      "api.grpc.topic.stream_write.sessions_active_count",
+                                      "api.grpc.topic.stream_write.sessions_created",
                                   },
                                   topicName, "", "", ""
                                   );
 
                     checkCounters(monPort,
                                   {
-                                      "api.topic_service.stream_read.commits_per_second",
-                                      "api.topic_service.stream_read.partitions_errors_per_second",
-                                      "api.topic_service.stream_read.partitions_locked_count",
-                                      "api.topic_service.stream_read.partitions_locked_per_second",
-                                      "api.topic_service.stream_read.partitions_released_per_second",
-                                      "api.topic_service.stream_read.partitions_to_be_locked_count",
-                                      "api.topic_service.stream_read.partitions_to_be_released_count",
+                                      "api.grpc.topic.stream_read.commits",
+                                      "api.grpc.topic.stream_read.partition.errors",
+                                      "api.grpc.topic.stream_read.partition.locked_inflight_count",
+                                      "api.grpc.topic.stream_read.partition.locked",
+                                      "api.grpc.topic.stream_read.partition.released",
+                                      "api.grpc.topic.stream_read.partition.to_be_locked_inflight_count",
+                                      "api.grpc.topic.stream_read.partition.to_be_released_inflight_count",
                                   },
                                   topicName, consumerName, "", ""
                                   );
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
-                                      "topic.read_lag_milliseconds",
-                                      "topic.written_bytes_per_second",
-                                      "topic.written_messages_per_second",
-                                      "api.topic_service.stream_write.bytes_per_second",
-                                      "api.topic_service.stream_write.partition_throttled_milliseconds",
-                                      "topic.written_message_size_bytes",
-                                      "api.topic_service.stream_write.messages_per_second",
-                                      "topic.write_lag_milliseconds",
-                                      "topic.written_uncompressed_bytes_per_second",
-                                      "topic.awaiting_consume_milliseconds",
-                                      "api.topic_service.stream_write.buffer_brimmed_milliseconds",
-                                      "api.topic_service.stream_read.bytes_per_second",
-                                      "api.topic_service.stream_read.messages_per_second",
-                                      "topic.read_bytes_per_second",
-                                      "topic.read_messages_per_second",
+                                      "topic.read.lag_milliseconds",
+                                      "topic.write.bytes",
+                                      "topic.write.messages",
+                                      "api.grpc.topic.stream_write.bytes",
+                                      "api.grpc.topic.stream_write.partition_throttled_milliseconds",
+                                      "topic.write.message_size_bytes",
+                                      "api.grpc.topic.stream_write.messages",
+                                      "topic.write.lag_milliseconds",
+                                      "topic.write.uncompressed_bytes",
+                                      "api.grpc.topic.stream_read.bytes",
+                                      "api.grpc.topic.stream_read.messages",
+                                      "topic.read.bytes",
+                                      "topic.read.messages",
                                   },
                                   topicName, "", "", ""
                                   );
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
-                                      "topic.read_lag_milliseconds",
-                                      "topic.awaiting_consume_milliseconds",
-                                      "api.topic_service.stream_read.bytes_per_second",
-                                      "api.topic_service.stream_read.messages_per_second",
-                                      "topic.read_bytes_per_second",
-                                      "topic.read_messages_per_second",
+                                      "topic.read.lag_milliseconds",
+                                      "topic.read.awaiting_consume_milliseconds",
+                                      "api.grpc.topic.stream_read.bytes",
+                                      "api.grpc.topic.stream_read.messages",
+                                      "topic.read.bytes",
+                                      "topic.read.messages",
                                   },
                                   topicName, consumerName, "", ""
                                   );
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
-                                      "topic.awaiting_consume_milliseconds"
                                   },
                                   topicName, consumerName, "1", ""
                                   );
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
-                                      "api.topic_service.stream_write.buffer_brimmed_milliseconds"
                                   },
                                   topicName, "", "1", ""
                                   );

@@ -30,24 +30,13 @@ TVector<std::pair<TString, TString>> BuildLabels(const TString& method, const TH
 
 template <>
 void FillInputCustomMetrics<PutRecordsRequest>(const PutRecordsRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{request.records_size(), true, true,
-                 BuildLabels("", httpContext, "topic.written_messages_per_second")
-             });
-
     i64 bytes = 0;
     for (auto& rec : request.records()) {
         bytes += rec.data().size() +  rec.partition_key().size() + rec.explicit_hash_key().size();
     }
-
     ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{bytes, true, true,
-                 BuildLabels("", httpContext, "topic.written_bytes_per_second")
-             });
-
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{bytes, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.put_records.bytes_per_second")
+                 BuildLabels("PutRecords", httpContext, "api.http.data_streams.request.bytes")
              });
 }
 
@@ -55,23 +44,14 @@ template <>
 void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{1, true, true,
-                 BuildLabels("", httpContext, "topic.written_messages_per_second")
-             });
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{1, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.put_record.messages_per_second")
+                 BuildLabels("", httpContext, "api.http.data_streams.put_record.messages")
              });
 
     i64 bytes = request.data().size() +  request.partition_key().size() + request.explicit_hash_key().size();
 
     ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{bytes, true, true,
-                 BuildLabels("", httpContext, "topic.written_bytes_per_second")
-             });
-
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{bytes, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.put_record.bytes_per_second")
+                 BuildLabels("PutRecord", httpContext, "api.http.data_streams.request.bytes")
              });
 }
 
@@ -79,10 +59,8 @@ void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, c
 template <>
 void FillOutputCustomMetrics<PutRecordResult>(const PutRecordResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     Y_UNUSED(result);
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{1, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.put_record.success_per_second")
-             });
+    Y_UNUSED(httpContext);
+    Y_UNUSED(ctx);
 }
 
 
@@ -92,23 +70,19 @@ void FillOutputCustomMetrics<PutRecordsResult>(const PutRecordsResult& result, c
     i64 success = result.records_size() - failed;
     if (success > 0) {
         ctx.Send(MakeMetricsServiceID(),
-                 new TEvServerlessProxy::TEvCounter{1, true, true,
-                     BuildLabels("", httpContext, "api.data_streams.put_records.success_per_second")
-                 });
-        ctx.Send(MakeMetricsServiceID(),
                  new TEvServerlessProxy::TEvCounter{success, true, true,
-                     BuildLabels("", httpContext, "api.data_streams.put_records.successfull_messages_per_second")
+                     BuildLabels("", httpContext, "api.http.data_streams.put_records.successfull_messages")
                  });
     }
 
     ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{result.records_size(), true, true,
-                 BuildLabels("", httpContext, "api.data_streams.put_records.total_messages_per_second")
+                 BuildLabels("", httpContext, "api.http.data_streams.put_records.total_messages")
              });
     if (failed > 0) {
         ctx.Send(MakeMetricsServiceID(),
                  new TEvServerlessProxy::TEvCounter{failed, true, true,
-                     BuildLabels("", httpContext, "api.data_streams.put_records.failed_messages_per_second")
+                     BuildLabels("", httpContext, "api.http.data_streams.put_records.failed_messages")
                  });
     }
 }
@@ -127,24 +101,12 @@ void FillOutputCustomMetrics<GetRecordsResult>(const GetRecordsResult& result, c
                                  });
 
     ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{1, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.get_records.success_per_second")}
-             );
-    ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{records_n, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.get_records.messages_per_second")}
+                 BuildLabels("", httpContext, "api.http.data_streams.get_records.messages")}
              );
     ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{bytes, true, true,
-                 BuildLabels("", httpContext, "api.data_streams.get_records.bytes_per_second")}
-             );
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{records_n, true, true,
-                 BuildLabels("", httpContext, "topic.read_messages_per_second")}
-             );
-    ctx.Send(MakeMetricsServiceID(),
-             new TEvServerlessProxy::TEvCounter{bytes, true, true,
-                 BuildLabels("", httpContext, "topic.read_bytes_per_second")}
+                 BuildLabels("GetRecords", httpContext, "api.http.data_streams.response.bytes")}
              );
 }
 

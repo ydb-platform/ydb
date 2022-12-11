@@ -328,22 +328,25 @@ struct TUserInfo {
 
         BytesRead = TMultiCounter(subgroup,
                                   aggregates, {{"consumer", User}},
-                                  {"api.topic_service.stream_read.bytes_per_second",
-                                   "topic.read_bytes_per_second"}, true, "name");
+                                  {"api.grpc.topic.stream_read.bytes",
+                                   "topic.read.bytes"}, true, "name");
         MsgsRead = TMultiCounter(subgroup,
                                  aggregates, {{"consumer", User}},
-                                 {"api.topic_service.stream_read.messages_per_second",
-                                  "topic.read_messages_per_second"}, true, "name");
-
+                                 {"api.grpc.topic.stream_read.messages",
+                                  "topic.read.messages"}, true, "name");
+        Y_UNUSED(dcId);
+        Y_UNUSED(partition);
+        /*
         Counter.SetCounter(subgroup,
                            {{"database", dbPath}, {"cloud_id", cloudId}, {"folder_id", folderId}, {"database_id", dbId},
                             {"topic", TopicConverter->GetFederationPath()},
                             {"consumer", User}, {"host", dcId}, {"partition", partition}},
-                           {"name", "topic.awaiting_consume_milliseconds", true});
+                           {"name", "topic.read.awaiting_consume_milliseconds", true});
+        */
 
         ReadTimeLag.reset(new TPercentileCounter(
                      NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless), aggregates,
-                     {{"consumer", User}, {"name", "topic.read_lag_milliseconds"}}, "bin",
+                     {{"consumer", User}, {"name", "topic.read.lag_milliseconds"}}, "bin",
                      TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
                                                         {1000, "1000"}, {2000, "2000"},
                                                         {5000, "5000"}, {10'000, "10000"},

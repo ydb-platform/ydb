@@ -816,13 +816,13 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
     auto aggr = NPersQueue::GetLabelsForTopic(topic, cloudId, dbId, dbPath, folderId);
     const TVector<std::pair<TString, TString>> cons{{"consumer", ClientPath}};
 
-    topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_locked_per_second"}, true, "name");
-    topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_released_per_second"}, true, "name");
-    topicCounters.PartitionsToBeReleased = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_to_be_released_count"}, false, "name");
-    topicCounters.PartitionsToBeLocked   = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_to_be_locked_count"}, false, "name");
-    topicCounters.PartitionsInfly        = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_locked_count"}, false, "name");
-    topicCounters.Errors                 = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.partitions_errors_per_second"}, true, "name");
-    topicCounters.Commits                = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.topic_service.stream_read.commits_per_second"}, true, "name");
+    topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
+    topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.stopped"}, true, "name");
+    topicCounters.PartitionsToBeReleased = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.stopping_count"}, false, "name");
+    topicCounters.PartitionsToBeLocked   = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.starting_count"}, false, "name");
+    topicCounters.PartitionsInfly        = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
+    topicCounters.Errors                 = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
+    topicCounters.Commits                = NPQ::TMultiCounter(subGroup, aggr, cons, {"api.grpc.topic.stream_read.commits"}, true, "name");
 
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;

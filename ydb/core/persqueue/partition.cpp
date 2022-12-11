@@ -815,10 +815,10 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
             {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeSession");
-    BytesWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + suffix}, true);
+    BytesWrittenTotal = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + suffix}, true);
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"UncompressedBytesWritten" + suffix}, true);
     BytesWrittenComp = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"CompactedBytesWritten" + suffix}, true);
-    MsgsWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"MessagesWritten" + suffix}, true);
+    MsgsWrittenTotal = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"MessagesWritten" + suffix}, true);
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -854,7 +854,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     const auto topicName = TopicConverter->GetModernName();
     auto counters = AppData(ctx)->Counters;
     auto labels = NPersQueue::GetLabelsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
-
+/*
     WriteBufferIsFullCounter.SetCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless),
         {
@@ -865,11 +865,11 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
          {"topic", TopicConverter->GetFederationPath()},
          {"host", DCId},
          {"partition", ToString<ui32>(Partition)}},
-        {"name", "api.topic_service.stream_write.buffer_brimmed_milliseconds", true});
-
+        {"name", "api.grpc.topic.stream_write.buffer_brimmed_milliseconds", true});
+*/
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                    {{"name", "topic.write_lag_milliseconds"}}, "bin",
+                    {{"name", "topic.write.lag_milliseconds"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {100, "100"}, {200, "200"}, {500, "500"},
                         {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
@@ -878,7 +878,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                    {{"name", "topic.written_message_size_bytes"}}, "bin",
+                    {{"name", "topic.write.message_size_bytes"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
                         {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
@@ -886,19 +886,25 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
                         {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
 
-    BytesWritten = NKikimr::NPQ::TMultiCounter(
+    BytesWrittenGrpc = NKikimr::NPQ::TMultiCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
-                    {"api.topic_service.stream_write.bytes_per_second",
-                     "topic.written_bytes_per_second"} , true, "name");
-    MsgsWritten = NKikimr::NPQ::TMultiCounter(
+                    {"api.grpc.topic.stream_write.bytes"} , true, "name");
+    BytesWrittenTotal = NKikimr::NPQ::TMultiCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
-                    {"api.topic_service.stream_write.messages_per_second",
-                     "topic.written_messages_per_second"}, true, "name");
+                    {"topic.write.bytes"} , true, "name");
+
+    MsgsWrittenGrpc = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+                    {"api.grpc.topic.stream_write.messages"}, true, "name");
+    MsgsWrittenTotal = NKikimr::NPQ::TMultiCounter(
+        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+                    {"topic.write.messages"}, true, "name");
+
 
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
 
         NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
-                    {"topic.written_uncompressed_bytes_per_second"}, true, "name");
+                    {"topic.write.uncompressed_bytes"}, true, "name");
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -912,7 +918,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                            {{"name", "api.topic_service.stream_write.topic_throttled_milliseconds"}}, "bin",
+                            {{"name", "api.grpc.topic.stream_write.topic_throttled_milliseconds"}}, "bin",
                             TVector<std::pair<ui64, TString>>{
                                 {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                                 {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
@@ -923,7 +929,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                        {{"name", "api.topic_service.stream_write.partition_throttled_milliseconds"}}, "bin",
+                        {{"name", "api.grpc.topic.stream_write.partition_throttled_milliseconds"}}, "bin",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                             {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
@@ -1046,7 +1052,6 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
             avg.Update(now);
         }
     }
-
     WriteBufferIsFullCounter.UpdateWorkingTime(now);
 
     WriteLagMs.Update(0, now);
@@ -4157,14 +4162,19 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_OK].Increment(WriteNewSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_CYCLE_BYTES].IncrementFor(WriteCycleSize);
     TabletCounters.Percentile()[COUNTER_PQ_WRITE_NEW_BYTES].IncrementFor(WriteNewSize);
-    if (BytesWritten)
-        BytesWritten.Inc(WriteNewSizeInternal);
+    if (BytesWrittenGrpc)
+        BytesWrittenGrpc.Inc(WriteNewSizeInternal);
+    if (BytesWrittenTotal)
+        BytesWrittenTotal.Inc(WriteNewSize);
+
     if (BytesWrittenUncompressed)
         BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
     if (BytesWrittenComp)
         BytesWrittenComp.Inc(WriteCycleSize);
-    if (MsgsWritten)
-        MsgsWritten.Inc(WriteNewMessagesInternal);
+    if (MsgsWrittenGrpc)
+        MsgsWrittenGrpc.Inc(WriteNewMessagesInternal);
+    if (MsgsWrittenTotal)
+        MsgsWrittenTotal.Inc(WriteNewMessages);
 
     //All ok
     auto now = ctx.Now();
@@ -4669,7 +4679,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         }
 
         WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-        WriteNewSizeInternal = p.Msg.External ? 0 : WriteNewSize;
+        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
         WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
         if (p.Msg.PartNo == 0) {
              ++WriteNewMessages;

@@ -243,7 +243,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 - CLI
 
    ```bash
-   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl drop mytable
+   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
    ```
 
 {% if oss == true %}

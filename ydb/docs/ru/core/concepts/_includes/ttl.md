@@ -243,7 +243,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 - CLI
 
   ```bash
-  $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl drop mytable
+  $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl reset mytable
   ```
 
 {% if oss == true %}

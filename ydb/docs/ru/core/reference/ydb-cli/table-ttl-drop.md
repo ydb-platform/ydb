@@ -1,30 +1,30 @@
-# Удаление параметров TTL
+# Сброс параметров TTL
 
-С помощью подкоманды `table ttl drop` вы можете удалить [TTL](../../concepts/ttl.md) для указанной таблицы.
+С помощью подкоманды `table ttl reset` вы можете выключить [TTL](../../concepts/ttl.md) для указанной таблицы.
 
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [global options...] table ttl drop [options...] <table path>
+{{ ydb-cli }} [global options...] table ttl reset [options...] <table path>
 ```
 
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` — [параметры подкоманды](#options).
 * `table path` — путь таблицы.
 
-Посмотрите описание команды удаления TTL:
+Посмотрите описание команды выключения TTL:
 
 ```bash
-{{ ydb-cli }} table ttl drop --help
+{{ ydb-cli }} table ttl reset --help
 ```
 
 ## Примеры {examples}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Удалите TTL для таблицы `series`:
+Выключите TTL для таблицы `series`:
 
 ```bash
-{{ ydb-cli }} -p db1 table ttl drop \
+{{ ydb-cli }} -p db1 table ttl reset \
   series
 ```

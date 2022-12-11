@@ -61,7 +61,7 @@ table attribute drop | Удаление атрибута таблицы
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
 [table readtable](../commands/readtable.md) | Потоковое чтение таблицы
 [table ttl set](../table-ttl-set.md) | Установка параметров TTL
-[table ttl drop](../table-ttl-drop.md) | Удаление параметров TTL
+[table ttl reset](../table-ttl-drop.md) | Сброс параметров TTL
 [tools copy](../tools-copy.md) | Копирование таблиц
 [tools dump](../export_import/tools_dump.md) | Выгрузка директории или таблицы в файловую систему
 [tools rename](../commands/tools/rename.md) | Переименование таблиц

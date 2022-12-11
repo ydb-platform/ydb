@@ -61,7 +61,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table query explain](../commands/explain-plan.md) | YQL query execution plan |
 | [table readtable](../commands/readtable.md) | Streaming table reads |
 | [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
-| [table ttl drop](../table-ttl-drop.md) | Deleting TTL parameters |
+| [table ttl reset](../table-ttl-drop.md) | Resetting TTL parameters |
 | [tools copy](../tools-copy.md) | Copying tables |
 | [tools dump](../export_import/tools_dump.md) | Dumping a directory or table to the file system |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |

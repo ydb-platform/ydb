@@ -49,7 +49,11 @@ namespace NKikimr::NStorage {
                 Y_VERIFY(tokenCount >= 2);
                 ui64 size = (ui64)100 << 30; // 100GB is default
                 if (splitted.size() >= 3) {
-                    size = Max(size, FromStringWithDefault<ui64>(splitted[2], size) << 30);
+                    ui64 minSize = (ui64)100 << 30;
+                    if (pdiskConfig->FeatureFlags.GetEnableSmallDiskOptimization()) {
+                        minSize = (32ull << 20) * 256; // at least needed 256 chunks
+                    }
+                    size = Max(minSize, FromStringWithDefault<ui64>(splitted[2], size) << 30);
                 }
 
                 auto diskMode = NPDisk::NSectorMap::DM_NONE;

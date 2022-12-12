@@ -1288,6 +1288,11 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.TotalChunks = Format.DiskSizeChunks();
                 params.ExpectedOwnerCount = Cfg->ExpectedSlotCount;
                 params.SysLogSize = Format.SystemChunkCount; // sysLogSize = chunk 0 + additional SysLog chunks
+                if (Format.IsDiskSmall() && Cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
+                    params.SeparateCommonLog = false;
+                } else {
+                    params.SeparateCommonLog = true;
+                }
                 params.CommonLogSize = LogChunks.size();
                 params.SpaceColorBorder = Cfg->SpaceColorBorder;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {

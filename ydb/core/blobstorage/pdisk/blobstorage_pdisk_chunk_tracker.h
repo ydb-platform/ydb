@@ -267,15 +267,17 @@ public:
             return false;
         }
 
-        i64 commonLog = MinCommonLogSize;
-        if (commonLog + staticLog < params.CommonLogSize) {
-            commonLog = params.CommonLogSize - staticLog;
-        }
-        unappropriated += GlobalQuota->AddSystemOwner(OwnerSystem, commonLog, "Common Log");
-        if (unappropriated < 0) {
-            outErrorReason = (TStringBuilder() << "Error adding OwnerSystem (common log) quota, size# " << commonLog
-                    << " TotalChunks# " << params.TotalChunks);
-            return false;
+        if (params.SeparateCommonLog) {
+            i64 commonLog = MinCommonLogSize;
+            if (commonLog + staticLog < params.CommonLogSize) {
+                commonLog = params.CommonLogSize - staticLog;
+            }
+            unappropriated += GlobalQuota->AddSystemOwner(OwnerSystem, commonLog, "Common Log");
+            if (unappropriated < 0) {
+                outErrorReason = (TStringBuilder() << "Error adding OwnerSystem (common log) quota, size# " << commonLog
+                        << " TotalChunks# " << params.TotalChunks);
+                return false;
+            }
         }
 
         i64 chunksOwned = 0;
@@ -313,9 +315,14 @@ public:
         }
 
         if (params.CommonLogSize) {
-            bool isOk = GlobalQuota->InitialAllocate(OwnerSystem, params.CommonLogSize);
-            if (!isOk) {
-                return false;
+            if (params.SeparateCommonLog) {
+                if (!GlobalQuota->InitialAllocate(OwnerSystem, params.CommonLogSize)) {
+                    return false;
+                }
+            } else {
+                if (!SharedQuota->InitialAllocate(params.CommonLogSize)) {
+                    return false;
+                }
             }
         }
 
@@ -337,11 +344,24 @@ public:
         if (IsOwnerUser(owner)) {
             return OwnerQuota->GetHardLimit(owner);
         } else {
-            if (owner == OwnerCommonStaticLog) {
-                // Static groups use both common and bonus pools
-                return GlobalQuota->GetHardLimit(OwnerCommonStaticLog) + GlobalQuota->GetHardLimit(OwnerSystem);
-            } else {
-                return GlobalQuota->GetHardLimit(owner);
+            switch (owner) {
+                case OwnerCommonStaticLog:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->GetHardLimit(OwnerCommonStaticLog) + GlobalQuota->GetHardLimit(OwnerSystem);
+                    } else {
+                        return SharedQuota->GetHardLimit() + GlobalQuota->GetHardLimit(OwnerCommonStaticLog);
+                    }
+                    break;
+                case OwnerSystem:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->GetHardLimit(OwnerSystem);
+                    } else {
+                        return SharedQuota->GetHardLimit();
+                    }
+                    break;
+                default:
+                    return GlobalQuota->GetHardLimit(owner);
+                    break;
             }
         }
     }
@@ -366,11 +386,24 @@ public:
             // fix for CLOUDINC-1822: remove OwnerQuota->GetFree(owner) since it broke group balancing in Hive
             return SharedQuota->GetFree();
         } else {
-            if (owner == OwnerCommonStaticLog) {
-                // Static groups use both common and bonus pools
-                return GlobalQuota->GetFree(OwnerCommonStaticLog) + GlobalQuota->GetFree(OwnerSystem);
-            } else {
-                return GlobalQuota->GetFree(owner);
+            switch (owner) {
+                case OwnerCommonStaticLog:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->GetFree(OwnerCommonStaticLog) + GlobalQuota->GetFree(OwnerSystem);
+                    } else {
+                        return SharedQuota->GetFree() + GlobalQuota->GetFree(OwnerCommonStaticLog);
+                    }
+                    break;
+                case OwnerSystem:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->GetFree(OwnerSystem);
+                    } else {
+                        return SharedQuota->GetFree();
+                    }
+                    break;
+                default:
+                    return GlobalQuota->GetFree(owner);
+                    break;
             }
         }
     }
@@ -390,13 +423,35 @@ public:
             ret = Max(ret, SharedQuota->EstimateSpaceColor(allocationSize));
             return ret;
         } else {
-            if (owner == OwnerCommonStaticLog) {
-                if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
-                    // No static group bonus, use common quota for the request
-                    owner = OwnerSystem;
-                }
+            switch (owner) {
+                case OwnerCommonStaticLog:
+                    if (Params.SeparateCommonLog) {
+                        if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
+                            // No static group bonus, use common quota for the request
+                            return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize);
+                        } else {
+                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize);
+                        }
+                    } else {
+                        if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
+                            // No static group bonus, use common quota for the request
+                            return SharedQuota->EstimateSpaceColor(allocationSize);
+                        } else {
+                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize);
+                        }
+                    }
+                    break;
+                case OwnerSystem:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize);
+                    } else {
+                        return SharedQuota->EstimateSpaceColor(allocationSize);
+                    }
+                    break;
+                default:
+                    return GlobalQuota->EstimateSpaceColor(owner, allocationSize);
+                    break;
             }
-            return GlobalQuota->EstimateSpaceColor(owner, allocationSize);
         }
     }
 
@@ -405,18 +460,30 @@ public:
             OwnerQuota->ForceAllocate(owner, count);
             return SharedQuota->TryAllocate(count, outErrorReason);
         } else {
-            if (owner == OwnerCommonStaticLog) {
-                // Chunk allocation for static log (can use both common and bonus pools)
-                // Try common pool first
-                bool isOk = GlobalQuota->TryAllocate(OwnerSystem, count, outErrorReason);
-                if (isOk) {
-                    return true;
-                }
-                // Try bonus pool
-                return GlobalQuota->TryAllocate(OwnerCommonStaticLog, count, outErrorReason);
-            } else {
-                // Chunk allocation for any other owner
-                return GlobalQuota->TryAllocate(owner, count, outErrorReason);
+            switch (owner) {
+                case OwnerCommonStaticLog:
+                    if (Params.SeparateCommonLog) {
+                        if (GlobalQuota->TryAllocate(OwnerSystem, count, outErrorReason)) {
+                            return true;
+                        }
+                    } else {
+                        if (SharedQuota->TryAllocate(count, outErrorReason)) {
+                            return true;
+                        }
+                    }
+                    // Try bonus pool
+                    return GlobalQuota->TryAllocate(OwnerCommonStaticLog, count, outErrorReason);
+                    break;
+                case OwnerSystem:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->TryAllocate(owner, count, outErrorReason);
+                    } else {
+                        return SharedQuota->TryAllocate(count, outErrorReason);
+                    }
+                    break;
+                default:
+                    return GlobalQuota->TryAllocate(owner, count, outErrorReason);
+                    break;
             }
         }
     }
@@ -426,20 +493,30 @@ public:
             OwnerQuota->Release(owner, count);
             SharedQuota->Release(count);
         } else {
-            if (owner == OwnerCommonStaticLog || owner == OwnerSystem) {
-                // Chunk release for common log (fill bonus pool first, then fill the common pool)
-                i64 usedBonus = GlobalQuota->GetUsed(OwnerCommonStaticLog);
-                i64 releaseBonus = Min(usedBonus, count);
-                if (releaseBonus) {
-                    GlobalQuota->Release(OwnerCommonStaticLog, releaseBonus);
+            switch (owner) {
+                case OwnerCommonStaticLog:
+                case OwnerSystem: 
+                {
+                    // Chunk release for common log (fill bonus pool first, then fill the common pool)
+                    i64 usedBonus = GlobalQuota->GetUsed(OwnerCommonStaticLog);
+                    i64 releaseBonus = Min(usedBonus, count);
+                    if (releaseBonus) {
+                        GlobalQuota->Release(OwnerCommonStaticLog, releaseBonus);
+                    }
+                    i64 releaseCommon = count - releaseBonus;
+                    if (releaseCommon) {
+                        if (Params.SeparateCommonLog) {
+                            GlobalQuota->Release(OwnerSystem, releaseCommon);
+                        } else {
+                            SharedQuota->Release(releaseCommon);
+                        }
+                    }
+                    break;
                 }
-                i64 releaseCommon = count - releaseBonus;
-                if (releaseCommon) {
-                    GlobalQuota->Release(OwnerSystem, releaseCommon);
-                }
-            } else {
-                // Chunk release for any other owner
-                GlobalQuota->Release(owner, count);
+                default:
+                    // Chunk release for any other owner
+                    GlobalQuota->Release(owner, count);
+                    break;
             }
         }
     }
@@ -455,7 +532,19 @@ public:
         if (IsOwnerUser(owner)) {
             return OwnerQuota->ColorFlagLimit(owner, color);
         } else {
-            return GlobalQuota->ColorFlagLimit(owner, color);
+            switch (owner) {
+                case OwnerSystem:
+                    if (Params.SeparateCommonLog) {
+                        return GlobalQuota->ColorFlagLimit(OwnerSystem, color);
+                    } else {
+                        return SharedQuota->ColorFlagLimit(color);
+                    }
+                case OwnerCommonStaticLog:
+                default:
+                    // Chunk release for any other owner
+                    return GlobalQuota->ColorFlagLimit(owner, color);
+                    break;
+            }
         }
     }
 };

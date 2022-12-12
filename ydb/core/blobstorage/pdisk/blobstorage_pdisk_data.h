@@ -770,6 +770,10 @@ struct TDiskFormat {
         Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));
         memcpy(this, &format, format.GetUsedSize());
     }
+
+    bool IsDiskSmall() {
+        return DiskSize < FullSizeDiskMinimumSize;
+    }
 };
 
 union TDiskFormatSector {

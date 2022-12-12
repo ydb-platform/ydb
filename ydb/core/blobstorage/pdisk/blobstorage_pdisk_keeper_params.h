@@ -37,6 +37,9 @@ struct TKeeperParams {
     TMap<TOwner, TOwnerInfo> OwnersInfo;
 
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+    // Small disk
+    bool SeparateCommonLog = true;
 };
 
 } // NPDisk

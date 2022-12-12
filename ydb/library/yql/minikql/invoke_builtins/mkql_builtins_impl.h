@@ -815,7 +815,7 @@ std::shared_ptr<arrow::DataType> GetPrimitiveDataType();
 
 template <>
 inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<bool>() {
-    return arrow::boolean();
+    return arrow::uint8();
 }
 
 template <>
@@ -878,7 +878,7 @@ arrow::Datum MakeScalarDatum(T value);
 
 template <>
 inline arrow::Datum MakeScalarDatum<bool>(bool value) {
-    return arrow::Datum(std::make_shared<arrow::BooleanScalar>(value));
+    return arrow::Datum(std::make_shared<arrow::UInt8Scalar>(value));
 }
 
 template <>
@@ -1191,6 +1191,22 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     owner.KernelMap.emplace(argTypes, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
 }
 
+template<typename TInput1, typename TInput2,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryPredicateKernel(TKernelFamilyBase& owner) {
+    // ui8 type is used as bool replacement
+    using TOutput = ui8;
+    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
+    using TExecs = TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, TFuncInstance::DefaultNulls>;
+
+    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id });
+    NUdf::TDataTypeId returnType = NUdf::TDataType<bool>::Id;
+
+    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
+    k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+    owner.KernelMap.emplace(argTypes, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+}
+
 template<template<typename, typename, typename> class TFunc>
 void AddBinaryIntegralKernels(TKernelFamilyBase& owner) {
     AddBinaryKernel<ui8, ui8, ui8, TFunc>(owner);
@@ -1278,78 +1294,77 @@ public:
 
 template<template<typename, typename, typename> class TPred>
 void AddBinaryIntegralPredicateKernels(TKernelFamilyBase& owner) {
-    using TResult = ui8;
-    AddBinaryKernel<ui8, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, i8, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, i16, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, i32, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<ui8, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, i8, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, i16, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, i32, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<ui8, i64, TPred>(owner);
 
-    AddBinaryKernel<i8, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<i8, i8, TResult, TPred>(owner);
-    AddBinaryKernel<i8, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<i8, i16, TResult, TPred>(owner);
-    AddBinaryKernel<i8, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<i8, i32, TResult, TPred>(owner);
-    AddBinaryKernel<i8, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<i8, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<i8, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<i8, i8, TPred>(owner);
+    AddBinaryPredicateKernel<i8, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<i8, i16, TPred>(owner);
+    AddBinaryPredicateKernel<i8, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<i8, i32, TPred>(owner);
+    AddBinaryPredicateKernel<i8, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<i8, i64, TPred>(owner);
 
-    AddBinaryKernel<ui16, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, i8, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, i16, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, i32, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<ui16, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, i8, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, i16, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, i32, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<ui16, i64, TPred>(owner);
 
-    AddBinaryKernel<i16, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<i16, i8, TResult, TPred>(owner);
-    AddBinaryKernel<i16, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<i16, i16, TResult, TPred>(owner);
-    AddBinaryKernel<i16, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<i16, i32, TResult, TPred>(owner);
-    AddBinaryKernel<i16, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<i16, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<i16, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<i16, i8, TPred>(owner);
+    AddBinaryPredicateKernel<i16, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<i16, i16, TPred>(owner);
+    AddBinaryPredicateKernel<i16, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<i16, i32, TPred>(owner);
+    AddBinaryPredicateKernel<i16, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<i16, i64, TPred>(owner);
 
-    AddBinaryKernel<ui32, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, i8, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, i16, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, i32, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<ui32, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, i8, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, i16, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, i32, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<ui32, i64, TPred>(owner);
 
-    AddBinaryKernel<i32, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<i32, i8, TResult, TPred>(owner);
-    AddBinaryKernel<i32, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<i32, i16, TResult, TPred>(owner);
-    AddBinaryKernel<i32, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<i32, i32, TResult, TPred>(owner);
-    AddBinaryKernel<i32, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<i32, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<i32, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<i32, i8, TPred>(owner);
+    AddBinaryPredicateKernel<i32, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<i32, i16, TPred>(owner);
+    AddBinaryPredicateKernel<i32, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<i32, i32, TPred>(owner);
+    AddBinaryPredicateKernel<i32, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<i32, i64, TPred>(owner);
 
-    AddBinaryKernel<ui64, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, i8, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, i16, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, i32, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<ui64, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, i8, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, i16, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, i32, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<ui64, i64, TPred>(owner);
 
-    AddBinaryKernel<i64, ui8, TResult, TPred>(owner);
-    AddBinaryKernel<i64, i8, TResult, TPred>(owner);
-    AddBinaryKernel<i64, ui16, TResult, TPred>(owner);
-    AddBinaryKernel<i64, i16, TResult, TPred>(owner);
-    AddBinaryKernel<i64, ui32, TResult, TPred>(owner);
-    AddBinaryKernel<i64, i32, TResult, TPred>(owner);
-    AddBinaryKernel<i64, ui64, TResult, TPred>(owner);
-    AddBinaryKernel<i64, i64, TResult, TPred>(owner);
+    AddBinaryPredicateKernel<i64, ui8, TPred>(owner);
+    AddBinaryPredicateKernel<i64, i8, TPred>(owner);
+    AddBinaryPredicateKernel<i64, ui16, TPred>(owner);
+    AddBinaryPredicateKernel<i64, i16, TPred>(owner);
+    AddBinaryPredicateKernel<i64, ui32, TPred>(owner);
+    AddBinaryPredicateKernel<i64, i32, TPred>(owner);
+    AddBinaryPredicateKernel<i64, ui64, TPred>(owner);
+    AddBinaryPredicateKernel<i64, i64, TPred>(owner);
 }
 
 template<template<typename, typename, typename> class TPred>

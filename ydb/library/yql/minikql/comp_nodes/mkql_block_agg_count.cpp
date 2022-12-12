@@ -143,12 +143,12 @@ public:
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
-                auto filterBitmap = filterArray->GetValues<uint8_t>(1, 0);
+                const ui8* filterBitmap = filterArray->GetValues<uint8_t>(1);
                 auto state = typedState->Count_;
                 for (ui32 i = 0; i < array->length; ++i) {
                     ui64 fullIndex = i + array->offset;
                     auto bit1 = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                    auto bit2 = ((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                    auto bit2 = filterBitmap[i];
                     state += bit1 & bit2;
                 }
 

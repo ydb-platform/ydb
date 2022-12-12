@@ -100,14 +100,13 @@ public:
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
-                auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+                const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
                 TSum sum = typedState->Sum_;
                 if (array->GetNullCount() == 0) {
                     typedState->IsValid_ = 1;
                     for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = -TIn(filterBitmap[i]);
                         sum += ptr[i] & filterMask;
                     }
                 } else {
@@ -117,7 +116,7 @@ public:
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
                         TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = -TIn(filterBitmap[i]);
                         mask &= filterMask;
                         sum += (ptr[i] & mask);
                         count += mask & 1;
@@ -243,11 +242,10 @@ public:
             const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
             const auto& filterArray = filterDatum.array();
             MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
-            auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+            const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
             for (int64_t i = 0; i < len; ++i) {
-                ui64 fullIndex = i + array->offset;
                 // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                TIn filterMask = -TIn(filterBitmap[i]);
                 sum += ptr[i] & filterMask;
             }
         }
@@ -339,15 +337,14 @@ public:
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
-                auto filterBitmap = filterArray->template GetValues<uint8_t>(1, 0);
+                const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
 
                 double sum = typedState->Sum_;
                 ui64 count = typedState->Count_;
                 if (array->GetNullCount() == 0) {
                     for (int64_t i = 0; i < len; ++i) {
-                        ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = -TIn(filterBitmap[i]);
                         sum += double(ptr[i] & filterMask);
                         count += filterMask & 1;
                     }
@@ -356,8 +353,8 @@ public:
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        TIn filterMask = (((filterBitmap[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                        TIn filterMask = -TIn(filterBitmap[i]);
                         mask &= filterMask;
                         sum += double(ptr[i] & mask);
                         count += mask & 1;

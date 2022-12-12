@@ -1,5 +1,6 @@
 #include "mkql_block_agg.h"
 #include "mkql_block_agg_factory.h"
+#include "mkql_bit_utils.h"
 #include "mkql_rh_hash.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
@@ -299,6 +300,13 @@ private:
     const std::shared_ptr<arrow::DataType> DataType_;
 };
 
+size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
+    size_t len = (size_t)arr->length;
+    MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
+    const ui8* src = arr->GetValues<ui8>(1);
+    return GetSparseBitmapPopCount(src, len);
+}
+
 class TBlockCombineAllWrapper : public TStatefulWideFlowComputationNode<TBlockCombineAllWrapper> {
 public:
     TBlockCombineAllWrapper(TComputationMutables& mutables,
@@ -338,12 +346,11 @@ public:
                 if (FilterColumn_) {
                     auto filterDatum = TArrowBlock::From(s.Values_[*FilterColumn_]).GetDatum();
                     if (filterDatum.is_scalar()) {
-                        if (!filterDatum.scalar_as<arrow::BooleanScalar>().value) {
+                        if (!filterDatum.scalar_as<arrow::UInt8Scalar>().value) {
                             continue;
                         }
                     } else {
-                        arrow::BooleanArray arr(filterDatum.array());
-                        ui64 popCount = (ui64)arr.true_count();
+                        ui64 popCount = GetBitmapPopCount(filterDatum.array());
                         if (popCount == 0) {
                             continue;
                         }

@@ -108,7 +108,7 @@ public:
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                        TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
                         value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
                     }
                 }
@@ -124,7 +124,7 @@ public:
                 if (array->GetNullCount() == 0) {
                     typedState->IsValid_ = 1;
                     for (int64_t i = 0; i < len; ++i) {
-                        TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
+                        TIn filterMask = -TIn(filterBitmap[i]);
                         value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
                     }
                 } else {
@@ -133,8 +133,8 @@ public:
                     for (int64_t i = 0; i < len; ++i) {
                         ui64 fullIndex = i + array->offset;
                         // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                        TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
-                        TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
+                        TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
+                        TIn filterMask = -TIn(filterBitmap[i]);
                         mask &= filterMask;
                         value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & mask) | (value & ~mask)));
                         count += mask & 1;
@@ -180,7 +180,7 @@ public:
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 ui64 fullIndex = row + array->offset;
                 // bit 1 -> mask 0xFF..FF, bit 0 -> mask 0x00..00
-                TIn mask = (((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1) ^ 1) - TIn(1);
+                TIn mask = -TIn((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
                 typedState->Value_ = UpdateMinMax<IsMin>(typedState->Value_, TIn((ptr[row] & mask) | (typedState->Value_ & ~mask)));
                 typedState->IsValid_ |= mask & 1;
             }
@@ -273,8 +273,7 @@ public:
 
             TIn value = typedState->Value_;
             for (int64_t i = 0; i < len; ++i) {
-                ui64 fullIndex = i + array->offset;
-                TIn filterMask = (((*filterBitmap++) & 1) ^ 1) - TIn(1);
+                TIn filterMask = -TIn(filterBitmap[i]);
                 value = UpdateMinMax<IsMin>(value, TIn((ptr[i] & filterMask) | (value & ~filterMask)));
             }
 

@@ -6,8 +6,7 @@
 
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 TDowntime::TDowntime(TDuration ignoredDowntimeGap)
     : IgnoredDowntimeGap(ignoredDowntimeGap)
@@ -279,8 +278,7 @@ void TDowntimes::DbStoreState(TTransactionContext& txc,
     }
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NCms::TDowntime::TSegment, stream, value) {
     stream << "[" << value.Start.ToStringLocalUpToSeconds() << "-"

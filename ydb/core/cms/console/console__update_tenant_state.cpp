@@ -1,7 +1,6 @@
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateTenantState : public TTransactionBase<TTenantsManager> {
 public:
@@ -70,5 +69,4 @@ ITransaction *TTenantsManager::CreateTxUpdateTenantState(const TString &path,
     return new TTxUpdateTenantState(this, path, state, worker);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

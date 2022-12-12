@@ -5,8 +5,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
 
@@ -225,5 +224,4 @@ IActor *CreateWalleAdapter(TEvCms::TEvWalleCreateTaskRequest::TPtr &ev, TActorId
     return new TWalleCreateTaskAdapter(ev, cms);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

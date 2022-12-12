@@ -8,8 +8,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 struct TWalleTaskInfo {
     TString TaskId;
@@ -59,5 +58,4 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
 
 using TCmsStatePtr = TIntrusivePtr<TCmsState>;
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

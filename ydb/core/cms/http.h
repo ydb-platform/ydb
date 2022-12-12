@@ -4,10 +4,8 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 IActor *CreateCmsHttp();
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

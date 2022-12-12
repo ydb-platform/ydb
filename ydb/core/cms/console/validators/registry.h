@@ -7,8 +7,7 @@
 #include <util/generic/bitmap.h>
 #include <util/system/mutex.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TValidatorsRegistry  : public TThrRefBase {
 public:
@@ -75,5 +74,4 @@ private:
     static TPtr Instance_;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

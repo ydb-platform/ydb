@@ -2,8 +2,7 @@
 #include "console_impl.h"
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConsole::TTxLoadState : public TTransactionBase<TConsole> {
 public:
@@ -83,5 +82,4 @@ ITransaction *TConsole::CreateTxLoadState()
     return new TTxLoadState(this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

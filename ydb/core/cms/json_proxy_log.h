@@ -2,8 +2,7 @@
 
 #include "json_proxy.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TJsonProxyLog : public TJsonProxyCms<TEvCms::TEvGetLogTailRequest, TEvCms::TEvGetLogTailResponse> {
 private:
@@ -47,6 +46,4 @@ public:
     }
 };
 
-
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

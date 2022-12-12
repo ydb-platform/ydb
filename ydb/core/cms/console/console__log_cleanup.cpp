@@ -1,7 +1,6 @@
 #include "console_configs_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxLogCleanup : public TTransactionBase<TConfigsManager> {
 public:
@@ -36,5 +35,4 @@ ITransaction *TConfigsManager::CreateTxLogCleanup()
     return new TTxLogCleanup(this);
 }
 
-} // NConsole
-} // NKikimr
+} // NKikimr::NConsole

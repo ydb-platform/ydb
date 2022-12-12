@@ -3,8 +3,7 @@
 #include "config_index.h"
 #include "configs_config.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TModificationsValidatorTests;
 
@@ -61,5 +60,4 @@ private:
     friend class TModificationsValidatorTests;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

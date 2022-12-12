@@ -1,7 +1,6 @@
 #include "console_configs_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
 
@@ -59,5 +58,4 @@ ITransaction *TConfigsManager::CreateTxGetLogTail(TEvConsole::TEvGetLogTailReque
     return new TTxGetLogTail(this, ev);
 }
 
-} // NConsole
-} // NKikimr
+} // namespace NKikimr::NConsole

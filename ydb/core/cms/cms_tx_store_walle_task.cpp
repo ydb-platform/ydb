@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxStoreWalleTask : public TTransactionBase<TCms> {
 public:
@@ -68,5 +67,4 @@ ITransaction *TCms::CreateTxStoreWalleTask(const TWalleTaskInfo &task, THolder<I
     return new TTxStoreWalleTask(this, task, std::move(req), std::move(resp));
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

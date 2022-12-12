@@ -7,8 +7,7 @@
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 struct TEvConsole {
     enum EEv {
@@ -283,5 +282,4 @@ struct TEvConsole {
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info);
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

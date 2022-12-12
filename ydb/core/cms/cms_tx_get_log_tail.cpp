@@ -1,8 +1,7 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
 
@@ -64,5 +63,4 @@ ITransaction *TCms::CreateTxGetLogTail(TEvCms::TEvGetLogTailRequest::TPtr &ev)
     return new TTxGetLogTail(this, ev);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

@@ -8,8 +8,7 @@
 #include <util/generic/set.h>
 #include <util/generic/string.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 constexpr const char *WALLE_CMS_USER = "Wall-E";
 constexpr const char *WALLE_API_URL_PREFIX = "/api/walle/v11/";
@@ -35,5 +34,4 @@ inline void WalleAuditLog(const IEventBase* request, const IEventBase* response,
     AuditLog("Wall-E adapter", request, response, ctx);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

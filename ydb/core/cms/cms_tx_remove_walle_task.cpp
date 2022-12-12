@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxRemoveWalleTask : public TTransactionBase<TCms> {
 public:
@@ -51,5 +50,4 @@ ITransaction* TCms::CreateTxRemoveWalleTask(const TString &id)
     return new TTxRemoveWalleTask(this, id);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

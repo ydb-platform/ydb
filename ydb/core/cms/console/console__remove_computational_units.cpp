@@ -1,7 +1,6 @@
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NOperationId;
 
@@ -56,5 +55,4 @@ ITransaction *TTenantsManager::CreateTxRemoveComputationalUnits(TTenant::TPtr te
     return new TTxRemoveComputationalUnits(tenant, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

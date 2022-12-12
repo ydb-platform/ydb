@@ -8,8 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 struct TCmsSentinelConfig {
     bool Enable = false;
@@ -228,5 +227,4 @@ struct TCmsConfig {
     }
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

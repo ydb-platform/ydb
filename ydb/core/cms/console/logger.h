@@ -9,8 +9,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/set.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using NTabletFlatExecutor::TTransactionContext;
 
@@ -42,5 +41,4 @@ private:
     ui64 MinLogItemId = 0;
 };
 
-} // NConsole
-} // NKikimr
+} // namespace NKikimr::NConsole

@@ -1,7 +1,6 @@
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxRevertPoolState : public TTransactionBase<TTenantsManager> {
 public:
@@ -80,5 +79,4 @@ ITransaction *TTenantsManager::CreateTxRevertPoolState(TTenant::TPtr tenant,
     return new TTxRevertPoolState(this, tenant, pool, worker);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

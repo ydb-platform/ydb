@@ -3,8 +3,7 @@
 
 #include <util/generic/utility.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
 
@@ -192,5 +191,4 @@ void TLogger::SetMinLogItemId(ui64 id) {
     MinLogItemId = id;
 }
 
-} // NConsole
-} // NKikimr
+} // namespace NKikimr::NConsole

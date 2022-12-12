@@ -1,8 +1,7 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxAlterTenant : public TTransactionBase<TTenantsManager> {
 public:
@@ -400,5 +399,4 @@ ITransaction *TTenantsManager::CreateTxAlterTenant(TEvConsole::TEvAlterTenantReq
     return new TTxAlterTenant(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

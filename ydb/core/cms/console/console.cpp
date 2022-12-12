@@ -10,8 +10,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 void TConsole::OnActivateExecutor(const TActorContext &ctx)
 {
@@ -187,5 +186,4 @@ IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)
     return new TConsole(tablet, info);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

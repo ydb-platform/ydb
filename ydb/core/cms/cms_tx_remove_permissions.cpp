@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxRemovePermissions : public TTransactionBase<TCms> {
 public:
@@ -78,5 +77,4 @@ ITransaction* TCms::CreateTxRemovePermissions(TVector<TString> ids, THolder<IEve
     return new TTxRemovePermissions(this, std::move(ids), std::move(req), std::move(resp), expired);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

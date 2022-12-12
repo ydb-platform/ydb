@@ -4,8 +4,7 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/base/ticket_parser.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 template <NKikimrCms::ETextFormat format>
 class TLogFormatter {
@@ -156,5 +155,4 @@ TString TLogFormatter<NKikimrCms::TEXT_FORMAT_DETAILED>::FormatData(const NKikim
     return ss.Str();
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

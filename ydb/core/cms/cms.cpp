@@ -22,8 +22,7 @@
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
@@ -2068,5 +2067,4 @@ IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info)
     return new TCms(tablet, info);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

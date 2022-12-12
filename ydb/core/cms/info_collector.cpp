@@ -19,8 +19,7 @@
 #define LOG_W(stream) LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << stream)
 #define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << stream)
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrWhiteboard;
@@ -513,5 +512,4 @@ IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {
     return new TInfoCollector(client, timeout);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

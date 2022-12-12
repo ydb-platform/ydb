@@ -2,8 +2,7 @@
 #include "scheme.h"
 #include "sentinel.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxUpdateConfig : public TTransactionBase<TCms> {
 public:
@@ -99,5 +98,4 @@ ITransaction *TCms::CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev)
                                ConfigSubscriptionId);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

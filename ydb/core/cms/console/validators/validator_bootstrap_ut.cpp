@@ -1,8 +1,7 @@
 #include "validator_bootstrap.h"
 #include "validator_ut_common.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NTests;
 
@@ -167,5 +166,4 @@ Y_UNIT_TEST_SUITE(BootstrapTabletsValidatorTests) {
     }
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -4,8 +4,7 @@
 
 #include <util/string/split.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 template <typename TRequestEvent, typename TResponseEvent>
 class TJsonProxyDataShard : public TJsonProxy<TRequestEvent, TResponseEvent> {
@@ -184,6 +183,4 @@ public:
     }
 };
 
-
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

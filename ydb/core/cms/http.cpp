@@ -21,8 +21,7 @@
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 template <typename HandlerActorType>
 class TApiMethodHandler : public TApiMethodHandlerBase {
@@ -209,5 +208,4 @@ IActor *CreateCmsHttp() {
     return new TCmsHttp();
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

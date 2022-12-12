@@ -3,8 +3,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
 using namespace NNodeWhiteboard;
@@ -92,5 +91,4 @@ IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TC
     return new TWalleRemoveTaskAdapter(ev, state, cms);
 }
 
-} // NCms
-} // NKikimr
+} // NKikimr::NCms

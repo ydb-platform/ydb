@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxRejectNotification : public TTransactionBase<TCms> {
 public:
@@ -68,5 +67,4 @@ ITransaction *TCms::CreateTxRejectNotification(TEvCms::TEvManageNotificationRequ
     return new TTxRejectNotification(this, ev.Release());
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

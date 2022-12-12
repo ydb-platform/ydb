@@ -4,8 +4,7 @@
 
 #include <util/generic/hash_set.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 struct TConfigsConfig {
     static constexpr ui64 MAX_CONFIG_CHECKS_LIMIT = 100000;
@@ -29,5 +28,4 @@ struct TConfigsConfig {
     bool TreatWarningAsError;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

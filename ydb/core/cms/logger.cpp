@@ -3,8 +3,7 @@
 
 #include <util/generic/utility.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
 
@@ -132,5 +131,4 @@ void TLogger::DbLogData(const TLogRecordData &data,
         .Update<Schema::LogRecords::Data>(data);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

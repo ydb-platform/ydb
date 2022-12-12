@@ -11,9 +11,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 
-namespace NKikimr {
-namespace NCms {
-namespace NSentinel {
+namespace NKikimr::NCms::NSentinel {
 
 using EPDiskStatus = NKikimrBlobStorage::EDriveStatus;
 using TLimitsMap = TMap<EPDiskState, ui32>;
@@ -182,6 +180,4 @@ private:
 
 IActor* CreateBSCClientActor(const TCmsStatePtr& cmsState);
 
-} // NSentinel
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms::NSentinel

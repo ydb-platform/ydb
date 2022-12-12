@@ -4,8 +4,7 @@
 
 #include <library/cpp/actors/core/mon.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TApiMethodHandlerBase {
 public:
@@ -14,5 +13,4 @@ public:
     virtual IActor *CreateHandlerActor(NMon::TEvHttpInfo::TPtr &event) = 0;
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

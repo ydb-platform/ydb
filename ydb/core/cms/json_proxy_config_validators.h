@@ -4,8 +4,7 @@
 
 #include <util/string/split.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TJsonProxyConfigValidators : public TJsonProxyConsole<NConsole::TEvConsole::TEvListConfigValidatorsRequest,
                                                              NConsole::TEvConsole::TEvListConfigValidatorsResponse> {
@@ -25,6 +24,4 @@ public:
     }
 };
 
-
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

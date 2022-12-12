@@ -2,10 +2,8 @@
 
 #include "defs.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout);
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

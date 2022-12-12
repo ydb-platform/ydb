@@ -11,8 +11,7 @@
 #include <util/random/random.h>
 #include <util/string/split.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 void TConfigsManager::ClearState()
 {
@@ -628,5 +627,4 @@ void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
                     LogCleanupTimerCookieHolder.Get());
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

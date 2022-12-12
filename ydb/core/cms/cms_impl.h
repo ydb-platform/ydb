@@ -21,8 +21,7 @@
 #include <util/generic/stack.h>
 #include <util/generic/queue.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using NConsole::TEvConsole;
 using NTabletFlatExecutor::TTabletExecutedFlat;
@@ -457,5 +456,4 @@ public:
 
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

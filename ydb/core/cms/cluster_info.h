@@ -20,8 +20,7 @@
 #include <util/generic/set.h>
 #include "util/generic/ptr.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 // Forward declarations.
 class TClusterInfo;
@@ -951,5 +950,4 @@ inline bool ActionRequiresHost(const NKikimrCms::TAction &action)
 }
 
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

@@ -1,9 +1,7 @@
 #pragma once
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 void RegisterCoreValidators();
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

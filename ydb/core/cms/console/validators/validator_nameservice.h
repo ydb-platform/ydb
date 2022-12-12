@@ -2,8 +2,7 @@
 
 #include "validator.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TNameserviceConfigValidator : public IConfigValidator {
 public:
@@ -17,5 +16,4 @@ public:
 private:
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

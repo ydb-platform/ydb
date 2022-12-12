@@ -1,8 +1,7 @@
 #pragma once
 #include "defs.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 /**
  * Log Settings Configurator is used to track log config changes and adjust current
@@ -12,5 +11,4 @@ IActor *CreateLogSettingsConfigurator();
 
 IActor *CreateLogSettingsConfigurator(const TString &pathToConfigCacheFile);
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

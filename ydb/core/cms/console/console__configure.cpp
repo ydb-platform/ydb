@@ -3,8 +3,7 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxConfigure : public TTransactionBase<TConfigsManager> {
 public:
@@ -620,5 +619,4 @@ ITransaction *TConfigsManager::CreateTxConfigure(TEvConsole::TEvConfigureRequest
     return new TTxConfigure(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

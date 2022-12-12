@@ -6,8 +6,7 @@
 
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TBootstrapConfigValidator::TBootstrapConfigValidator()
     : IConfigValidator("bootstrap",
@@ -277,5 +276,4 @@ bool TBootstrapConfigValidator::IsUnlimitedResource(const NKikimrResourceBroker:
     return true;
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

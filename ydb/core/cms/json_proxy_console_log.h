@@ -2,8 +2,7 @@
 
 #include "json_proxy.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NConsole;
 
@@ -71,6 +70,4 @@ public:
     }
 };
 
-
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

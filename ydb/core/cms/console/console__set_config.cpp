@@ -5,8 +5,7 @@
 
 #include <ydb/core/base/path.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConsole::TTxSetConfig : public TTransactionBase<TConsole> {
 public:
@@ -95,5 +94,4 @@ ITransaction *TConsole::CreateTxSetConfig(TEvConsole::TEvSetConfigRequest::TPtr 
     return new TTxSetConfig(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -7,8 +7,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TImmediateControlsConfigurator : public TActorBootstrapped<TImmediateControlsConfigurator> {
 public:
@@ -216,5 +215,4 @@ IActor *CreateImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
     return new TImmediateControlsConfigurator(board, cfg, allowExistingControls);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

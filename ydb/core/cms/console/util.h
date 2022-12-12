@@ -3,10 +3,8 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
     NTabletPipe::TClientRetryPolicy FastConnectRetryPolicy();
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

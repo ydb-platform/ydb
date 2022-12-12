@@ -3,8 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NTests;
 
@@ -162,5 +161,4 @@ Y_UNIT_TEST_SUITE(NameserviceConfigValidatorTests) {
     }
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

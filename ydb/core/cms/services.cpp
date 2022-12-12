@@ -2,8 +2,7 @@
 
 #include <util/generic/hash.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 bool TryFromWhiteBoardRole(const TString& role, EService& value) {
     static const THashMap<TString, EService> roleToService = {
@@ -20,5 +19,4 @@ bool TryFromWhiteBoardRole(const TString& role, EService& value) {
     return true;
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

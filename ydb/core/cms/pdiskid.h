@@ -1,8 +1,7 @@
 #pragma once
 #include "defs.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 struct TPDiskID {
     ui32 NodeId;
@@ -60,8 +59,7 @@ struct TPDiskIDHash {
     }
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms
 
 template<>
 inline void Out<NKikimr::NCms::TPDiskID>(IOutputStream& o, const NKikimr::NCms::TPDiskID& x) {

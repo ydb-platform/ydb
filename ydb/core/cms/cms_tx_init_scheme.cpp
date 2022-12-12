@@ -1,8 +1,7 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxInitScheme : public TTransactionBase<TCms> {
 public:
@@ -35,5 +34,4 @@ ITransaction* TCms::CreateTxInitScheme()
     return new TTxInitScheme(this);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

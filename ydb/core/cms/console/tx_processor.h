@@ -7,8 +7,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using NTabletFlatExecutor::ITransaction;
 
@@ -166,5 +165,4 @@ private:
     TString LogPrefix;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

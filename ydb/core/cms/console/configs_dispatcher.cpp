@@ -25,8 +25,7 @@
 #define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 namespace {
 
@@ -942,5 +941,4 @@ IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config)
     return new TConfigsDispatcher(config);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

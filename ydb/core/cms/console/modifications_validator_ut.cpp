@@ -5,8 +5,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NUT;
 
@@ -1648,5 +1647,4 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TModificationsValidatorTests);
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -1,7 +1,6 @@
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NOperationId;
 
@@ -124,5 +123,4 @@ ITransaction *TTenantsManager::CreateTxRemoveTenant(TEvConsole::TEvRemoveTenantR
     return new TTxRemoveTenant(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

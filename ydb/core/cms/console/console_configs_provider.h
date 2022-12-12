@@ -11,8 +11,7 @@
 
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsProvider : public TActorBootstrapped<TConfigsProvider> {
 public:
@@ -212,5 +211,4 @@ private:
     TInMemorySubscriptionIndex InMemoryIndex;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

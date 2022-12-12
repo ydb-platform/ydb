@@ -1,8 +1,7 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxLogAndSend : public TTransactionBase<TCms> {
 public:
@@ -42,5 +41,4 @@ ITransaction *TCms::CreateTxLogAndSend(TEvPrivate::TEvLogAndSend::TPtr &ev)
     return new TTxLogAndSend(this, ev);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

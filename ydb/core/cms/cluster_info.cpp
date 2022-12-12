@@ -12,8 +12,7 @@
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, stream)
 #define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, stream)
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
@@ -916,5 +915,4 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
     }
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

@@ -4,8 +4,7 @@
 #include "cms_state.h"
 #include "pdiskid.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 struct TEvSentinel {
     enum EEv {
@@ -51,5 +50,4 @@ struct TEvSentinel {
 
 IActor* CreateSentinel(TCmsStatePtr state);
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

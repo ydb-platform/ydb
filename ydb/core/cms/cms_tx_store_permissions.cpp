@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
 public:
@@ -105,5 +104,4 @@ ITransaction* TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<I
     return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled));
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

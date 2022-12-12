@@ -10,9 +10,7 @@
 #define COLLAPSED_REF_CONTENT(target, text) \
     WITH_SCOPED(tmp, NKikimr::NConsole::NHttp::TCollapsedRef(__stream, target, text))
 
-namespace NKikimr {
-namespace NConsole {
-namespace NHttp {
+namespace NKikimr::NConsole::NHttp {
 
 struct TCollapsedRef {
     TCollapsedRef(IOutputStream& str, const TString& target, const TString& text)
@@ -43,6 +41,4 @@ void OutputStaticPart(IOutputStream &os);
 void OutputStyles(IOutputStream &os);
 void OutputConfigHTML(IOutputStream &os, const NKikimrConfig::TAppConfig &config);
 
-} // namespace NHttp
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole::NHttp

@@ -1,7 +1,6 @@
 #include "console_impl.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConsole::TTxInitScheme : public TTransactionBase<TConsole> {
 public:
@@ -33,5 +32,4 @@ ITransaction *TConsole::CreateTxInitScheme()
     return new TTxInitScheme(this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -4,8 +4,7 @@
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TModificationsValidator::TModificationsValidator(const TConfigIndex &index,
                                                  const TConfigModifications &diff,
@@ -370,5 +369,4 @@ void TModificationsValidator::AddLimitExceededIssue()
     Issues.push_back(issue);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

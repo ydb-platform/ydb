@@ -2,8 +2,7 @@
 
 #include <util/random/random.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
     NTabletPipe::TClientRetryPolicy FastConnectRetryPolicy() {
         auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -11,5 +10,4 @@ namespace NConsole {
         return policy;
     }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -19,8 +19,7 @@
 
 #include <util/generic/set.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -172,5 +171,4 @@ private:
     TActorId NetClassifierUpdaterId;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

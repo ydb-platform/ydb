@@ -20,8 +20,7 @@
 
 #include <iostream>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
 class TJsonProxyBase : public TActorBootstrapped<TJsonProxyBase<TRequestEvent, TResponseEvent, ForwardToken>> {
@@ -246,5 +245,4 @@ using TJsonProxyCms = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, false, Fo
 template <typename TRequestEvent, typename TResponseEvent, bool ForwardToken = false>
 using TJsonProxyConsole = TJsonProxyCmsBase<TRequestEvent, TResponseEvent, true, ForwardToken>;
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

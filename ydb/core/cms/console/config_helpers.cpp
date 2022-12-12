@@ -12,8 +12,7 @@
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 namespace {
 
@@ -447,5 +446,4 @@ IActor *CreateSubscriptionEraser(ui64 subscriptionId,
     return new TConfigHelper(subscriptionId, owner, cookie);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

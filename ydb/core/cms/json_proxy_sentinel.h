@@ -2,8 +2,7 @@
 
 #include "json_proxy.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TJsonProxySentinel : public TJsonProxyCms<TEvCms::TEvGetSentinelStateRequest, TEvCms::TEvGetSentinelStateResponse> {
 private:
@@ -65,6 +64,4 @@ public:
     }
 };
 
-
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

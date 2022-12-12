@@ -1,8 +1,7 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxLogCleanup : public TTransactionBase<TCms> {
 public:
@@ -35,5 +34,4 @@ ITransaction *TCms::CreateTxLogCleanup()
     return new TTxLogCleanup(this);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

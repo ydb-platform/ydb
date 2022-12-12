@@ -4,8 +4,7 @@
 
 #include <library/cpp/actors/core/mon.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 void AuditLog(const TString& component, const TString& message, const TActorContext& ctx);
 void AuditLog(const TString& component, const IEventBase* request, const IEventBase* response, const TActorContext& ctx);
@@ -13,5 +12,4 @@ void AuditLog(const TString& component, const IEventBase* request, const IEventB
 // for http request/response
 void AuditLog(const TString& component, NMon::TEvHttpInfo::TPtr& request, const TString& response, const TActorContext& ctx);
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

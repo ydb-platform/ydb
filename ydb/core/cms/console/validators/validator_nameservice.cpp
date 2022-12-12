@@ -7,8 +7,7 @@
 
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TNameserviceConfigValidator::TNameserviceConfigValidator()
     : IConfigValidator("nameservice", NKikimrConsole::TConfigItem::NameserviceConfigItem)
@@ -169,5 +168,4 @@ bool TNameserviceConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig &o
     return true;
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -8,8 +8,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/set.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using NTabletFlatExecutor::TTransactionContext;
 
@@ -126,5 +125,4 @@ private:
     TDuration IgnoredDowntimeGap;
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

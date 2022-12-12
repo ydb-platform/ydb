@@ -1,8 +1,7 @@
 #pragma once
 #include "defs.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 /**
  * Node config courier is used to get full or partial node config from
@@ -80,5 +79,4 @@ IActor *CreateSubscriptionEraser(ui64 subscriptionId,
                                  TActorId owner = TActorId(),
                                  ui64 cookie = 0);
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

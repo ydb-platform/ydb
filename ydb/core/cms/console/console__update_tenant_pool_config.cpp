@@ -1,8 +1,7 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateTenantPoolConfig : public TTransactionBase<TTenantsManager> {
 public:
@@ -94,5 +93,4 @@ ITransaction *TTenantsManager::CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpd
     return new TTxUpdateTenantPoolConfig(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

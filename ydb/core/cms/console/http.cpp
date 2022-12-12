@@ -3,9 +3,7 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NConsole {
-namespace NHttp {
+namespace NKikimr::NConsole::NHttp {
 
 void OutputStyles(IOutputStream &os)
 {
@@ -87,6 +85,4 @@ void OutputConfigHTML(IOutputStream &os, const NKikimrConfig::TAppConfig &config
     }
 }
 
-} // namespace NHttp
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole::NHttp

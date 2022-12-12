@@ -2,8 +2,7 @@
 
 #include <util/string/printf.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TConfigsConfig::TConfigsConfig(const NKikimrConsole::TConfigsConfig &config)
 {
@@ -50,5 +49,4 @@ bool TConfigsConfig::Check(const NKikimrConsole::TConfigsConfig &config,
 }
 
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

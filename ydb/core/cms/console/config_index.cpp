@@ -3,8 +3,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TUsageScope::TUsageScope()
     : Order(0)
@@ -867,5 +866,4 @@ void TSubscriptionModifications::DeepCopyFrom(const TSubscriptionModifications &
     ModifiedCookies = other.ModifiedCookies;
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

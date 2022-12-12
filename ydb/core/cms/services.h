@@ -2,8 +2,7 @@
 
 #include <util/generic/flags.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 enum class EService: ui8 {
     Storage = 1 /* "storage" */,
@@ -15,5 +14,4 @@ Y_DECLARE_OPERATORS_FOR_FLAGS(TServices);
 
 bool TryFromWhiteBoardRole(const TString& role, EService& value);
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

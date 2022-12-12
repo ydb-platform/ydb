@@ -2,8 +2,7 @@
 
 #include "validator.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TBootstrapConfigValidator : public IConfigValidator {
 public:
@@ -24,5 +23,4 @@ private:
     bool IsUnlimitedResource(const NKikimrResourceBroker::TResources &limit) const;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

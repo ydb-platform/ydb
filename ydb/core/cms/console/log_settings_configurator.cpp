@@ -8,8 +8,7 @@
 #include <util/stream/file.h>
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TLogSettingsConfigurator : public TActorBootstrapped<TLogSettingsConfigurator> {
 public:
@@ -217,5 +216,4 @@ IActor *CreateLogSettingsConfigurator(const TString &pathToConfigCacheFile)
     return new TLogSettingsConfigurator(pathToConfigCacheFile);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

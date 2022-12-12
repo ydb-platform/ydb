@@ -5,8 +5,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 /**
  * Configs Dispatcher is used as a broker for subscriptions for
@@ -95,5 +94,4 @@ inline TActorId MakeConfigsDispatcherID(ui32 node = 0) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

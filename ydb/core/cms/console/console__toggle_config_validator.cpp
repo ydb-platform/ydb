@@ -6,8 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxToggleConfigValidator : public TTransactionBase<TConfigsManager> {
 public:
@@ -116,5 +115,4 @@ ITransaction *TConfigsManager::CreateTxToggleConfigValidator(TEvConsole::TEvTogg
     return new TTxToggleConfigValidator(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

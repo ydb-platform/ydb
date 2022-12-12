@@ -4,8 +4,7 @@
 
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 void AuditLog(const TString& component, const TString& message, const TActorContext& ctx) {
     LOG_NOTICE_S(ctx, NKikimrServices::CMS, "[AuditLog] [" << component << "] " << message);
@@ -36,5 +35,4 @@ void AuditLog(const TString& component, NMon::TEvHttpInfo::TPtr& request, const 
     AuditLog(component, message, ctx);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

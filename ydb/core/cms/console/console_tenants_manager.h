@@ -25,8 +25,7 @@
 
 #include <util/generic/set.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
@@ -1009,8 +1008,7 @@ private:
     NKikimrConfig::TFeatureFlags FeatureFlags;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole
 
 template<>
 inline void Out<NKikimr::NConsole::TTenantsManager::TTenant::EState>(IOutputStream& o, NKikimr::NConsole::TTenantsManager::TTenant::EState x) {

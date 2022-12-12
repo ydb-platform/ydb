@@ -1,8 +1,7 @@
 #include "validator.h"
 #include "registry.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 void RegisterValidator(IConfigValidator::TPtr validator)
 {
@@ -11,5 +10,4 @@ void RegisterValidator(IConfigValidator::TPtr validator)
              validator->GetName().data(), (ui32)TValidatorsRegistry::Instance()->IsLocked());
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

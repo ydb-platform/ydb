@@ -2,8 +2,7 @@
 
 #include <util/random/random.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxAddConfigSubscription : public TTransactionBase<TConfigsManager> {
 public:
@@ -103,5 +102,4 @@ ITransaction *TConfigsManager::CreateTxAddConfigSubscription(TEvConsole::TEvAddC
     return new TTxAddConfigSubscription(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

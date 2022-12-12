@@ -3,8 +3,7 @@
 #include "validator_bootstrap.h"
 #include "validator_nameservice.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 void RegisterCoreValidators()
 {
@@ -12,5 +11,4 @@ void RegisterCoreValidators()
     RegisterValidator(new TNameserviceConfigValidator);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -7,8 +7,7 @@
 
 #include <util/system/hostname.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxLoadState : public TTransactionBase<TCms> {
 public:
@@ -205,5 +204,4 @@ ITransaction* TCms::CreateTxLoadState()
     return new TTxLoadState(this);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

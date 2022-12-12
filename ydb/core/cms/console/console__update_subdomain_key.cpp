@@ -1,7 +1,6 @@
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateSubDomainKey : public TTransactionBase<TTenantsManager> {
 public:
@@ -109,5 +108,4 @@ ITransaction *TTenantsManager::CreateTxUpdateSubDomainKey(const TString &path,
     return new TTxUpdateSubDomainKey(this, path, schemeShardId, pathId, worker);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

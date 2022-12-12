@@ -1,8 +1,7 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxUpdateDowntimes : public TTransactionBase<TCms> {
 public:
@@ -37,5 +36,4 @@ ITransaction *TCms::CreateTxUpdateDowntimes()
     return new TTxUpdateDowntimes(this);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

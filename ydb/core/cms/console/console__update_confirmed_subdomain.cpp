@@ -1,7 +1,6 @@
 #include "console_tenants_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateConfirmedSubdomain : public TTransactionBase<TTenantsManager> {
 public:
@@ -71,5 +70,4 @@ ITransaction *TTenantsManager::CreateTxUpdateConfirmedSubdomain(const TString &p
     return new TTxUpdateConfirmedSubdomain(this, path, version, worker);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

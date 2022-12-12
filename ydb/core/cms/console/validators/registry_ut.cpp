@@ -2,8 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 namespace {
 
@@ -265,5 +264,4 @@ Y_UNIT_TEST_SUITE(TRegistryTests) {
     }
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

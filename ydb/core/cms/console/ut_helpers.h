@@ -11,9 +11,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NConsole {
-namespace NUT {
+namespace NKikimr::NConsole::NUT {
 
 inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<ui32> &nodes)
 {
@@ -296,6 +294,4 @@ inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikim
 }
 
 
-} // namespace NUT
-} // namespace NConsole
-} // namesapce NKikimr
+} // namesapce NKikimr::NConsole::NUT

@@ -6,8 +6,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TSharedCacheConfigurator : public TActorBootstrapped<TSharedCacheConfigurator> {
 public:
@@ -75,5 +74,4 @@ IActor *CreateSharedCacheConfigurator()
     return new TSharedCacheConfigurator();
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

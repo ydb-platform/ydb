@@ -6,8 +6,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 namespace NTests {
 
 inline void RemoveNode(ui32 id,
@@ -164,5 +163,4 @@ void CheckConfig(const NKikimrConfig::TAppConfig &config,
 }
 
 } // namespace NTests
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

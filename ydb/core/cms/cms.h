@@ -29,8 +29,7 @@
  *     https://wiki.yandex-team.ru/users/ienkovich/docs/ydb/cms/
  */
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 struct TEvCms {
     enum EEv {
@@ -335,5 +334,4 @@ struct TEvCms {
 
 IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info);
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

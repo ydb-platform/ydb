@@ -2,11 +2,9 @@
 
 #include <ydb/core/protos/node_whiteboard.pb.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using TPDiskStateInfo = NKikimrWhiteboard::TPDiskStateInfo;
 using EPDiskState = NKikimrBlobStorage::TPDiskState::E;
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

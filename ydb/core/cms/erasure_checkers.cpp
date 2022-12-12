@@ -1,7 +1,6 @@
 #include "erasure_checkers.h"
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 bool TErasureCounterBase::IsDown(const TVDiskInfo& vdisk, 
                                  TClusterInfoPtr info,
@@ -219,5 +218,4 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
     }
 }
 
-} // namespace NCms
-} // namespace NKikimr
+} // namespace NKikimr::NCms

@@ -5,8 +5,7 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 struct Schema : NIceDb::Schema {
     struct Param : Table<1> {
@@ -137,5 +136,4 @@ struct Schema : NIceDb::Schema {
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

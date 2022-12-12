@@ -5,8 +5,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 /**
  * Immediate Controls Configurator is used to work with
@@ -16,5 +15,4 @@ IActor *CreateImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
                                             const NKikimrConfig::TImmediateControlsConfig &cfg,
                                             bool allowExistingControls = false);
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

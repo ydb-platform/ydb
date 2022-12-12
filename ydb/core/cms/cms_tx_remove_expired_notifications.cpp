@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxRemoveExpiredNotifications : public TTransactionBase<TCms> {
 public:
@@ -83,5 +82,4 @@ ITransaction *TCms::CreateTxRemoveExpiredNotifications()
     return new TTxRemoveExpiredNotifications(this);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

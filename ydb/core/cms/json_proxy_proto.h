@@ -17,8 +17,7 @@
 #include <util/generic/serialized_enum.h>
 #include <iostream>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TJsonProxyProto : public TActorBootstrapped<TJsonProxyProto> {
 private:
@@ -199,5 +198,4 @@ protected:
     NMon::TEvHttpInfo::TPtr RequestEvent;
 };
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

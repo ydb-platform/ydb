@@ -12,8 +12,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
 
@@ -381,5 +380,4 @@ IActor *CreateWalleApiHandler(NMon::TEvHttpInfo::TPtr &event)
     return new TWalleCrateTaskHandler(event);
 }
 
-} // NCms
-} // NKikimr
+} // namespace NKikimr::NCms

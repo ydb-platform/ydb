@@ -10,8 +10,7 @@
 #include <util/generic/vector.h>
 #include <util/string/printf.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 // Base class for config validators. Validators are used
 // by CMS to check uploaded cluster configs.
@@ -123,5 +122,4 @@ private:
 // All registered validators should have unique names.
 void RegisterValidator(IConfigValidator::TPtr validator);
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

@@ -1,7 +1,6 @@
 #include "tx_processor.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TTxProcessor::TTxProcessor(ITxExecutor &executor,
                            const TString &name,
@@ -249,5 +248,4 @@ void TTxProcessor::ProcessNextTx(const TActorContext &ctx)
     Executor.Execute(ActiveTx, ctx);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

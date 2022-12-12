@@ -3,8 +3,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 class TCms::TTxRemoveRequest : public TTransactionBase<TCms> {
 public:
@@ -56,5 +55,4 @@ ITransaction* TCms::CreateTxRemoveRequest(const TString &id, THolder<IEventBase>
     return new TTxRemoveRequest(this, id, std::move(req), std::move(resp));
 }
 
-} // NCms
-} // NKikimr
+} // NKikimr::NCms

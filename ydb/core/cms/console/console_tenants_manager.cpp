@@ -20,8 +20,7 @@
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS, stream)
 
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 using namespace NOperationId;
 using namespace NTenantSlotBroker;
@@ -3411,5 +3410,4 @@ TString MakeStoragePoolName(const TString &tenantName, const TString &poolTypeNa
     return Sprintf("%s:%s", tenantName.data(), poolTypeName.data());
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

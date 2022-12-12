@@ -7,8 +7,7 @@
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
 
-namespace NKikimr {
-namespace NCms {
+namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
 
@@ -105,5 +104,5 @@ public:
 TSimpleSharedPtr<IErasureCounter>
 CreateErasureCounter(TErasureType::EErasureSpecies es, 
                      const TVDiskInfo& vdisk, ui32 groupId);
-}
-}
+
+} // namespace NKikimr::NCms

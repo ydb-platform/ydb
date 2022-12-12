@@ -1,7 +1,6 @@
 #include "console_configs_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxRemoveConfigSubscription : public TTransactionBase<TConfigsManager> {
 public:
@@ -83,5 +82,4 @@ ITransaction *TConfigsManager::CreateTxRemoveConfigSubscription(TEvConsole::TEvR
     return new TTxRemoveConfigSubscription(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

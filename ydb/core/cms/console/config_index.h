@@ -11,8 +11,7 @@
 #include <util/generic/set.h>
 #include <util/stream/str.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 struct TTenantAndNodeType {
     TTenantAndNodeType() = default;
@@ -81,8 +80,7 @@ struct TSubscriberId {
     TActorId ServiceId;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole
 
 template<>
 struct THash<NKikimr::NConsole::TSubscriberId> {
@@ -107,8 +105,7 @@ struct THash<NKikimr::NConsole::TTenantAndNodeType> {
     }
 };
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 /**
  * Structre to hold config usage scope. For config items it is used similar
@@ -715,5 +712,4 @@ struct TSubscriptionModifications {
     THashMap<ui64, ui64> ModifiedCookies;
 };
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

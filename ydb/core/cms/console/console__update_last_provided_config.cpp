@@ -1,7 +1,6 @@
 #include "console_configs_manager.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxUpdateLastProvidedConfig : public TTransactionBase<TConfigsManager> {
 public:
@@ -68,5 +67,4 @@ ITransaction *TConfigsManager::CreateTxUpdateLastProvidedConfig(TEvConsole::TEvC
     return new TTxUpdateLastProvidedConfig(ev, this);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

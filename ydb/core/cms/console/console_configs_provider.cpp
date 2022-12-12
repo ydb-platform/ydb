@@ -7,8 +7,7 @@
 
 #include <library/cpp/actors/core/interconnect.h>
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 namespace {
 
@@ -1085,5 +1084,4 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
     ApplySubscriptionModifications(ev->Get()->Modifications, ctx);
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

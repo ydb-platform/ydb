@@ -1,7 +1,6 @@
 #include "registry.h"
 
-namespace NKikimr {
-namespace NConsole {
+namespace NKikimr::NConsole {
 
 TValidatorsRegistry::TPtr TValidatorsRegistry::Instance_;
 TMutex TValidatorsRegistry::Mutex;
@@ -181,5 +180,4 @@ void TValidatorsRegistry::RemoveFromValidatorClasses(IConfigValidator::TPtr vali
     }
 }
 
-} // namespace NConsole
-} // namespace NKikimr
+} // namespace NKikimr::NConsole

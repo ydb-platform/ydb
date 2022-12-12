@@ -203,7 +203,8 @@ public:
             TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
             appData->DefaultUserSIDs = std::move(defaultUserSIDs);
         }
-        appData->AllAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers();
+        const auto& allAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers();
+        appData->AllAuthenticatedUsers = !allAuthenticatedUsers.Empty() ? allAuthenticatedUsers : "all-users@well-known";
 
         appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();

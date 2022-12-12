@@ -389,12 +389,12 @@ namespace NKikimr::NPersQueueTests {
                     checkCounters(monPort,
                                   {
                                       "api.grpc.topic.stream_read.commits",
-                                      "api.grpc.topic.stream_read.partition.errors",
-                                      "api.grpc.topic.stream_read.partition.locked_inflight_count",
-                                      "api.grpc.topic.stream_read.partition.locked",
-                                      "api.grpc.topic.stream_read.partition.released",
-                                      "api.grpc.topic.stream_read.partition.to_be_locked_inflight_count",
-                                      "api.grpc.topic.stream_read.partition.to_be_released_inflight_count",
+                                      "api.grpc.topic.stream_read.partition_session.errors",
+                                      "api.grpc.topic.stream_read.partition_session.started",
+                                      "api.grpc.topic.stream_read.partition_session.stopped",
+                                      "api.grpc.topic.stream_read.partition_session.count",
+                                      "api.grpc.topic.stream_read.partition_session.starting_count",
+                                      "api.grpc.topic.stream_read.partition_session.stopping_count",
                                       "api.grpc.topic.stream_write.errors",
                                       "api.grpc.topic.stream_write.sessions_active_count",
                                       "api.grpc.topic.stream_write.sessions_created",
@@ -405,12 +405,13 @@ namespace NKikimr::NPersQueueTests {
                     checkCounters(monPort,
                                   {
                                       "api.grpc.topic.stream_read.commits",
-                                      "api.grpc.topic.stream_read.partition.errors",
-                                      "api.grpc.topic.stream_read.partition.locked_inflight_count",
-                                      "api.grpc.topic.stream_read.partition.locked",
-                                      "api.grpc.topic.stream_read.partition.released",
-                                      "api.grpc.topic.stream_read.partition.to_be_locked_inflight_count",
-                                      "api.grpc.topic.stream_read.partition.to_be_released_inflight_count",
+                                      "api.grpc.topic.stream_read.partition_session.errors",
+                                      "api.grpc.topic.stream_read.partition_session.started",
+                                      "api.grpc.topic.stream_read.partition_session.stopped",
+                                      "api.grpc.topic.stream_read.partition_session.count",
+                                      "api.grpc.topic.stream_read.partition_session.starting_count",
+                                      "api.grpc.topic.stream_read.partition_session.stopping_count",
+
                                   },
                                   topicName, consumerName, "", ""
                                   );
@@ -437,25 +438,12 @@ namespace NKikimr::NPersQueueTests {
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
                                       "topic.read.lag_milliseconds",
-                                      "topic.read.awaiting_consume_milliseconds",
                                       "api.grpc.topic.stream_read.bytes",
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
                                   },
                                   topicName, consumerName, "", ""
-                                  );
-
-                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
-                                  {
-                                  },
-                                  topicName, consumerName, "1", ""
-                                  );
-
-                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
-                                  {
-                                  },
-                                  topicName, "", "1", ""
                                   );
                 }
             };

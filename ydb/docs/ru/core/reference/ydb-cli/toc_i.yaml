@@ -32,7 +32,7 @@ items:
     - name: Установка параметров TTL
       href: table-ttl-set.md
     - name: Удаление параметров TTL
-      href: table-ttl-drop.md
+      href: table-ttl-reset.md
     - name: Удаление таблицы
       href: table-drop.md
   - name: Работа с данными

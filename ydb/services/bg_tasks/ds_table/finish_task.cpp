@@ -2,7 +2,7 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TDropTaskActor::OnSessionId(const TString& sessionId) {
+std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TDropTaskActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     sb << "DECLARE $taskId AS String;" << Endl;
@@ -20,7 +20,7 @@ std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TDropTaskActor::
     return request;
 }
 
-void TDropTaskActor::OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
+void TDropTaskActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
     Controller->TaskFinished(TaskId);
 }
 

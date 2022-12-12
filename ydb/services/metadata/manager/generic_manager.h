@@ -1,93 +1,81 @@
 #pragma once
-#include <ydb/services/metadata/abstract/manager.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/service.h>
 
-namespace NKikimr::NMetadata {
+namespace NKikimr::NMetadata::NModifications {
 
-class TOperationsController: public NMetadataManager::IAlterController {
+class TOperationsController: public IAlterController {
 private:
-    YDB_READONLY_DEF(NThreading::TPromise<NMetadata::TObjectOperatorResult>, Promise);
+    YDB_READONLY_DEF(NThreading::TPromise<TObjectOperatorResult>, Promise);
 public:
-    TOperationsController(NThreading::TPromise<NMetadata::TObjectOperatorResult>&& p)
+    TOperationsController(NThreading::TPromise<TObjectOperatorResult>&& p)
         : Promise(std::move(p))
     {
 
     }
 
     virtual void AlterProblem(const TString& errorMessage) override {
-        Promise.SetValue(NMetadata::TObjectOperatorResult(false).SetErrorMessage(errorMessage));
+        Promise.SetValue(TObjectOperatorResult(false).SetErrorMessage(errorMessage));
     }
     virtual void AlterFinished() override {
-        Promise.SetValue(NMetadata::TObjectOperatorResult(true));
+        Promise.SetValue(TObjectOperatorResult(true));
     }
 
 };
 
 template <class T>
-class TGenericOperationsManager: public NMetadata::IOperationsManager {
+class TGenericOperationsManager: public IObjectOperationsManager<T> {
+private:
+    using TBase = IObjectOperationsManager<T>;
+public:
+    using TModificationContext = typename TBase::TModificationContext;
+private:
+    template <class TCommand, class TSettings>
+    NThreading::TFuture<TObjectOperatorResult> DoModifyObject(
+        const TSettings& settings, const ui32 nodeId,
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const
+    {
+        if (!manager) {
+            TObjectOperatorResult result("modification object behaviour not initialized");
+            return NThreading::MakeFuture<TObjectOperatorResult>(result);
+        }
+        if (!manager->GetOperationsManager()) {
+            TObjectOperatorResult result("modification is unavailable for " + manager->GetTypeId());
+            return NThreading::MakeFuture<TObjectOperatorResult>(result);
+        }
+        TOperationParsingResult patch(TBase::BuildPatchFromSettings(settings, context));
+        if (!patch.IsSuccess()) {
+            TObjectOperatorResult result(patch.GetErrorMessage());
+            return NThreading::MakeFuture<TObjectOperatorResult>(result);
+        }
+        auto promise = NThreading::NewPromise<TObjectOperatorResult>();
+        auto result = promise.GetFuture();
+        auto c = std::make_shared<TOperationsController>(std::move(promise));
+        auto command = std::make_shared<TCommand>(patch.GetRecord(), manager, c, context);
+        TActivationContext::Send(new IEventHandle(NProvider::MakeServiceId(nodeId), {},
+            new NProvider::TEvObjectsOperation(command)));
+        return result;
+    }
 protected:
-    virtual NThreading::TFuture<NMetadata::TObjectOperatorResult> DoCreateObject(
+    virtual NThreading::TFuture<TObjectOperatorResult> DoCreateObject(
         const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
-        NMetadata::IOperationsManager::TPtr manager, const TModificationContext& context) const override
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const override
     {
-        NMetadata::TOperationParsingResult patch(T::BuildPatchFromSettings(settings, context));
-        if (!patch.IsSuccess()) {
-            NMetadata::TObjectOperatorResult result(patch.GetErrorMessage());
-            return NThreading::MakeFuture<NMetadata::TObjectOperatorResult>(result);
-        }
-        auto promise = NThreading::NewPromise<NMetadata::TObjectOperatorResult>();
-        auto result = promise.GetFuture();
-        auto c = std::make_shared<TOperationsController>(std::move(promise));
-        auto command = std::make_shared<NMetadataManager::TCreateCommand<T>>(patch.GetRecord(), manager, c, context);
-        TActivationContext::Send(new IEventHandle(NMetadataProvider::MakeServiceId(nodeId), {},
-            new NMetadataProvider::TEvObjectsOperation(command)));
-        return result;
+        return DoModifyObject<TCreateCommand<T>>(settings, nodeId, manager, context);
     }
-    virtual NThreading::TFuture<NMetadata::TObjectOperatorResult> DoAlterObject(
+    virtual NThreading::TFuture<TObjectOperatorResult> DoAlterObject(
         const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
-        NMetadata::IOperationsManager::TPtr manager, const TModificationContext& context) const override
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const override
     {
-        NMetadata::TOperationParsingResult patch(T::BuildPatchFromSettings(settings, context));
-        if (!patch.IsSuccess()) {
-            return NThreading::MakeFuture<NMetadata::TObjectOperatorResult>(NMetadata::TObjectOperatorResult(patch.GetErrorMessage()));
-        }
-        auto promise = NThreading::NewPromise<NMetadata::TObjectOperatorResult>();
-        auto result = promise.GetFuture();
-        auto c = std::make_shared<TOperationsController>(std::move(promise));
-        auto command = std::make_shared<NMetadataManager::TAlterCommand<T>>(patch.GetRecord(), manager, c, context);
-        TActivationContext::Send(new IEventHandle(NMetadataProvider::MakeServiceId(nodeId), {},
-            new NMetadataProvider::TEvObjectsOperation(command)));
-        return result;
+        return DoModifyObject<TAlterCommand<T>>(settings, nodeId, manager, context);
     }
-    virtual NThreading::TFuture<NMetadata::TObjectOperatorResult> DoDropObject(
+    virtual NThreading::TFuture<TObjectOperatorResult> DoDropObject(
         const NYql::TDropObjectSettings& settings, const ui32 nodeId,
-        NMetadata::IOperationsManager::TPtr manager, const TModificationContext& context) const override
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const override
     {
-        NMetadata::TOperationParsingResult patch(T::BuildPatchFromSettings(settings, context));
-        if (!patch.IsSuccess()) {
-            return NThreading::MakeFuture<NMetadata::TObjectOperatorResult>(NMetadata::TObjectOperatorResult(patch.GetErrorMessage()));
-        }
-        auto promise = NThreading::NewPromise<NMetadata::TObjectOperatorResult>();
-        auto result = promise.GetFuture();
-        auto c = std::make_shared<TOperationsController>(std::move(promise));
-        auto command = std::make_shared<NMetadataManager::TDropCommand<T>>(patch.GetRecord(), manager, c, context);
-        TActivationContext::Send(new IEventHandle(NMetadataProvider::MakeServiceId(nodeId), {},
-            new NMetadataProvider::TEvObjectsOperation(command)));
-        return result;
+        return DoModifyObject<TDropCommand<T>>(settings, nodeId, manager, context);
     }
 public:
-    virtual TString GetTablePath() const override {
-        return T::GetStorageTablePath();
-    }
-
-    virtual TString GetTypeId() const override {
-        return GetTypeIdStatic();
-    }
-
-    static TString GetTypeIdStatic() {
-        return T::GetTypeId();
-    }
 };
 
 }

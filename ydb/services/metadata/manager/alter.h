@@ -5,18 +5,16 @@
 #include "restore.h"
 #include "modification.h"
 
-#include <ydb/services/metadata/abstract/manager.h>
-
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
 class TAlterActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
-    virtual bool ProcessPreparedObjects(TTableRecords&& records) const override {
+    virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
         TBase::Register(new TUpdateObjectsActor<TObject>(std::move(records), TBase::UserToken,
             TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
         return true;
@@ -34,7 +32,7 @@ class TCreateActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
-    virtual bool ProcessPreparedObjects(TTableRecords&& records) const override {
+    virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
         TBase::Register(new TInsertObjectsActor<TObject>(std::move(records), TBase::UserToken,
             TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
         return true;
@@ -52,14 +50,15 @@ class TDropActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
+    using TBase::Manager;
     virtual bool BuildRestoreObjectIds() override {
         auto& first = TBase::Patches.front();
-        std::vector<Ydb::Column> columns = first.SelectOwnedColumns(TObject::TDecoder::GetPKColumns());
+        std::vector<Ydb::Column> columns = first.SelectOwnedColumns(Manager->GetSchema().GetPKColumns());
         if (!columns.size()) {
             TBase::ExternalController->AlterProblem("no pk columns in patch");
             return false;
         }
-        if (columns.size() != TObject::TDecoder::GetPKColumns().size()) {
+        if (columns.size() != Manager->GetSchema().GetPKColumns().size()) {
             TBase::ExternalController->AlterProblem("no columns for pk detection");
             return false;
         }
@@ -78,7 +77,7 @@ protected:
 public:
     using TBase::TBase;
 
-    virtual bool ProcessPreparedObjects(TTableRecords&& records) const override {
+    virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
         TBase::Register(new TDeleteObjectsActor<TObject>(std::move(records), TBase::UserToken,
             TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetUserToken()));
         return true;
@@ -91,39 +90,42 @@ public:
 };
 
 template <class TObject>
-class TCreateCommand: public NMetadata::IAlterCommand {
+class TCreateCommand: public IAlterCommand {
 private:
-    using TBase = NMetadata::IAlterCommand;
+    using TBase = IAlterCommand;
 protected:
     virtual void DoExecute() const override {
-        Context.SetActivityType(NMetadata::IOperationsManager::EActivityType::Create);
-        TActivationContext::AsActorContext().Register(new NMetadataManager::TCreateActor<TObject>(GetRecords(), GetController(), GetContext()));
+        typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
+        Context.SetActivityType(IOperationsManager::EActivityType::Create);
+        TActivationContext::AsActorContext().Register(new TCreateActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
     using TBase::TBase;
 };
 
 template <class TObject>
-class TAlterCommand: public NMetadata::IAlterCommand {
+class TAlterCommand: public IAlterCommand {
 private:
-    using TBase = NMetadata::IAlterCommand;
+    using TBase = IAlterCommand;
 protected:
     virtual void DoExecute() const override {
-        Context.SetActivityType(NMetadata::IOperationsManager::EActivityType::Alter);
-        TActivationContext::AsActorContext().Register(new NMetadataManager::TAlterActor<TObject>(GetRecords(), GetController(), GetContext()));
+        typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
+        Context.SetActivityType(IOperationsManager::EActivityType::Alter);
+        TActivationContext::AsActorContext().Register(new TAlterActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
     using TBase::TBase;
 };
 
 template <class TObject>
-class TDropCommand: public NMetadata::IAlterCommand {
+class TDropCommand: public IAlterCommand {
 private:
-    using TBase = NMetadata::IAlterCommand;
+    using TBase = IAlterCommand;
 protected:
     virtual void DoExecute() const override {
-        Context.SetActivityType(NMetadata::IOperationsManager::EActivityType::Drop);
-        TActivationContext::AsActorContext().Register(new NMetadataManager::TDropActor<TObject>(GetRecords(), GetController(), GetContext()));
+        typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
+        Context.SetActivityType(IOperationsManager::EActivityType::Drop);
+        TActivationContext::AsActorContext().Register(new TDropActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
     using TBase::TBase;

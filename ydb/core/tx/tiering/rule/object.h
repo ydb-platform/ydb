@@ -46,7 +46,7 @@ public:
     }
 };
 
-class TTieringRule: public NMetadataManager::TObject<TTieringRule> {
+class TTieringRule: public NMetadata::NModifications::TObject<TTieringRule> {
 private:
     YDB_ACCESSOR_DEF(TString, TieringRuleId);
     YDB_ACCESSOR_DEF(TString, DefaultColumn);
@@ -55,7 +55,8 @@ protected:
     NJson::TJsonValue SerializeDescriptionToJson() const;
     bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);
 public:
-    static TString GetInternalStorageTablePath();
+    static NMetadata::IClassBehaviour::TPtr GetBehaviour();
+
     bool ContainsTier(const TString& tierName) const;
 
     void AddInterval(const TString& name, const TDuration evDuration) {
@@ -66,13 +67,9 @@ public:
         return "TIERING_RULE";
     }
 
-    static void AlteringPreparation(std::vector<TTieringRule>&& objects,
-        NMetadataManager::IAlterPreparationController<TTieringRule>::TPtr controller,
-        const NMetadata::IOperationsManager::TModificationContext& context);
-
     NJson::TJsonValue GetDebugJson() const;
 
-    class TDecoder: public NInternal::TDecoderBase {
+    class TDecoder: public NMetadata::NInternal::TDecoderBase {
     private:
         YDB_READONLY(i32, TieringRuleIdIdx, -1);
         YDB_READONLY(i32, DefaultColumnIdx, -1);
@@ -82,20 +79,14 @@ public:
         static inline const TString DefaultColumn = "defaultColumn";
         static inline const TString Description = "description";
 
-        static std::vector<Ydb::Column> GetPKColumns();
-        static std::vector<Ydb::Column> GetColumns();
-        static std::vector<TString> GetPKColumnIds();
-
         TDecoder(const Ydb::ResultSet& rawData) {
             TieringRuleIdIdx = GetFieldIndex(rawData, TieringRuleId);
             DefaultColumnIdx = GetFieldIndex(rawData, DefaultColumn);
             DescriptionIdx = GetFieldIndex(rawData, Description);
         }
     };
-    NKikimr::NMetadataManager::TTableRecord SerializeToRecord() const;
+    NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r);
-    static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        const NMetadata::IOperationsManager::TModificationContext& context);
     NKikimr::NOlap::TTiersInfo BuildTiersInfo() const;
 };
 

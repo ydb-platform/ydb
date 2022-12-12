@@ -1,5 +1,5 @@
 #include "restore_controller.h"
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 }

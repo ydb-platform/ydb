@@ -19,19 +19,25 @@ target_link_libraries(services-metadata-manager PUBLIC
   services-metadata-initializer
   ydb-core-base
   services-metadata-request
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(services-metadata-manager PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/abstract.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/alter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/alter_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/table_record.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/restore.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/modification.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/generic_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/init_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/preparation_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/restore_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/ydb_value_operator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/modification_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/object.cpp
+)
+generate_enum_serilization(services-metadata-manager
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/manager/abstract.h
+  INCLUDE_HEADERS
+  ydb/services/metadata/manager/abstract.h
 )

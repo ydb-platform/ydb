@@ -15,20 +15,20 @@ namespace NKikimr::NColumnShard::NTiers {
 class TTierPreparationActor: public NActors::TActorBootstrapped<TTierPreparationActor> {
 private:
     std::vector<TTierConfig> Objects;
-    NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr Controller;
-    NMetadata::IOperationsManager::TModificationContext Context;
+    NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr Controller;
+    NMetadata::NModifications::IOperationsManager::TModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     std::shared_ptr<TConfigsSnapshot> Tierings;
     std::shared_ptr<TFetcherCheckUserTieringPermissions> SSFetcher;
     std::optional<TFetcherCheckUserTieringPermissions::TResult> SSCheckResult;
     void StartChecker();
 protected:
-    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
             default:
                 break;
@@ -37,8 +37,8 @@ public:
     void Bootstrap();
 
     TTierPreparationActor(std::vector<TTierConfig>&& objects,
-        NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
-        const NMetadata::IOperationsManager::TModificationContext& context);
+        NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
+        const NMetadata::NModifications::IOperationsManager::TModificationContext& context);
 };
 
 }

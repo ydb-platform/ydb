@@ -125,7 +125,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvForget::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NTiers::TEvTiersManagerReadyForUsage::TPtr& ev);
     
 
@@ -207,7 +207,7 @@ protected:
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);

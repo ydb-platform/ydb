@@ -51,7 +51,7 @@ public:
         }
     }
 
-    class TDecoder: public NInternal::TDecoderBase {
+    class TDecoder: public NMetadata::NInternal::TDecoderBase {
     private:
         YDB_ACCESSOR(i32, IdIdx, -1);
         YDB_ACCESSOR(i32, ClassIdx, -1);

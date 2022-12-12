@@ -5,7 +5,7 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/datetime/base.h>
 
-namespace NKikimr::NInternal {
+namespace NKikimr::NMetadata::NInternal {
 
 class TDecoderBase {
 protected:
@@ -20,7 +20,7 @@ public:
     bool Read(const i32 columnIdx, bool& result, const Ydb::Value& r) const;
 
     template <class TObject>
-    static bool DeserializeFromRecord(TObject& object, const NMetadataManager::TTableRecord& tr) {
+    static bool DeserializeFromRecord(TObject& object, const TTableRecord& tr) {
         auto rs = tr.BuildRecordSet();
         Y_VERIFY(rs.rows().size() == 1);
         typename TObject::TDecoder decoder(rs);

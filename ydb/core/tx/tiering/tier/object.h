@@ -14,7 +14,7 @@ class TSnapshot;
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TTierConfig: public NMetadataManager::TObject<TTierConfig> {
+class TTierConfig: public NMetadata::NModifications::TObject<TTierConfig> {
 private:
     using TTierProto = NKikimrSchemeOp::TStorageTierConfig;
     YDB_ACCESSOR_DEF(TString, TierName);
@@ -27,32 +27,23 @@ public:
 
     }
 
-    static TString GetInternalStorageTablePath();
+    static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     NKikimrSchemeOp::TS3Settings GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const;
 
-    class TDecoder: public NInternal::TDecoderBase {
+    class TDecoder: public NMetadata::NInternal::TDecoderBase {
     private:
         YDB_READONLY(i32, TierNameIdx, -1);
         YDB_READONLY(i32, TierConfigIdx, -1);
     public:
         static inline const TString TierName = "tierName";
         static inline const TString TierConfig = "tierConfig";
-        static std::vector<Ydb::Column> GetPKColumns();
-        static std::vector<Ydb::Column> GetColumns();
-        static std::vector<TString> GetPKColumnIds();
         TDecoder(const Ydb::ResultSet& rawData) {
             TierNameIdx = GetFieldIndex(rawData, TierName);
             TierConfigIdx = GetFieldIndex(rawData, TierConfig);
         }
     };
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r);
-    NMetadataManager::TTableRecord SerializeToRecord() const;
-    static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        const NMetadata::IOperationsManager::TModificationContext& context);
-
-    static void AlteringPreparation(std::vector<TTierConfig>&& objects,
-        NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
-        const NMetadata::IOperationsManager::TModificationContext& context);
+    NMetadata::NInternal::TTableRecord SerializeToRecord() const;
 
     bool NeedExport() const {
         return ProtoConfig.HasObjectStorage();

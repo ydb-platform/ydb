@@ -1047,9 +1047,9 @@ void TColumnShard::Handle(NTiers::TEvTiersManagerReadyForUsage::TPtr& /*ev*/) {
     }
 }
 
-void TColumnShard::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(Tiers);
-    ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadataProvider::TEvRefreshSubscriberData" << ev->Get()->GetSnapshot()->SerializeToString();
+    ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadata::NProvider::TEvRefreshSubscriberData" << ev->Get()->GetSnapshot()->SerializeToString();
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 

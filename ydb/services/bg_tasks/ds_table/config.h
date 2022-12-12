@@ -8,7 +8,7 @@
 namespace NKikimr::NBackgroundTasks {
 class TConfig {
 private:
-    YDB_READONLY_DEF(NInternal::NRequest::TConfig, RequestConfig);
+    YDB_READONLY_DEF(NMetadata::NRequest::TConfig, RequestConfig);
     YDB_READONLY(TDuration, PullPeriod, TDuration::Seconds(10));
     YDB_READONLY(TDuration, PingPeriod, TDuration::Seconds(2));
     YDB_READONLY(TDuration, PingCheckPeriod, TDuration::Seconds(20));

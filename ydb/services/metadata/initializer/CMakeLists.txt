@@ -21,6 +21,7 @@ target_link_libraries(services-metadata-initializer PUBLIC
 )
 target_sources(services-metadata-initializer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/accessor_init.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/behaviour.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/events.cpp

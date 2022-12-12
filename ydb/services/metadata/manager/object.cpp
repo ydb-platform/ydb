@@ -1,6 +1,6 @@
 #include "object.h"
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 Ydb::Table::CreateTableRequest TBaseObject::AddHistoryTableScheme(const Ydb::Table::CreateTableRequest& baseScheme, const TString& tableName) {
     Ydb::Table::CreateTableRequest result = baseScheme;

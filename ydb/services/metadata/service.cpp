@@ -2,7 +2,7 @@
 
 #include <ydb/services/metadata/ds_table/config.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
 NActors::TActorId MakeServiceId(const ui32 nodeId) {
     return NActors::TActorId(nodeId, "SrvcMetaData");

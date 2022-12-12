@@ -12,7 +12,6 @@
 #include <ydb/services/metadata/initializer/initializer.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
-#include <ydb/services/metadata/manager/init_manager.h>
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 #include <ydb/services/metadata/secret/manager.h>
@@ -33,10 +32,10 @@ using namespace NColumnShard;
 
 Y_UNIT_TEST_SUITE(Initializer) {
 
-    class TTestInitializer: public NMetadata::IInitializationBehaviour {
+    class TTestInitializer: public NMetadata::NInitializer::IInitializationBehaviour {
     protected:
-        virtual void DoPrepare(NMetadataInitializer::IInitializerInput::TPtr controller) const override {
-            TVector<NMetadataInitializer::ITableModifier::TPtr> result;
+        virtual void DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const override {
+            TVector<NMetadata::NInitializer::ITableModifier::TPtr> result;
             const TString tablePath = "/Root/.metadata/test";
             {
                 Ydb::Table::CreateTableRequest request;
@@ -48,47 +47,53 @@ Y_UNIT_TEST_SUITE(Initializer) {
                     column.set_name("test");
                     column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
                 }
-                result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
+                result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
             }
-            result.emplace_back(NMetadataInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));
+            result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));
             controller->PreparationFinished(result);
         }
     public:
     };
 
-    class TInitManagerTest: public NMetadata::TInitManagerBase {
+    class TInitBehaviourTest: public NMetadata::IClassBehaviour {
     protected:
-        virtual std::shared_ptr<NMetadata::IInitializationBehaviour> DoGetInitializationBehaviour() const override {
+        virtual TString GetInternalStorageTablePath() const override {
+            return "test";
+        }
+        virtual std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour> ConstructInitializer() const override {
             return std::make_shared<TTestInitializer>();
+        }
+        virtual std::shared_ptr<NMetadata::NModifications::IOperationsManager> ConstructOperationsManager() const override {
+            return nullptr;
         }
     public:
         virtual TString GetTypeId() const override {
-            return TypeName<TInitManagerTest>();
+            return TypeName<TInitBehaviourTest>();
         }
     };
 
     class TInitUserEmulator: public NActors::TActorBootstrapped<TInitUserEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TInitUserEmulator>;
-        std::shared_ptr<TInitManagerTest> Manager = std::make_shared<TInitManagerTest>();
+        std::shared_ptr<TInitBehaviourTest> Manager = std::make_shared<TInitBehaviourTest>();
         YDB_READONLY_FLAG(Initialized, false);
     public:
 
         STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NMetadataProvider::TEvManagerPrepared, Handle);
+                hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
                 default:
                     Y_VERIFY(false);
             }
         }
 
-        void Handle(NMetadataProvider::TEvManagerPrepared::TPtr& /*ev*/) {
+        void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& /*ev*/) {
             InitializedFlag = true;
         }
 
         void Bootstrap() {
             Become(&TThis::StateWork);
-            Sender<NMetadataProvider::TEvPrepareManager>(Manager).SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
+            Sender<NMetadata::NProvider::TEvPrepareManager>(Manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
         }
     };
 

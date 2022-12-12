@@ -12,7 +12,7 @@ void TFetcherCheckUserTieringPermissions::DoProcess(NSchemeShard::TSchemeShard& 
     ui32 access = 0;
     access |= NACLib::EAccessRights::AlterSchema;
 
-    if (ActivityType == NMetadata::IOperationsManager::EActivityType::Undefined) {
+    if (ActivityType == NMetadata::NModifications::IOperationsManager::EActivityType::Undefined) {
         content.Deny("undefined activity type");
     } else {
         bool denied = false;
@@ -23,11 +23,11 @@ void TFetcherCheckUserTieringPermissions::DoProcess(NSchemeShard::TSchemeShard& 
                 if (!path.IsResolved() || path.IsUnderDeleting() || path.IsDeleted()) {
                     continue;
                 }
-                if (ActivityType == NMetadata::IOperationsManager::EActivityType::Drop) {
+                if (ActivityType == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
                     denied = true;
                     content.Deny("tiering in using by table");
                     break;
-                } else if (ActivityType == NMetadata::IOperationsManager::EActivityType::Alter) {
+                } else if (ActivityType == NMetadata::NModifications::IOperationsManager::EActivityType::Alter) {
                     if (!UserToken) {
                         continue;
                     }

@@ -1,6 +1,6 @@
 #include "ydb_value_operator.h"
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NInternal {
 
 bool TYDBValue::IsSameType(const Ydb::Value& v, const Ydb::Type& type) {
     Y_VERIFY(type.has_type_id());
@@ -112,6 +112,13 @@ Ydb::Column TYDBColumn::Bytes(const TString& columnId) {
     Ydb::Column result;
     result.set_name(columnId);
     result.mutable_type()->set_type_id(Ydb::Type::STRING);
+    return result;
+}
+
+Ydb::Column TYDBColumn::Boolean(const TString& columnId) {
+    Ydb::Column result;
+    result.set_name(columnId);
+    result.mutable_type()->set_type_id(Ydb::Type::BOOL);
     return result;
 }
 

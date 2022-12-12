@@ -8,27 +8,27 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/service.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
 IActor* CreateService(const TConfig& config) {
     return new TService(config);
 }
 
-void TService::PrepareManagers(std::vector<NMetadata::IOperationsManager::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
+void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
     TManagersId id(managers);
-    const bool isInitialization = (managers.size() == 1) && managers.front()->GetTypeId() == NMetadataInitializer::TManager::GetTypeIdStatic();
+    const bool isInitialization = (managers.size() == 1) && managers.front()->GetTypeId() == NInitializer::TDBInitialization::GetTypeId();
     if (ActiveFlag || (PreparationFlag && isInitialization)) {
         for (auto&& manager : managers) {
             Y_VERIFY(!RegisteredManagers.contains(manager->GetTypeId()));
             if (!ManagersInRegistration.contains(manager->GetTypeId()) && !RegisteredManagers.contains(manager->GetTypeId())) {
                 ManagersInRegistration.emplace(manager->GetTypeId(), manager);
-                Register(new NMetadataInitializer::TDSAccessorInitialized(Config.GetRequestConfig(),
-                    manager->GetTypeId(), manager->GetInitializationBehaviour(), InternalController, InitializationSnapshot));
+                Register(new NInitializer::TDSAccessorInitialized(Config.GetRequestConfig(),
+                    manager->GetTypeId(), manager->GetInitializer(), InternalController, InitializationSnapshot));
             }
         }
     } else if (!PreparationFlag) {
         PreparationFlag = true;
-        InitializationFetcher = std::make_shared<NMetadataInitializer::TFetcher>();
+        InitializationFetcher = std::make_shared<NInitializer::TFetcher>();
         Send(SelfId(), new TEvSubscribeExternal(InitializationFetcher));
     }
     EventsWaiting[id].emplace_back(ev, sender);
@@ -44,7 +44,7 @@ void TService::Handle(TEvPrepareManager::TPtr& ev) {
     }
 }
 
-void TService::Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev) {
+void TService::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
     const TString& initId = ev->Get()->GetInitializationId();
 
     auto it = ManagersInRegistration.find(initId);
@@ -113,7 +113,7 @@ void TService::Handle(TEvUnsubscribeExternal::TPtr& ev) {
 
 void TService::Handle(TEvRefreshSubscriberData::TPtr& ev) {
     auto s = ev->Get()->GetSnapshot();
-    InitializationSnapshot = dynamic_pointer_cast<NMetadataInitializer::TSnapshot>(s);
+    InitializationSnapshot = dynamic_pointer_cast<NInitializer::TSnapshot>(s);
     Y_VERIFY(InitializationSnapshot);
     if (!ActiveFlag) {
         ActiveFlag = true;
@@ -131,7 +131,7 @@ void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
 }
 
 void TServiceInternalController::InitializationFinished(const TString& id) const {
-    ActorId.Send(ActorId, new NMetadataInitializer::TEvInitializationFinished(id));
+    ActorId.Send(ActorId, new NInitializer::TEvInitializationFinished(id));
 }
 
 }

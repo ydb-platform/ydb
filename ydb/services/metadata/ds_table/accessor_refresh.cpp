@@ -6,8 +6,7 @@
 
 #include <util/string/escape.h>
 
-namespace NKikimr::NMetadataProvider {
-using namespace NInternal::NRequest;
+namespace NKikimr::NMetadata::NProvider {
 
 void TDSAccessorRefresher::Handle(TEvYQLResponse::TPtr& ev) {
     auto& currentFullReply = ev->Get()->GetResponse();
@@ -51,12 +50,12 @@ void TDSAccessorRefresher::Handle(TEvRefresh::TPtr& /*ev*/) {
     auto& managers = SnapshotConstructor->GetManagers();
     Y_VERIFY(managers.size());
     for (auto&& i : managers) {
-        sb << "SELECT * FROM `" + EscapeC(i->GetTablePath()) + "`;";
+        sb << "SELECT * FROM `" + EscapeC(i->GetStorageTablePath()) + "`;";
     }
-    Register(new TYQLQuerySessionedActor(sb, NACLib::TSystemUsers::Metadata(), Config.GetRequestConfig(), InternalController));
+    Register(new NRequest::TYQLQuerySessionedActor(sb, NACLib::TSystemUsers::Metadata(), Config.GetRequestConfig(), InternalController));
 }
 
-TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, ISnapshotsFetcher::TPtr snapshotConstructor)
+TDSAccessorRefresher::TDSAccessorRefresher(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr snapshotConstructor)
     : SnapshotConstructor(snapshotConstructor)
     , Config(config)
 {

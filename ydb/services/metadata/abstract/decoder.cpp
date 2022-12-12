@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/json/json_reader.h>
 
-namespace NKikimr::NInternal {
+namespace NKikimr::NMetadata::NInternal {
 
 i32 TDecoderBase::GetFieldIndex(const Ydb::ResultSet& rawData, const TString& columnId) const {
     i32 idx = 0;

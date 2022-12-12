@@ -9,7 +9,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/core/base/events.h>
 
-namespace NKikimr::NInternal::NRequest {
+namespace NKikimr::NMetadata::NRequest {
 
 enum EEvents {
     EvCreateTableRequest = EventSpaceBegin(TKikimrEvents::ES_INTERNAL_REQUEST),

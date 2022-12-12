@@ -5,15 +5,15 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-class TAssignTasksActor: public NInternal::NRequest::TSessionedActor {
+class TAssignTasksActor: public NMetadata::NRequest::TSessionedActor {
 private:
-    using TBase = NInternal::NRequest::TSessionedActor;
+    using TBase = NMetadata::NRequest::TSessionedActor;
     TExecutorController::TPtr Controller;
     const ui32 TasksCount;
     const TString ExecutorId;
 
-    virtual void OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& result) override;
-    virtual std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
+    virtual void OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& result) override;
+    virtual std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
 public:
     TAssignTasksActor(const ui32 tasksCount, TExecutorController::TPtr controller, const TString& executorId)
         : TBase(controller->GetRequestConfig(), controller->GetUserToken())

@@ -11,7 +11,7 @@ namespace NKikimr::NBackgroundTasks {
 
 class TTask;
 
-class TExecutorController: public NMetadataInitializer::IInitializerOutput {
+class TExecutorController: public NMetadata::NInitializer::IInitializerOutput {
 private:
     const NActors::TActorIdentity ExecutorActorId;
     YDB_READONLY_DEF(TConfig, Config);
@@ -34,7 +34,7 @@ public:
         return Config.GetTablePath();
     }
 
-    const NInternal::NRequest::TConfig& GetRequestConfig() const {
+    const NMetadata::NRequest::TConfig& GetRequestConfig() const {
         return Config.GetRequestConfig();
     }
 

@@ -4,7 +4,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NInternal {
 
 class TTableRecord {
 private:

@@ -1,7 +1,7 @@
 #include "config.h"
 #include <util/generic/ylimits.h>
 
-namespace NKikimr::NInternal::NRequest {
+namespace NKikimr::NMetadata::NRequest {
 
 bool TConfig::DeserializeFromProto(const NKikimrConfig::TInternalRequestConfig& config) {
     RetryPeriodStart = TDuration::Seconds(config.GetRetryPeriodStartSeconds());

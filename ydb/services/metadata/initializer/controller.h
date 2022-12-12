@@ -3,9 +3,9 @@
 
 #include <ydb/services/metadata/manager/common.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
-class TInitializerInput: public IInitializerInput, public NMetadataManager::IAlterController {
+class TInitializerInput: public IInitializerInput, public NModifications::IAlterController {
 private:
     const TActorIdentity ActorId;
 public:

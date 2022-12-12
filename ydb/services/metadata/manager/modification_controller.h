@@ -2,7 +2,7 @@
 #include "common.h"
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 class IModificationObjectsController {
 public:

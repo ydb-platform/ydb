@@ -1,13 +1,10 @@
 #include "checker_secret.h"
 #include "secret.h"
+#include "secret_behaviour.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NMetadata::NSecret {
-
-TString TSecret::GetInternalStorageTablePath() {
-    return "secrets/values";
-}
 
 bool TSecret::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
     if (!decoder.Read(decoder.GetOwnerUserIdIdx(), OwnerUserId, rawValue)) {
@@ -22,85 +19,17 @@ bool TSecret::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r
     return true;
 }
 
-NMetadataManager::TTableRecord TSecret::SerializeToRecord() const {
-    NMetadataManager::TTableRecord result;
-    result.SetColumn(TDecoder::OwnerUserId, NMetadataManager::TYDBValue::Bytes(OwnerUserId));
-    result.SetColumn(TDecoder::SecretId, NMetadataManager::TYDBValue::Bytes(SecretId));
-    result.SetColumn(TDecoder::Value, NMetadataManager::TYDBValue::Bytes(Value));
+NInternal::TTableRecord TSecret::SerializeToRecord() const {
+    NInternal::TTableRecord result;
+    result.SetColumn(TDecoder::OwnerUserId, NInternal::TYDBValue::Bytes(OwnerUserId));
+    result.SetColumn(TDecoder::SecretId, NInternal::TYDBValue::Bytes(SecretId));
+    result.SetColumn(TDecoder::Value, NInternal::TYDBValue::Bytes(Value));
     return result;
 }
 
-void TSecret::AlteringPreparation(std::vector<TSecret>&& objects,
-    NMetadataManager::IAlterPreparationController<TSecret>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& context) {
-    if (!!context.GetUserToken()) {
-        for (auto&& i : objects) {
-            if (i.GetOwnerUserId() != context.GetUserToken()->GetUserSID()) {
-                controller->PreparationProblem("no permissions for modify secrets");
-                return;
-            }
-        }
-    }
-    TActivationContext::Register(new TSecretPreparationActor(std::move(objects), controller, context));
-}
-
-NMetadata::TOperationParsingResult TSecret::BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::IOperationsManager::TModificationContext& context) {
-    NKikimr::NMetadataManager::TTableRecord result;
-    if (!context.GetUserToken()) {
-        auto it = settings.GetFeatures().find(TDecoder::OwnerUserId);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::OwnerUserId, NMetadataManager::TYDBValue::Bytes(it->second));
-        } else {
-            return "OwnerUserId not defined";
-        }
-    } else {
-        result.SetColumn(TDecoder::OwnerUserId, NMetadataManager::TYDBValue::Bytes(context.GetUserToken()->GetUserSID()));
-    }
-    for (auto&& c : settings.GetObjectId()) {
-        if (c >= '0' && c <= '9') {
-            continue;
-        }
-        if (c >= 'a' && c <= 'z') {
-            continue;
-        }
-        if (c >= 'A' && c <= 'Z') {
-            continue;
-        }
-        if (c == '_') {
-            continue;
-        }
-        return "incorrect character for secret id: '" + TString(c) + "'";
-    }
-    {
-        result.SetColumn(TDecoder::SecretId, NMetadataManager::TYDBValue::Bytes(settings.GetObjectId()));
-    }
-    {
-        auto it = settings.GetFeatures().find(TDecoder::Value);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::Value, NMetadataManager::TYDBValue::Bytes(it->second));
-        }
-    }
+IClassBehaviour::TPtr TSecret::GetBehaviour() {
+    static std::shared_ptr<NSecret::TSecretBehaviour> result = std::make_shared<NSecret::TSecretBehaviour>();
     return result;
-}
-
-std::vector<Ydb::Column> TSecret::TDecoder::GetColumns() {
-    return {
-        NMetadataManager::TYDBColumn::Bytes(OwnerUserId),
-        NMetadataManager::TYDBColumn::Bytes(SecretId),
-        NMetadataManager::TYDBColumn::Bytes(Value)
-    };
-}
-
-std::vector<Ydb::Column> TSecret::TDecoder::GetPKColumns() {
-    return {
-        NMetadataManager::TYDBColumn::Bytes(OwnerUserId),
-        NMetadataManager::TYDBColumn::Bytes(SecretId)
-    };
-}
-
-std::vector<TString> TSecret::TDecoder::GetPKColumnIds() {
-    return { OwnerUserId, SecretId };
 }
 
 TString TSecretId::SerializeToString() const {

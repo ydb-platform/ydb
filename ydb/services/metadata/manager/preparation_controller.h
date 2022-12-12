@@ -3,17 +3,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NMetadataManager {
-
-template <class TObject>
-class IAlterPreparationController {
-public:
-    using TPtr = std::shared_ptr<IAlterPreparationController>;
-    virtual ~IAlterPreparationController() = default;
-
-    virtual void PreparationFinished(std::vector<TObject>&& objects) = 0;
-    virtual void PreparationProblem(const TString& errorMessage) = 0;
-};
+namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
 class TEvAlterPreparationFinished: public TEventLocal<TEvAlterPreparationFinished<TObject>, EvAlterPreparationFinished> {

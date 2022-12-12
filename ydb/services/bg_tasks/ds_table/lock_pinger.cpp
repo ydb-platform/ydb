@@ -4,7 +4,7 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor::OnSessionId(const TString& sessionId) {
+std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     const auto now = TActivationContext::Now();
@@ -35,7 +35,7 @@ std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor
     return request;
 }
 
-void TLockPingerActor::OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& /*ev*/) {
+void TLockPingerActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*ev*/) {
     ExecutorController->LockPingerFinished();
 }
 

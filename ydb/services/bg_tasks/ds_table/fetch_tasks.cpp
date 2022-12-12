@@ -4,7 +4,7 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-void TFetchTasksActor::OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& currentFullReply) {
+void TFetchTasksActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& currentFullReply) {
     Ydb::Table::ExecuteQueryResult qResult;
     currentFullReply.operation().result().UnpackTo(&qResult);
     Y_VERIFY((size_t)qResult.result_sets().size() == 1);
@@ -21,7 +21,7 @@ void TFetchTasksActor::OnResult(const NInternal::NRequest::TDialogYQLRequest::TR
     Controller->FetchingFinished();
 }
 
-std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TFetchTasksActor::OnSessionId(const TString& sessionId) {
+std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TFetchTasksActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     sb << "DECLARE $executorId AS String;" << Endl;

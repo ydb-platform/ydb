@@ -3,7 +3,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
 class IRestoreObjectsController {

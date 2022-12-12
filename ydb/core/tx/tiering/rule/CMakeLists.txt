@@ -20,6 +20,7 @@ target_link_libraries(tx-tiering-rule PUBLIC
   core-tx-schemeshard
 )
 target_sources(tx-tiering-rule PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/object.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/checker.cpp
@@ -41,6 +42,6 @@ target_link_libraries(tx-tiering-rule.global PUBLIC
   core-tx-schemeshard
 )
 target_sources(tx-tiering-rule.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/behaviour.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/ss_fetcher.cpp
 )

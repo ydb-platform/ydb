@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         STATEFN(StateInit) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+                hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
                 default:
                     Y_VERIFY(false);
             }
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 if (event->HasBuffer() && !event->HasEvent()) {
                 } else if (!event->GetBase()) {
                 } else {
-                    auto ptr = dynamic_cast<NMetadataProvider::TEvRefreshSubscriberData*>(event->GetBase());
+                    auto ptr = dynamic_cast<NMetadata::NProvider::TEvRefreshSubscriberData*>(event->GetBase());
                     if (ptr) {
                         CheckFound(ptr);
                     }
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Y_VERIFY(IsFound());
         }
 
-        void CheckFound(NMetadataProvider::TEvRefreshSubscriberData* event) {
+        void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
             auto snapshot = event->GetSnapshotAs<NTiers::TConfigsSnapshot>();
             if (!snapshot) {
                 Cerr << "incorrect snapshot" << Endl;
@@ -218,20 +218,20 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             FoundFlag = true;
         }
 
-        void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
             CheckFound(ev->Get());
         }
 
         void Bootstrap() {
-            ProviderId = NMetadataProvider::MakeServiceId(SelfId().NodeId());
+            ProviderId = NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
             ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
             Become(&TThis::StateInit);
-            Sender<NMetadataProvider::TEvSubscribeExternal>(ExternalDataManipulation).SendTo(ProviderId);
+            Sender<NMetadata::NProvider::TEvSubscribeExternal>(ExternalDataManipulation).SendTo(ProviderId);
             Start = Now();
         }
     };
 
-    class TEmulatorAlterController: public NMetadataManager::IAlterController {
+    class TEmulatorAlterController: public NMetadata::NModifications::IAlterController {
     private:
         YDB_READONLY_FLAG(Finished, false);
     public:
@@ -307,11 +307,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 }
             }
             {
-                std::vector<NMetadataManager::TTableRecord> patches;
+                std::vector<NMetadata::NInternal::TTableRecord> patches;
                 {
-                    NMetadataManager::TTableRecord patch;
-                    patch.SetColumn("ownerPath", NMetadataManager::TYDBValue::Bytes("/Root/olapStore"));
-                    patch.SetColumn("tierName", NMetadataManager::TYDBValue::Bytes("tier1"));
+                    NMetadata::NInternal::TTableRecord patch;
+                    patch.SetColumn("ownerPath", NMetadata::NInternal::TYDBValue::Bytes("/Root/olapStore"));
+                    patch.SetColumn("tierName", NMetadata::NInternal::TYDBValue::Bytes("tier1"));
                     patches.emplace_back(std::move(patch));
                 }
 

@@ -11,16 +11,16 @@ namespace NKikimr::NMetadata::NSecret {
 class TAccessPreparationActor: public NActors::TActorBootstrapped<TAccessPreparationActor> {
 private:
     std::vector<TAccess> Objects;
-    NMetadataManager::IAlterPreparationController<TAccess>::TPtr Controller;
-    NMetadata::IOperationsManager::TModificationContext Context;
+    NModifications::IAlterPreparationController<TAccess>::TPtr Controller;
+    NModifications::IOperationsManager::TModificationContext Context;
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     void StartChecker();
 protected:
-    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NProvider::TEvRefreshSubscriberData::TPtr& ev);
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NProvider::TEvRefreshSubscriberData, Handle);
             default:
                 break;
         }
@@ -28,8 +28,8 @@ public:
     void Bootstrap();
 
     TAccessPreparationActor(std::vector<TAccess>&& objects,
-        NMetadataManager::IAlterPreparationController<TAccess>::TPtr controller,
-        const NMetadata::IOperationsManager::TModificationContext& context);
+        NModifications::IAlterPreparationController<TAccess>::TPtr controller,
+        const NModifications::IOperationsManager::TModificationContext& context);
 };
 
 }

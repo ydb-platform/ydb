@@ -1,15 +1,13 @@
 #pragma once
-
 #include "snapshot.h"
-#include <ydb/services/metadata/abstract/common.h>
-#include <ydb/services/metadata/abstract/manager.h>
-#include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/abstract/fetcher.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
-class TFetcher: public NMetadataProvider::TSnapshotsFetcher<TSnapshot> {
+class TFetcher: public NFetcher::TSnapshotsFetcher<TSnapshot> {
 protected:
-    virtual std::vector<NMetadata::IOperationsManager::TPtr> DoGetManagers() const override;
+    virtual std::vector<IClassBehaviour::TPtr> DoGetManagers() const override;
 public:
 };
 

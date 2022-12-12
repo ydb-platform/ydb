@@ -1,4 +1,5 @@
 #include "object.h"
+#include "behaviour.h"
 
 #include <ydb/core/tx/tiering/tier/checker.h>
 
@@ -9,6 +10,11 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 namespace NKikimr::NColumnShard::NTiers {
+
+NMetadata::IClassBehaviour::TPtr TTierConfig::GetBehaviour() {
+    static std::shared_ptr<TTierConfigBehaviour> result = std::make_shared<TTierConfigBehaviour>();
+    return result;
+}
 
 NJson::TJsonValue TTierConfig::GetDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
@@ -31,39 +37,10 @@ bool TTierConfig::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Valu
     return true;
 }
 
-NKikimr::NMetadataManager::TTableRecord TTierConfig::SerializeToRecord() const {
-    NMetadataManager::TTableRecord result;
-    result.SetColumn(TDecoder::TierName, NMetadataManager::TYDBValue::Bytes(TierName));
-    result.SetColumn(TDecoder::TierConfig, NMetadataManager::TYDBValue::Bytes(ProtoConfig.DebugString()));
-    return result;
-}
-
-TString TTierConfig::GetInternalStorageTablePath() {
-    return "tiering/tiers";
-}
-
-void TTierConfig::AlteringPreparation(std::vector<TTierConfig>&& objects,
-    NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& context)
-{
-    TActivationContext::Register(new TTierPreparationActor(std::move(objects), controller, context));
-}
-
-NMetadata::TOperationParsingResult TTierConfig::BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::IOperationsManager::TModificationContext& /*context*/) {
-    NKikimr::NMetadataManager::TTableRecord result;
-    result.SetColumn(TDecoder::TierName, NMetadataManager::TYDBValue::Bytes(settings.GetObjectId()));
-    {
-        auto it = settings.GetFeatures().find(TDecoder::TierConfig);
-        if (it != settings.GetFeatures().end()) {
-            TTierProto proto;
-            if (!::google::protobuf::TextFormat::ParseFromString(it->second, &proto)) {
-                return "incorrect proto format";
-            } else {
-                result.SetColumn(TDecoder::TierConfig, NMetadataManager::TYDBValue::Bytes(it->second));
-            }
-        }
-    }
+NMetadata::NInternal::TTableRecord TTierConfig::SerializeToRecord() const {
+    NMetadata::NInternal::TTableRecord result;
+    result.SetColumn(TDecoder::TierName, NMetadata::NInternal::TYDBValue::Bytes(TierName));
+    result.SetColumn(TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Bytes(ProtoConfig.DebugString()));
     return result;
 }
 
@@ -76,22 +53,6 @@ NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
         secrets->PatchString(*config.MutableSecretKey());
     }
     return config;
-}
-
-std::vector<Ydb::Column> TTierConfig::TDecoder::GetPKColumns() {
-    return { NMetadataManager::TYDBColumn::Bytes(TierName) };
-}
-
-std::vector<Ydb::Column> TTierConfig::TDecoder::GetColumns() {
-    return
-    {
-        NMetadataManager::TYDBColumn::Bytes(TierName),
-        NMetadataManager::TYDBColumn::Bytes(TierConfig)
-    };
-}
-
-std::vector<TString> TTierConfig::TDecoder::GetPKColumnIds() {
-    return { TierName };
 }
 
 }

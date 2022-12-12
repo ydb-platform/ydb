@@ -4,11 +4,11 @@
 #include <ydb/core/protos/config.pb.h>
 #include <util/datetime/base.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
 class TConfig {
 private:
-    YDB_READONLY_DEF(NInternal::NRequest::TConfig, RequestConfig);
+    YDB_READONLY_DEF(NRequest::TConfig, RequestConfig);
     YDB_READONLY(TDuration, RefreshPeriod, TDuration::Seconds(10));
     YDB_READONLY_FLAG(Enabled, false);
     YDB_READONLY(TString, Path, ".metadata");

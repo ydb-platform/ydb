@@ -5,7 +5,7 @@
 #include <ydb/services/metadata/request/request_actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
 class TDSAccessorRefresher;
 
@@ -15,9 +15,9 @@ public:
 
 class TEvYQLResponse: public NActors::TEventLocal<TEvYQLResponse, EEvSubscribe::EvYQLResponse> {
 private:
-    YDB_READONLY_DEF(NInternal::NRequest::TDialogYQLRequest::TResponse, Response);
+    YDB_READONLY_DEF(NRequest::TDialogYQLRequest::TResponse, Response);
 public:
-    TEvYQLResponse(const NInternal::NRequest::TDialogYQLRequest::TResponse& r)
+    TEvYQLResponse(const NRequest::TDialogYQLRequest::TResponse& r)
         : Response(r)
     {
 
@@ -26,9 +26,9 @@ public:
 
 class TEvEnrichSnapshotResult: public NActors::TEventLocal<TEvEnrichSnapshotResult, EEvSubscribe::EvEnrichSnapshotResult> {
 private:
-    YDB_READONLY_DEF(ISnapshot::TPtr, EnrichedSnapshot);
+    YDB_READONLY_DEF(NFetcher::ISnapshot::TPtr, EnrichedSnapshot);
 public:
-    TEvEnrichSnapshotResult(ISnapshot::TPtr snapshot)
+    TEvEnrichSnapshotResult(NFetcher::ISnapshot::TPtr snapshot)
         : EnrichedSnapshot(snapshot) {
 
     }
@@ -44,7 +44,7 @@ public:
     }
 };
 
-class TRefreshInternalController: public ISnapshotAcceptorController, public NInternal::NRequest::IQueryOutput {
+class TRefreshInternalController: public NFetcher::ISnapshotAcceptorController, public NRequest::IQueryOutput {
 private:
     const TActorIdentity ActorId;
 public:
@@ -57,11 +57,11 @@ public:
         ActorId.Send(ActorId, new TEvEnrichSnapshotProblem(errorMessage));
     }
 
-    virtual void Enriched(ISnapshot::TPtr enrichedSnapshot) override {
+    virtual void Enriched(NFetcher::ISnapshot::TPtr enrichedSnapshot) override {
         ActorId.Send(ActorId, new TEvEnrichSnapshotResult(enrichedSnapshot));
     }
 
-    virtual void OnReply(const NInternal::NRequest::TDialogYQLRequest::TResponse& response) override {
+    virtual void OnReply(const NRequest::TDialogYQLRequest::TResponse& response) override {
         ActorId.Send(ActorId, new TEvYQLResponse(response));
     }
 };
@@ -69,9 +69,9 @@ public:
 class TDSAccessorRefresher: public NActors::TActorBootstrapped<TDSAccessorRefresher> {
 private:
     using TBase = NActors::TActorBootstrapped<TDSAccessorRefresher>;
-    ISnapshotsFetcher::TPtr SnapshotConstructor;
+    NFetcher::ISnapshotsFetcher::TPtr SnapshotConstructor;
     std::shared_ptr<TRefreshInternalController> InternalController;
-    YDB_READONLY_DEF(ISnapshot::TPtr, CurrentSnapshot);
+    YDB_READONLY_DEF(NFetcher::ISnapshot::TPtr, CurrentSnapshot);
     YDB_READONLY_DEF(Ydb::Table::ExecuteQueryResult, CurrentSelection);
     Ydb::Table::ExecuteQueryResult ProposedProto;
     TInstant RequestedActuality = TInstant::Zero();
@@ -99,7 +99,7 @@ public:
         }
     }
 
-    TDSAccessorRefresher(const TConfig& config, ISnapshotsFetcher::TPtr snapshotConstructor);
+    TDSAccessorRefresher(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr snapshotConstructor);
 
     void Handle(TEvEnrichSnapshotResult::TPtr& ev);
     void Handle(TEvEnrichSnapshotProblem::TPtr& ev);

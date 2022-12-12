@@ -3,11 +3,10 @@
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/services/metadata/abstract/decoder.h>
-#include <ydb/services/metadata/abstract/manager.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
 class TDBInitializationKey {
 private:
@@ -26,16 +25,12 @@ public:
     }
 };
 
-class TDBInitialization: public TDBInitializationKey, public NMetadataManager::TObject<TDBInitialization> {
+class TDBInitialization: public TDBInitializationKey, public NModifications::TObject<TDBInitialization> {
 private:
     using TBase = TDBInitializationKey;
     YDB_READONLY(TInstant, Instant, AppData()->TimeProvider->Now());
 public:
-    static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& /*settings*/,
-        const NMetadata::IOperationsManager::TModificationContext& /*context*/) {
-        NMetadataManager::TTableRecord result;
-        return result;
-    }
+    static IClassBehaviour::TPtr GetBehaviour();
 
     class TDecoder: public NInternal::TDecoderBase {
     private:
@@ -46,9 +41,6 @@ public:
         static inline const TString ComponentId = "componentId";
         static inline const TString ModificationId = "modificationId";
         static inline const TString Instant = "instant";
-        static std::vector<TString> GetPKColumnIds();
-        static std::vector<Ydb::Column> GetPKColumns();
-        static std::vector<Ydb::Column> GetColumns();
 
         TDecoder(const Ydb::ResultSet& rawData) {
             ComponentIdIdx = GetFieldIndex(rawData, ComponentId);
@@ -59,15 +51,8 @@ public:
 
     using TBase::TBase;
 
-    static void AlteringPreparation(std::vector<TDBInitialization>&& objects,
-        NMetadataManager::IAlterPreparationController<TDBInitialization>::TPtr controller,
-        const NMetadata::IOperationsManager::TModificationContext& context);
-    static TString GetStorageHistoryTablePath() {
-        return "";
-    }
-    static TString GetInternalStorageTablePath();
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
-    NKikimr::NMetadataManager::TTableRecord SerializeToRecord() const;
+    NInternal::TTableRecord SerializeToRecord() const;
     static TString GetTypeId() {
         return "INITIALIZATION";
     }

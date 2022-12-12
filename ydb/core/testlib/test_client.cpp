@@ -686,9 +686,9 @@ namespace Tests {
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
         }
         if (Settings->IsEnableMetadataProvider()) {
-            auto* actor = NMetadataProvider::CreateService(NMetadataProvider::TConfig());
+            auto* actor = NMetadata::NProvider::CreateService(NMetadata::NProvider::TConfig());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NMetadataProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
+            Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid);
         }
         if (Settings->IsEnableBackgroundTasks()) {
             auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());

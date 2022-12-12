@@ -6,9 +6,9 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TSnapshotsFetcher: public NMetadataProvider::TSnapshotsFetcher<TSnapshot> {
+class TSnapshotsFetcher: public NFetcher::TSnapshotsFetcher<TSnapshot> {
 protected:
-    virtual std::vector<IOperationsManager::TPtr> DoGetManagers() const override;
+    virtual std::vector<IClassBehaviour::TPtr> DoGetManagers() const override;
 public:
 };
 

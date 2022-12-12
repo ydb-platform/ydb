@@ -3,7 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <util/datetime/base.h>
 
-namespace NKikimr::NInternal::NRequest {
+namespace NKikimr::NMetadata::NRequest {
 
 class TConfig {
 private:

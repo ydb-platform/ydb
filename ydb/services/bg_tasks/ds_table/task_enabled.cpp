@@ -4,7 +4,7 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TUpdateTaskEnabledActor::OnSessionId(const TString& sessionId) {
+std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TUpdateTaskEnabledActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     sb << "DECLARE $taskId AS String;" << Endl;
@@ -24,7 +24,7 @@ std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TUpdateTaskEnabl
     return request;
 }
 
-void TUpdateTaskEnabledActor::OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
+void TUpdateTaskEnabledActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
     Sender<TEvUpdateTaskEnabledResult>(TaskId, true).SendTo(ResultWaiter);
 }
 

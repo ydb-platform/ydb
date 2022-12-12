@@ -1,5 +1,5 @@
 #include "common.h"
 
-namespace NKikimr::NInternal::NRequest {
+namespace NKikimr::NMetadata::NRequest {
 
 }

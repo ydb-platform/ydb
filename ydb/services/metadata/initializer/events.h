@@ -8,7 +8,7 @@
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/actors/core/av_bootstrapped.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
 enum EEvents {
     EvInitializerPreparationStart = EventSpaceBegin(TKikimrEvents::ES_METADATA_INITIALIZER),

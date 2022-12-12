@@ -1,10 +1,11 @@
 #include "initialization.h"
+#include <ydb/services/bg_tasks/abstract/task.h>
 
 namespace NKikimr::NBackgroundTasks {
 
-void TBGTasksInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPtr controller) const {
+void TBGTasksInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const {
     const TString tableName = Config.GetTablePath();
-    TVector<NMetadataInitializer::ITableModifier::TPtr> result;
+    TVector<NMetadata::NInitializer::ITableModifier::TPtr> result;
     {
         Ydb::Table::CreateTableRequest request;
         request.set_session_id("");
@@ -60,7 +61,7 @@ void TBGTasksInitializer::DoPrepare(NMetadataInitializer::IInitializerInput::TPt
             column.set_name("state");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
-        result.emplace_back(new NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogCreateTable>(request, "create"));
+        result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
     }
     controller->PreparationFinished(result);
 }

@@ -1,14 +1,13 @@
 #pragma once
+#include "abstract.h"
 #include "modification_controller.h"
 #include "preparation_controller.h"
 #include "restore.h"
 #include "modification.h"
 
-#include <ydb/services/metadata/abstract/manager.h>
-
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
 class TProcessingController:
@@ -55,36 +54,50 @@ protected:
     TString TransactionId;
     typename TProcessingController<TObject>::TPtr InternalController;
     IAlterController::TPtr ExternalController;
-    const NMetadata::IOperationsManager::TModificationContext Context;
-    std::vector<TTableRecord> Patches;
-    TTableRecords RestoreObjectIds;
+    typename IObjectOperationsManager<TObject>::TPtr Manager;
+    const IOperationsManager::TModificationContext Context;
+    std::vector<NInternal::TTableRecord> Patches;
+    NInternal::TTableRecords RestoreObjectIds;
     const NACLib::TUserToken UserToken = NACLib::TSystemUsers::Metadata();
     virtual bool PrepareRestoredObjects(std::vector<TObject>& objects) const = 0;
-    virtual bool ProcessPreparedObjects(TTableRecords&& records) const = 0;
+    virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const = 0;
     virtual void InitState() = 0;
     virtual bool BuildRestoreObjectIds() = 0;
 public:
-    TModificationActorImpl(TTableRecord&& patch, IAlterController::TPtr controller, const NMetadata::IOperationsManager::TModificationContext& context)
+    TModificationActorImpl(NInternal::TTableRecord&& patch,
+        IAlterController::TPtr controller,
+        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const IOperationsManager::TModificationContext& context)
         : ExternalController(controller)
+        , Manager(manager)
         , Context(context) {
         Patches.emplace_back(std::move(patch));
     }
 
-    TModificationActorImpl(const TTableRecord& patch, IAlterController::TPtr controller, const NMetadata::IOperationsManager::TModificationContext& context)
+    TModificationActorImpl(const NInternal::TTableRecord& patch, IAlterController::TPtr controller,
+        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const IOperationsManager::TModificationContext& context)
         : ExternalController(controller)
+        , Manager(manager)
         , Context(context) {
         Patches.emplace_back(patch);
     }
 
-    TModificationActorImpl(std::vector<TTableRecord>&& patches, IAlterController::TPtr controller, const NMetadata::IOperationsManager::TModificationContext& context)
+    TModificationActorImpl(std::vector<NInternal::TTableRecord>&& patches, IAlterController::TPtr controller,
+        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const IOperationsManager::TModificationContext& context)
         : ExternalController(controller)
+        , Manager(manager)
         , Context(context)
         , Patches(std::move(patches)) {
 
     }
 
-    TModificationActorImpl(const std::vector<TTableRecord>& patches, IAlterController::TPtr controller, const NMetadata::IOperationsManager::TModificationContext& context)
+    TModificationActorImpl(const std::vector<NInternal::TTableRecord>& patches, IAlterController::TPtr controller,
+        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const IOperationsManager::TModificationContext& context)
         : ExternalController(controller)
+        , Manager(manager)
         , Context(context)
         , Patches(patches) {
 
@@ -92,10 +105,10 @@ public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogCreateSession>, Handle);
+            hFunc(NRequest::TEvRequestResult<NRequest::TDialogCreateSession>, Handle);
             hFunc(TEvRestoreFinished<TObject>, Handle);
             hFunc(TEvAlterPreparationFinished<TObject>, Handle);
-            hFunc(NInternal::NRequest::TEvRequestFailed, Handle);
+            hFunc(NRequest::TEvRequestFailed, Handle);
             hFunc(TEvRestoreProblem, Handle);
             hFunc(TEvAlterPreparationProblem, Handle);
             default:
@@ -113,11 +126,11 @@ public:
             return TBase::PassAway();
         }
 
-        TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogCreateSession>(
-            NInternal::NRequest::TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
+        TBase::Register(new NRequest::TYDBRequest<NRequest::TDialogCreateSession>(
+            NRequest::TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
     }
 
-    void Handle(typename NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogCreateSession>::TPtr& ev) {
+    void Handle(typename NRequest::TEvRequestResult<NRequest::TDialogCreateSession>::TPtr& ev) {
         Ydb::Table::CreateSessionResponse currentFullReply = ev->Get()->GetResult();
         Ydb::Table::CreateSessionResult session;
         currentFullReply.operation().result().UnpackTo(&session);
@@ -135,15 +148,13 @@ public:
         if (!PrepareRestoredObjects(objects)) {
             TBase::PassAway();
         } else {
-            auto preparationController = std::dynamic_pointer_cast<IAlterPreparationController<TObject>>(InternalController);
-            Y_VERIFY(preparationController);
-            TObject::AlteringPreparation(std::move(objects), preparationController, Context);
+            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context);
         }
     }
 
     void Handle(typename TEvAlterPreparationFinished<TObject>::TPtr& ev) {
-        TTableRecords records;
-        records.InitColumns(TObject::TDecoder::GetColumns());
+        NInternal::TTableRecords records;
+        records.InitColumns(Manager->GetSchema().GetYDBColumns());
         records.ReserveRows(ev->Get()->GetObjects().size());
         for (auto&& i : ev->Get()->GetObjects()) {
             if (!records.AddRecordNativeValues(i.SerializeToRecord())) {
@@ -157,7 +168,7 @@ public:
         }
     }
 
-    void Handle(typename NInternal::NRequest::TEvRequestFailed::TPtr& /*ev*/) {
+    void Handle(typename NRequest::TEvRequestFailed::TPtr& /*ev*/) {
         auto g = TBase::PassAwayGuard();
         ExternalController->AlterProblem("cannot initialize session");
     }
@@ -179,12 +190,13 @@ class TModificationActor: public TModificationActorImpl<TObject> {
 private:
     using TBase = TModificationActorImpl<TObject>;
 protected:
+    using TBase::Manager;
     virtual void InitState() override {
         TBase::Become(&TModificationActor<TObject>::StateMain);
     }
 
     virtual bool BuildRestoreObjectIds() override {
-        TBase::RestoreObjectIds.InitColumns(TObject::TDecoder::GetPKColumns());
+        TBase::RestoreObjectIds.InitColumns(Manager->GetSchema().GetPKColumns());
         for (auto&& i : TBase::Patches) {
             if (!TBase::RestoreObjectIds.AddRecordNativeValues(i)) {
                 TBase::ExternalController->AlterProblem("no pk columns in patch");
@@ -211,10 +223,10 @@ public:
         std::vector<bool> realPatches;
         realPatches.resize(TBase::Patches.size(), false);
         for (auto&& i : objects) {
-            const TTableRecord* trPatch = nullptr;
-            TTableRecord trObject = i.SerializeToRecord();
+            const NInternal::TTableRecord* trPatch = nullptr;
+            NInternal::TTableRecord trObject = i.SerializeToRecord();
             for (auto&& p : TBase::Patches) {
-                if (p.CompareColumns(trObject, TObject::TDecoder::GetPKColumnIds())) {
+                if (p.CompareColumns(trObject, Manager->GetSchema().GetPKColumnIds())) {
                     trPatch = &p;
                     break;
                 }
@@ -236,7 +248,7 @@ public:
         for (auto&& p : TBase::Patches) {
             bool found = false;
             for (auto&& i : objects) {
-                if (i.SerializeToRecord().CompareColumns(p, TObject::TDecoder::GetPKColumnIds())) {
+                if (i.SerializeToRecord().CompareColumns(p, Manager->GetSchema().GetPKColumnIds())) {
                     found = true;
                     break;
                 }

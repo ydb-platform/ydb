@@ -6,14 +6,14 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-class TLockPingerActor: public NInternal::NRequest::TSessionedActor {
+class TLockPingerActor: public NMetadata::NRequest::TSessionedActor {
 private:
-    using TBase = NInternal::NRequest::TSessionedActor;
+    using TBase = NMetadata::NRequest::TSessionedActor;
     const std::set<TString> TaskIds;
     TExecutorController::TPtr ExecutorController;
 protected:
-    virtual void OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& result) override;
-    virtual std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
+    virtual void OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& result) override;
+    virtual std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
 public:
     TLockPingerActor(TExecutorController::TPtr executorController, const std::set<TString>& taskIds)
         : TBase(executorController->GetRequestConfig(), executorController->GetUserToken())

@@ -6,7 +6,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
 class TRestoreObjectsActor: public NActors::TActorBootstrapped<TRestoreObjectsActor<TObject>> {
@@ -14,13 +14,13 @@ private:
     using TBase = NActors::TActorBootstrapped<TRestoreObjectsActor<TObject>>;
     using IRestoreObjectsController = IRestoreObjectsController<TObject>;
     typename IRestoreObjectsController::TPtr Controller;
-    const TTableRecords ObjectIds;
+    const NInternal::TTableRecords ObjectIds;
     TString SessionId;
     const NACLib::TUserToken UserToken;
 
-    void Handle(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogSelect>::TPtr& ev) {
+    void Handle(NRequest::TEvRequestResult<NRequest::TDialogSelect>::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        const NInternal::NRequest::TDialogSelect::TResponse& result = ev->Get()->GetResult();
+        const NRequest::TDialogSelect::TResponse& result = ev->Get()->GetResult();
         Ydb::Table::ExecuteQueryResult qResult;
         result.operation().result().UnpackTo(&qResult);
         Y_VERIFY((size_t)qResult.result_sets().size() == 1);
@@ -38,13 +38,13 @@ private:
         Controller->RestoreFinished(std::move(objects), qResult.tx_meta().id());
     }
 
-    void Handle(NInternal::NRequest::TEvRequestFailed::TPtr& /*ev*/) {
+    void Handle(NRequest::TEvRequestFailed::TPtr& /*ev*/) {
         auto g = TBase::PassAwayGuard();
         Controller->RestoreProblem("cannot execute yql request");
     }
 
 public:
-    TRestoreObjectsActor(const TTableRecords& objectIds, const NACLib::TUserToken& uToken, typename IRestoreObjectsController::TPtr controller, const TString& sessionId)
+    TRestoreObjectsActor(const NInternal::TTableRecords& objectIds, const NACLib::TUserToken& uToken, typename IRestoreObjectsController::TPtr controller, const TString& sessionId)
         : Controller(controller)
         , ObjectIds(objectIds)
         , SessionId(sessionId)
@@ -55,8 +55,8 @@ public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NInternal::NRequest::TEvRequestResult<NInternal::NRequest::TDialogSelect>, Handle);
-            hFunc(NInternal::NRequest::TEvRequestFailed, Handle);
+            hFunc(NRequest::TEvRequestResult<NRequest::TDialogSelect>, Handle);
+            hFunc(NRequest::TEvRequestFailed, Handle);
             default:
                 break;
         }
@@ -67,11 +67,11 @@ public:
             Controller->RestoreProblem("no objects for restore");
             TBase::PassAway();
         }
-        auto request = ObjectIds.BuildSelectQuery(TObject::GetStorageTablePath());
+        auto request = ObjectIds.BuildSelectQuery(TObject::GetBehaviour()->GetStorageTablePath());
         request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
         request.set_session_id(SessionId);
         TBase::Become(&TRestoreObjectsActor::StateMain);
-        TBase::Register(new NInternal::NRequest::TYDBRequest<NInternal::NRequest::TDialogSelect>(request, UserToken, TBase::SelfId()));
+        TBase::Register(new NRequest::TYDBRequest<NRequest::TDialogSelect>(request, UserToken, TBase::SelfId()));
     }
 };
 

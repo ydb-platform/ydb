@@ -24,7 +24,7 @@ void TExecutorController::TaskFinished(const TString& taskId) const {
 }
 
 void TExecutorController::InitializationFinished(const TString& id) const {
-    ExecutorActorId.Send(ExecutorActorId, new NMetadataInitializer::TEvInitializationFinished(id));
+    ExecutorActorId.Send(ExecutorActorId, new NMetadata::NInitializer::TEvInitializationFinished(id));
 }
 
 void TExecutorController::LockPingerFinished() const {

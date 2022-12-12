@@ -6,19 +6,27 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TSecretManager: public TGenericOperationsManager<TSecret> {
-private:
-    static TFactory::TRegistrator<TSecretManager> Registrator;
+class TSecretManager: public NModifications::TGenericOperationsManager<TSecret> {
 protected:
-    virtual IInitializationBehaviour::TPtr DoGetInitializationBehaviour() const override;
+    virtual void DoPrepareObjectsBeforeModification(std::vector<TSecret>&& patchedObjects,
+        NModifications::IAlterPreparationController<TSecret>::TPtr controller, const NModifications::IOperationsManager::TModificationContext& context) const override;
+
+    virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(
+        const NYql::TObjectSettingsImpl& settings, const NModifications::IOperationsManager::TModificationContext& context) const override;
+    virtual NModifications::TTableSchema ConstructActualSchema() const override;
+
 public:
 };
 
-class TAccessManager: public TGenericOperationsManager<TAccess> {
-private:
-    static TFactory::TRegistrator<TAccessManager> Registrator;
+class TAccessManager: public NModifications::TGenericOperationsManager<TAccess> {
 protected:
-    virtual IInitializationBehaviour::TPtr DoGetInitializationBehaviour() const override;
+    virtual void DoPrepareObjectsBeforeModification(std::vector<TAccess>&& patchedObjects,
+        NModifications::IAlterPreparationController<TAccess>::TPtr controller,
+        const NModifications::IOperationsManager::TModificationContext& context) const override;
+
+    virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
+        const NModifications::IOperationsManager::TModificationContext& context) const override;
+    virtual NModifications::TTableSchema ConstructActualSchema() const override;
 public:
 };
 

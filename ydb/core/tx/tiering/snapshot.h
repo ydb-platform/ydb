@@ -10,9 +10,9 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TConfigsSnapshot: public NMetadataProvider::ISnapshot {
+class TConfigsSnapshot: public NMetadata::NFetcher::ISnapshot {
 private:
-    using TBase = NMetadataProvider::ISnapshot;
+    using TBase = NMetadata::NFetcher::ISnapshot;
     using TConfigsMap = TMap<TString, TTierConfig>;
     YDB_ACCESSOR_DEF(TConfigsMap, TierConfigs);
     using TTieringMap = TMap<TString, TTieringRule>;

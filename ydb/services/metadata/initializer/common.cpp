@@ -1,19 +1,19 @@
 #include "common.h"
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
 ITableModifier::TPtr TACLModifierConstructor::BuildModifier() const {
-    return std::make_shared<NMetadataInitializer::TGenericTableModifier<NInternal::NRequest::TDialogModifyPermissions>>(Request, Id);
+    return std::make_shared<TGenericTableModifier<NRequest::TDialogModifyPermissions>>(Request, Id);
 }
 
-NKikimr::NMetadataInitializer::TACLModifierConstructor TACLModifierConstructor::GetNoAccessModifier(const TString& path, const TString& id) {
+TACLModifierConstructor TACLModifierConstructor::GetNoAccessModifier(const TString& path, const TString& id) {
     TACLModifierConstructor result(path, id);
     result->set_clear_permissions(true);
     result->set_interrupt_inheritance(true);
     return result;
 }
 
-NKikimr::NMetadataInitializer::TACLModifierConstructor TACLModifierConstructor::GetReadOnlyModifier(const TString& path, const TString& id) {
+TACLModifierConstructor TACLModifierConstructor::GetReadOnlyModifier(const TString& path, const TString& id) {
     TACLModifierConstructor result(path, id);
     result->set_clear_permissions(true);
     result->set_interrupt_inheritance(true);

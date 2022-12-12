@@ -2,11 +2,12 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NInternal {
 
 class TYDBColumn {
 public:
     static Ydb::Column Bytes(const TString& columnId);
+    static Ydb::Column Boolean(const TString& columnId);
     static Ydb::Column UInt64(const TString& columnId);
     static Ydb::Column UInt32(const TString& columnId);
 };

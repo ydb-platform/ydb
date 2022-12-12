@@ -11,8 +11,9 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NKikimr::NInternal::NRequest {
+namespace NKikimr::NMetadata::NRequest {
 
+// class with interaction features for ydb-yql request execution
 template <class TRequestExt, class TResponseExt, ui32 EvStartExt, ui32 EvResultInternalExt, ui32 EvResultExt>
 class TDialogPolicyImpl {
 public:
@@ -191,9 +192,10 @@ public:
 template <class TDialogPolicy>
 class TSessionedActorImpl: public NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>> {
 private:
-    ui32 Retry = 0;
     static_assert(!std::is_same<TDialogPolicy, TDialogCreateSession>());
     using TBase = NActors::TActorBootstrapped<TSessionedActorImpl<TDialogPolicy>>;
+
+    ui32 Retry = 0;
     void Handle(TEvRequestResult<TDialogCreateSession>::TPtr& ev) {
         Ydb::Table::CreateSessionResponse currentFullReply = ev->Get()->GetResult();
         Ydb::Table::CreateSessionResult session;
@@ -205,7 +207,7 @@ private:
         TBase::Register(new TYDBRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId(), Config, TBase::SelfId()));
     }
 protected:
-    const NInternal::NRequest::TConfig Config;
+    const TConfig Config;
     const NACLib::TUserToken UserToken;
     virtual std::optional<typename TDialogPolicy::TRequest> OnSessionId(const TString& sessionId) = 0;
     virtual void OnResult(const typename TDialogPolicy::TResponse& response) = 0;
@@ -221,7 +223,7 @@ public:
         }
     }
 
-    TSessionedActorImpl(const NInternal::NRequest::TConfig& config, const NACLib::TUserToken& uToken)
+    TSessionedActorImpl(const TConfig& config, const NACLib::TUserToken& uToken)
         : Config(config)
         , UserToken(uToken)
     {
@@ -277,7 +279,7 @@ protected:
     }
 public:
     TYQLQuerySessionedActor(const TString& query, const NACLib::TUserToken& uToken,
-        const NInternal::NRequest::TConfig& config, IQueryOutput::TPtr output)
+        const TConfig& config, IQueryOutput::TPtr output)
         : TBase(config, uToken)
         , Query(query)
         , Output(output)

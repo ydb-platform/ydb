@@ -19,20 +19,20 @@ void TPathCleaner::Handle(TEvTierCleared::TPtr& ev) {
     }
 }
 
-NMetadataProvider::ISnapshotsFetcher::TPtr TPathCleaner::GetTieringSnapshotParser() const {
+NMetadata::NFetcher::ISnapshotsFetcher::TPtr TPathCleaner::GetTieringSnapshotParser() const {
     return std::make_shared<NTiers::TSnapshotConstructor>();
 }
 
-NMetadataProvider::ISnapshotsFetcher::TPtr TPathCleaner::GetSecretsSnapshotParser() const {
+NMetadata::NFetcher::ISnapshotsFetcher::TPtr TPathCleaner::GetSecretsSnapshotParser() const {
     return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
 }
 
-void TPathCleaner::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TPathCleaner::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto configs = ev->Get()->GetSnapshotPtrAs<TConfigsSnapshot>()) {
-        Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()), new NMetadataProvider::TEvUnsubscribeExternal(GetTieringSnapshotParser()));
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetTieringSnapshotParser()));
         Configs = configs;
     } else if (auto secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
-        Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()), new NMetadataProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         Secrets = secrets;
     } else {
         Y_VERIFY(false);
@@ -64,8 +64,8 @@ void TPathCleaner::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev)
 
 void TPathCleaner::Bootstrap() {
     Become(&TPathCleaner::StateMain);
-    Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()), new NMetadataProvider::TEvSubscribeExternal(GetTieringSnapshotParser()));
-    Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()), new NMetadataProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetTieringSnapshotParser()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
 }
 
 TPathCleaner::TPathCleaner(const TString& tieringId, const ui64 pathId, NBackgroundTasks::ITaskExecutorController::TPtr controller)

@@ -5,14 +5,14 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-class TDropTaskActor: public NInternal::NRequest::TSessionedActor {
+class TDropTaskActor: public NMetadata::NRequest::TSessionedActor {
 private:
-    using TBase = NInternal::NRequest::TSessionedActor;
+    using TBase = NMetadata::NRequest::TSessionedActor;
     const TString TaskId;
     TExecutorController::TPtr Controller;
 protected:
-    virtual void OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& result) override;
-    virtual std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
+    virtual void OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& result) override;
+    virtual std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> OnSessionId(const TString& sessionId) override;
 
 public:
 

@@ -8,7 +8,7 @@
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/service.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
 void TDSAccessorInitialized::Bootstrap() {
     Become(&TDSAccessorInitialized::StateMain);
@@ -53,33 +53,32 @@ void TDSAccessorInitialized::DoNextModifier() {
     }
 }
 
-void TDSAccessorInitialized::Handle(NInternal::NRequest::TEvRequestFinished::TPtr& /*ev*/) {
+void TDSAccessorInitialized::Handle(NRequest::TEvRequestFinished::TPtr& /*ev*/) {
     ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
     Y_VERIFY(Modifiers.size());
-    if (NMetadataProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
+    if (NProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
-        auto manager = std::make_shared<NMetadataInitializer::TManager>();
-        auto alterCommand = std::make_shared<NMetadataManager::TCreateCommand<TDBInitialization>>(
-            dbInit.SerializeToRecord(), manager, InternalController, NMetadata::IOperationsManager::TModificationContext());
-        Sender<NMetadataProvider::TEvObjectsOperation>(alterCommand)
-            .SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
+        auto alterCommand = std::make_shared<NModifications::TCreateCommand<TDBInitialization>>(
+            dbInit.SerializeToRecord(), TDBInitialization::GetBehaviour(), InternalController, NModifications::IOperationsManager::TModificationContext());
+        Sender<NProvider::TEvObjectsOperation>(alterCommand)
+            .SendTo(NProvider::MakeServiceId(SelfId().NodeId()));
     } else {
         DoNextModifier();
     }
 }
 
-void TDSAccessorInitialized::Handle(NMetadataManager::TEvModificationFinished::TPtr& /*ev*/) {
+void TDSAccessorInitialized::Handle(NModifications::TEvModificationFinished::TPtr& /*ev*/) {
     DoNextModifier();
 }
 
-void TDSAccessorInitialized::Handle(NMetadataManager::TEvModificationProblem::TPtr& /*ev*/) {
-    Schedule(TDuration::Seconds(1), new NInternal::NRequest::TEvRequestFinished);
+void TDSAccessorInitialized::Handle(NModifications::TEvModificationProblem::TPtr& /*ev*/) {
+    Schedule(TDuration::Seconds(1), new NRequest::TEvRequestFinished);
 }
 
-TDSAccessorInitialized::TDSAccessorInitialized(const NInternal::NRequest::TConfig& config,
+TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
     const TString& componentId,
-    NMetadata::IInitializationBehaviour::TPtr initializationBehaviour,
-    IInitializerOutput::TPtr controller, std::shared_ptr<NMetadataInitializer::TSnapshot> initializationSnapshot)
+    IInitializationBehaviour::TPtr initializationBehaviour,
+    IInitializerOutput::TPtr controller, std::shared_ptr<TSnapshot> initializationSnapshot)
     : Config(config)
     , InitializationBehaviour(initializationBehaviour)
     , ExternalController(controller)

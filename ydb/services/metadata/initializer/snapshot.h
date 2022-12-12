@@ -4,11 +4,11 @@
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
-class TSnapshot: public NMetadataProvider::ISnapshot {
+class TSnapshot: public NFetcher::ISnapshot {
 private:
-    using TBase = NMetadataProvider::ISnapshot;
+    using TBase = NFetcher::ISnapshot;
     using TObjects = std::map<TDBInitializationKey, TDBInitialization>;
     YDB_READONLY_DEF(TObjects, Objects);
 protected:

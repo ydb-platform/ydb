@@ -1,4 +1,5 @@
 #include "object.h"
+#include "behaviour.h"
 
 #include <ydb/core/tx/tiering/rule/checker.h>
 #include <ydb/core/tx/tiering/snapshot.h>
@@ -13,17 +14,6 @@ NJson::TJsonValue TTieringRule::GetDebugJson() const {
     result.InsertValue(TDecoder::DefaultColumn, DefaultColumn);
     result.InsertValue(TDecoder::Description, SerializeDescriptionToJson());
     return result;
-}
-
-TString TTieringRule::GetInternalStorageTablePath() {
-    return "tiering/rules";
-}
-
-void TTieringRule::AlteringPreparation(std::vector<TTieringRule>&& objects,
-    NMetadataManager::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& context)
-{
-    TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
 }
 
 NJson::TJsonValue TTieringRule::SerializeDescriptionToJson() const {
@@ -51,15 +41,15 @@ bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue & json
     return true;
 }
 
-NKikimr::NMetadataManager::TTableRecord TTieringRule::SerializeToRecord() const {
-    NMetadataManager::TTableRecord result;
-    result.SetColumn(TDecoder::TieringRuleId, NMetadataManager::TYDBValue::Bytes(TieringRuleId));
-    result.SetColumn(TDecoder::DefaultColumn, NMetadataManager::TYDBValue::Bytes(DefaultColumn));
+NMetadata::NInternal::TTableRecord TTieringRule::SerializeToRecord() const {
+    NMetadata::NInternal::TTableRecord result;
+    result.SetColumn(TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Bytes(TieringRuleId));
+    result.SetColumn(TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Bytes(DefaultColumn));
     {
         auto jsonDescription = SerializeDescriptionToJson();
         NJsonWriter::TBuf sout;
         sout.WriteJsonValue(&jsonDescription, true);
-        result.SetColumn(TDecoder::Description, NMetadataManager::TYDBValue::Bytes(sout.Str()));
+        result.SetColumn(TDecoder::Description, NMetadata::NInternal::TYDBValue::Bytes(sout.Str()));
     }
     return result;
 }
@@ -81,25 +71,6 @@ bool TTieringRule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Val
     return true;
 }
 
-NMetadata::TOperationParsingResult TTieringRule::BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::IOperationsManager::TModificationContext& /*context*/) {
-    NKikimr::NMetadataManager::TTableRecord result;
-    result.SetColumn(TDecoder::TieringRuleId, NMetadataManager::TYDBValue::Bytes(settings.GetObjectId()));
-    {
-        auto it = settings.GetFeatures().find(TDecoder::DefaultColumn);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::DefaultColumn, NMetadataManager::TYDBValue::Bytes(it->second));
-        }
-    }
-    {
-        auto it = settings.GetFeatures().find(TDecoder::Description);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TDecoder::Description, NMetadataManager::TYDBValue::Bytes(it->second));
-        }
-    }
-    return result;
-}
-
 NKikimr::NOlap::TTiersInfo TTieringRule::BuildTiersInfo() const {
     NOlap::TTiersInfo result(GetDefaultColumn());
     for (auto&& r : Intervals) {
@@ -117,24 +88,9 @@ bool TTieringRule::ContainsTier(const TString& tierName) const {
     return false;
 }
 
-std::vector<Ydb::Column> TTieringRule::TDecoder::GetPKColumns() {
-    return
-    {
-        NMetadataManager::TYDBColumn::Bytes(TieringRuleId)
-    };
-}
-
-std::vector<Ydb::Column> TTieringRule::TDecoder::GetColumns() {
-    return
-    {
-        NMetadataManager::TYDBColumn::Bytes(TieringRuleId),
-        NMetadataManager::TYDBColumn::Bytes(DefaultColumn),
-        NMetadataManager::TYDBColumn::Bytes(Description)
-    };
-}
-
-std::vector<TString> TTieringRule::TDecoder::GetPKColumnIds() {
-    return { TieringRuleId };
+NMetadata::IClassBehaviour::TPtr TTieringRule::GetBehaviour() {
+    static std::shared_ptr<TTieringRuleBehaviour> result = std::make_shared<TTieringRuleBehaviour>();
+    return result;
 }
 
 }

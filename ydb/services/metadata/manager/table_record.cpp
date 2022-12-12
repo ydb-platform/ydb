@@ -7,7 +7,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NInternal {
 
 bool TTableRecord::CompareColumns(const TTableRecord& item, const std::vector<TString>& columnIds) const {
     for (auto&& i : columnIds) {
@@ -64,7 +64,7 @@ const Ydb::Value* TTableRecord::GetValuePtr(const TString& columnId) const {
     return &it->second;
 }
 
-NKikimr::NMetadataManager::TTableRecord& TTableRecord::SetColumn(const TString& columnId, const Ydb::Value& v) {
+TTableRecord& TTableRecord::SetColumn(const TString& columnId, const Ydb::Value& v) {
     Values[columnId] = v;
     return *this;
 }
@@ -269,7 +269,7 @@ void TTableRecords::AddColumn(const Ydb::Column& c, const Ydb::Value& v) {
     }
 }
 
-NKikimr::NMetadataManager::TTableRecords TTableRecords::SelectColumns(const std::vector<TString>& columnIds) const {
+TTableRecords TTableRecords::SelectColumns(const std::vector<TString>& columnIds) const {
     std::set<TString> columnIdsSet(columnIds.begin(), columnIds.end());
     TTableRecords result;
     std::vector<ui32> idxs;

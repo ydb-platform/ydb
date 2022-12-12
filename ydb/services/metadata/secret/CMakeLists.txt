@@ -21,12 +21,13 @@ target_link_libraries(services-metadata-secret PUBLIC
 )
 target_sources(services-metadata-secret PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/secret.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/checker_secret.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/access.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/checker_access.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/snapshot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/fetcher.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/checker_secret.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/checker_access.cpp
 )
 
 add_global_library_for(services-metadata-secret.global services-metadata-secret)
@@ -41,5 +42,6 @@ target_link_libraries(services-metadata-secret.global PUBLIC
   services-metadata-request
 )
 target_sources(services-metadata-secret.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/secret_behaviour.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/secret/access_behaviour.cpp
 )

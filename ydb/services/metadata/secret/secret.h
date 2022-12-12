@@ -3,7 +3,6 @@
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/services/metadata/abstract/decoder.h>
-#include <ydb/services/metadata/abstract/manager.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
 
@@ -32,11 +31,13 @@ public:
     }
 };
 
-class TSecret: public TSecretId, public NMetadataManager::TObject<TSecret> {
+class TSecret: public TSecretId, public NModifications::TObject<TSecret> {
 private:
     using TBase = TSecretId;
     YDB_ACCESSOR_DEF(TString, Value);
 public:
+    static IClassBehaviour::TPtr GetBehaviour();
+
     class TDecoder: public NInternal::TDecoderBase {
     private:
         YDB_ACCESSOR(i32, OwnerUserIdIdx, -1);
@@ -46,9 +47,6 @@ public:
         static inline const TString OwnerUserId = "ownerUserId";
         static inline const TString SecretId = "secretId";
         static inline const TString Value = "value";
-        static std::vector<TString> GetPKColumnIds();
-        static std::vector<Ydb::Column> GetPKColumns();
-        static std::vector<Ydb::Column> GetColumns();
 
         TDecoder(const Ydb::ResultSet& rawData) {
             OwnerUserIdIdx = GetFieldIndex(rawData, OwnerUserId);
@@ -59,14 +57,8 @@ public:
 
     using TBase::TBase;
 
-    static void AlteringPreparation(std::vector<TSecret>&& objects,
-        NMetadataManager::IAlterPreparationController<TSecret>::TPtr controller,
-        const NMetadata::IOperationsManager::TModificationContext& context);
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue);
-    static TString GetInternalStorageTablePath();
-    NMetadataManager::TTableRecord SerializeToRecord() const;
-    static NMetadata::TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-        const NMetadata::IOperationsManager::TModificationContext& context);
+    NInternal::TTableRecord SerializeToRecord() const;
     static TString GetTypeId() {
         return "SECRET";
     }

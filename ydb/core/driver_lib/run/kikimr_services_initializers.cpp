@@ -2042,15 +2042,15 @@ TMetadataProviderInitializer::TMetadataProviderInitializer(const TKikimrRunConfi
 }
 
 void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NMetadataProvider::TConfig serviceConfig;
+    NMetadata::NProvider::TConfig serviceConfig;
     if (Config.HasMetadataProviderConfig()) {
         Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetMetadataProviderConfig()));
     }
 
     if (serviceConfig.IsEnabled()) {
-        auto service = NMetadataProvider::CreateService(serviceConfig);
+        auto service = NMetadata::NProvider::CreateService(serviceConfig);
         setup->LocalServices.push_back(std::make_pair(
-            NMetadataProvider::MakeServiceId(NodeId),
+            NMetadata::NProvider::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

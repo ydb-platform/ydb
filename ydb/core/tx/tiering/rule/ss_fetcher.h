@@ -39,7 +39,8 @@ private:
     static TFactory::TRegistrator<TFetcherCheckUserTieringPermissions> Registrator;
     YDB_ACCESSOR_DEF(std::set<TString>, TieringRuleIds);
     YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
-    YDB_ACCESSOR(NMetadata::IOperationsManager::EActivityType, ActivityType, NMetadata::IOperationsManager::EActivityType::Undefined);
+    YDB_ACCESSOR(NMetadata::NModifications::IOperationsManager::EActivityType, ActivityType,
+        NMetadata::NModifications::IOperationsManager::EActivityType::Undefined);
 protected:
     virtual TProtoClass DoSerializeToProto() const override;
     virtual bool DoDeserializeFromProto(const TProtoClass& protoData) override;

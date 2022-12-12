@@ -2,7 +2,7 @@
 #include <ydb/services/metadata/request/config.h>
 #include <ydb/services/metadata/request/request_actor.h>
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
 class TACLModifierConstructor;
 
@@ -10,7 +10,7 @@ class ITableModifier {
 private:
     YDB_READONLY_DEF(TString, ModificationId);
 protected:
-    virtual bool DoExecute(const TActorId& resultCallbackId, const NInternal::NRequest::TConfig& config) const = 0;
+    virtual bool DoExecute(const TActorId& resultCallbackId, const NRequest::TConfig& config) const = 0;
 public:
     using TPtr = std::shared_ptr<ITableModifier>;
     virtual ~ITableModifier() = default;
@@ -21,7 +21,7 @@ public:
 
     }
 
-    bool Execute(const TActorId& resultCallbackId, const NInternal::NRequest::TConfig& config) const {
+    bool Execute(const TActorId& resultCallbackId, const NRequest::TConfig& config) const {
         return DoExecute(resultCallbackId, config);
     }
 };
@@ -32,8 +32,8 @@ private:
     using TBase = ITableModifier;
     YDB_READONLY_DEF(typename TDialogPolicy::TRequest, Request);
 protected:
-    virtual bool DoExecute(const TActorId& resultCallbackId, const NInternal::NRequest::TConfig& config) const override {
-        TActivationContext::ActorSystem()->Register(new NInternal::NRequest::TYDBRequest<TDialogPolicy>(Request,
+    virtual bool DoExecute(const TActorId& resultCallbackId, const NRequest::TConfig& config) const override {
+        TActivationContext::ActorSystem()->Register(new NRequest::TYDBRequest<TDialogPolicy>(Request,
             NACLib::TSystemUsers::Metadata(), resultCallbackId, config));
         return true;
     }

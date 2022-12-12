@@ -1,5 +1,5 @@
 #include "alter_impl.h"
 
-namespace NKikimr::NMetadataManager {
+namespace NKikimr::NMetadata::NModifications {
 
 }

@@ -1,10 +1,9 @@
 #include "fetcher.h"
-#include "manager.h"
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
-std::vector<NMetadata::IOperationsManager::TPtr> TFetcher::DoGetManagers() const {
-    return { std::make_shared<TManager>() };
+std::vector<IClassBehaviour::TPtr> TFetcher::DoGetManagers() const {
+    return { TDBInitialization::GetBehaviour() };
 }
 
 }

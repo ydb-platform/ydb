@@ -20,6 +20,7 @@ target_link_libraries(tx-tiering-tier PUBLIC
   core-tx-schemeshard
 )
 target_sources(tx-tiering-tier PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/checker.cpp
@@ -38,5 +39,5 @@ target_link_libraries(tx-tiering-tier.global PUBLIC
   core-tx-schemeshard
 )
 target_sources(tx-tiering-tier.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/behaviour.cpp
 )

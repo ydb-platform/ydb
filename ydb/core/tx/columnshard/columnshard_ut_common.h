@@ -308,7 +308,7 @@ struct TTestSchema {
         return out;
     }
 
-    static NMetadataProvider::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
+    static NMetadata::NFetcher::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64 metaShard, const TVector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
@@ -357,7 +357,7 @@ struct TTestSchema {
 };
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadataProvider::ISnapshot::TPtr snapshot);
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
                const TString& data, std::shared_ptr<arrow::Schema> schema = {});

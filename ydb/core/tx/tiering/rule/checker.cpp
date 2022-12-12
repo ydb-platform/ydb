@@ -56,7 +56,7 @@ void TRulePreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingRe
     }
 }
 
-void TRulePreparationActor::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TRulePreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto snapshot = ev->Get()->GetSnapshotPtrAs<TConfigsSnapshot>()) {
         Tierings = snapshot;
     } else if (auto snapshot = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
@@ -69,10 +69,10 @@ void TRulePreparationActor::Handle(NMetadataProvider::TEvRefreshSubscriberData::
 
 void TRulePreparationActor::Bootstrap() {
     Become(&TThis::StateMain);
-    Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadataProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
-    Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadataProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
     {
         SSFetcher = std::make_shared<TFetcherCheckUserTieringPermissions>();
         SSFetcher->SetUserToken(Context.GetUserToken());
@@ -85,8 +85,8 @@ void TRulePreparationActor::Bootstrap() {
 }
 
 TRulePreparationActor::TRulePreparationActor(std::vector<TTieringRule>&& objects,
-    NMetadataManager::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& context)
+    NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TModificationContext& context)
     : Objects(std::move(objects))
     , Controller(controller)
     , Context(context)

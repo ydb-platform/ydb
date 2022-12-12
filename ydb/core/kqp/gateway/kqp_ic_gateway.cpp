@@ -1382,9 +1382,9 @@ public:
     private:
         TKikimrIcGateway& Owner;
     protected:
-        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
-            NMetadata::IOperationsManager::TPtr manager, const TSettings& settings,
-            const NMetadata::IOperationsManager::TModificationContext& context) = 0;
+        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+            NMetadata::IClassBehaviour::TPtr manager, const TSettings& settings,
+            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) = 0;
         ui32 GetNodeId() const {
             return Owner.NodeId;
         }
@@ -1410,15 +1410,18 @@ public:
                 if (!Owner.GetDatabaseForLoginOperation(database)) {
                     return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
                 }
-                NMetadata::IOperationsManager::TPtr manager(NMetadata::IOperationsManager::TFactory::Construct(settings.GetTypeId()));
-                if (!manager) {
+                NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TFactory::Construct(settings.GetTypeId()));
+                if (!cBehaviour) {
                     return MakeFuture(ResultFromError<TGenericResult>("incorrect object type"));
                 }
-                NMetadata::IOperationsManager::TModificationContext context;
+                if (!cBehaviour->GetOperationsManager()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("type has not manager for operations"));
+                }
+                NMetadata::NModifications::IOperationsManager::TModificationContext context;
                 if (GetUserToken()) {
                     context.SetUserToken(*GetUserToken());
                 }
-                return DoExecute(manager, settings, context).Apply([](const NThreading::TFuture<NMetadata::TObjectOperatorResult>& f) {
+                return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<NMetadata::NModifications::TObjectOperatorResult>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().IsSuccess()) {
                         TGenericResult result;
                         result.SetSuccess();
@@ -1439,11 +1442,11 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TCreateObjectSettings>;
     protected:
-        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
-            NMetadata::IOperationsManager::TPtr manager, const NYql::TCreateObjectSettings& settings,
-            const NMetadata::IOperationsManager::TModificationContext& context) override
+        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+            NMetadata::IClassBehaviour::TPtr manager, const NYql::TCreateObjectSettings& settings,
+            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) override
         {
-            return manager->CreateObject(settings, TBase::GetNodeId(), manager, context);
+            return manager->GetOperationsManager()->CreateObject(settings, TBase::GetNodeId(), manager, context);
         }
     public:
         using TBase::TBase;
@@ -1453,10 +1456,10 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TAlterObjectSettings>;
     protected:
-        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
-            NMetadata::IOperationsManager::TPtr manager, const NYql::TAlterObjectSettings& settings,
-            const NMetadata::IOperationsManager::TModificationContext& context) override {
-            return manager->AlterObject(settings, TBase::GetNodeId(), manager, context);
+        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+            NMetadata::IClassBehaviour::TPtr manager, const NYql::TAlterObjectSettings& settings,
+            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) override {
+            return manager->GetOperationsManager()->AlterObject(settings, TBase::GetNodeId(), manager, context);
         }
     public:
         using TBase::TBase;
@@ -1466,10 +1469,10 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TDropObjectSettings>;
     protected:
-        virtual TFuture<NMetadata::TObjectOperatorResult> DoExecute(
-            NMetadata::IOperationsManager::TPtr manager, const NYql::TDropObjectSettings& settings,
-            const NMetadata::IOperationsManager::TModificationContext& context) override {
-            return manager->DropObject(settings, TBase::GetNodeId(), manager, context);
+        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+            NMetadata::IClassBehaviour::TPtr manager, const NYql::TDropObjectSettings& settings,
+            const NMetadata::NModifications::IOperationsManager::TModificationContext& context) override {
+            return manager->GetOperationsManager()->DropObject(settings, TBase::GetNodeId(), manager, context);
         }
     public:
         using TBase::TBase;

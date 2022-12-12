@@ -1,6 +1,6 @@
 #include "snapshot.h"
 
-namespace NKikimr::NMetadataInitializer {
+namespace NKikimr::NMetadata::NInitializer {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
     Y_VERIFY(rawDataResult.result_sets().size() == 1);

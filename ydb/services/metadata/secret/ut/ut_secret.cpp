@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(Secret) {
 
         STATEFN(StateInit) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+                hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
                 default:
                     Y_VERIFY(false);
             }
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(Secret) {
                 if (event->HasBuffer() && !event->HasEvent()) {
                 } else if (!event->GetBase()) {
                 } else {
-                    auto ptr = dynamic_cast<NMetadataProvider::TEvRefreshSubscriberData*>(event->GetBase());
+                    auto ptr = dynamic_cast<NMetadata::NProvider::TEvRefreshSubscriberData*>(event->GetBase());
                     if (ptr) {
                         CheckFound(ptr);
                     }
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             Y_VERIFY(IsFound());
         }
 
-        void CheckFound(NMetadataProvider::TEvRefreshSubscriberData* event) {
+        void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
             auto snapshot = event->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
             Y_VERIFY(!!snapshot);
             if (ExpectedSecretsCount) {
@@ -127,15 +127,15 @@ Y_UNIT_TEST_SUITE(Secret) {
             FoundFlag = true;
         }
 
-        void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
             CheckFound(ev->Get());
         }
 
         void Bootstrap() {
             auto manager = std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
             Become(&TThis::StateInit);
-            Y_VERIFY(NMetadataProvider::TServiceOperator::IsEnabled());
-            Sender<NMetadataProvider::TEvSubscribeExternal>(manager).SendTo(NMetadataProvider::MakeServiceId(SelfId().NodeId()));
+            Y_VERIFY(NMetadata::NProvider::TServiceOperator::IsEnabled());
+            Sender<NMetadata::NProvider::TEvSubscribeExternal>(manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
             Start = Now();
         }
     };
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(Secret) {
 
             lHelper.StartSchemaRequest("DROP OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)");
-            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initializations`");
+            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`");
 
             emulator->SetExpectedSecretsCount(0).SetExpectedAccessCount(0);
             {
@@ -250,9 +250,9 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@test1` (TYPE SECRET_ACCESS)", false);
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
-            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initializations`");
-            lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initializations`", false);
-            lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initializations`", false);
+            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`");
+            lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initialization/migrations`", false);
+            lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initialization/migrations`", false);
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
         }
     }

@@ -1,7 +1,7 @@
 #pragma once
 #include "accessor_refresh.h"
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
 class TDSAccessorNotifier;
 
@@ -49,7 +49,7 @@ protected:
 public:
     using TBase::Handle;
 
-    TDSAccessorNotifier(const TConfig& config, ISnapshotsFetcher::TPtr sParser)
+    TDSAccessorNotifier(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr sParser)
         : TBase(config, sParser) {
     }
 
@@ -73,7 +73,7 @@ class TExternalData: public TDSAccessorNotifier {
 private:
     using TBase = TDSAccessorNotifier;
 public:
-    TExternalData(const TConfig& config, ISnapshotsFetcher::TPtr sParser)
+    TExternalData(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr sParser)
         : TBase(config, sParser) {
 
     }

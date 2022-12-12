@@ -2,7 +2,7 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TAssignTasksActor::OnSessionId(const TString& sessionId) {
+std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TAssignTasksActor::OnSessionId(const TString& sessionId) {
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     const auto now = TActivationContext::Now();
@@ -38,7 +38,7 @@ std::optional<NInternal::NRequest::TDialogYQLRequest::TRequest> TAssignTasksActo
     return request;
 }
 
-void TAssignTasksActor::OnResult(const NInternal::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
+void TAssignTasksActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
     Controller->AssignFinished();
 }
 

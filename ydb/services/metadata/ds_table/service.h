@@ -11,9 +11,9 @@
 
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
-class TServiceInternalController: public NMetadataInitializer::IInitializerOutput {
+class TServiceInternalController: public NInitializer::IInitializerOutput {
 private:
     const NActors::TActorIdentity ActorId;
 public:
@@ -30,7 +30,7 @@ class TManagersId {
 private:
     YDB_READONLY_DEF(std::set<TString>, ManagerIds);
 public:
-    TManagersId(const std::vector<NMetadata::IOperationsManager::TPtr>& managers) {
+    TManagersId(const std::vector<IClassBehaviour::TPtr>& managers) {
         for (auto&& i : managers) {
             ManagerIds.emplace(i->GetTypeId());
         }
@@ -97,26 +97,26 @@ private:
     bool PreparationFlag = false;
     std::map<TString, NActors::TActorId> Accessors;
     std::map<TManagersId, std::deque<TWaitEvent>> EventsWaiting;
-    std::map<TString, NMetadata::IOperationsManager::TPtr> ManagersInRegistration;
-    std::map<TString, NMetadata::IOperationsManager::TPtr> RegisteredManagers;
+    std::map<TString, IClassBehaviour::TPtr> ManagersInRegistration;
+    std::map<TString, IClassBehaviour::TPtr> RegisteredManagers;
 
-    std::shared_ptr<NMetadataInitializer::TFetcher> InitializationFetcher;
-    std::shared_ptr<NMetadataInitializer::TSnapshot> InitializationSnapshot;
+    std::shared_ptr<NInitializer::TFetcher> InitializationFetcher;
+    std::shared_ptr<NInitializer::TSnapshot> InitializationSnapshot;
     std::shared_ptr<TServiceInternalController> InternalController;
     const TConfig Config;
 
-    void Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev);
+    void Handle(NInitializer::TEvInitializationFinished::TPtr& ev);
     void Handle(TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvAskSnapshot::TPtr& ev);
     void Handle(TEvPrepareManager::TPtr& ev);
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvObjectsOperation::TPtr& ev);
-    void PrepareManagers(std::vector<NMetadata::IOperationsManager::TPtr> manager, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
+    void PrepareManagers(std::vector<IClassBehaviour::TPtr> manager, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
 
     template <class TEventPtr, class TAction>
     void ProcessEventWithFetcher(TEventPtr& ev, TAction action) {
-        std::vector<NMetadata::IOperationsManager::TPtr> needManagers;
+        std::vector<IClassBehaviour::TPtr> needManagers;
         for (auto&& i : ev->Get()->GetFetcher()->GetManagers()) {
             if (!RegisteredManagers.contains(i->GetTypeId())) {
                 needManagers.emplace_back(i);
@@ -146,7 +146,7 @@ public:
             hFunc(TEvPrepareManager, Handle);
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
-            hFunc(NMetadataInitializer::TEvInitializationFinished, Handle);
+            hFunc(NInitializer::TEvInitializationFinished, Handle);
             default:
                 Y_VERIFY(false);
         }

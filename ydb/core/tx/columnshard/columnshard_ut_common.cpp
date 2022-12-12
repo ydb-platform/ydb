@@ -42,8 +42,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.UpdateCurrentTime(TInstant::Now());
 }
 
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadataProvider::ISnapshot::TPtr snapshot) {
-    auto event = std::make_unique<NMetadataProvider::TEvRefreshSubscriberData>(snapshot);
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot) {
+    auto event = std::make_unique<NMetadata::NProvider::TEvRefreshSubscriberData>(snapshot);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 }
@@ -291,7 +291,7 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
-NMetadataProvider::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
+NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     std::unique_ptr<NColumnShard::NTiers::TConfigsSnapshot> cs(new NColumnShard::NTiers::TConfigsSnapshot(Now()));
     if (specials.Tiers.empty()) {
         return cs;

@@ -7,9 +7,9 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TSnapshot: public NMetadataProvider::ISnapshot {
+class TSnapshot: public NFetcher::ISnapshot {
 private:
-    using TBase = NMetadataProvider::ISnapshot;
+    using TBase = NFetcher::ISnapshot;
     using TSecrets = std::map<TSecretId, TSecret>;
     YDB_READONLY_DEF(TSecrets, Secrets);
     YDB_READONLY_DEF(std::vector<TAccess>, Access);

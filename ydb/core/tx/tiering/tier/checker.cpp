@@ -16,7 +16,7 @@ void TTierPreparationActor::StartChecker() {
         return;
     }
     for (auto&& tier : Objects) {
-        if (Context.GetActivityType() == NMetadata::IOperationsManager::EActivityType::Drop) {
+        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
             std::set<TString> tieringsWithTiers;
             for (auto&& i : Tierings->GetTableTierings()) {
                 if (i.second.ContainsTier(tier.GetTierName())) {
@@ -60,7 +60,7 @@ void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingRe
     }
 }
 
-void TTierPreparationActor::Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev) {
+void TTierPreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     if (auto snapshot = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
         Secrets = snapshot;
     } else if (auto snapshot = ev->Get()->GetSnapshotPtrAs<TConfigsSnapshot>()) {
@@ -93,15 +93,15 @@ void TTierPreparationActor::Handle(NMetadataProvider::TEvRefreshSubscriberData::
 
 void TTierPreparationActor::Bootstrap() {
     Become(&TThis::StateMain);
-    Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadataProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
-    Send(NMetadataProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadataProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
 }
 
 TTierPreparationActor::TTierPreparationActor(std::vector<TTierConfig>&& objects,
-    NMetadataManager::IAlterPreparationController<TTierConfig>::TPtr controller,
-    const NMetadata::IOperationsManager::TModificationContext& context)
+    NMetadata::NModifications::IAlterPreparationController<TTierConfig>::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TModificationContext& context)
     : Objects(std::move(objects))
     , Controller(controller)
     , Context(context)

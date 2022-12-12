@@ -60,7 +60,7 @@ private:
     std::set<TString> CurrentTaskIds;
     TExecutorController::TPtr InternalController;
 protected:
-    void Handle(NMetadataInitializer::TEvInitializationFinished::TPtr& ev);
+    void Handle(NMetadata::NInitializer::TEvInitializationFinished::TPtr& ev);
     void Handle(TEvStartAssign::TPtr& ev);
     void Handle(TEvAssignFinished::TPtr& ev);
     void Handle(TEvFetchingFinished::TPtr& ev);
@@ -70,11 +70,11 @@ protected:
     void Handle(TEvUpdateTaskEnabled::TPtr& ev);
     void Handle(TEvLockPingerStart::TPtr& ev);
     void Handle(TEvLockPingerFinished::TPtr& ev);
-    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadataInitializer::TEvInitializationFinished, Handle);
+            hFunc(NMetadata::NInitializer::TEvInitializationFinished, Handle);
             hFunc(TEvStartAssign, Handle);
             hFunc(TEvAssignFinished, Handle);
             hFunc(TEvFetchingFinished, Handle);
@@ -83,7 +83,7 @@ protected:
             hFunc(TEvTaskExecutorFinished, Handle);
             hFunc(TEvLockPingerStart, Handle);
             hFunc(TEvLockPingerFinished, Handle);
-            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             default:
                 break;
         }

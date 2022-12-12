@@ -25,10 +25,10 @@ private:
     std::set<TString> TiersWait;
     NBackgroundTasks::ITaskExecutorController::TPtr Controller;
 
-    NMetadataProvider::ISnapshotsFetcher::TPtr GetTieringSnapshotParser() const;
-    NMetadataProvider::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() const;
+    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetTieringSnapshotParser() const;
+    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() const;
 protected:
-    void Handle(NMetadataProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvTierCleared::TPtr& ev);
 public:
     TPathCleaner(const TString& tieringId, const ui64 pathId, NBackgroundTasks::ITaskExecutorController::TPtr controller);
@@ -39,7 +39,7 @@ public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadataProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             hFunc(TEvTierCleared, Handle);
             default:
                 break;

@@ -2,7 +2,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <util/generic/ylimits.h>
 
-namespace NKikimr::NMetadataProvider {
+namespace NKikimr::NMetadata::NProvider {
 
 bool TConfig::DeserializeFromProto(const NKikimrConfig::TMetadataProviderConfig& config) {
     if (config.HasPath()) {

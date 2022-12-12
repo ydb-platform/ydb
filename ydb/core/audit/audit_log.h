@@ -25,10 +25,10 @@
 
 #define AUDIT_LOG(expr) AUDIT_LOG_S((TlsActivationContext->ExecutorThread.ActorSystem), expr)
 
-#define AUDIT_PART_NO_COND(key, value) auditParts.push_back({key, value});
-#define AUDIT_PART_COND(key, value, condition)                                                                                      \
+#define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
+#define AUDIT_PART_COND(key, value, condition)                                                                                    \
     do {                                                                                                                          \
-        if (condition && !value.Empty()) {                                                                                        \
+        if (condition && !value.empty()) {                                                                                        \
             auditParts.push_back({key, value});                                                                                   \
         }                                                                                                                         \
     } while (0);

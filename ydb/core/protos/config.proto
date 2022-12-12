@@ -1401,7 +1401,7 @@ message TAuditConfig {
     }
 
     optional string AuditFilePath = 1;
-    optional EFormat Format = 2;
+    optional EFormat Format = 2 [default = JSON];
 };
 
 message THiveTabletLimit {

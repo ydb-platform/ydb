@@ -85,7 +85,14 @@ void MakeAuditLog(const TTxId& txId, const THolder<TProposeResponse>& response, 
             AUDIT_PART("subject", context.GetSubject())
             AUDIT_PART("status", NKikimrScheme::EStatus_Name(response->Record.GetStatus()))
             AUDIT_PART("reason", response->Record.GetReason(), response->Record.HasReason())
-            AUDIT_PART("operation", (*it).ToString())
+            AUDIT_PART("operation", it->GetOperation())
+            AUDIT_PART("path", it->GetPath())
+            AUDIT_PART("src path", it->GetSrcPath())
+            AUDIT_PART("dst path", it->GetDstPath())
+            AUDIT_PART("set owner", it->GetSetOwner())
+            AUDIT_PART("add access", it->GetAddAccess())
+            AUDIT_PART("remove access", it->GetRemoveAccess())
+            AUDIT_PART("protobuf request", it->GetProtoRequest())
         );
     }
 }

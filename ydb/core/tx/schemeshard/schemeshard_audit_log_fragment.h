@@ -26,7 +26,14 @@ struct TAuditLogFragment {
     void FillPathes(const NKikimrSchemeOp::TModifyScheme& tx);
 
     TString GetAnyPath() const;
-    TString ToString() const;
+    TString GetOperation() const;
+    TString GetPath() const;
+    TString GetSrcPath() const;
+    TString GetDstPath() const;
+    TString GetSetOwner() const;
+    TString GetAddAccess() const;
+    TString GetRemoveAccess() const;
+    TString GetProtoRequest() const;
 };
 
 }

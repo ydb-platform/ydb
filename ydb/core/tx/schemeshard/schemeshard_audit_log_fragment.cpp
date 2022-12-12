@@ -492,41 +492,86 @@ TString TAuditLogFragment::GetAnyPath() const {
     }
 }
 
-TString TAuditLogFragment::ToString() const {
+TString TAuditLogFragment::GetOperation() const {
+    return Operation;
+}
+
+TString TAuditLogFragment::GetPath() const {
+    if (!Path && SrcPaths && DstPaths) {
+        return "";
+    }
+    return Path.GetOrElse("");
+}
+
+TString TAuditLogFragment::GetSrcPath() const {
+    Y_VERIFY_DEBUG(SrcPaths.size() == DstPaths.size());
+    auto minSize = Min(SrcPaths.size(), DstPaths.size());
+    if (minSize == 0)
+        return "";
+
     auto result = TStringBuilder();
-
-    result << "operation: " << Operation;
-
-    if (Path) {
-        result << ", path: " << Path;
-    } else if (SrcPaths && DstPaths) {
-        Y_VERIFY_DEBUG(SrcPaths.size() == DstPaths.size());
-        auto minSize = Min(SrcPaths.size(), DstPaths.size());
-        for (size_t i = 0; i < minSize; ++i) {
-            result << ", src path: " << SrcPaths[i];
-            result << ", dst path: " << DstPaths[i];
-        }
-    } else {
-        result << ", no path";
+    result << "{";
+    for (size_t i = 0; i < minSize; ++i) {
+        result << SrcPaths[i];
+        if (i < minSize - 1)
+            result << ", ";
     }
-
-    if (NewOwner) {
-        result << ", set owner: " << NewOwner;
-    }
-
-    for (const auto& acl : AddACL)  {
-        result << ", add access: " << acl;
-    }
-
-    for (const auto& acl : RmACL)  {
-        result << ", remove access: " << acl;
-    }
-
-    if (ProtoRequest) {
-        result << ", protobuf request: " << ProtoRequest;
-    }
-
+    result << "}";
     return result;
 }
 
+TString TAuditLogFragment::GetDstPath() const {
+    Y_VERIFY_DEBUG(SrcPaths.size() == DstPaths.size());
+    auto minSize = Min(SrcPaths.size(), DstPaths.size());
+    if (minSize == 0)
+        return "";
+
+    auto result = TStringBuilder();
+    result << "{";
+    for (size_t i = 0; i < minSize; ++i) {
+        result << DstPaths[i];
+        if (i < minSize - 1)
+            result << ", ";
+    }
+    result << "}";
+    return result;
+}
+
+TString TAuditLogFragment::GetSetOwner() const {
+    return NewOwner.GetOrElse("");
+}
+
+TString TAuditLogFragment::GetAddAccess() const {
+    if (AddACL.empty())
+        return "";
+
+    auto result = TStringBuilder();
+    result << "{";
+    for (size_t i = 0; i < AddACL.size(); ++i) {
+        result << AddACL[i];
+        if (i < AddACL.size() - 1)
+            result << ", ";
+    }
+    result << "}";
+    return result;
+}
+
+TString TAuditLogFragment::GetRemoveAccess() const {
+    if (RmACL.empty())
+        return "";
+
+    auto result = TStringBuilder();
+    result << "{";
+    for (size_t i = 0; i < RmACL.size(); ++i) {
+        result << RmACL[i];
+        if (i < RmACL.size() - 1)
+            result << ", ";
+    }
+    result << "}";
+    return result;
+}
+
+TString TAuditLogFragment::GetProtoRequest() const {
+    return ProtoRequest.GetOrElse("");
+}
 }

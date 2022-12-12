@@ -51,6 +51,7 @@ message TConfig {
     optional uint32 PerformanceProfileMaxPostponedWeight = 44;
     optional uint32 PerformanceProfileMaxWriteCostMultiplier = 45;
     optional uint32 PerformanceProfileMaxPostponedTime = 46;
+    optional uint32 PerformanceProfileMaxPostponedCount = 47;
 }
 
 message TUpdateConfig {

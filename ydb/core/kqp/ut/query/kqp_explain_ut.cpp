@@ -774,10 +774,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/OlapTable` (
-                Key Int32,
+                Key Int32 NOT NULL,
                 Value Int64,
                 PRIMARY KEY (Key)
             )
+            PARTITION BY HASH(Key)
             WITH (STORE = COLUMN);
         )").GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());

@@ -61,5 +61,9 @@
   }
   ```
 
+- Node.js
+
+  {% include [static](../../../../_includes/nodejs/recipes/auth/static.md) %}
+
 
 {% endlist %}

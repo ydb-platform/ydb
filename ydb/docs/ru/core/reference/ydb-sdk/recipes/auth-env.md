@@ -97,4 +97,8 @@
   }
   ```
 
+- Node.js
+
+  {% include [env](../../../../_includes/nodejs/recipes/auth/env.md) %}
+
 {% endlist %}

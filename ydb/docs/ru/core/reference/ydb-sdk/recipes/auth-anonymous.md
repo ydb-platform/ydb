@@ -89,4 +89,8 @@
   }
   ```
 
+- Node.js
+
+  {% include [anonymous](../../../../_includes/nodejs/recipes/auth/anonymous.md) %}
+
 {% endlist %}

@@ -98,4 +98,8 @@ Below are examples of the code for authentication using environment variables in
    }
    ```
 
+- Node.js
+
+  {% include [env](../../../../_includes/nodejs/recipes/auth/env.md) %}
+
 {% endlist %}

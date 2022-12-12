@@ -94,4 +94,16 @@ Below are examples of the code for authentication using a service account file i
   }
   ```
 
+- Node.js
+  
+  ### Load service account data from file
+
+  {% include [service-account-file](../../../../_includes/nodejs/recipes/auth/service-account-file.md) %}
+
+  ### Load service account data from other source
+
+  When you need to load service account data from the outside, for example, from the secrets vault, this method is suitable:
+
+  {% include [service-account-data](../../../../_includes/nodejs/recipes/auth/service-account-data.md) %}
+
 {% endlist %}

@@ -116,4 +116,8 @@
   }
   ```
 
+- Node.js
+
+  {% include [access-token](../../../../_includes/nodejs/recipes/auth/access-token.md) %}
+
 {% endlist %}

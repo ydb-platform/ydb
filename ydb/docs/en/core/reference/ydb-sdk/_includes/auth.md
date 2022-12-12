@@ -61,6 +61,7 @@ You can click any of the methods below to go to the source code of an example in
    | Access Token | [TokenAuthService( accessToken, database )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/access-token-credentials) |
    | Metadata | [MetadataAuthService( database )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/metadata-credentials) |
    | Service Account Key | [getSACredentialsFromJson( saKeyFile )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/service-account-credentials) |
+   | User+Password | [StaticCredentialsAuthService( user, password, endpoint )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/static-credentials) |
    | Determined by environment variables | [getCredentialsFromEnv( entryPoint, database, logger )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/environ) |
 
 - Rust

@@ -90,4 +90,8 @@
   }
   ```
 
+- Node.js
+
+  {% include [metadata](../../../../_includes/nodejs/recipes/auth/metadata.md) %}
+
 {% endlist %}

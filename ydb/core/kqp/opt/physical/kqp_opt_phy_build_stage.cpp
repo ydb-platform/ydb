@@ -317,7 +317,7 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
             programArgs.push_back(argument.Cast<TCoArgument>());
         }
     } else {
-        argument = read.Ranges();
+        rangesExpr = argument = read.Ranges();
     }
 
     TMaybeNode<TExprBase> phyRead;

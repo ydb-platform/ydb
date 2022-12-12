@@ -1971,10 +1971,32 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CompareYson("[[%false]]", StreamResultToYson(result));
     }
 
+    Y_UNIT_TEST(DqSourceFullScan) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        TFeatureFlags flags;
+        flags.SetEnablePredicateExtractForScanQueries(true);
+        settings.SetFeatureFlags(flags);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        CreateSampleTables(kikimr);
+
+        {
+            auto result = db.StreamExecuteScanQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard`;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(DqSource) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         TFeatureFlags flags;
         flags.SetEnablePredicateExtractForScanQueries(true);

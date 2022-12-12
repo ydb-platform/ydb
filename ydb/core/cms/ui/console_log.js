@@ -242,7 +242,7 @@ function loadConsoleLog(reverse) {
     }
 
     if (ConsoleLogState.affected !== undefined) {
-        url += '&affected=' + ConsoleLogState.affected;
+        url += '&affected-kinds=' + ConsoleLogState.affected;
     }
 
     if (reverse) {

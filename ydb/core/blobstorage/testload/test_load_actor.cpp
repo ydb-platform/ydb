@@ -49,7 +49,6 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         int SubRequestId; // origin subrequest id
         TMap<TActorId, TActorInfo> ActorMap; // per-actor status
         ui32 HttpInfoResPending; // number of requests pending
-        TString ErrorMessage;
         TString Mode; // mode of page content
     };
 
@@ -308,7 +307,7 @@ public:
         AllNodesLoadConfigs.push_back(record);
         const TActorId nameserviceId = GetNameserviceActorId();
         bool sendStatus = ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "send status: " << sendStatus);
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "TEvListNodes have sent, status: " << sendStatus);
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -326,9 +325,9 @@ public:
         info.Origin = ev->Sender;
         info.SubRequestId = ev->Get()->SubRequestId;
         info.Mode = mode;
-        info.ErrorMessage.clear();
 
         if (params.Has("protobuf")) {
+            TString errorMsg = "ok";
             NKikimr::TEvTestLoadRequest record;
             bool status = google::protobuf::TextFormat::ParseFromString(params.Get("protobuf"), &record);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST,
@@ -337,7 +336,7 @@ public:
             );
             ui64 tag = 0;
             if (status) {
-                if (params.Has("run_all") && params.Get("run_all") == "on") {
+                if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
                     LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on all nodes");
                     RunRecordOnAllNodes(record, ctx);
                     tag = NextTag; // may be datarace here
@@ -346,27 +345,27 @@ public:
                         LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on node: " << SelfId().NodeId());
                         tag = ProcessCmd(record, ctx);
                     } catch (const TLoadActorException& ex) {
-                        info.ErrorMessage = ex.what();
+                        errorMsg = ex.what();
                     }
                 }
             } else {
-                info.ErrorMessage = "bad protobuf";
+                errorMsg = "bad protobuf";
             }
 
-            GenerateJsonTagInfoRes(ctx, id, tag);
+            GenerateJsonTagInfoRes(ctx, id, tag, errorMsg);
             return;
         } else if (params.Has("stop_request")) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
             NKikimr::TEvTestLoadRequest record;
             record.MutableLoadStop()->SetRemoveAllTags(true);
-            if (params.Has("stop_all_nodes") && params.Get("stop_all_nodes") == "on") {
+            if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
                 RunRecordOnAllNodes(record, ctx);
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on node: " << SelfId().NodeId());
                 ProcessCmd(record, ctx);
             }
-            GenerateJsonTagInfoRes(ctx, id, 0);
+            GenerateJsonTagInfoRes(ctx, id, 0, "OK");
             return;
         } else if (mode == "results_json") {
             GenerateJsonInfoRes(ctx, id);
@@ -431,7 +430,7 @@ public:
         }
     }
 
-    void GenerateJsonTagInfoRes(const TActorContext& ctx, ui32 id, ui64 tag) {
+    void GenerateJsonTagInfoRes(const TActorContext& ctx, ui32 id, ui64 tag, TString errorMsg) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
@@ -439,8 +438,10 @@ public:
         TStringStream str;
         str << NMonitoring::HTTPOKJSON;
         NJson::TJsonValue value;
-        value["tag"] = tag;
-        value["status"] = "OK";
+        if (tag) {
+            value["tag"] = tag;
+        }
+        value["status"] = errorMsg;
         NJson::WriteJson(&str, &value);
 
         auto result = std::make_unique<NMon::TEvHttpInfoRes>(str.Str(), info.SubRequestId,
@@ -479,11 +480,6 @@ public:
 
         TStringStream str;
         HTML(str) {
-            if (info.ErrorMessage) {
-                DIV() {
-                    str << "<h1>" << info.ErrorMessage << "</h1>";
-                }
-            }
             auto printTabs = [&](TString link, TString name) {
                 TString type = link == mode ? "btn-info" : "btn-default";
                 str << "<a href='?mode=" << link << "' class='btn " << type << "'>" << name << "</a>\n";
@@ -498,39 +494,41 @@ public:
             if (mode == "start_load") {
                 str << R"___(
                     <script>
-                        function sendStartRequest(button) {
+                        function sendStartRequest(button, run_all) {
                             $.ajax({
                                 url: "",
                                 data: {
                                     protobuf: $('#protobuf').val(),
-                                    run_all: $('#runAllNodes:checked').val()
+                                    all_nodes: run_all
                                 },
                                 method: "GET",
                                 dataType: "html",
                                 success: function(result) {
                                     $(button).prop('disabled', true);
-                                    $(button).text("started");
-                                    $("#protobuf").text(result);
+                                    $(button).text('started');
+                                    $('#protobuf').text(result);
                                 }
                             });
                         }
                     </script>
                 )___";
-                str << R"(<textarea id="protobuf" name="protobuf" rows="20" cols="50">)";
-                str << NKqpConstants::DEFAULT_PROTO;
-                str << "</textarea><br>";
-                str << R"(<input type="checkbox" id="runAllNodes" name="runAll"> )";
-                str << R"(<label for="runAllNodes"> Run on all nodes</label>)" << "<br><br>";
-                str << R"(<button onClick='sendStartRequest(this)' name='startNewLoad' class='btn btn-default'>Start new load</button>)" << "<br><br>";
+                str << R"_(
+                    <textarea id="protobuf" name="protobuf" rows="20" cols="50">)_" << NKqpConstants::DEFAULT_PROTO << R"_(
+                    </textarea>
+                    <br><br>
+                    <button onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>Start new load on current node</button>
+                    <br>
+                    <button onClick='sendStartRequest(this, true)' name='startNewLoadAllNodes' class='btn btn-default'>Start new load on all tenant nodes</button>
+                )_";
             } else if (mode == "stop_load") {
                 str << R"___(
                     <script>
-                        function sendStopRequest(button) {
+                        function sendStopRequest(button, stop_all) {
                             $.ajax({
                                 url: "",
                                 data: {
                                     stop_request: true,
-                                    stop_all_nodes: $('#stopAllNodes:checked').val()
+                                    all_nodes: stop_all
                                 },
                                 method: "GET",
                                 dataType: "html",
@@ -542,9 +540,12 @@ public:
                         }
                     </script>
                 )___";
-                str << R"(<input type="checkbox" id="stopAllNodes" name="stopAll"> )";
-                str << R"(<label for="stopAllNodes"> Stop load on all nodes</label>)" << "<br><br>";
-                str << R"(<button onClick='sendStopRequest(this)' name='stopNewLoad' class='btn btn-default'>Stop load</button>)" << "<br><br>";
+                str << R"_(
+                    <br><br>
+                    <button onClick='sendStopRequest(this, false)' name='stopNewLoadOneNode' class='btn btn-default'>Stop load on current node</button>
+                    <br>
+                    <button onClick='sendStopRequest(this, true)' name='stopNewLoadAllNodes' class='btn btn-default'>Stop load on all tenant nodes</button>
+                )_";
             } else if (mode == "results") {
                 for (auto it = info.ActorMap.rbegin(); it != info.ActorMap.rend(); ++it) {
                     const TActorInfo& perActorInfo = it->second;

@@ -485,10 +485,10 @@ TStringBuf GetKeyView(const TSSOKey& key) {
     return key.AsView();
 }
 
-template <typename TKey, bool UseSet>
-class TBlockCombineHashedWrapper : public TStatefulWideFlowComputationNode<TBlockCombineHashedWrapper<TKey, UseSet>> {
+template <typename TKey, bool UseSet, bool UseFilter>
+class TBlockCombineHashedWrapper : public TStatefulWideFlowComputationNode<TBlockCombineHashedWrapper<TKey, UseSet, UseFilter>> {
 public:
-    using TSelf = TBlockCombineHashedWrapper<TKey, UseSet>;
+    using TSelf = TBlockCombineHashedWrapper<TKey, UseSet, UseFilter>;
     using TBase = TStatefulWideFlowComputationNode<TSelf>;
 
     TBlockCombineHashedWrapper(TComputationMutables& mutables,
@@ -508,6 +508,11 @@ public:
         , AggsParams_(std::move(aggsParams))
     {
         MKQL_ENSURE(Width_ > 0, "Missing block length column");
+        if constexpr (UseFilter) {
+            MKQL_ENSURE(filterColumn, "Missing filter column");
+        } else {
+            MKQL_ENSURE(!filterColumn, "Unexpected filter column");
+        }
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
@@ -529,6 +534,23 @@ public:
                     continue;
                 }
 
+                const ui8* filterBitmap = nullptr;
+                if constexpr (UseFilter) {
+                    auto filterDatum = TArrowBlock::From(s.Values_[*FilterColumn_]).GetDatum();
+                    if (filterDatum.is_scalar()) {
+                        if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
+                            continue;
+                        }
+                    } else {
+                        const auto& arr = filterDatum.array();
+                        filterBitmap = arr->template GetValues<ui8>(1);
+                        ui64 popCount = GetBitmapPopCount(arr);
+                        if (popCount == 0) {
+                            continue;
+                        }
+                    }
+                }
+
                 s.HasValues_ = true;
                 TVector<arrow::Datum> keysDatum;
                 keysDatum.reserve(Keys_.size());
@@ -539,6 +561,12 @@ public:
                 TOutputBuffer out;
                 out.Resize(sizeof(TKey));
                 for (ui64 row = 0; row < batchLength; ++row) {
+                    if constexpr (UseFilter) {
+                        if (filterBitmap && !filterBitmap[row]) {
+                            continue;
+                        }
+                    }
+
                     out.Rewind();
                     // encode key
                     for (ui32 i = 0; i < keysDatum.size(); ++i) {
@@ -742,7 +770,7 @@ void FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, TVector<TAggPa
     }
 }
 
-template <bool UseSet>
+template <bool UseSet, bool UseFilter>
 IComputationNode* MakeBlockCombineHashedWrapper(
     ui32 totalKeysSize,
     TComputationMutables& mutables,
@@ -753,14 +781,14 @@ IComputationNode* MakeBlockCombineHashedWrapper(
     std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
     TVector<TAggParams>&& aggsParams) {
     if (totalKeysSize <= sizeof(ui32)) {
-        return new TBlockCombineHashedWrapper<ui32, UseSet>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return new TBlockCombineHashedWrapper<ui32, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
     }
 
     if (totalKeysSize <= sizeof(ui64)) {
-        return new TBlockCombineHashedWrapper<ui64, UseSet>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+        return new TBlockCombineHashedWrapper<ui64, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
     }
 
-    return new TBlockCombineHashedWrapper<TSSOKey, UseSet>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
+    return new TBlockCombineHashedWrapper<TSSOKey, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams));
 }
 
 }
@@ -903,10 +931,18 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
         }
     }
 
-    if (aggsParams.size() == 0) {
-        return MakeBlockCombineHashedWrapper<true>(totalKeysSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+    if (filterColumn) {
+        if (aggsParams.size() == 0) {
+            return MakeBlockCombineHashedWrapper<true, true>(totalKeysSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        } else {
+            return MakeBlockCombineHashedWrapper<false, true>(totalKeysSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        }
     } else {
-        return MakeBlockCombineHashedWrapper<false>(totalKeysSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        if (aggsParams.size() == 0) {
+            return MakeBlockCombineHashedWrapper<true, false>(totalKeysSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        } else {
+            return MakeBlockCombineHashedWrapper<false, false>(totalKeysSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+        }
     }
 }
 

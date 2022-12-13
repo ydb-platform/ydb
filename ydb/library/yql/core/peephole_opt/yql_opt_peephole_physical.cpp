@@ -4881,7 +4881,7 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
         .Build();
 }
 
-TExprNode::TPtr UpdateBlockCombineAllColumns(const TExprNode::TPtr& node, std::optional<ui32> filterColumn, const TVector<ui32>& argIndices, TExprContext& ctx) {
+TExprNode::TPtr UpdateBlockCombineColumns(const TExprNode::TPtr& node, std::optional<ui32> filterColumn, const TVector<ui32>& argIndices, TExprContext& ctx) {
     auto combineChildren = node->ChildrenList();
     combineChildren[0] = node->Head().HeadPtr();
     if (filterColumn) {
@@ -4889,11 +4889,22 @@ TExprNode::TPtr UpdateBlockCombineAllColumns(const TExprNode::TPtr& node, std::o
         combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(*filterColumn));
     } else {
         if (!combineChildren[1]->IsCallable("Void")) {
-            combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(combineChildren[2]->Content())]));
+            combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(combineChildren[1]->Content())]));
         }
     }
 
-    auto payloadNodes = combineChildren[2]->ChildrenList();
+    const bool hashed = node->Content().EndsWith("Hashed");
+    if (hashed) {
+        auto keyNodes = combineChildren[2]->ChildrenList();
+        for (auto& p : keyNodes) {
+            p = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(p->Content())]));
+        }
+
+        combineChildren[2] = ctx.ChangeChildren(*combineChildren[2], std::move(keyNodes));
+    }
+
+    auto payloadIndex = hashed ? 3 : 2;
+    auto payloadNodes = combineChildren[payloadIndex]->ChildrenList();
     for (auto& p : payloadNodes) {
         YQL_ENSURE(p->IsList() && p->ChildrenSize() >= 1 && p->Head().IsCallable("AggBlockApply"), "Expected AggBlockApply");
         auto payloadArgs = p->ChildrenList();
@@ -4904,11 +4915,11 @@ TExprNode::TPtr UpdateBlockCombineAllColumns(const TExprNode::TPtr& node, std::o
         p = ctx.ChangeChildren(*p, std::move(payloadArgs));
     }
 
-    combineChildren[2] = ctx.ChangeChildren(*combineChildren[2], std::move(payloadNodes));
+    combineChildren[payloadIndex] = ctx.ChangeChildren(*combineChildren[payloadIndex], std::move(payloadNodes));
     return ctx.ChangeChildren(*node, std::move(combineChildren));
 }
 
-TExprNode::TPtr OptimizeBlockCombineAll(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeBlockCombine(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     if (node->Head().IsCallable("WideMap")) {
         const auto& lambda = node->Head().Tail();
@@ -4916,7 +4927,7 @@ TExprNode::TPtr OptimizeBlockCombineAll(const TExprNode::TPtr& node, TExprContex
         bool onlyArguments = IsArgumentsOnlyLambda(lambda, argIndices);
         if (onlyArguments) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Drop renaming WideMap under " << node->Content();
-            return UpdateBlockCombineAllColumns(node, {}, argIndices, ctx);
+            return UpdateBlockCombineColumns(node, {}, argIndices, ctx);
         }
     }
 
@@ -4929,7 +4940,7 @@ TExprNode::TPtr OptimizeBlockCombineAll(const TExprNode::TPtr& node, TExprContex
         }
 
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content();
-        return UpdateBlockCombineAllColumns(node, filterIndex, argIndices, ctx);
+        return UpdateBlockCombineColumns(node, filterIndex, argIndices, ctx);
     }
 
     return node;
@@ -6713,7 +6724,8 @@ struct TPeepHoleRules {
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"Skip", &OptimizeSkipTakeToBlocks},
         {"Take", &OptimizeSkipTakeToBlocks},
-        {"BlockCombineAll", &OptimizeBlockCombineAll},
+        {"BlockCombineAll", &OptimizeBlockCombine},
+        {"BlockCombineHashed", &OptimizeBlockCombine},
     };
 
     TPeepHoleRules()

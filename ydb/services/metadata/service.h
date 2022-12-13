@@ -4,7 +4,7 @@
 
 namespace NKikimr::NMetadata::NProvider {
 
-class TEvObjectsOperation: public NActors::TEventLocal<TEvObjectsOperation, EEvSubscribe::EvAlterObjects> {
+class TEvObjectsOperation: public NActors::TEventLocal<TEvObjectsOperation, EEvents::EvAlterObjects> {
 private:
     YDB_READONLY_DEF(NModifications::IAlterCommand::TPtr, Command);
 public:
@@ -14,7 +14,7 @@ public:
     }
 };
 
-class TEvPrepareManager: public NActors::TEventLocal<TEvPrepareManager, EEvSubscribe::EvPrepareManager> {
+class TEvPrepareManager: public NActors::TEventLocal<TEvPrepareManager, EEvents::EvPrepareManager> {
 private:
     YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
 public:
@@ -24,7 +24,7 @@ public:
     }
 };
 
-class TEvManagerPrepared: public NActors::TEventLocal<TEvManagerPrepared, EEvSubscribe::EvManagerPrepared> {
+class TEvManagerPrepared: public NActors::TEventLocal<TEvManagerPrepared, EEvents::EvManagerPrepared> {
 private:
     YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
 public:
@@ -34,7 +34,7 @@ public:
     }
 };
 
-class TEvAskSnapshot: public NActors::TEventLocal<TEvAskSnapshot, EEvSubscribe::EvAskExternal> {
+class TEvAskSnapshot: public NActors::TEventLocal<TEvAskSnapshot, EEvents::EvAskExternal> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
 public:
@@ -44,7 +44,7 @@ public:
     }
 };
 
-class TEvSubscribeExternal: public NActors::TEventLocal<TEvSubscribeExternal, EEvSubscribe::EvSubscribeExternal> {
+class TEvSubscribeExternal: public NActors::TEventLocal<TEvSubscribeExternal, EEvents::EvSubscribeExternal> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
 public:
@@ -55,7 +55,7 @@ public:
     }
 };
 
-class TEvUnsubscribeExternal: public NActors::TEventLocal<TEvUnsubscribeExternal, EEvSubscribe::EvUnsubscribeExternal> {
+class TEvUnsubscribeExternal: public NActors::TEventLocal<TEvUnsubscribeExternal, EEvents::EvUnsubscribeExternal> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
 public:

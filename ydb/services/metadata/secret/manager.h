@@ -13,7 +13,6 @@ protected:
 
     virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(
         const NYql::TObjectSettingsImpl& settings, const NModifications::IOperationsManager::TModificationContext& context) const override;
-    virtual NModifications::TTableSchema ConstructActualSchema() const override;
 
 public:
 };
@@ -26,7 +25,6 @@ protected:
 
     virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         const NModifications::IOperationsManager::TModificationContext& context) const override;
-    virtual NModifications::TTableSchema ConstructActualSchema() const override;
 public:
 };
 

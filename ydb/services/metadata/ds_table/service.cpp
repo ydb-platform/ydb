@@ -37,18 +37,17 @@ void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAut
 void TService::Handle(TEvPrepareManager::TPtr& ev) {
     auto it = RegisteredManagers.find(ev->Get()->GetManager()->GetTypeId());
     if (it != RegisteredManagers.end()) {
-        Send(ev->Sender, new TEvManagerPrepared(ev->Get()->GetManager()));
+        Send(ev->Sender, new TEvManagerPrepared(it->second));
     } else {
         auto m = ev->Get()->GetManager();
         PrepareManagers({ m }, ev->ReleaseBase(), ev->Sender);
     }
 }
 
-void TService::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
-    const TString& initId = ev->Get()->GetInitializationId();
-
+void TService::InitializationFinished(const TString& initId) {
     auto it = ManagersInRegistration.find(initId);
     Y_VERIFY(it != ManagersInRegistration.end());
+
     RegisteredManagers.emplace(initId, it->second);
     ManagersInRegistration.erase(it);
 
@@ -80,6 +79,32 @@ void TService::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
     }
 }
 
+void TService::Handle(TEvTableDescriptionSuccess::TPtr& ev) {
+    const TString& initId = ev->Get()->GetRequestId();
+    auto it = ManagersInRegistration.find(initId);
+    Y_VERIFY(it != ManagersInRegistration.end());
+    it->second->GetOperationsManager()->SetActualSchema(ev->Get()->GetSchema());
+    InitializationFinished(initId);
+}
+
+void TService::Handle(TEvTableDescriptionFailed::TPtr& ev) {
+    const TString& initId = ev->Get()->GetRequestId();
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service cannot receive table description for " << initId << Endl;
+    Schedule(TDuration::Seconds(1), new NInitializer::TEvInitializationFinished(initId));
+}
+
+void TService::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
+    const TString& initId = ev->Get()->GetInitializationId();
+
+    auto it = ManagersInRegistration.find(initId);
+    Y_VERIFY(it != ManagersInRegistration.end());
+    if (it->second->GetOperationsManager()) {
+        Register(new TSchemeDescriptionActor(InternalController, initId, it->second->GetStorageTablePath(), TDuration::Seconds(5)));
+    } else {
+        InitializationFinished(initId);
+    }
+}
+
 void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
     const TActorId senderId = ev->Sender;
     ProcessEventWithFetcher(ev, [this, senderId](const TActorId& actorId) {
@@ -97,6 +122,7 @@ void TService::Handle(TEvAskSnapshot::TPtr& ev) {
 void TService::Handle(TEvObjectsOperation::TPtr& ev) {
     auto it = RegisteredManagers.find(ev->Get()->GetCommand()->GetManager()->GetTypeId());
     if (it != RegisteredManagers.end()) {
+        ev->Get()->GetCommand()->SetManager(it->second);
         ev->Get()->GetCommand()->Execute();
     } else {
         auto m = ev->Get()->GetCommand()->GetManager();
@@ -132,6 +158,14 @@ void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
 
 void TServiceInternalController::InitializationFinished(const TString& id) const {
     ActorId.Send(ActorId, new NInitializer::TEvInitializationFinished(id));
+}
+
+void TServiceInternalController::OnDescriptionFailed(const TString& errorMessage, const TString& requestId) const {
+    ActorId.Send(ActorId, new TEvTableDescriptionFailed(errorMessage, requestId));
+}
+
+void TServiceInternalController::OnDescriptionSuccess(Ydb::Table::DescribeTableResult&& result, const TString& requestId) const {
+    ActorId.Send(ActorId, new TEvTableDescriptionSuccess(std::move(result), requestId));
 }
 
 }

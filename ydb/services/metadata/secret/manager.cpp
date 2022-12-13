@@ -44,14 +44,6 @@ NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings
     return result;
 }
 
-NModifications::TTableSchema TAccessManager::ConstructActualSchema() const {
-    NModifications::TTableSchema result;
-    result.AddColumn(true, NInternal::TYDBColumn::Bytes(TAccess::TDecoder::OwnerUserId))
-        .AddColumn(true, NInternal::TYDBColumn::Bytes(TAccess::TDecoder::SecretId))
-        .AddColumn(true, NInternal::TYDBColumn::Bytes(TAccess::TDecoder::AccessSID));
-    return result;
-}
-
 NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings, const NModifications::IOperationsManager::TModificationContext& context) const {
     NInternal::TTableRecord result;
     if (!context.GetUserToken()) {
@@ -101,14 +93,6 @@ void TSecretManager::DoPrepareObjectsBeforeModification(std::vector<TSecret>&& p
         }
     }
     TActivationContext::Register(new TSecretPreparationActor(std::move(patchedObjects), controller, context));
-}
-
-NModifications::TTableSchema TSecretManager::ConstructActualSchema() const {
-    NModifications::TTableSchema result;
-    result.AddColumn(true, NInternal::TYDBColumn::Bytes(TSecret::TDecoder::OwnerUserId))
-        .AddColumn(true, NInternal::TYDBColumn::Bytes(TSecret::TDecoder::SecretId))
-        .AddColumn(false, NInternal::TYDBColumn::Bytes(TSecret::TDecoder::Value));
-    return result;
 }
 
 }

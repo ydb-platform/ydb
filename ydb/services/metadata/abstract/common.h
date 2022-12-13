@@ -13,7 +13,7 @@
 
 namespace NKikimr::NMetadata::NProvider {
 
-enum EEvSubscribe {
+enum EEvents {
     EvRefreshSubscriberData = EventSpaceBegin(TKikimrEvents::ES_METADATA_PROVIDER),
     EvRefresh,
     EvEnrichSnapshotResult,
@@ -28,10 +28,13 @@ enum EEvSubscribe {
     EvAlterObjects,
     EvPrepareManager,
     EvManagerPrepared,
+    EvTimeout,
+    EvTableDescriptionFailed,
+    EvTableDescriptionSuccess,
     EvEnd
 };
 
-static_assert(EEvSubscribe::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER)");
+static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_PROVIDER)");
 
 class TEvRefreshSubscriberData: public NActors::TEventLocal<TEvRefreshSubscriberData, EvRefreshSubscriberData> {
 private:

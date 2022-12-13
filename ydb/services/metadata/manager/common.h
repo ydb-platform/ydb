@@ -25,7 +25,6 @@ public:
     virtual void AlterFinished() = 0;
 
 };
-}
 
 enum EEvents {
     EvRestoreFinished = EventSpaceBegin(TKikimrEvents::ES_METADATA_MANAGER),
@@ -38,6 +37,7 @@ enum EEvents {
     EvAlterPreparationProblem,
     EvEnd
 };
-
 static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_MANAGER)");
+}
+
 }

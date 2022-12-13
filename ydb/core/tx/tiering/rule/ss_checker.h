@@ -1,12 +1,12 @@
 #pragma once
 #include "object.h"
-#include "ss_dialog.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/services/metadata/common/ss_dialog.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
@@ -35,9 +35,9 @@ public:
     }
 };
 
-class TSSFetchingActor: public TSSDialogActor {
+class TSSFetchingActor: public NMetadata::NInternal::TSSDialogActor {
 private:
-    using TBase = TSSDialogActor;
+    using TBase = NMetadata::NInternal::TSSDialogActor;
     NSchemeShard::ISSDataProcessor::TPtr Processor;
     ISSFetchingController::TPtr Controller;
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);

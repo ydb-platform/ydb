@@ -9,11 +9,11 @@ namespace NKikimr::NMetadata::NProvider {
 
 class TDSAccessorRefresher;
 
-class TEvRefresh: public NActors::TEventLocal<TEvRefresh, EEvSubscribe::EvRefresh> {
+class TEvRefresh: public NActors::TEventLocal<TEvRefresh, EEvents::EvRefresh> {
 public:
 };
 
-class TEvYQLResponse: public NActors::TEventLocal<TEvYQLResponse, EEvSubscribe::EvYQLResponse> {
+class TEvYQLResponse: public NActors::TEventLocal<TEvYQLResponse, EEvents::EvYQLResponse> {
 private:
     YDB_READONLY_DEF(NRequest::TDialogYQLRequest::TResponse, Response);
 public:
@@ -24,7 +24,7 @@ public:
     }
 };
 
-class TEvEnrichSnapshotResult: public NActors::TEventLocal<TEvEnrichSnapshotResult, EEvSubscribe::EvEnrichSnapshotResult> {
+class TEvEnrichSnapshotResult: public NActors::TEventLocal<TEvEnrichSnapshotResult, EEvents::EvEnrichSnapshotResult> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshot::TPtr, EnrichedSnapshot);
 public:
@@ -34,7 +34,7 @@ public:
     }
 };
 
-class TEvEnrichSnapshotProblem: public NActors::TEventLocal<TEvEnrichSnapshotProblem, EEvSubscribe::EvEnrichSnapshotProblem> {
+class TEvEnrichSnapshotProblem: public NActors::TEventLocal<TEvEnrichSnapshotProblem, EEvents::EvEnrichSnapshotProblem> {
 private:
     YDB_READONLY_DEF(TString, ErrorText);
 public:

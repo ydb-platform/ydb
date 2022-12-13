@@ -5,7 +5,7 @@ namespace NKikimr::NMetadata::NProvider {
 
 class TDSAccessorNotifier;
 
-class TEvAsk: public NActors::TEventLocal<TEvAsk, EEvSubscribe::EvAskLocal> {
+class TEvAsk: public NActors::TEventLocal<TEvAsk, EEvents::EvAskLocal> {
 private:
     YDB_READONLY_DEF(TActorId, RequesterId);
 public:
@@ -15,7 +15,7 @@ public:
     }
 };
 
-class TEvSubscribe: public NActors::TEventLocal<TEvSubscribe, EEvSubscribe::EvSubscribeLocal> {
+class TEvSubscribe: public NActors::TEventLocal<TEvSubscribe, EEvents::EvSubscribeLocal> {
 private:
     YDB_READONLY_DEF(TActorId, SubscriberId);
 public:
@@ -25,7 +25,7 @@ public:
     }
 };
 
-class TEvUnsubscribe: public NActors::TEventLocal<TEvUnsubscribe, EEvSubscribe::EvUnsubscribeLocal> {
+class TEvUnsubscribe: public NActors::TEventLocal<TEvUnsubscribe, EEvents::EvUnsubscribeLocal> {
 private:
     YDB_READONLY_DEF(TActorId, SubscriberId);
 public:

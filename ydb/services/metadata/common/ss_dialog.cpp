@@ -5,7 +5,7 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-namespace NKikimr::NColumnShard::NTiers {
+namespace NKikimr::NMetadata::NInternal {
 
 void TSSDialogActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& /*ev*/) {
     OnFail("cannot delivery message to schemeshard");

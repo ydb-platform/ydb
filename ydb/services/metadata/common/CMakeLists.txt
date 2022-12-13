@@ -6,22 +6,20 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(common)
-add_subdirectory(ds_table)
-add_subdirectory(initializer)
-add_subdirectory(manager)
-add_subdirectory(request)
-add_subdirectory(secret)
 
-add_library(ydb-services-metadata)
-target_link_libraries(ydb-services-metadata PUBLIC
+add_library(services-metadata-common)
+target_compile_options(services-metadata-common PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(services-metadata-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  services-metadata-initializer
   services-metadata-abstract
-  services-metadata-manager
+  services-bg_tasks-abstract
+  core-tx-schemeshard
 )
-target_sources(ydb-services-metadata PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/service.cpp
+target_sources(services-metadata-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/common/timeout.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/common/ss_dialog.cpp
 )

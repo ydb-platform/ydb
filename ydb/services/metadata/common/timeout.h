@@ -1,14 +1,14 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/tx/tiering/common.h>
+#include <ydb/services/metadata/abstract/common.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
 
-namespace NKikimr::NColumnShard::NTiers {
+namespace NKikimr::NMetadata::NInternal {
 
-class TEvTimeout: public NActors::TEventLocal<TEvTimeout, EEvents::EvTimeout> {
+class TEvTimeout: public NActors::TEventLocal<TEvTimeout, NProvider::EEvents::EvTimeout> {
 
 };
 

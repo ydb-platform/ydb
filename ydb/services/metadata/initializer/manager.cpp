@@ -17,12 +17,4 @@ NModifications::TOperationParsingResult TManager::DoBuildPatchFromSettings(
     return result;
 }
 
-NModifications::TTableSchema TManager::ConstructActualSchema() const {
-    NModifications::TTableSchema result;
-    result.AddColumn(true, NInternal::TYDBColumn::Bytes(TDBInitialization::TDecoder::ComponentId))
-        .AddColumn(true, NInternal::TYDBColumn::Bytes(TDBInitialization::TDecoder::ModificationId))
-        .AddColumn(false, NInternal::TYDBColumn::UInt32(TDBInitialization::TDecoder::Instant));
-    return result;
-}
-
 }

@@ -31,11 +31,4 @@ void TTiersManager::DoPrepareObjectsBeforeModification(std::vector<TTierConfig>&
     TActivationContext::Register(new TTierPreparationActor(std::move(patchedObjects), controller, context));
 }
 
-NMetadata::NModifications::TTableSchema TTiersManager::ConstructActualSchema() const {
-    NMetadata::NModifications::TTableSchema result;
-    result.AddColumn(true, NMetadata::NInternal::TYDBColumn::Bytes(TTierConfig::TDecoder::TierName))
-        .AddColumn(false, NMetadata::NInternal::TYDBColumn::Bytes(TTierConfig::TDecoder::TierConfig));
-    return result;
-}
-
 }

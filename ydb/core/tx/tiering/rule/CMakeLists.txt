@@ -14,8 +14,9 @@ target_compile_options(tx-tiering-rule PRIVATE
 target_link_libraries(tx-tiering-rule PUBLIC
   contrib-libs-cxxsupp
   yutil
-  services-metadata-initializer
   services-metadata-abstract
+  services-metadata-common
+  services-metadata-initializer
   services-bg_tasks-abstract
   core-tx-schemeshard
 )
@@ -25,8 +26,6 @@ target_sources(tx-tiering-rule PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/checker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/ss_checker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/timeout.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/rule/ss_dialog.cpp
 )
 
 add_global_library_for(tx-tiering-rule.global tx-tiering-rule)
@@ -36,8 +35,9 @@ target_compile_options(tx-tiering-rule.global PRIVATE
 target_link_libraries(tx-tiering-rule.global PUBLIC
   contrib-libs-cxxsupp
   yutil
-  services-metadata-initializer
   services-metadata-abstract
+  services-metadata-common
+  services-metadata-initializer
   services-bg_tasks-abstract
   core-tx-schemeshard
 )

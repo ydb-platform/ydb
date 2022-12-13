@@ -13,8 +13,6 @@ protected:
 
     virtual NMetadata::NModifications::TOperationParsingResult DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         const NMetadata::NModifications::IOperationsManager::TModificationContext& /*context*/) const override;
-
-    virtual NMetadata::NModifications::TTableSchema ConstructActualSchema() const override;
 public:
 };
 

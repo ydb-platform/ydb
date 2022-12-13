@@ -30,12 +30,4 @@ NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuild
     return result;
 }
 
-NMetadata::NModifications::TTableSchema TTieringRulesManager::ConstructActualSchema() const {
-    NMetadata::NModifications::TTableSchema result;
-    result.AddColumn(true, NMetadata::NInternal::TYDBColumn::Bytes(TTieringRule::TDecoder::TieringRuleId))
-        .AddColumn(false, NMetadata::NInternal::TYDBColumn::Bytes(TTieringRule::TDecoder::DefaultColumn))
-        .AddColumn(false, NMetadata::NInternal::TYDBColumn::Bytes(TTieringRule::TDecoder::Description));
-    return result;
-}
-
 }

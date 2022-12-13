@@ -1,12 +1,11 @@
 #pragma once
-
 #include "timeout.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
-namespace NKikimr::NColumnShard::NTiers {
+namespace NKikimr::NMetadata::NInternal {
 
 class TSSDialogActor: public TTimeoutActor<TSSDialogActor> {
 private:

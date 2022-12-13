@@ -114,16 +114,10 @@ private:
     YDB_READONLY_DEF(std::vector<Ydb::Column>, YDBColumns);
     YDB_READONLY_DEF(std::vector<Ydb::Column>, PKColumns);
     YDB_READONLY_DEF(std::vector<TString>, PKColumnIds);
+
+    TTableSchema& AddColumn(const bool primary, const Ydb::Column& info) noexcept;
 public:
-    TTableSchema& AddColumn(const bool primary, const Ydb::Column& info) noexcept {
-        Columns.emplace_back(primary, info);
-        YDBColumns.emplace_back(info);
-        if (primary) {
-            PKColumns.emplace_back(info);
-            PKColumnIds.emplace_back(info.name());
-        }
-        return *this;
-    }
+    TTableSchema(const Ydb::Table::DescribeTableResult& description);
 };
 
 class IOperationsManager {
@@ -145,9 +139,7 @@ public:
         TModificationContext() = default;
     };
 private:
-    mutable std::optional<TTableSchema> ActualSchema;
-protected:
-    virtual TTableSchema ConstructActualSchema() const = 0;
+    YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
 protected:
     virtual NThreading::TFuture<TObjectOperatorResult> DoCreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TModificationContext& context) const = 0;
@@ -172,10 +164,9 @@ public:
         IClassBehaviour::TPtr manager, const TModificationContext& context) const {
         return DoDropObject(settings, nodeId, manager, context);
     }
+
     const TTableSchema& GetSchema() const {
-        if (!ActualSchema) {
-            ActualSchema = ConstructActualSchema();
-        }
+        Y_VERIFY(!!ActualSchema);
         return *ActualSchema;
     }
 };
@@ -206,7 +197,7 @@ public:
 class IAlterCommand {
 private:
     YDB_READONLY_DEF(std::vector<NInternal::TTableRecord>, Records);
-    YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
+    YDB_ACCESSOR_DEF(IClassBehaviour::TPtr, Manager);
     YDB_READONLY_DEF(IAlterController::TPtr, Controller);
 protected:
     mutable IOperationsManager::TModificationContext Context;

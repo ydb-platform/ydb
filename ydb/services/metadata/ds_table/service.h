@@ -1,6 +1,7 @@
 #pragma once
 #include "accessor_subscribe.h"
 #include "config.h"
+#include "scheme_describe.h"
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/common.h>
@@ -8,12 +9,41 @@
 #include <ydb/services/metadata/initializer/manager.h>
 #include <ydb/services/metadata/initializer/snapshot.h>
 #include <ydb/services/metadata/initializer/fetcher.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
-class TServiceInternalController: public NInitializer::IInitializerOutput {
+class TEvTableDescriptionFailed: public TEventLocal<TEvTableDescriptionFailed, EEvents::EvTableDescriptionFailed> {
+private:
+    YDB_READONLY_DEF(TString, ErrorMessage);
+    YDB_READONLY_DEF(TString, RequestId);
+public:
+    explicit TEvTableDescriptionFailed(const TString& errorMessage, const TString& reqId)
+        : ErrorMessage(errorMessage)
+        , RequestId(reqId) {
+
+    }
+};
+
+class TEvTableDescriptionSuccess: public TEventLocal<TEvTableDescriptionSuccess, EEvents::EvTableDescriptionSuccess> {
+private:
+    YDB_READONLY_DEF(TString, RequestId);
+    YDB_READONLY_DEF(Ydb::Table::DescribeTableResult, Description);
+public:
+    TEvTableDescriptionSuccess(Ydb::Table::DescribeTableResult&& description, const TString& reqId)
+        : RequestId(reqId)
+        , Description(std::move(description))
+    {
+    }
+
+    NModifications::TTableSchema GetSchema() const {
+        return NModifications::TTableSchema(Description);
+    }
+};
+
+class TServiceInternalController: public NInitializer::IInitializerOutput, public ISchemeDescribeController {
 private:
     const NActors::TActorIdentity ActorId;
 public:
@@ -24,6 +54,9 @@ public:
     }
 
     virtual void InitializationFinished(const TString& id) const override;
+
+    virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) const override;
+    virtual void OnDescriptionSuccess(Ydb::Table::DescribeTableResult&& result, const TString& requestId) const override;
 };
 
 class TManagersId {
@@ -112,7 +145,12 @@ private:
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvObjectsOperation::TPtr& ev);
+    void Handle(TEvTableDescriptionSuccess::TPtr& ev);
+    void Handle(TEvTableDescriptionFailed::TPtr& ev);
+
     void PrepareManagers(std::vector<IClassBehaviour::TPtr> manager, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
+    void InitializationFinished(const TString& initId);
+    void RequestTableDescription(const TString& path) const;
 
     template <class TEventPtr, class TAction>
     void ProcessEventWithFetcher(TEventPtr& ev, TAction action) {
@@ -146,6 +184,10 @@ public:
             hFunc(TEvPrepareManager, Handle);
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
+
+            hFunc(TEvTableDescriptionSuccess, Handle);
+            hFunc(TEvTableDescriptionFailed, Handle);
+            
             hFunc(NInitializer::TEvInitializationFinished, Handle);
             default:
                 Y_VERIFY(false);

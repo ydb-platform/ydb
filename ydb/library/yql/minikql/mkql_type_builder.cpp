@@ -1344,6 +1344,12 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     case NUdf::EDataSlot::Timestamp:
         type = arrow::uint64();
         return true;
+    case NUdf::EDataSlot::Float:
+        type = arrow::float32();
+        return true;
+    case NUdf::EDataSlot::Double:
+        type = arrow::float64();
+        return true;
     default:
         return false;
     }
@@ -1351,6 +1357,23 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
 
 bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type) {
     auto unpacked = UnpackOptional(itemType, isOptional);
+    if (unpacked->IsTuple()) {
+        auto tupleType = AS_TYPE(TTupleType, unpacked);
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            std::shared_ptr<arrow::DataType> childType;
+            bool isChildOptional;
+            if (!ConvertArrowType(tupleType->GetElementType(i), isChildOptional, childType)) {
+                return false;
+            }
+
+            fields.emplace_back(std::make_shared<arrow::Field>("field" + ToString(i), childType, isChildOptional));
+        }
+
+        type = std::make_shared<arrow::StructType>(fields);
+        return true;
+    }
+
     if (!unpacked->IsData()) {
         return false;
     }

@@ -591,6 +591,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
 

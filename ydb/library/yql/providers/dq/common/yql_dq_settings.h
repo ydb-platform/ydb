@@ -32,6 +32,8 @@ struct TDqSettings {
         static constexpr ui64 WatermarksGranularityMs = 1000;
         static constexpr ui64 WatermarksLateArrivalDelayMs = 5000;
         static constexpr ui64 ParallelOperationsLimit = 16;
+        static constexpr double HashShuffleTasksRatio = 0.5;
+        static constexpr ui32 HashShuffleMaxTasks = 24;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -84,6 +86,8 @@ struct TDqSettings {
 
     NCommon::TConfSetting<TString, false> WorkerFilter;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
+    NCommon::TConfSetting<double, false> HashShuffleTasksRatio;
+    NCommon::TConfSetting<ui32, false> HashShuffleMaxTasks;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -127,7 +131,8 @@ struct TDqSettings {
         SAVE_SETTING(WatermarksLateArrivalDelayMs);
         SAVE_SETTING(UseAggPhases);
         SAVE_SETTING(HashJoinMode);
-
+        SAVE_SETTING(HashShuffleTasksRatio);        
+        SAVE_SETTING(HashShuffleMaxTasks);    
 #undef SAVE_SETTING
     }
 

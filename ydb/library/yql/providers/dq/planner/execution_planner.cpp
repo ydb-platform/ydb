@@ -153,7 +153,9 @@ namespace NYql::NDqs {
                 YQL_CLOG(TRACE, ProviderDq) << "Read stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
             } else {
                 YQL_CLOG(TRACE, ProviderDq) << "Common stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
-                NDq::CommonBuildTasks(TasksGraph, stage);
+                double hashShuffleTasksRatio =  settings->HashShuffleTasksRatio.Get().GetOrElse(TDqSettings::TDefault::HashShuffleTasksRatio);
+                ui64 maxHashShuffleTasks = settings->HashShuffleMaxTasks.Get().GetOrElse(TDqSettings::TDefault::HashShuffleMaxTasks);
+                NDq::CommonBuildTasks(hashShuffleTasksRatio, maxHashShuffleTasks, TasksGraph, stage);
             }
 
             // Sinks
@@ -564,7 +566,7 @@ namespace NYql::NDqs {
         continue;                                        \
     }
 
-    void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
+    void TDqsExecutionPlanner::BuildConnections( const NNodes::TDqPhyStage& stage) {
         NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {

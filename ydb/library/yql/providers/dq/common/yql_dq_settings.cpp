@@ -55,6 +55,8 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, ParallelOperationsLimit).Lower(1).Upper(128);
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
+    REGISTER_SETTING(*this, HashShuffleTasksRatio).Lower(0.5).Upper(5);
+    REGISTER_SETTING(*this, HashShuffleMaxTasks).Lower(1).Upper(1000);
 }
 
 } // namespace NYql

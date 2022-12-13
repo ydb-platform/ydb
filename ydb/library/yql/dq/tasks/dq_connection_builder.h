@@ -3,13 +3,15 @@
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
+
 namespace NYql::NDq {
 
 using TChannelLogFunc = std::function<void(ui64 channel, ui64 from, ui64 to, TStringBuf type, bool enableSpilling)>;
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
-void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>& graph, const NNodes::TDqPhyStage& stage) {
+void CommonBuildTasks(double hashShuffleTasksRatio, ui32 maxHashShuffleTasks, TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>& graph, const NNodes::TDqPhyStage& stage) {
     ui32 partitionsCount = 1;
+
 
     auto& stageInfo = graph.GetStageInfo(stage);
     for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
@@ -31,8 +33,8 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
         if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {
             auto shuffle = maybeCnShuffle.Cast();
             auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
-            partitionsCount = std::max(partitionsCount, (ui32)originStageInfo.Tasks.size() / 2);
-            partitionsCount = std::min(partitionsCount, 24u);
+            partitionsCount = std::max(partitionsCount, (ui32) (originStageInfo.Tasks.size() * hashShuffleTasksRatio) );
+            partitionsCount = std::min(partitionsCount, maxHashShuffleTasks);
         } else if (auto maybeCnMap = input.Maybe<NNodes::TDqCnMap>()) {
             auto cnMap = maybeCnMap.Cast();
             auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());

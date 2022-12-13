@@ -87,7 +87,7 @@ public:
     };
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r);
-    NKikimr::NOlap::TTiersInfo BuildTiersInfo() const;
+    NKikimr::NOlap::TTiering BuildOlapTiers() const;
 };
 
 }

@@ -51,7 +51,8 @@ public:
         auto& event = *ev->Get();
         const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
-            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId << " status " << event.Status
+            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId
+                << " status " << NKikimrProto::EReplyStatus_Name(event.Status)
                 << " at tablet " << TabletId << " (index)");
 
             BlobsToRead.erase(blobId);

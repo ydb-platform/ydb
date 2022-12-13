@@ -127,7 +127,7 @@ class TColumnShard
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NTiers::TEvTiersManagerReadyForUsage::TPtr& ev);
-    
+
 
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
@@ -178,9 +178,8 @@ class TColumnShard
         TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
     }
 
-    NOlap::TIndexInfo GetActualIndexInfo(const bool tiersUsage = true) const;
-
     void ActivateTiering(const ui64 pathId, const TString& useTiering);
+
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
@@ -463,7 +462,7 @@ private:
 
     std::unique_ptr<TEvPrivate::TEvIndexing> SetupIndexation();
     std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();
-    std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiersInfo>& pathTtls = {},
+    std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {},
                                                       bool force = false);
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();
 

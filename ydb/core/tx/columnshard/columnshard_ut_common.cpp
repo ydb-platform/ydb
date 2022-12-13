@@ -300,9 +300,9 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
     tRule.SetTieringRuleId("Tiering1");
     for (auto&& tier : specials.Tiers) {
         if (!tRule.GetDefaultColumn()) {
-            tRule.SetDefaultColumn(tier.GetTtlColumn());
+            tRule.SetDefaultColumn(tier.TtlColumn);
         }
-        Y_VERIFY(tRule.GetDefaultColumn() == tier.GetTtlColumn());
+        Y_VERIFY(tRule.GetDefaultColumn() == tier.TtlColumn);
         {
             NColumnShard::NTiers::TTierConfig tConfig;
             tConfig.SetTierName(tier.Name);
@@ -319,7 +319,7 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
             }
             cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
         }
-        tRule.AddInterval(tier.Name, TDuration::Seconds(tier.GetEvictAfterSecondsUnsafe()));
+        tRule.AddInterval(tier.Name, TDuration::Seconds((*tier.EvictAfter).Seconds()));
     }
     cs->MutableTableTierings().emplace(tRule.GetTieringRuleId(), tRule);
     return cs;

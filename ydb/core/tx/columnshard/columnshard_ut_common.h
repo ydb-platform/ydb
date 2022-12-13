@@ -28,9 +28,8 @@ struct TTestSchema {
     static inline const TString DefaultTtlColumn = "saved_at";
 
     struct TStorageTier {
-        YDB_ACCESSOR(TString, TtlColumn, DefaultTtlColumn);
-        YDB_OPT(ui32, EvictAfterSeconds);
-    public:
+        TString TtlColumn = DefaultTtlColumn;
+        std::optional<TDuration> EvictAfter;
         TString Name;
         TString Codec;
         std::optional<int> CompressionLevel;
@@ -38,7 +37,6 @@ struct TTestSchema {
 
         TStorageTier(const TString& name = {})
             : Name(name)
-
         {}
 
         NKikimrSchemeOp::EColumnCodec GetCodecId() const {
@@ -63,6 +61,11 @@ struct TTestSchema {
             }
             return *this;
         }
+
+        TStorageTier& SetTtlColumn(const TString& columnName) {
+            TtlColumn = columnName;
+            return *this;
+        }
     };
 
     struct TTableSpecials : public TStorageTier {
@@ -73,13 +76,18 @@ struct TTestSchema {
         }
 
         bool HasTtl() const {
-            return !HasTiers() && HasEvictAfterSeconds();
+            return EvictAfter.has_value();
         }
 
         TTableSpecials WithCodec(const TString& codec) {
             TTableSpecials out = *this;
             out.SetCodec(codec);
             return out;
+        }
+
+        TTableSpecials& SetTtl(std::optional<TDuration> ttl) {
+            EvictAfter = ttl;
+            return *this;
         }
     };
 
@@ -197,16 +205,26 @@ struct TTestSchema {
         }
     }
 
-    static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
-        ttlSettings->SetVersion(1);
-        auto* enable = ttlSettings->MutableEnabled();
-        enable->SetColumnName(specials.GetTtlColumn());
-        enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
+    static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
+        Y_VERIFY(specials.HasTtl());
+        Y_VERIFY(!specials.TtlColumn.empty());
+        ttl->SetColumnName(specials.TtlColumn);
+        ttl->SetExpireAfterSeconds((*specials.EvictAfter).Seconds());
     }
 
-    static void InitTiers(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
-        Y_VERIFY(specials.HasTiers());
-        ttlSettings->MutableTiering()->SetUseTiering("Tiering1");
+    static bool InitTiersAndTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
+        ttlSettings->SetVersion(1);
+        if (specials.HasTiers()) {
+            ttlSettings->MutableTiering()->SetUseTiering("Tiering1");
+            if (specials.HasTtl()) {
+                InitTtl(specials, ttlSettings->MutableTiering()->MutableTtl());
+            }
+            return true;
+        } else if (specials.HasTtl()) {
+            InitTtl(specials, ttlSettings->MutableEnabled());
+            return true;
+        }
+        return false;
     }
 
     static TString CreateTableTxBody(ui64 pathId, const TVector<std::pair<TString, TTypeInfo>>& columns,
@@ -225,11 +243,9 @@ struct TTestSchema {
             InitSchema(columns, pk, specials, preset->MutableSchema());
         }
 
-        if (specials.HasTtl()) {
-            InitTtl(specials, table->MutableTtlSettings());
-        } else if (specials.HasTiers()) {
-            InitTiers(specials, table->MutableTtlSettings());
-        }
+        InitTiersAndTtl(specials, table->MutableTtlSettings());
+
+        Cerr << "CreateTable: " << tx << "\n";
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
@@ -245,11 +261,9 @@ struct TTestSchema {
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
-        if (specials.HasTtl()) {
-            InitTtl(specials, table->MutableTtlSettings());
-        } else if (specials.HasTiers()) {
-            InitTiers(specials, table->MutableTtlSettings());
-        }
+        InitTiersAndTtl(specials, table->MutableTtlSettings());
+
+        Cerr << "CreateInitShard: " << tx << "\n";
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
@@ -264,10 +278,9 @@ struct TTestSchema {
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
+        InitTiersAndTtl(specials, table->MutableTtlSettings());
 
-        if (specials.HasTtl()) {
-            InitTtl(specials, table->MutableTtlSettings());
-        }
+        Cerr << "CreateStandaloneTable: " << tx << "\n";
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
@@ -281,17 +294,11 @@ struct TTestSchema {
         tx.MutableSeqNo()->SetRound(version);
 
         auto* ttlSettings = table->MutableTtlSettings();
-        ttlSettings->SetVersion(version);
-
-        if (specials.HasTtl()) {
-            auto* enable = ttlSettings->MutableEnabled();
-            enable->SetColumnName(specials.GetTtlColumn());
-            enable->SetExpireAfterSeconds(specials.GetEvictAfterSecondsUnsafe());
-        } else if (specials.HasTiers()) {
-            ttlSettings->MutableTiering()->SetUseTiering("Tiering1");
-        } else {
+        if (!InitTiersAndTtl(specials, ttlSettings)) {
             ttlSettings->MutableDisabled();
         }
+
+        Cerr << "AlterTable: " << tx << "\n";
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);

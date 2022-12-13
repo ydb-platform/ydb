@@ -200,7 +200,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             // If no paths trigger schema defined TTL
-            THashMap<ui64, NOlap::TTiersInfo> pathTtls;
+            THashMap<ui64, NOlap::TTiering> pathTtls;
             if (!ttlBody.GetPathIds().empty()) {
                 auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
                 if (!unixTime) {
@@ -217,7 +217,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
 
                 for (ui64 pathId : ttlBody.GetPathIds()) {
-                    pathTtls.emplace(pathId, NOlap::TTiersInfo(columnName, unixTime));
+                    pathTtls.emplace(pathId, NOlap::TTiering::MakeTtl(unixTime, columnName));
                 }
             }
 
@@ -228,6 +228,8 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                     ctx.Send(Self->SelfId(), event->TxEvent.release());
                 }
                 status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
+            } else {
+                statusMessage = "TTL not started";
             }
 
             break;
@@ -270,9 +272,10 @@ void TTxProposeTransaction::Complete(const TActorContext& ctx) {
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
     auto& record = Proto(ev->Get());
-    ui32 txKind = record.GetTxKind();
+    auto txKind = record.GetTxKind();
     ui64 txId = record.GetTxId();
-    LOG_S_DEBUG("ProposeTransaction kind " << txKind << " txId " << txId << " at tablet " << TabletID());
+    LOG_S_DEBUG("ProposeTransaction " << NKikimrTxColumnShard::ETransactionKind_Name(txKind)
+        << " txId " << txId << " at tablet " << TabletID());
 
     Execute(new TTxProposeTransaction(this, ev), ctx);
 }

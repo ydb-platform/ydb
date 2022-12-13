@@ -35,6 +35,15 @@ public:
 
         auto& event = *ev->Get();
         const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
+
+        if (event.Status != NKikimrProto::EReplyStatus::OK) {
+            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId
+                << " status " << NKikimrProto::EReplyStatus_Name(event.Status)
+                << " at tablet " << TabletId << " (read)");
+            SendErrorResult(ctx, NKikimrTxColumnShard::EResultStatus::ERROR);
+            return DieFinished(ctx);
+        }
+
         Y_VERIFY(event.Data.size() == event.BlobRange.Size, "%zu, %d", event.Data.size(), event.BlobRange.Size);
 
         if (IndexedBlobs.count(event.BlobRange)) {
@@ -78,6 +87,9 @@ public:
     void SendErrorResult(const TActorContext& ctx, NKikimrTxColumnShard::EResultStatus status) {
         Y_VERIFY(status != NKikimrTxColumnShard::EResultStatus::SUCCESS);
         SendResult(ctx, {}, true, status);
+
+        WaitIndexed.clear();
+        WaitCommitted.clear();
     }
 
     void SendResult(const TActorContext& ctx, const std::shared_ptr<arrow::RecordBatch>& batch, bool finished = false,
@@ -88,6 +100,10 @@ public:
         TString data;
         if (batch) {
             data = NArrow::SerializeBatchNoCompression(batch);
+
+            auto metadata = proto.MutableMeta();
+            metadata->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
+            metadata->SetSchema(GetSerializedSchema(batch));
         }
 
         if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
@@ -100,21 +116,18 @@ public:
         proto.SetFinished(finished);
         ++ReturnedBatchNo;
 
-        auto metadata = proto.MutableMeta();
-        metadata->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
-        metadata->SetSchema(GetSerializedSchema(batch));
         if (finished) {
             auto stats = ReadMetadata->ReadStats;
-            auto* proto = metadata->MutableReadStats();
-            proto->SetBeginTimestamp(stats->BeginTimestamp.MicroSeconds());
-            proto->SetDurationUsec(stats->Duration().MicroSeconds());
-            proto->SetSelectedIndex(stats->SelectedIndex);
-            proto->SetIndexGranules(stats->IndexGranules);
-            proto->SetIndexPortions(stats->IndexPortions);
-            proto->SetIndexBatches(stats->IndexBatches);
-            proto->SetNotIndexedBatches(stats->CommittedBatches);
-            proto->SetUsedColumns(stats->UsedColumns);
-            proto->SetDataBytes(stats->DataBytes);
+            auto* protoStats = proto.MutableMeta()->MutableReadStats();
+            protoStats->SetBeginTimestamp(stats->BeginTimestamp.MicroSeconds());
+            protoStats->SetDurationUsec(stats->Duration().MicroSeconds());
+            protoStats->SetSelectedIndex(stats->SelectedIndex);
+            protoStats->SetIndexGranules(stats->IndexGranules);
+            protoStats->SetIndexPortions(stats->IndexPortions);
+            protoStats->SetIndexBatches(stats->IndexBatches);
+            protoStats->SetNotIndexedBatches(stats->CommittedBatches);
+            protoStats->SetUsedColumns(stats->UsedColumns);
+            protoStats->SetDataBytes(stats->DataBytes);
         }
 
         if (Deadline != TInstant::Max()) {
@@ -197,9 +210,6 @@ public:
 
     void SendTimeouts(const TActorContext& ctx) {
         SendErrorResult(ctx, NKikimrTxColumnShard::EResultStatus::TIMEOUT);
-
-        WaitCommitted.clear();
-        IndexedBlobs.clear();
     }
 
     void SendReadRequest(const TActorContext& ctx, const NBlobCache::TBlobRange& blobRange) {

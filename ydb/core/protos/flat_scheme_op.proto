@@ -472,6 +472,10 @@ message TColumnDataLifeCycle {
 
     message TStorageTiering {
         optional string UseTiering = 1;
+        // If set remote data by TTL in addition to the last tier's border
+        optional TTtl Ttl = 2;
+        // If set keep data in default storage (out of tiers) till this border
+        //optional TTtl KeepTime = 3; TODO
     }
 
     message TDisabled {

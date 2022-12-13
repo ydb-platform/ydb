@@ -1,18 +1,6 @@
 #include "column_engine.h"
 #include <util/stream/output.h>
 
-namespace NKikimr::NOlap {
-
-TString TTiersInfo::GetDebugString() const {
-    TStringBuilder sb;
-    sb << "column=" << Column << ";";
-    for (auto&& i : TierBorders) {
-        sb << "tname=" << i.TierName << ";eborder=" << i.EvictBorder << ";";
-    }
-    return sb;
-}
-}
-
 template <>
 void Out<NKikimr::NOlap::TColumnEngineChanges>(IOutputStream& out, TTypeTraits<NKikimr::NOlap::TColumnEngineChanges>::TFuncParam changes) {
     if (ui32 switched = changes.SwitchedPortions.size()) {

@@ -9,33 +9,20 @@ public:
     static constexpr const ui64 DEFAULT_REPEAT_TTL_TIMEOUT_SEC = 10;
 
     struct TEviction {
-        TString TierName;
         TDuration EvictAfter;
+        TString ColumnName;
     };
 
     struct TDescription {
-        TString ColumnName;
-        std::vector<TEviction> Evictions;
+        std::optional<TEviction> Eviction;
 
         TDescription() = default;
 
-        TDescription(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl) {
-            if (ttl.HasEnabled()) {
-                auto& enabled = ttl.GetEnabled();
-                ColumnName = enabled.GetColumnName();
-                auto expireSec = TDuration::Seconds(enabled.GetExpireAfterSeconds());
+        TDescription(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl) {
+            auto expireSec = TDuration::Seconds(ttl.GetExpireAfterSeconds());
 
-                Evictions.reserve(1);
-                Evictions.emplace_back(TEviction{{}, expireSec});
-            }
-
-            if (Enabled()) {
-                Y_VERIFY(!ColumnName.empty());
-            }
-        }
-
-        bool Enabled() const {
-            return !Evictions.empty();
+            Eviction = TEviction{expireSec, ttl.GetColumnName()};
+            Y_VERIFY(!Eviction->ColumnName.empty());
         }
     };
 
@@ -44,12 +31,13 @@ public:
     }
 
     void SetPathTtl(ui64 pathId, TDescription&& descr) {
-        if (descr.Enabled()) {
-            auto it = Columns.find(descr.ColumnName);
+        if (descr.Eviction) {
+            auto& evict = descr.Eviction;
+            auto it = Columns.find(evict->ColumnName);
             if (it != Columns.end()) {
-                descr.ColumnName = *it; // replace string dups (memory efficiency)
+                evict->ColumnName = *it; // replace string dups (memory efficiency)
             } else {
-                Columns.insert(descr.ColumnName);
+                Columns.insert(evict->ColumnName);
             }
             PathTtls[pathId] = descr;
         } else {
@@ -61,18 +49,16 @@ public:
         PathTtls.erase(pathId);
     }
 
-    THashMap<ui64, NOlap::TTiersInfo> MakeIndexTtlMap(TInstant now, bool force = false) {
+    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction, TInstant now, bool force = false) {
         if ((now < LastRegularTtl + TtlTimeout) && !force) {
-            return {};
+            return;
         }
 
-        THashMap<ui64, NOlap::TTiersInfo> out;
         for (auto& [pathId, descr] : PathTtls) {
-            out.emplace(pathId, Convert(descr, now));
+            eviction[pathId].Ttl = Convert(descr, now);
         }
 
         LastRegularTtl = now;
-        return out;
     }
 
     void Repeat() {
@@ -89,16 +75,13 @@ private:
     TDuration RepeatTtlTimeout{TDuration::Seconds(DEFAULT_REPEAT_TTL_TIMEOUT_SEC)};
     TInstant LastRegularTtl;
 
-    NOlap::TTiersInfo Convert(const TDescription& descr, TInstant timePoint) const {
-        Y_VERIFY(descr.Enabled());
-        NOlap::TTiersInfo out(descr.ColumnName);
-
-        for (auto& tier : descr.Evictions) {
-            auto border = timePoint - tier.EvictAfter;
-            out.AddTier(tier.TierName, border);
+    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr, TInstant timePoint) const {
+        if (descr.Eviction) {
+            auto& evict = descr.Eviction;
+            auto border = timePoint - evict->EvictAfter;
+            return NOlap::TTierInfo::MakeTtl(border, evict->ColumnName);
         }
-
-        return out;
+        return {};
     }
 };
 

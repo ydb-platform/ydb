@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         YDB_READONLY_FLAG(Found, false);
         YDB_ACCESSOR(ui32, ExpectedTieringsCount, 1);
         YDB_ACCESSOR(ui32, ExpectedTiersCount, 1);
-        
+
         using TKeyCheckers = TMap<TString, TJsonChecker>;
         YDB_ACCESSOR_DEF(TKeyCheckers, Checkers);
     public:
@@ -349,7 +349,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
             .SetEnableOlapSchemaOperations(true);
-        ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
@@ -509,7 +508,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
         Cerr << "Insert..." << Endl;
-        const TInstant pkStart = Now() - TDuration::Days(5);
+        const TInstant pkStart = Now() - TDuration::Days(15);
         ui32 idx = 0;
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", 0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 2000);
         {

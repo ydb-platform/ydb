@@ -101,7 +101,7 @@ bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
         CreateS3Actor(TabletId, TabletActorId, Config.GetTierName())
     );
     auto s3Config = Config.GetPatchedConfig(secrets);
-    
+
     ctx.Send(newActor, new TEvPrivate::TEvS3Settings(s3Config));
     StorageActorId = newActor;
 #endif
@@ -115,16 +115,7 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 {
 }
 
-NOlap::TStorageTier TManager::BuildTierStorage() const {
-    NOlap::TStorageTier result;
-    result.Name = Config.GetTierName();
-    if (Config.GetProtoConfig().HasCompression()) {
-        result.Compression = ConvertCompression(Config.GetProtoConfig().GetCompression());
-    }
-    return result;
-}
-
-NKikimr::NOlap::TCompression TManager::ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
+NKikimr::NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
     NOlap::TCompression out;
     if (compression.HasCompressionCodec()) {
         switch (compression.GetCompressionCodec()) {
@@ -223,19 +214,26 @@ NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManip
     return ExternalDataManipulation;
 }
 
-THashMap<ui64, NKikimr::NOlap::TTiersInfo> TTiersManager::GetTiering() const {
-    THashMap<ui64, NKikimr::NOlap::TTiersInfo> result;
+THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
+    THashMap<ui64, NKikimr::NOlap::TTiering> result;
     if (!Snapshot) {
         return result;
     }
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
     Y_VERIFY(snapshotPtr);
+    auto& tierConfigs = snapshotPtr->GetTierConfigs();
     for (auto&& i : PathIdTiering) {
         auto* tiering = snapshotPtr->GetTieringById(i.second);
-        if (!tiering) {
-
-        } else {
-            result.emplace(i.first, tiering->BuildTiersInfo());
+        if (tiering) {
+            result.emplace(i.first, tiering->BuildOlapTiers());
+            for (auto& [pathId, pathTiering] : result) {
+                for (auto& [name, tier] : pathTiering.TierByName) {
+                    auto it = tierConfigs.find(name);
+                    if (it != tierConfigs.end()) {
+                        tier->Compression = NTiers::ConvertCompression(it->second.GetProtoConfig().GetCompression());
+                    }
+                }
+            }
         }
     }
     return result;

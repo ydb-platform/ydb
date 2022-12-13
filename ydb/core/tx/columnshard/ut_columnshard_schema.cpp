@@ -17,7 +17,7 @@ using namespace NTxUT;
 using namespace NColumnShard;
 using NWrappers::NTestHelpers::TS3Mock;
 
-enum class EStartTtlSettings {
+enum class EInitialEviction {
     None,
     Ttl,
     Tiering
@@ -61,10 +61,10 @@ bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot s
     return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
 }
 
-std::shared_ptr<arrow::Array> GetFirstPKColumn(const TString& blob, const TString& srtSchema,
-                                               const std::string& columnName)
+std::shared_ptr<arrow::Array> DeserializeColumn(const TString& blob, const TString& strSchema,
+                                                const std::string& columnName)
 {
-    auto schema = NArrow::DeserializeSchema(srtSchema);
+    auto schema = NArrow::DeserializeSchema(strSchema);
     auto batch = NArrow::DeserializeBatch(blob, schema);
     UNIT_ASSERT(batch);
 
@@ -73,12 +73,12 @@ std::shared_ptr<arrow::Array> GetFirstPKColumn(const TString& blob, const TStrin
     return array;
 }
 
-bool CheckSame(const TString& blob, const TString& srtSchema, ui32 expectedSize,
+bool CheckSame(const TString& blob, const TString& strSchema, ui32 expectedSize,
                const std::string& columnName, i64 seconds) {
     auto expected = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
     UNIT_ASSERT_VALUES_EQUAL(expected.value, seconds * 1000 * 1000);
 
-    auto tsCol = GetFirstPKColumn(blob, srtSchema, columnName);
+    auto tsCol = DeserializeColumn(blob, strSchema, columnName);
     UNIT_ASSERT(tsCol);
     UNIT_ASSERT_VALUES_EQUAL(tsCol->length(), expectedSize);
 
@@ -130,6 +130,8 @@ bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 10
     return ProposeSchemaTx(runtime, sender, txBody, {++planStep, ++txId});
 }
 
+static constexpr ui32 PORTION_ROWS = 80 * 1000;
+
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
@@ -162,9 +164,10 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         ttlSec -= (ts[0] + ts[1]) / 2; // enable internal ttl between ts1 and ts2
     }
     if (spec.HasTiers()) {
-        spec.Tiers[0].SetEvictAfterSeconds(ttlSec);
+        spec.Tiers[0].EvictAfter = TDuration::Seconds(ttlSec);
     } else {
-        spec.SetEvictAfterSeconds(ttlSec);
+        UNIT_ASSERT(!spec.TtlColumn.empty());
+        spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
     bool ok = ProposeSchemaTx(runtime, sender,
                               TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, spec, "/Root/olapStore"),
@@ -176,8 +179,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
     //
 
-    ui32 portionSize = 80 * 1000;
-    auto blobs = MakeData(ts, portionSize, portionSize / 2, spec.GetTtlColumn());
+    auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn);
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
     for (auto& data : blobs) {
         UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data));
@@ -192,9 +194,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.GetTtlColumn());
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] + 1, spec.GetTtlColumn());
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] + 1, spec.TtlColumn);
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -206,7 +208,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     {
         --planStep;
         auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, Max<ui64>(), tableId);
-        Proto(read.get()).AddColumnNames(spec.GetTtlColumn());
+        Proto(read.get()).AddColumnNames(spec.TtlColumn);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
@@ -216,20 +218,20 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
         UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
         UNIT_ASSERT(resRead.GetData().size() > 0);
 
         auto& schema = resRead.GetMeta().GetSchema();
-        UNIT_ASSERT(CheckSame(resRead.GetData(), schema, portionSize, spec.GetTtlColumn(), ts[1]));
+        UNIT_ASSERT(CheckSame(resRead.GetData(), schema, PORTION_ROWS, spec.TtlColumn, ts[1]));
     }
 
     // Alter TTL
     ttlSec = TInstant::Now().Seconds() - (ts[1] + 1);
     if (spec.HasTiers()) {
-        spec.Tiers[0].SetEvictAfterSeconds(ttlSec);
+        spec.Tiers[0].EvictAfter = TDuration::Seconds(ttlSec);
     } else {
-        spec.SetEvictAfterSeconds(ttlSec);
+        spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
     ok = ProposeSchemaTx(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 2, spec),
@@ -241,15 +243,15 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.GetTtlColumn());
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[1] + 1, spec.GetTtlColumn());
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[1] + 1, spec.TtlColumn);
     }
 
     {
         --planStep;
         auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, Max<ui64>(), tableId);
-        Proto(read.get()).AddColumnNames(spec.GetTtlColumn());
+        Proto(read.get()).AddColumnNames(spec.TtlColumn);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
@@ -259,9 +261,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
         UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT_EQUAL(resRead.GetData().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetData().size(), 0);
     }
 
     // Disable TTL
@@ -279,15 +281,15 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     PlanCommit(runtime, sender, ++planStep, txId);
 
     if (internal) {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.GetTtlColumn());
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] - 1, spec.GetTtlColumn());
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] - 1, spec.TtlColumn);
     }
 
     {
         --planStep;
         auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, Max<ui64>(), tableId);
-        Proto(read.get()).AddColumnNames(spec.GetTtlColumn());
+        Proto(read.get()).AddColumnNames(spec.TtlColumn);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
@@ -302,13 +304,12 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(resRead.GetData().size() > 0);
 
         auto& schema = resRead.GetMeta().GetSchema();
-        UNIT_ASSERT(CheckSame(resRead.GetData(), schema, portionSize, spec.GetTtlColumn(), ts[0]));
+        UNIT_ASSERT(CheckSame(resRead.GetData(), schema, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
 }
 
 class TCountersContainer {
 private:
-    ui32 RestartTabletOnPutData = 0;
     ui32 SuccessCounterStart = 0;
 public:
     ui32 UnknownsCounter = 0;
@@ -316,32 +317,17 @@ public:
     ui32 ErrorsCounter = 0;
     ui32 ResponsesCounter = 0;
 
-    TCountersContainer& SetRestartTabletOnPutData(const ui32 value) {
-        RestartTabletOnPutData = value;
-        return *this;
-    }
-
-    bool PopRestartTabletOnPutData() {
-        if (!RestartTabletOnPutData) {
-            return false;
-        }
-        --RestartTabletOnPutData;
-        return true;
-    }
     TString SerializeToString() const {
         TStringBuilder sb;
         sb << "EXPORTS INFO: " << SuccessCounter << "/" << ErrorsCounter << "/" << UnknownsCounter << "/" << ResponsesCounter;
         return sb;
     }
 
-    void WaitEvents(TTestBasicRuntime& runtime, const TActorId sender, const ui32 attemption, const ui32 expectedDeltaSuccess, const TDuration timeout) {
+    void WaitEvents(TTestBasicRuntime& runtime, const ui32 attemption, const ui32 expectedDeltaSuccess, const TDuration timeout) {
         const TInstant startInstant = TAppData::TimeProvider->Now();
         const TInstant deadline = startInstant + timeout;
         Cerr << "START_WAITING(" << attemption << "): " << SerializeToString() << Endl;
         while (TAppData::TimeProvider->Now() < deadline) {
-            if (PopRestartTabletOnPutData()) {
-                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-            }
             Cerr << "IN_WAITING(" << attemption << "):" << SerializeToString() << Endl;
             runtime.SimulateSleep(TDuration::Seconds(1));
             UNIT_ASSERT(ErrorsCounter == 0);
@@ -358,7 +344,7 @@ public:
         if (expectedDeltaSuccess) {
             UNIT_ASSERT(SuccessCounter >= SuccessCounterStart + expectedDeltaSuccess);
         } else {
-            UNIT_ASSERT(SuccessCounter == SuccessCounterStart);
+            UNIT_ASSERT_VALUES_EQUAL(SuccessCounter, SuccessCounterStart);
         }
         Cerr << "FINISH_WAITING(" << attemption << "): " << SerializeToString() << Endl;
         SuccessCounterStart = SuccessCounter;
@@ -370,7 +356,7 @@ private:
     TCountersContainer* Counters = nullptr;
     TTestBasicRuntime& Runtime;
     const TActorId Sender;
-private:
+
     template <class TPrivateEvent>
     static TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
@@ -378,8 +364,8 @@ private:
         }
         return dynamic_cast<TPrivateEvent*>(ev->GetBase());
     }
-public:
 
+public:
     TEventsCounter(TCountersContainer& counters, TTestBasicRuntime& runtime, const TActorId sender)
         : Counters(&counters)
         , Runtime(runtime)
@@ -388,6 +374,7 @@ public:
         Y_UNUSED(Runtime);
         Y_UNUSED(Sender);
     }
+
     bool operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         TStringBuilder ss;
         if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
@@ -402,7 +389,10 @@ public:
                 ss << "(" << ++Counters->UnknownsCounter << "): UNKNOWN";
             }
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
-            ss << "S3_RESPONSE(" << ++Counters->ResponsesCounter << "):";
+            ss << "S3_RESPONSE(put " << ++Counters->ResponsesCounter << "):";
+        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
+            ss << "(" << ++Counters->SuccessCounter << "): DELETE SUCCESS";
+            ss << "S3_RESPONSE(delete " << ++Counters->ResponsesCounter << "):";
         } else {
             return false;
         }
@@ -412,8 +402,10 @@ public:
     };
 };
 
-std::vector<std::pair<ui32, ui64>>
-TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTestSchema::TTableSpecials>& specs, const ui32 startTieringIndex) {
+std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TString>& blobs,
+                                             const std::vector<TTestSchema::TTableSpecials>& specs,
+                                             const ui32 initialEviction)
+{
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -460,16 +452,16 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
 
     TAutoPtr<IEventHandle> handle;
 
-    std::vector<std::pair<ui32, ui64>> resColumns;
-    resColumns.reserve(specs.size());
+    std::vector<std::pair<ui32, ui64>> specRowsBytes;
+    specRowsBytes.reserve(specs.size());
 
     TCountersContainer counter;
     runtime.SetEventFilter(TEventsCounter(counter, runtime, sender));
     for (ui32 i = 0; i < specs.size(); ++i) {
-        bool hasEvictionSettings = false;
+        bool hasColdEviction = false;
         for (auto&& i : specs[i].Tiers) {
             if (!!i.S3) {
-                hasEvictionSettings = true;
+                hasColdEviction = true;
                 break;
             }
         }
@@ -483,20 +475,21 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
                 PlanSchemaTx(runtime, sender, { planStep, txId });
             }
         }
-        if (specs[i].Tiers.size()) {
+        if (specs[i].HasTiers()) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
-        counter.SetRestartTabletOnPutData(reboots ? 1 : 0);
 
-        TriggerTTL(runtime, sender, { ++planStep, ++txId }, {}, 0, specs[i].GetTtlColumn());
-        if (hasEvictionSettings) {
-            if (i == startTieringIndex + 1 || i == startTieringIndex + 2) {
-                counter.WaitEvents(runtime, sender, i, 1, TDuration::Seconds(40));
+        TriggerTTL(runtime, sender, { ++planStep, ++txId }, {}, 0, specs[i].TtlColumn);
+        if (hasColdEviction) {
+            Cerr << "Cold tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
+            if (i > initialEviction) {
+                counter.WaitEvents(runtime, i, 1, TDuration::Seconds(40));
             } else {
-                counter.WaitEvents(runtime, sender, i, 0, TDuration::Seconds(20));
+                counter.WaitEvents(runtime, i, 0, TDuration::Seconds(20));
             }
         } else {
-            counter.WaitEvents(runtime, sender, i, 0, TDuration::Seconds(5));
+            Cerr << "Hot tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
+            counter.WaitEvents(runtime, i, 0, TDuration::Seconds(4));
         }
         if (reboots) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
@@ -506,10 +499,10 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
 
         --planStep;
         auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, Max<ui64>(), tableId);
-        Proto(read.get()).AddColumnNames(specs[i].GetTtlColumn());
+        Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
-        resColumns.emplace_back(0, 0);
+        specRowsBytes.emplace_back(0, 0);
         ui32 idx = 0;
         while (true) {
             auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
@@ -526,17 +519,15 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
             }
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
-            auto pkColumn = GetFirstPKColumn(resRead.GetData(), schema, specs[i].GetTtlColumn());
-            UNIT_ASSERT(pkColumn);
-            UNIT_ASSERT(pkColumn->type_id() == arrow::Type::TIMESTAMP);
+            auto ttlColumn = DeserializeColumn(resRead.GetData(), schema, specs[i].TtlColumn);
+            UNIT_ASSERT(ttlColumn);
 
-            auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(pkColumn);
-            resColumns.back().first += tsColumn->length();
+            specRowsBytes.back().first += ttlColumn->length();
             if (resRead.GetFinished()) {
                 UNIT_ASSERT(meta.HasReadStats());
                 auto& readStats = meta.GetReadStats();
                 ui64 numBytes = readStats.GetDataBytes(); // compressed bytes in storage
-                resColumns.back().second += numBytes;
+                specRowsBytes.back().second += numBytes;
                 break;
             }
         }
@@ -546,90 +537,157 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
         }
     }
 
-    return resColumns;
+    return specRowsBytes;
 }
 
-void TestTwoTiers(const TTestSchema::TTableSpecials& spec, bool compressed, bool reboots, const EStartTtlSettings startConf) {
-    const std::vector<ui64> ts = { 1600000000, 1620000000 };
-    ui64 nowSec = TInstant::Now().Seconds();
+class TEvictionChanges {
+public:
+    void AddTierAlters(const TTestSchema::TTableSpecials& spec, const std::vector<TDuration>&& borders,
+                        std::vector<TTestSchema::TTableSpecials>& alters) const {
+        UNIT_ASSERT_EQUAL(borders.size(), 3);
+        UNIT_ASSERT(spec.Tiers.size());
 
-    ui32 portionSize = 80 * 1000;
-    ui32 overlapSize = 40 * 1000;
-    std::vector<TString> blobs = MakeData(ts, portionSize, overlapSize, spec.GetTtlColumn());
+        alters.reserve(alters.size() + spec.Tiers.size() + 1);
 
-    ui64 allowBoth = nowSec - ts[0] + 600;
-    ui64 allowOne = nowSec - ts[1] + 600;
-    ui64 allowNone = nowSec - ts[1] - 600;
-    ui32 startTieringIndex = 0;
-    std::vector<TTestSchema::TTableSpecials> alters;
-    if (startConf != EStartTtlSettings::Tiering) {
-        if (startConf == EStartTtlSettings::None) {
-            alters.emplace_back(TTestSchema::TTableSpecials());
+        if (spec.Tiers.size() == 1) {
+            alters.push_back(MakeAlter(spec, {borders[0]})); // <tier0 border>, data[0], data[1]
+            alters.push_back(MakeAlter(spec, {borders[1]})); // data[0], <tier0 border>, data[1]
+            alters.push_back(MakeAlter(spec, {borders[2]})); // data[0], data[1], <tier0 border>
+        } else if (spec.Tiers.size() == 2) {
+            alters.push_back(MakeAlter(spec, {borders[0], borders[0]})); // <tier1 border>, <tier0 border>, data[0], data[1]
+            alters.push_back(MakeAlter(spec, {borders[1], borders[0]})); // <tier1 border>, data[0], <tier0 border>, data[1]
+            alters.push_back(MakeAlter(spec, {borders[2], borders[1]})); // data[0], <tier1 border>, data[1], <tier0 border>
+            alters.push_back(MakeAlter(spec, {borders[2], borders[2]})); // data[0], data[1], <tier1 border>, <tier0 border>
         }
-        if (startConf == EStartTtlSettings::Ttl) {
-            alters.emplace_back(TTestSchema::TTableSpecials());
-            alters.back().SetTtlColumn("timestamp");
-            alters.back().SetEvictAfterSeconds(allowBoth);
-        }
-        std::vector<TString> blobsOld = MakeData({ 1500000000, 1620000000 }, portionSize, overlapSize, spec.GetTtlColumn());
-        blobs.emplace_back(std::move(blobsOld[0]));
-        blobs.emplace_back(std::move(blobsOld[1]));
     }
-    startTieringIndex = alters.size();
-    alters.resize(alters.size() + 4, spec);
-    alters[startTieringIndex].Tiers[0].SetEvictAfterSeconds(allowBoth); // tier0 allows/has: data[0], data[1]
-    alters[startTieringIndex].Tiers[1].SetEvictAfterSeconds(allowBoth); // tier1 allows: data[0], data[1], has: nothing
 
-    alters[startTieringIndex + 1].Tiers[0].SetEvictAfterSeconds(allowOne); // tier0 allows/has: data[1]
-    alters[startTieringIndex + 1].Tiers[1].SetEvictAfterSeconds(allowBoth); // tier1 allows: data[0], data[1], has: data[0]
+    void AddTtlAlters(const TTestSchema::TTableSpecials& spec, const std::vector<TDuration>&& borders,
+                      std::vector<TTestSchema::TTableSpecials>& alters) const {
+        UNIT_ASSERT_EQUAL(borders.size(), 3);
+        UNIT_ASSERT(spec.Tiers.size());
 
-    alters[startTieringIndex + 2].Tiers[0].SetEvictAfterSeconds(allowNone); // tier0 allows/has: nothing
-    alters[startTieringIndex + 2].Tiers[1].SetEvictAfterSeconds(allowOne); // tier1 allows/has: data[1]
+        TTestSchema::TTableSpecials specTtl(spec);
+        if (spec.Tiers.size() == 1) {
+            specTtl = MakeAlter(spec, {borders[0]}); // <tier0 border>, data[0], data[1]
+        } else if (spec.Tiers.size() == 2) {
+            specTtl = MakeAlter(spec, {borders[0], borders[0]}); // <tier1 border>, <tier0 border>, data[0], data[1]
+        }
 
-    alters[startTieringIndex + 3].Tiers[0].SetEvictAfterSeconds(allowNone); // tier0 allows/has: nothing
-    alters[startTieringIndex + 3].Tiers[1].SetEvictAfterSeconds(allowNone); // tier1 allows/has: nothing
+        alters.reserve(alters.size() + borders.size());
+        alters.push_back(specTtl.SetTtl(borders[0])); // <ttl border>, data[0], data[1]
+        alters.push_back(specTtl.SetTtl(borders[1])); // data[0], <ttl border>, data[1]
+        alters.push_back(specTtl.SetTtl(borders[2])); // data[0], data[1], <ttl border>
+    }
 
-    auto columns = TestTiers(reboots, blobs, alters, startTieringIndex);
+    static void Assert(const TTestSchema::TTableSpecials& spec,
+                       const std::vector<std::pair<ui32, ui64>>& rowsBytes,
+                       size_t initialEviction) {
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[initialEviction].first, 2 * PORTION_ROWS);
+        UNIT_ASSERT(rowsBytes[initialEviction].second);
+        if (spec.Tiers.size() > 1) {
+            UNIT_ASSERT_VALUES_EQUAL(rowsBytes[initialEviction].first, rowsBytes[initialEviction + 1].first);
+        }
 
-    for (auto&& i : columns) {
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[rowsBytes.size() - 2].first, PORTION_ROWS);
+        UNIT_ASSERT(rowsBytes[rowsBytes.size() - 2].second);
+
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes.back().first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes.back().second, 0);
+    }
+
+private:
+    TTestSchema::TTableSpecials MakeAlter(const TTestSchema::TTableSpecials& spec,
+                                          const std::vector<TDuration>& tierBorders) const {
+        UNIT_ASSERT_EQUAL(spec.Tiers.size(), tierBorders.size());
+
+        TTestSchema::TTableSpecials alter(spec); // same TTL, Codec, etc.
+        for (size_t i = 0; i < tierBorders.size(); ++i) {
+            alter.Tiers[i].EvictAfter = tierBorders[i];
+        }
+        return alter;
+    }
+};
+
+TTestSchema::TTableSpecials InitialSpec(const EInitialEviction init, TDuration initTs) {
+    TTestSchema::TTableSpecials spec;
+    if (init == EInitialEviction::Ttl) {
+        spec.TtlColumn = "timestamp";
+        spec.EvictAfter = initTs;
+    }
+    return spec;
+}
+
+std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpecials& spec, bool reboots,
+                                                   EInitialEviction init, bool testTtl = false) {
+    const std::vector<ui64> ts = { 1600000000, 1620000000 };
+
+    ui32 overlapSize = 40 * 1000;
+    std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
+    if (init != EInitialEviction::Tiering) {
+        std::vector<TString> preload = MakeData({ 1500000000, 1620000000 }, PORTION_ROWS, overlapSize, spec.TtlColumn);
+        blobs.emplace_back(std::move(preload[0]));
+        blobs.emplace_back(std::move(preload[1]));
+    }
+
+    TInstant now = TInstant::Now();
+    TDuration allowBoth = TDuration::Seconds(now.Seconds() - ts[0] + 600);
+    TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
+    TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
+
+    std::vector<TTestSchema::TTableSpecials> alters = { InitialSpec(init, allowBoth) };
+    size_t initialEviction = alters.size();
+
+    TEvictionChanges changes;
+    if (testTtl) {
+        changes.AddTtlAlters(spec, {allowBoth, allowOne, allowNone}, alters);
+    } else {
+        changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
+    }
+
+    auto rowsBytes = TestTiers(reboots, blobs, alters, initialEviction);
+    for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
 
-    UNIT_ASSERT_EQUAL(columns.size(), alters.size());
-    UNIT_ASSERT(columns[startTieringIndex].second);
-    UNIT_ASSERT(columns[startTieringIndex].first);
+    UNIT_ASSERT_EQUAL(rowsBytes.size(), alters.size());
 
-    UNIT_ASSERT(columns[startTieringIndex + 1].second);
-    UNIT_ASSERT(columns[startTieringIndex + 1].first);
-
-    UNIT_ASSERT(columns[startTieringIndex + 2].second);
-    UNIT_ASSERT(columns[startTieringIndex + 2].first);
-
-    UNIT_ASSERT(!columns[startTieringIndex + 3].first);
-    UNIT_ASSERT(!columns[startTieringIndex + 3].second);
-
-    UNIT_ASSERT_EQUAL(columns[startTieringIndex].first, 2 * portionSize/* - overlapSize*/);
-    UNIT_ASSERT_EQUAL(columns[startTieringIndex].first, columns[startTieringIndex + 1].first);
-    UNIT_ASSERT_EQUAL(columns[startTieringIndex + 2].first, portionSize);
-
-    if (compressed) {
-        UNIT_ASSERT_GT(columns[startTieringIndex].second, columns[startTieringIndex + 1].second);
-    } else {
-        UNIT_ASSERT_EQUAL(columns[startTieringIndex].second, columns[startTieringIndex + 1].second);
+    if (!testTtl) { // TODO
+        changes.Assert(spec, rowsBytes, initialEviction);
     }
+    return rowsBytes;
 }
 
-void TestTwoHotTiers(bool reboot) {
+void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None) {
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
     spec.Tiers.back().SetCodec("zstd");
 
-    TestTwoTiers(spec, true, reboot, EStartTtlSettings::None);
+    auto rowsBytes = TestTiersAndTtl(spec, reboot, initial, changeTtl);
+    if (changeTtl) {
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[0].first, 3 * PORTION_ROWS);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[1].first, 2 * PORTION_ROWS);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[2].first, PORTION_ROWS);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[3].first, 0);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes.size(), 5);
+        if (initial == EInitialEviction::Ttl) {
+            UNIT_ASSERT_VALUES_EQUAL(rowsBytes[0].first, 2 * PORTION_ROWS);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(rowsBytes[0].first, 3 * PORTION_ROWS);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[1].first, 2 * PORTION_ROWS);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[2].first, 2 * PORTION_ROWS);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[3].first, PORTION_ROWS);
+        UNIT_ASSERT_VALUES_EQUAL(rowsBytes[4].first, 0);
+
+        UNIT_ASSERT(rowsBytes[1].second > rowsBytes[2].second); // compression works
+    }
 }
 
-void TestHotAndColdTiers(bool reboot, const EStartTtlSettings startConf) {
+void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
     const TString bucket = "tiering-test-01";
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
@@ -664,7 +722,7 @@ void TestHotAndColdTiers(bool reboot, const EStartTtlSettings startConf) {
         s3Config.SetConnectionTimeoutMs(10000);
     }
 
-    TestTwoTiers(spec, false, reboot, startConf);
+    TestTiersAndTtl(spec, reboot, initial);
 }
 
 void TestDrop(bool reboots) {
@@ -695,9 +753,7 @@ void TestDrop(bool reboots) {
 
     //
 
-    static const ui32 portionSize = 80 * 1000;
-
-    TString data1 = MakeTestBlob({0, portionSize}, testYdbSchema);
+    TString data1 = MakeTestBlob({0, PORTION_ROWS}, testYdbSchema);
     UNIT_ASSERT(data1.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(data1.size() < 7 * 1024 * 1024);
 
@@ -920,40 +976,62 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestTtl(true, false, specs);
     }
 
+    // TODO: EnableOneTierAfterTtl, EnableTtlAfterOneTier
+
     Y_UNIT_TEST(HotTiers) {
-        TestTwoHotTiers(false);
+        TestTwoHotTiers(false, false);
     }
 
     Y_UNIT_TEST(RebootHotTiers) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(true);
+        TestTwoHotTiers(true, false);
     }
+
+    Y_UNIT_TEST(HotTiersTtl) {
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
+        TestTwoHotTiers(false, true);
+    }
+
+    Y_UNIT_TEST(RebootHotTiersTtl) {
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
+        TestTwoHotTiers(true, true);
+    }
+
+    Y_UNIT_TEST(HotTiersAfterTtl) {
+        TestTwoHotTiers(false, false, EInitialEviction::Ttl);
+    }
+
+    Y_UNIT_TEST(RebootHotTiersAfterTtl) {
+        TestTwoHotTiers(true, false, EInitialEviction::Ttl);
+    }
+
+    // TODO: EnableTtlAfterHotTiers
 
     Y_UNIT_TEST(ColdTiers) {
-        TestHotAndColdTiers(false, EStartTtlSettings::Tiering);
-    }
-
-    Y_UNIT_TEST(ColdTiersWithNoneTtlTiering) {
-        TestHotAndColdTiers(false, EStartTtlSettings::None);
-    }
-
-    Y_UNIT_TEST(ColdTiersWithTtlTiering) {
-        TestHotAndColdTiers(false, EStartTtlSettings::Ttl);
-    }
-
-    Y_UNIT_TEST(ColdTiersWithNoneTtlTieringAndReboot) {
-        TestHotAndColdTiers(true, EStartTtlSettings::None);
-    }
-
-    Y_UNIT_TEST(ColdTiersWithTtlTieringAndReboot) {
-        TestHotAndColdTiers(true, EStartTtlSettings::Ttl);
+        TestHotAndColdTiers(false, EInitialEviction::Tiering);
     }
 
     Y_UNIT_TEST(RebootColdTiers) {
-        // Disabled KIKIMR-14942
         //NColumnShard::gAllowLogBatchingDefaultValue = false;
-        //TestHotAndColdTiers(true);
+        TestHotAndColdTiers(true, EInitialEviction::Tiering);
     }
+
+    Y_UNIT_TEST(EnableColdTiersAfterNoEviction) {
+        TestHotAndColdTiers(false, EInitialEviction::None);
+    }
+
+    Y_UNIT_TEST(RebootEnableColdTiersAfterNoEviction) {
+        TestHotAndColdTiers(true, EInitialEviction::None);
+    }
+
+    Y_UNIT_TEST(EnableColdTiersAfterTtl) {
+        TestHotAndColdTiers(false, EInitialEviction::Ttl);
+    }
+
+    Y_UNIT_TEST(RebootEnableColdTiersAfterTtl) {
+        TestHotAndColdTiers(true, EInitialEviction::Ttl);
+    }
+
+    // TODO: EnableTtlAfterColdTiers
 
     Y_UNIT_TEST(Drop) {
         TestDrop(false);

@@ -234,7 +234,12 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
 
             if (!Self->PathsToDrop.count(pathId)) {
-                ttls[pathId].emplace(version, TTtl::TDescription(info.GetTtlSettings()));
+                auto& ttlSettings = info.GetTtlSettings();
+                if (ttlSettings.HasEnabled()) {
+                    ttls[pathId].emplace(version, TTtl::TDescription(ttlSettings.GetEnabled()));
+                } else if (ttlSettings.HasTiering() && ttlSettings.GetTiering().HasTtl()) {
+                    ttls[pathId].emplace(version, TTtl::TDescription(ttlSettings.GetTiering().GetTtl()));
+                }
             }
 
             if (!rowset.Next())

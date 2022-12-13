@@ -189,7 +189,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                         continue;
                     }
                 }
-                LOG_S_DEBUG("Delete evicting blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                LOG_S_TRACE("Delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
@@ -199,6 +199,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     // DS to S3 eviction. Keep source blob in DS till EEvictState::EXTERN state.
                     continue;
                 }
+                LOG_S_TRACE("Delete evicted blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());

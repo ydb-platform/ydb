@@ -473,7 +473,9 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     const ui64 pathId = tableProto.GetPathId();
     if (!Tables.contains(pathId)) {
-        LOG_S_DEBUG("EnsureTable for pathId: " << pathId << " at tablet " << TabletID());
+        LOG_S_DEBUG("EnsureTable for pathId: " << pathId
+            << " ttl settings: " << tableProto.GetTtlSettings()
+            << " at tablet " << TabletID());
 
         ui32 schemaPresetId = 0;
         if (tableProto.HasSchemaPreset()) {
@@ -506,11 +508,16 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
             *tableVerProto.MutableTtlSettings() = tableProto.GetTtlSettings();
             auto& ttlInfo = tableProto.GetTtlSettings();
             if (ttlInfo.HasEnabled()) {
-                Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlInfo));
+                Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlInfo.GetEnabled()));
                 SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
             } else if (ttlInfo.HasTiering()) {
-                table.TieringUsage = ttlInfo.GetTiering().GetUseTiering();
+                auto& tiering = ttlInfo.GetTiering();
+                table.TieringUsage = tiering.GetUseTiering();
                 ActivateTiering(pathId, table.TieringUsage);
+                if (tiering.HasTtl()) {
+                    Ttl.SetPathTtl(pathId, TTtl::TDescription(tiering.GetTtl()));
+                    SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
+                }
             }
         }
 
@@ -543,8 +550,11 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     auto* tablePtr = Tables.FindPtr(pathId);
     Y_VERIFY(tablePtr && !tablePtr->IsDropped(), "AlterTable on a dropped or non-existent table");
     auto& table = *tablePtr;
+    auto& ttlSettings = alterProto.GetTtlSettings();
 
-    LOG_S_DEBUG("AlterTable for pathId: " << pathId << " at tablet " << TabletID());
+    LOG_S_DEBUG("AlterTable for pathId: " << pathId
+        << " ttl settings: " << ttlSettings
+        << " at tablet " << TabletID());
 
     Y_VERIFY(!alterProto.HasSchema(), "Tables with explicit schema are not supported");
     auto& info = table.Versions[version];
@@ -553,11 +563,17 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         info.SetSchemaPresetId(EnsureSchemaPreset(db, alterProto.GetSchemaPreset(), version));
     }
 
-    const TString& tieringUsage = alterProto.GetTtlSettings().GetTiering().GetUseTiering();
+    const TString& tieringUsage = ttlSettings.GetTiering().GetUseTiering();
     ActivateTiering(pathId, tieringUsage);
-    if (alterProto.HasTtlSettings() && alterProto.GetTtlSettings().HasEnabled()) {
-        *info.MutableTtlSettings() = alterProto.GetTtlSettings();
-        Ttl.SetPathTtl(pathId, TTtl::TDescription(alterProto.GetTtlSettings()));
+    if (alterProto.HasTtlSettings()) {
+        *info.MutableTtlSettings() = ttlSettings;
+        if (ttlSettings.HasEnabled()) {
+            Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlSettings.GetEnabled()));
+        } else if (ttlSettings.HasTiering() && ttlSettings.GetTiering().HasTtl()) {
+            Ttl.SetPathTtl(pathId, TTtl::TDescription( ttlSettings.GetTiering().GetTtl()));
+        } else {
+            Ttl.DropPathTtl(pathId);
+        }
     } else {
         Ttl.DropPathTtl(pathId);
     }
@@ -786,8 +802,13 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         return {};
     }
 
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
+    if (Tiers) {
+        actualIndexInfo.SetTiering(Tiers->GetTiering()); // TODO: pathIds
+    }
+
     ActiveIndexingOrCompaction = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(), indexChanges,
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
@@ -824,14 +845,19 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         return {};
     }
 
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
+    if (Tiers) {
+        actualIndexInfo.SetTiering(Tiers->GetTiering()); // TODO: pathIds
+    }
+
     ActiveIndexingOrCompaction = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(), indexChanges,
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterCompaction);
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);
 }
 
-std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiersInfo>& pathTtls,
-                                                               bool force) {
+std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls,
+                                                                bool force) {
     if (ActiveTtl) {
         LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
         return {};
@@ -841,28 +867,27 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         return {};
     }
 
-    THashMap<ui64, NOlap::TTiersInfo> regularTtls = pathTtls;
-    if (regularTtls.empty()) {
-        regularTtls = Ttl.MakeIndexTtlMap(TInstant::Now(), force);
-    }
-    const bool tiersUsage = regularTtls.empty() && Tiers;
-    if (tiersUsage) {
-        regularTtls = Tiers->GetTiering();
+    THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
+    if (eviction.empty()) {
+        if (Tiers) {
+            eviction = Tiers->GetTiering(); // TODO: pathIds
+        }
+        Ttl.AddTtls(eviction, TInstant::Now(), force);
     }
 
-    if (regularTtls.empty()) {
+    if (eviction.empty()) {
         LOG_S_TRACE("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
         return {};
-    } else {
-        for (auto&& i : regularTtls) {
-            LOG_S_DEBUG(i.first << "/" << i.second.GetDebugString() << ";tablet=" << TabletID());
-        }
     }
 
     LOG_S_DEBUG("Prepare TTL at tablet " << TabletID());
 
+    for (auto&& i : eviction) {
+        LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
+    }
+
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    indexChanges = PrimaryIndex->StartTtl(regularTtls);
+    indexChanges = PrimaryIndex->StartTtl(eviction);
 
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare TTL at tablet " << TabletID());
@@ -874,8 +899,11 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
 
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
+    actualIndexInfo.SetTiering(std::move(eviction));
+
     ActiveTtl = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(tiersUsage), indexChanges, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
 
@@ -925,7 +953,14 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         return {};
     }
 
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(GetActualIndexInfo(), changes, false);
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
+#if 0 // No need for now
+    if (Tiers) {
+        actualIndexInfo.SetTiering(Tiers->GetTiering());
+    }
+#endif
+
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
     ev->PutStatus = NKikimrProto::OK; // No new blobs to write
 
     ActiveCleanup = true;
@@ -953,7 +988,7 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     }
 
     if (schema.HasDefaultCompression()) {
-        NOlap::TCompression compression = NTiers::TManager::ConvertCompression(schema.GetDefaultCompression());
+        NOlap::TCompression compression = NTiers::ConvertCompression(schema.GetDefaultCompression());
         indexInfo.SetDefaultCompression(compression);
     }
 
@@ -1051,16 +1086,6 @@ void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
     Y_VERIFY(Tiers);
     ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadata::NProvider::TEvRefreshSubscriberData" << ev->Get()->GetSnapshot()->SerializeToString();
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
-}
-
-NOlap::TIndexInfo TColumnShard::GetActualIndexInfo(const bool tiersUsage) const {
-    auto indexInfo = PrimaryIndex->GetIndexInfo();
-    if (tiersUsage && Tiers) {
-        for (auto&& i : *Tiers) {
-            indexInfo.AddStorageTier(i.second.BuildTierStorage());
-        }
-    }
-    return indexInfo;
 }
 
 void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {

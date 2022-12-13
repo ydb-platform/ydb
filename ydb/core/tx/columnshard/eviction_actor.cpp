@@ -58,7 +58,8 @@ public:
             Y_VERIFY(blobData.size() == blobId.Size, "%u vs %u", (ui32)blobData.size(), blobId.Size);
             Blobs[blobId] = blobData;
         } else {
-            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId.ToString() << " status " << event.Status
+            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId.ToString()
+                << " status " << NKikimrProto::EReplyStatus_Name(event.Status)
                 << " at tablet " << TabletId << " (eviction)");
             TxEvent->PutStatus = event.Status;
             if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {

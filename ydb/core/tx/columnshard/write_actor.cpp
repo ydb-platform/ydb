@@ -224,23 +224,26 @@ public:
         TString accumulatedBlob;
         TVector<std::pair<size_t, TString>> recordsInBlob;
 
-        size_t portionsToWrite = indexChanges->AppendedPortions.size();
-        bool appended = true;
-        if (indexChanges->PortionsToEvict.size()) {
-            Y_VERIFY(portionsToWrite == 0);
-            portionsToWrite = indexChanges->PortionsToEvict.size();
-            appended = false;
-        }
+        Y_VERIFY(indexChanges->AppendedPortions.empty() || indexChanges->PortionsToEvict.empty());
+        size_t portionsToWrite = indexChanges->AppendedPortions.size() + indexChanges->PortionsToEvict.size();
+        bool eviction = indexChanges->PortionsToEvict.size() > 0;
 
         for (size_t pos = 0; pos < portionsToWrite; ++pos) {
-            auto& portionInfo = appended ? indexChanges->AppendedPortions[pos]
-                                         : indexChanges->PortionsToEvict[pos].first;
+            auto& portionInfo = eviction ? indexChanges->PortionsToEvict[pos].first
+                                         : indexChanges->AppendedPortions[pos];
             auto& records = portionInfo.Records;
 
             accumulatedBlob.clear();
             recordsInBlob.clear();
 
+            // There could be eviction mix between normal eviction and eviction without data changes
+            // TODO: better portions to blobs mathching
+            if (eviction && !indexChanges->PortionsToEvict[pos].second.DataChanges) {
+                continue;
+            }
+
             for (size_t i = 0; i < records.size(); ++i, ++blobsPos) {
+                Y_VERIFY(blobsPos < blobs.size());
                 const TString& currentBlob = blobs[blobsPos];
                 Y_VERIFY(currentBlob.size());
 

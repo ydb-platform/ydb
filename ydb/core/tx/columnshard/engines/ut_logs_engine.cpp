@@ -192,10 +192,6 @@ TIndexInfo TestTableInfo(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema
     return indexInfo;
 }
 
-static NOlap::TTiersInfo MakeTtl(TInstant border) {
-    return NOlap::TTiersInfo("timestamp", border);
-}
-
 template <typename TKeyDataType>
 class TBuilder {
 public:
@@ -346,8 +342,8 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 }
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
-         const THashMap<ui64, NOlap::TTiersInfo>& pathTtls, ui32 expectedToDrop) {
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartTtl(pathTtls);
+         const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartTtl(pathEviction);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
@@ -708,8 +704,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         // TTL
-        THashMap<ui64, NOlap::TTiersInfo> pathTtls;
-        pathTtls.emplace(pathId, MakeTtl(TInstant::MicroSeconds(10000)));
+        THashMap<ui64, NOlap::TTiering> pathTtls;
+        pathTtls.emplace(pathId, TTiering::MakeTtl(TInstant::MicroSeconds(10000), "timestamp"));
         Ttl(engine, db, pathTtls, 2);
 
         // read + load + read

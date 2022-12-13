@@ -247,7 +247,7 @@ public:
                                                           const TSnapshot& outdatedSnapshot) override;
     std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
                                                        THashSet<ui64>& pathsToDrop) override;
-    std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiersInfo>& pathTtls,
+    std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) override;

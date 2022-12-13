@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "scalars.h"
+#include "tier_info.h"
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/sys_view/common/schema.h>
 
@@ -49,16 +50,6 @@ GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>
 }
 
 struct TInsertedData;
-
-struct TCompression {
-    arrow::Compression::type Codec{arrow::Compression::LZ4_FRAME};
-    std::optional<int> Level;
-};
-
-struct TStorageTier {
-    TString Name;
-    std::optional<TCompression> Compression;
-};
 
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
@@ -193,41 +184,16 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }
 
-    std::optional<TCompression> GetTierCompression(ui32 tierNo) const {
-        if (!Tiers.empty()) {
-            Y_VERIFY(tierNo < Tiers.size());
-            return Tiers[tierNo].Compression;
-        }
-        return {};
+    void SetTiering(THashMap<ui64, TTiering>&& pathTierings) {
+        PathTiering = std::move(pathTierings);
     }
 
-    std::optional<TCompression> GetTierCompression(const TString& tierName) const {
-        if (tierName.empty()) {
-            return {};
+    const TTiering* GetTiering(ui64 pathId) const {
+        auto it = PathTiering.find(pathId);
+        if (it != PathTiering.end()) {
+            return &it->second;
         }
-        ui32 tierNo = GetTierNumber(tierName);
-        Y_VERIFY(tierNo != Max<ui32>());
-        return GetTierCompression(tierNo);
-    }
-
-    TString GetTierName(ui32 tierNo) const {
-        if (!Tiers.empty()) {
-            Y_VERIFY(tierNo < Tiers.size());
-            return Tiers[tierNo].Name;
-        }
-        return {};
-    }
-
-    void AddStorageTier(TStorageTier&& tier) {
-        TierByName[tier.Name] = Tiers.size();
-        Tiers.emplace_back(std::move(tier));
-    }
-
-    ui32 GetTierNumber(const TString& tierName) const {
-        if (auto it = TierByName.find(tierName); it != TierByName.end()) {
-            return it->second;
-        }
-        return Max<ui32>();
+        return nullptr;
     }
 
 private:
@@ -242,8 +208,7 @@ private:
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     TCompression DefaultCompression;
-    std::vector<TStorageTier> Tiers;
-    THashMap<TString, ui32> TierByName;
+    THashMap<ui64, TTiering> PathTiering;
 
     void AddRequiredColumns(const TVector<TString>& columns) {
         for (auto& name: columns) {

@@ -12,6 +12,8 @@
 namespace NKikimr::NColumnShard {
 namespace NTiers {
 
+NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
+
 class TManager {
 private:
     ui64 TabletId = 0;
@@ -20,8 +22,6 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, StorageActorId);
 public:
     TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TTierConfig& config);
-    static NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
-    NOlap::TStorageTier BuildTierStorage() const;
 
     TManager& Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     bool NeedExport() const {
@@ -54,7 +54,7 @@ public:
     {
     }
     TActorId GetActorId() const;
-    THashMap<ui64, NOlap::TTiersInfo> GetTiering() const;
+    THashMap<ui64, NOlap::TTiering> GetTiering() const;
     void TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void EnablePathId(const ui64 pathId, const TString& tieringId) {
         PathIdTiering.emplace(pathId, tieringId);

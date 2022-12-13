@@ -229,12 +229,21 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_INACTIVE_ROWS, stats.Inactive.Rows);
     SetCounter(COUNTER_INACTIVE_BYTES, stats.Inactive.Bytes);
     SetCounter(COUNTER_INACTIVE_RAW_BYTES, stats.Inactive.RawBytes);
-
     SetCounter(COUNTER_EVICTED_PORTIONS, stats.Evicted.Portions);
     SetCounter(COUNTER_EVICTED_BLOBS, stats.Evicted.Blobs);
     SetCounter(COUNTER_EVICTED_ROWS, stats.Evicted.Rows);
     SetCounter(COUNTER_EVICTED_BYTES, stats.Evicted.Bytes);
     SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.Evicted.RawBytes);
+
+    LOG_S_DEBUG("Index: tables " << stats.Tables
+        << " granules " << stats.Granules << " (empty " << stats.EmptyGranules << " overloaded " << stats.OverloadedGranules << ")"
+        << " inserted " << stats.Inserted.Portions << "/" << stats.Inserted.Blobs << "/" << stats.Inserted.Rows
+        << " compacted " << stats.Compacted.Portions << "/" << stats.Compacted.Blobs << "/" << stats.Compacted.Rows
+        << " s-compacted " << stats.SplitCompacted.Portions << "/" << stats.SplitCompacted.Blobs << "/" << stats.SplitCompacted.Rows
+        << " inactive " << stats.Inactive.Portions << "/" << stats.Inactive.Blobs << "/" << stats.Inactive.Rows
+        << " evicted " << stats.Evicted.Portions << "/" << stats.Evicted.Blobs << "/" << stats.Evicted.Rows
+        << " column records " << stats.ColumnRecords << " meta bytes " << stats.ColumnMetadataBytes
+        << " at tablet " << TabletID());
 }
 
 ui64 TColumnShard::MemoryUsage() const {

@@ -135,6 +135,10 @@ namespace NActors {
             return { Data_ + pos, len };
         }
 
+        explicit operator TStringBuf() const noexcept {
+            return Slice();
+        }
+
         bool IsPrivate() const {
             return Data_ ? IsPrivate(Header()) : true;
         }

@@ -38,6 +38,7 @@ namespace NActors {
             UNIT_ASSERT(!link.IsShared());
             UNIT_ASSERT(!data.IsShared());
 
+            UNIT_ASSERT_VALUES_EQUAL(TString(TStringBuf(data)), TString("Hello"));
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice()), TString("Hello"));
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1)), TString("ello"));
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1, 3)), TString("ell"));

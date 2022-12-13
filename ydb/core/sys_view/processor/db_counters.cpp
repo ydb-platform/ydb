@@ -368,7 +368,7 @@ void TSysViewProcessor::DetachExternalCounters() {
     GetServiceCounters(AppData()->Counters, "ydb_serverless", false)
         ->RemoveSubgroup("database", Database);
 
-    GetServiceCounters(AppData()->Counters, "labeled_severless", false)
+    GetServiceCounters(AppData()->Counters, "labeled_serverless", false)
         ->RemoveSubgroup("database", Database);
 }
 

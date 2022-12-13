@@ -54,7 +54,7 @@ You can also add or remove a secondary index using the {{ ydb-short-name }} CLI 
 
 `ADD CHANGEFEED <name> WITH (option = value[, ...])`: Adds a [changefeed](../../../../concepts/cdc) with the specified name and options.
 
-**Changefeed options**
+### Changefeed options {#changefeed-options}
 
 * `MODE`: Operation mode. Specifies what to write to a changefeed each time table data is altered.
    * `KEYS_ONLY`: Only the primary key components and change flag are written.

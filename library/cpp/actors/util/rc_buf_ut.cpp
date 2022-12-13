@@ -10,6 +10,16 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         UNIT_ASSERT_EQUAL(sizeof(TRcBuf), 4 * sizeof(uintptr_t));
     }
 
+    Y_UNIT_TEST(Slice) {
+        auto data = TRcBuf::Copy("Hello", 5);
+        UNIT_ASSERT_VALUES_EQUAL(TString(TStringBuf(data)), TString("Hello"));
+        UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice()), TString("Hello"));
+        UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1)), TString("ello"));
+        UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1, 3)), TString("ell"));
+        UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(1, 100)), TString("ello"));
+        UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice(0, 4)), TString("Hell"));
+    }
+
     Y_UNIT_TEST(CrossCompare) {
         TString str = "some very long string";
         const TString constStr(str);
@@ -159,7 +169,7 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
 
     Y_UNIT_TEST(SliceUnshare) {
         TRcBuf data = TRcBuf::Uninitialized(10, 20, 30);
-        TRcBuf otherData(TRcBuf::Slice, data.data() + 1, data.size() - 2, data);
+        TRcBuf otherData(TRcBuf::Piece, data.data() + 1, data.size() - 2, data);
         UNIT_ASSERT_EQUAL(otherData.Headroom(), 0);
         UNIT_ASSERT_EQUAL(otherData.Tailroom(), 0);
     }

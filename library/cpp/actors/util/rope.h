@@ -407,13 +407,13 @@ public:
 
         while (begin.Iter != end.Iter) {
             const size_t size = begin.ContiguousSize();
-            Chain.PutToEnd(TRcBuf::Slice, begin.ContiguousData(), size, begin.GetChunk());
+            Chain.PutToEnd(TRcBuf::Piece, begin.ContiguousData(), size, begin.GetChunk());
             begin.AdvanceToNextContiguousBlock();
             Size += size;
         }
 
         if (begin != end && end.PointsToChunkMiddle()) {
-            Chain.PutToEnd(TRcBuf::Slice, begin.Ptr, end.Ptr, begin.GetChunk());
+            Chain.PutToEnd(TRcBuf::Piece, begin.Ptr, end.Ptr, begin.GetChunk());
             Size += end.Ptr - begin.Ptr;
         }
     }
@@ -534,7 +534,7 @@ public:
                     return;
                 }
             }
-            dest->Chain.PutToEnd(TRcBuf::Slice, first->Begin, first->Begin + num, *first);
+            dest->Chain.PutToEnd(TRcBuf::Piece, first->Begin, first->Begin + num, *first);
             first->Begin += num;
         }
     }
@@ -552,7 +552,7 @@ public:
 
         // check if we have to split the block
         if (pos.PointsToChunkMiddle()) {
-            pos.Iter = Chain.InsertBefore(pos.Iter, TRcBuf::Slice, pos->Begin, pos.Ptr, pos.GetChunk());
+            pos.Iter = Chain.InsertBefore(pos.Iter, TRcBuf::Piece, pos->Begin, pos.Ptr, pos.GetChunk());
             ++pos.Iter;
             pos->Begin = pos.Ptr;
         }
@@ -854,7 +854,7 @@ private:
 
         auto addBlock = [&](const TRcBuf& from, const char *begin, const char *end) {
             if (target) {
-                target->Chain.PutToEnd(TRcBuf::Slice, begin, end, from);
+                target->Chain.PutToEnd(TRcBuf::Piece, begin, end, from);
                 target->Size += end - begin;
             }
             Size -= end - begin;
@@ -868,7 +868,7 @@ private:
             const char *firstChunkBegin = begin.PointsToChunkMiddle() ? begin->Begin : nullptr;
             begin->Begin = end.Ptr; // this affects both begin and end iterator pointed values
             if (firstChunkBegin) {
-                Chain.InsertBefore(begin.Iter, TRcBuf::Slice, firstChunkBegin, begin.Ptr, chunkToSplit);
+                Chain.InsertBefore(begin.Iter, TRcBuf::Piece, firstChunkBegin, begin.Ptr, chunkToSplit);
             }
         } else {
             // check the first iterator -- if it starts not from the begin of the block, we have to adjust end of the

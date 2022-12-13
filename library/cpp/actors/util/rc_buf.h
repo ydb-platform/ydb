@@ -688,7 +688,7 @@ class TRcBuf {
         }
     };
 
-    static constexpr struct TOwnedSlice {} OwnedSlice{};
+    static constexpr struct TOwnedPiece {} OwnedPiece{};
 
     TBackend Backend; // who actually holds the data
     const char *Begin; // data start
@@ -711,7 +711,7 @@ class TRcBuf {
         End = Begin + span.size();
     }
 
-    TRcBuf(TOwnedSlice, const char *data, size_t size, const TRcBuf& from)
+    TRcBuf(TOwnedPiece, const char *data, size_t size, const TRcBuf& from)
         : TRcBuf(from.Backend, {data, size})
     {
         Y_VERIFY(data >= from.GetData());
@@ -720,12 +720,12 @@ class TRcBuf {
         Backend.UpdateCookiesUnsafe(Begin, End);
     }
 
-    TRcBuf(TOwnedSlice, const char *begin, const char *end, const TRcBuf& from)
-        : TRcBuf(OwnedSlice, begin, end - begin, from)
+    TRcBuf(TOwnedPiece, const char *begin, const char *end, const TRcBuf& from)
+        : TRcBuf(OwnedPiece, begin, end - begin, from)
     {}
 
 public:
-    static constexpr struct TSlice {} Slice{};
+    static constexpr struct TPiece {} Piece{};
 
     enum class EResizeResult {
         NoAlloc,
@@ -770,7 +770,7 @@ public:
         : TRcBuf(backend, backend->GetData())
     {}
 
-    TRcBuf(TSlice, const char *data, size_t size, const TRcBuf& from)
+    TRcBuf(TPiece, const char *data, size_t size, const TRcBuf& from)
         : TRcBuf(from.Backend, {data, size})
     {
         Y_VERIFY(data >= from.GetData());
@@ -778,8 +778,8 @@ public:
         Y_VERIFY(data + size <= from.GetData() + from.GetSize());
     }
 
-    TRcBuf(TSlice, const char *begin, const char *end, const TRcBuf& from)
-        : TRcBuf(Slice, begin, end - begin, from)
+    TRcBuf(TPiece, const char *begin, const char *end, const TRcBuf& from)
+        : TRcBuf(Piece, begin, end - begin, from)
     {}
 
     TRcBuf(const TRcBuf& other)
@@ -806,7 +806,7 @@ public:
         if (headroom == 0 && tailroom == 0) {
             TInternalBackend res = TInternalBackend::Uninitialized(size);
             return TRcBuf(
-                OwnedSlice,
+                OwnedPiece,
                 res.data(),
                 res.data() + res.size(),
                 TRcBuf(res));
@@ -916,6 +916,16 @@ public:
 
     TContiguousSpan GetContiguousSpan() const {
         return {GetData(), GetSize()};
+    }
+
+    TStringBuf Slice(size_t pos = 0, size_t len = -1) const noexcept {
+        pos = Min(pos, size());
+        len = Min(len, size() - pos);
+        return {const_cast<TRcBuf*>(this)->UnsafeGetDataMut() + pos, len};
+    }
+
+    explicit operator TStringBuf() const noexcept {
+        return Slice();
     }
 
     TMutableContiguousSpan GetContiguousSpanMut() {

@@ -15,6 +15,8 @@ namespace NYql {
 using namespace NDqs; // TODO: remove this namespace;
 
 struct TDqState: public TThrRefBase {
+    using TPtr = TIntrusivePtr<TDqState>;
+
     IDqGateway::TPtr DqGateway;
     const TGatewaysConfig* GatewaysConfig;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;

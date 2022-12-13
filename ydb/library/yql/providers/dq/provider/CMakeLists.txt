@@ -42,7 +42,9 @@ target_link_libraries(providers-dq-provider PUBLIC
 )
 target_sources(providers-dq-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_control.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_constraints.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource_constraints.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_gateway.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_provider.cpp

@@ -1,5 +1,6 @@
 #include "yql_dq_datasink.h"
 #include "yql_dq_state.h"
+#include "yql_dq_datasink_constraints.h"
 #include "yql_dq_datasink_type_ann.h"
 #include "yql_dq_recapture.h"
 
@@ -34,6 +35,7 @@ public:
             return CreateDqsDataSinkTypeAnnotationTransformer(
                 state->TypeCtx, state->Settings->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate));
         })
+        , ConstraintsTransformer([state] () { return CreateDqDataSinkConstraintTransformer(state); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
 
@@ -189,6 +191,11 @@ public:
         return *TypeAnnotationTransformer;
     }
 
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly && subGraph);
+        return *ConstraintsTransformer;
+    }
+
     IGraphTransformer& GetRecaptureOptProposalTransformer() override {
         return *RecaptureTransformer;
     }
@@ -274,6 +281,7 @@ public:
     TLazyInitHolder<IGraphTransformer> PhyOptTransformer;
     TLazyInitHolder<IGraphTransformer> PhysicalFinalizingTransformer;
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer;
+    TLazyInitHolder<IGraphTransformer> ConstraintsTransformer;
     TLazyInitHolder<IGraphTransformer> RecaptureTransformer;
 };
 

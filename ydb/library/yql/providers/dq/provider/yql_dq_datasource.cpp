@@ -1,4 +1,5 @@
 #include "yql_dq_datasource.h"
+#include "yql_dq_datasource_constraints.h"
 #include "yql_dq_datasource_type_ann.h"
 #include "yql_dq_state.h"
 
@@ -43,6 +44,7 @@ public:
         })
         , ExecTransformer([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State)); })
         , TypeAnnotationTransformer([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
+        , ConstraintsTransformer([state] () { return CreateDqDataSourceConstraintTransformer(state); })
     { }
 
     TStringBuf GetName() const override {
@@ -52,6 +54,11 @@ public:
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
+    }
+
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly && subGraph);
+        return *ConstraintsTransformer;
     }
 
     IGraphTransformer& GetConfigurationTransformer() override {
@@ -234,6 +241,7 @@ private:
     TLazyInitHolder<IGraphTransformer> ConfigurationTransformer;
     TLazyInitHolder<IGraphTransformer> ExecTransformer;
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer;
+    TLazyInitHolder<IGraphTransformer> ConstraintsTransformer;
 };
 
 TIntrusivePtr<IDataProvider> CreateDqDataSource(const TDqStatePtr& state, TExecTransformerFactory execTransformerFactory) {

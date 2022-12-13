@@ -119,6 +119,10 @@ public:
         Constraints_.clear();
     }
 
+    explicit operator bool() const {
+        return !Constraints_.empty();
+    }
+
     bool operator ==(const TConstraintSet& s) const {
         return Constraints_ == s.Constraints_;
     }

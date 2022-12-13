@@ -65,7 +65,7 @@ inline size_t GetSparseBitmapPopCount(const ui8* src, size_t len) {
     // auto-vectorization is performed here
     size_t result = 0;
     while (len--) {
-        result += *src++ & ui8(1);
+        result += *src++;
     }
     return result;
 }
@@ -115,31 +115,31 @@ inline void CompressSparseBitmapNegate(ui8* dst, const ui8* srcSparse, size_t le
 
 inline void NegateSparseBitmap(ui8* dst, const ui8* src, size_t len) {
     while (len--) {
-        *dst++ = ~(*src++) & ui8(1);
+        *dst++ = *src++ ^ ui8(1);
     }
 }
 
 inline void XorSparseBitmapScalar(ui8* dst, ui8 value, const ui8* src, size_t len) {
     while (len--) {
-        *dst++ = (*src++ ^ value) & ui8(1);
+        *dst++ = *src++ ^ value;
     }
 }
 
 inline void XorSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t len) {
     while (len--) {
-        *dst++ = (*src1++ ^ *src2++) & ui8(1);
+        *dst++ = *src1++ ^ *src2++;
     }
 }
 
 inline void AndSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t len) {
     while (len--) {
-        *dst++ = (*src1++ & *src2++) & ui8(1);
+        *dst++ = *src1++ & *src2++;
     }
 }
 
 inline void OrSparseBitmaps(ui8* dst, const ui8* src1, const ui8* src2, size_t len) {
     while (len--) {
-        *dst++ = (*src1++ | *src2++) & ui8(1);
+        *dst++ = *src1++ | *src2++;
     }
 }
 
@@ -186,8 +186,7 @@ template<typename T>
 inline T* CompressArray(const T* src, const ui8* sparseBitmap, T* dst, size_t count) {
     while (count--) {
         *dst = *src++;
-        dst += *sparseBitmap & 1u;
-        sparseBitmap++;
+        dst += *sparseBitmap++;
     }
     return dst;
 }

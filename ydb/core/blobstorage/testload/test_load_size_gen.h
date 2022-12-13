@@ -10,7 +10,7 @@ namespace NKikimr {
             ui32 Min;
             ui32 Max;
 
-            TItem(const NKikimrBlobStorage::TEvTestLoadRequest::TSizeInfo& x)
+            TItem(const NKikimr::TEvTestLoadRequest::TSizeInfo& x)
                 : Min(x.GetMin())
                 , Max(x.GetMax())
             {

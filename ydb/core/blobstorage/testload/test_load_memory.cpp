@@ -30,7 +30,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 
-    TMemoryTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
+    TMemoryTestLoadActor(const NKikimr::TEvTestLoadRequest::TMemoryLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -129,7 +129,7 @@ public:
 };
 
 IActor* CreateMemoryTestLoad(
-    const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
+    const NKikimr::TEvTestLoadRequest::TMemoryLoadStart& cmd,
     const TActorId& parent,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     ui64 index,

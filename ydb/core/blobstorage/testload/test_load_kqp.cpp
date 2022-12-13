@@ -298,7 +298,7 @@ public:
         return NKikimrServices::TActivity::KQP_TEST_WORKLOAD;
     }
 
-    TKqpLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
+    TKqpLoadActor(const NKikimr::TEvTestLoadRequest::TKqpLoadStart& cmd,
             const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag)
         : Parent(parent)
@@ -326,7 +326,7 @@ public:
 
         NYdbWorkload::TWorkloadFactory factory;
 
-        if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) {
+        if (cmd.Workload_case() == NKikimr::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) {
             WorkloadClass = NYdbWorkload::EWorkload::STOCK;
             NYdbWorkload::TStockWorkloadParams params;
             params.PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
@@ -337,7 +337,7 @@ public:
             params.DbPath = WorkingDir;
             params.MinPartitions = UniformPartitionsCount;
             WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::STOCK, &params);
-        } else if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kKv) {
+        } else if (cmd.Workload_case() == NKikimr::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kKv) {
             WorkloadClass = NYdbWorkload::EWorkload::KV;
             NYdbWorkload::TKvWorkloadParams params;
             params.InitRowCount = cmd.GetKv().GetInitRowCount();
@@ -749,7 +749,7 @@ private:
 
 };
 
-IActor * CreateKqpLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
+IActor * CreateKqpLoadActor(const NKikimr::TEvTestLoadRequest::TKqpLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TKqpLoadActor(cmd, parent, counters, index, tag);
 }

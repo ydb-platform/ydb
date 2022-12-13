@@ -96,7 +96,7 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     TBuffer DataBuffer;
     ui64 Lsn = 1;
     TChunkInfo *ReservePending = nullptr;
-    NKikimrBlobStorage::TEvTestLoadRequest::ELogMode LogMode;
+    NKikimr::TEvTestLoadRequest::ELogMode LogMode;
     THashMap<TChunkIdx, ui32> ChunkUsageCount;
     TQueue<TChunkIdx> AllocationQueue;
     TMultiMap<TInstant, TRequestStat> TimeSeries;
@@ -132,7 +132,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
     }
 
-    TPDiskWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd, const TActorId& parent,
+    TPDiskWriterTestLoadActor(const NKikimr::TEvTestLoadRequest::TPDiskLoadStart& cmd, const TActorId& parent,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -427,7 +427,7 @@ public:
             ui32 offset = slotIndex * size;
             const TInstant now = TAppData::TimeProvider->Now();
             // like the parallel mode, but log is treated already written
-            bool isLogWritten = (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_NONE);
+            bool isLogWritten = (LogMode == NKikimr::TEvTestLoadRequest::LOG_NONE);
             ui64 requestIdx = NewTRequestInfo(size, chunkIdx, now, now, false, isLogWritten);
             SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound,
                     chunkIdx, offset,
@@ -435,7 +435,7 @@ public:
                     reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob, Sequential));
             ++ChunkWrite_RequestsSent;
 
-            if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_PARALLEL) {
+            if (LogMode == NKikimr::TEvTestLoadRequest::LOG_PARALLEL) {
                 SendLogRequest(ctx, requestIdx, chunkIdx);
             }
 
@@ -461,10 +461,10 @@ public:
         if (info->LogWritten) {
             // both data and log are written, this could happen only in LOG_PARALLEL mode; this request is done
             FinishRequest(ctx, requestIdx);
-        } else if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_SEQUENTIAL) {
+        } else if (LogMode == NKikimr::TEvTestLoadRequest::LOG_SEQUENTIAL) {
             // in sequential mode we send log request after completion of data write request
             SendLogRequest(ctx, requestIdx, msg->ChunkIdx);
-        } else if (LogMode == NKikimrBlobStorage::TEvTestLoadRequest::LOG_PARALLEL) {
+        } else if (LogMode == NKikimr::TEvTestLoadRequest::LOG_PARALLEL) {
             // this is parallel mode and log is not written yet, so request is not complete; we release it to avoid
             // being deleted
         }
@@ -639,7 +639,7 @@ public:
     )
 };
 
-IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd,
+IActor *CreatePDiskWriterTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TPDiskWriterTestLoadActor(cmd, parent, counters, index, tag);
 }

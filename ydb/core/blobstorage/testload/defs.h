@@ -6,4 +6,6 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/protos/services.pb.h>
+#include <ydb/core/protos/testload.pb.h>
 
+#include <ydb/core/blobstorage/testload/test_load_events.h>

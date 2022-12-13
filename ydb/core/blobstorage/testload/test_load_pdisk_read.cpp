@@ -122,7 +122,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_READ;
     }
 
-    TPDiskReaderTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskReadLoadStart& cmd, const TActorId& parent,
+    TPDiskReaderTestLoadActor(const NKikimr::TEvTestLoadRequest::TPDiskReadLoadStart& cmd, const TActorId& parent,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -585,7 +585,7 @@ public:
     )
 };
 
-IActor *CreatePDiskReaderTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskReadLoadStart& cmd,
+IActor *CreatePDiskReaderTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskReadLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         ui64 index, ui64 tag) {
     return new TPDiskReaderTestLoadActor(cmd, parent, counters, index, tag);

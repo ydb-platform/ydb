@@ -2306,8 +2306,6 @@ struct TEvBlobStorage {
     struct TEvControllerScrubReportQuantumInProgress;
     struct TEvRequestControllerInfo;
     struct TEvResponseControllerInfo;
-    struct TEvTestLoadRequest;
-    struct TEvTestLoadResponse;
     struct TEvControllerGroupDecommittedNotify;
     struct TEvControllerGroupDecommittedResponse;
     struct TEvControllerGroupMetricsExchange;

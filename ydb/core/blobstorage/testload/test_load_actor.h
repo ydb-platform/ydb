@@ -33,33 +33,33 @@ namespace NKikimr {
 
     NActors::IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
-    NActors::IActor *CreateWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TLoadStart& cmd,
+    NActors::IActor *CreateWriterTestLoad(const NKikimr::TEvTestLoadRequest::TLoadStart& cmd,
             const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
 
-    NActors::IActor *CreatePDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLoadStart& cmd,
+    NActors::IActor *CreatePDiskWriterTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreatePDiskLogWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
+    NActors::IActor *CreatePDiskLogWriterTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreatePDiskReaderTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskReadLoadStart& cmd,
+    NActors::IActor *CreatePDiskReaderTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskReadLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreateVDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
+    NActors::IActor *CreateVDiskWriterTestLoad(const NKikimr::TEvTestLoadRequest::TVDiskLoadStart& cmd,
             const NActors::TActorId& parent, ui64 tag);
 
-    NActors::IActor *CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
+    NActors::IActor *CreateKeyValueWriterTestLoad(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreateKqpLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
+    NActors::IActor *CreateKqpLoadActor(const NKikimr::TEvTestLoadRequest::TKqpLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 
-    NActors::IActor *CreateMemoryTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TMemoryLoadStart& cmd,
+    NActors::IActor *CreateMemoryTestLoad(const NKikimr::TEvTestLoadRequest::TMemoryLoadStart& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag);
 

@@ -9,7 +9,6 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tx_proxy.proto";
 import "ydb/core/protos/tx_scheme.proto";
 import "ydb/core/protos/node_whiteboard.proto";
-import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
@@ -21,8 +20,9 @@ import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/sqs.proto";
 import "ydb/core/protos/issue_id.proto";
-import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/query_stats.proto";
+import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/testload.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -481,7 +481,7 @@ message TDsTestLoadResponse {
 
 message TBsTestLoadRequest {
     repeated uint32 NodeId = 1;
-    optional NKikimrBlobStorage.TEvTestLoadRequest Event = 2;
+    optional NKikimr.TEvTestLoadRequest Event = 2;
 };
 
 message TBsTestLoadResponse {

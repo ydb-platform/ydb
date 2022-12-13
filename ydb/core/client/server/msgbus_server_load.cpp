@@ -1,12 +1,12 @@
 #include "msgbus_servicereq.h"
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/testload/test_load_events.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
 
 class TBsTestLoadActorRequest : public TActorBootstrapped<TBsTestLoadActorRequest>, public TMessageBusSessionIdentHolder {
     TVector<ui32> NodeIds;
-    NKikimrBlobStorage::TEvTestLoadRequest Cmd;
+    NKikimr::TEvTestLoadRequest Cmd;
     NKikimrClient::TBsTestLoadResponse Response;
     ui32 ResponsesPending;
 
@@ -24,7 +24,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         for (ui32 nodeId : NodeIds) {
-            auto msg = MakeHolder<TEvBlobStorage::TEvTestLoadRequest>();
+            auto msg = MakeHolder<TEvLoad::TEvTestLoadRequest>();
             msg->Record = Cmd;
             msg->Record.SetCookie(nodeId);
             ctx.Send(MakeBlobStorageLoadID(nodeId), msg.Release());
@@ -35,7 +35,7 @@ public:
         CheckResponse(ctx);
     }
 
-    void Handle(TEvBlobStorage::TEvTestLoadResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvLoad::TEvTestLoadResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         ui32 nodeId = record.GetCookie();
         --ResponsesPending;
@@ -63,7 +63,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBlobStorage::TEvTestLoadResponse, Handle);
+            HFunc(TEvLoad::TEvTestLoadResponse, Handle);
         }
     }
 };

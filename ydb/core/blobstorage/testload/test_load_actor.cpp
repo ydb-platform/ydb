@@ -77,7 +77,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     ui64 NextTag = 1;
 
     // queue for all-nodes load
-    TVector<NKikimrBlobStorage::TEvTestLoadRequest> AllNodesLoadConfigs;
+    TVector<NKikimr::TEvTestLoadRequest> AllNodesLoadConfigs;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -95,7 +95,7 @@ public:
         Become(&TLoadActor::StateFunc);
     }
 
-    void Handle(TEvBlobStorage::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvLoad::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
         ui32 status = NMsgBusProxy::MSTATUS_OK;
         TString error;
         ui64 tag = 0;
@@ -108,7 +108,7 @@ public:
             status = NMsgBusProxy::MSTATUS_ERROR;
             error = ex.what();
         }
-        auto response = std::make_unique<TEvBlobStorage::TEvTestLoadResponse>();
+        auto response = std::make_unique<TEvLoad::TEvTestLoadResponse>();
         response->Record.SetStatus(status);
         if (error) {
             response->Record.SetErrorReason(error);
@@ -129,10 +129,10 @@ public:
         }
     }
 
-    ui64 ProcessCmd(const NKikimrBlobStorage::TEvTestLoadRequest& record, const TActorContext& ctx) {
+    ui64 ProcessCmd(const NKikimr::TEvTestLoadRequest& record, const TActorContext& ctx) {
         ui64 tag = 0;
         switch (record.Command_case()) {
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kLoadStart: {
                 const auto& cmd = record.GetLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -144,7 +144,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kLoadStop: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kLoadStop: {
                 const auto& cmd = record.GetLoadStop();
                 if (cmd.HasRemoveAllTags() && cmd.GetRemoveAllTags()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Delete all running load actors");
@@ -166,7 +166,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kPDiskLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kPDiskLoadStart: {
                 const auto& cmd = record.GetPDiskLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -178,7 +178,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kPDiskReadLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kPDiskReadLoadStart: {
                 const auto& cmd = record.GetPDiskReadLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -190,7 +190,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kPDiskLogLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kPDiskLogLoadStart: {
                 const auto& cmd = record.GetPDiskLogLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -202,7 +202,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kVDiskLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kVDiskLoadStart: {
                 const auto& cmd = record.GetVDiskLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -213,7 +213,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKeyValueLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kKeyValueLoadStart: {
                 const auto& cmd = record.GetKeyValueLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -226,7 +226,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kKqpLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kKqpLoadStart: {
                 const auto& cmd = record.GetKqpLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -239,7 +239,7 @@ public:
                 break;
             }
 
-            case NKikimrBlobStorage::TEvTestLoadRequest::CommandCase::kMemoryLoadStart: {
+            case NKikimr::TEvTestLoadRequest::CommandCase::kMemoryLoadStart: {
                 const auto& cmd = record.GetMemoryLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -256,7 +256,7 @@ public:
                 TString protoTxt;
                 google::protobuf::TextFormat::PrintToString(record, &protoTxt);
                 ythrow TLoadActorException() << (TStringBuilder()
-                        << "TLoadActor::Handle(TEvBlobStorage::TEvTestLoadRequest): unexpected command case: "
+                        << "TLoadActor::Handle(TEvLoad::TEvTestLoadRequest): unexpected command case: "
                         << ui32(record.Command_case())
                         << " protoTxt# " << protoTxt.Quote());
             }
@@ -329,7 +329,7 @@ public:
         info.ErrorMessage.clear();
 
         if (params.Has("protobuf")) {
-            NKikimrBlobStorage::TEvTestLoadRequest record;
+            NKikimr::TEvTestLoadRequest record;
             bool status = google::protobuf::TextFormat::ParseFromString(params.Get("protobuf"), &record);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST,
                 "received protobuf: " << params.Get("protobuf") << " | "
@@ -357,7 +357,7 @@ public:
             return;
         } else if (params.Has("stop_request")) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
-            NKikimrBlobStorage::TEvTestLoadRequest record;
+            NKikimr::TEvTestLoadRequest record;
             record.MutableLoadStop()->SetRemoveAllTags(true);
             if (params.Has("stop_all_nodes") && params.Get("stop_all_nodes") == "on") {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
@@ -399,7 +399,7 @@ public:
         for (const auto& cmd : AllNodesLoadConfigs) {
             for (const auto& id : dyn_node_ids) {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "sending load request to: " << id);
-                auto msg = MakeHolder<TEvBlobStorage::TEvTestLoadRequest>();
+                auto msg = MakeHolder<TEvLoad::TEvTestLoadRequest>();
                 msg->Record = cmd;
                 msg->Record.SetCookie(id);
                 ctx.Send(MakeBlobStorageLoadID(id), msg.Release());
@@ -581,7 +581,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvBlobStorage::TEvTestLoadRequest, Handle)
+        HFunc(TEvLoad::TEvTestLoadRequest, Handle)
         HFunc(TEvTestLoadFinished, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
         HFunc(NMon::TEvHttpInfoRes, Handle)

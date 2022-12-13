@@ -120,16 +120,17 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/subdomains.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/table_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_counters_aggregator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_counters.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_counters_aggregator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_database.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_pipe.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_tracing_signals.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_tx.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_pool.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_slot_broker.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/test_shard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/testload.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tracing.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_tracing_signals.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_whiteboard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_columnshard.proto

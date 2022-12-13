@@ -4,8 +4,8 @@
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 
 namespace NKikimr {
@@ -342,14 +342,6 @@ namespace NKikimr {
             Record.MutableVDiskID()->CopyFrom(vdisk);
         }
     };
-
-    struct TEvBlobStorage::TEvTestLoadRequest : public TEventPB<TEvBlobStorage::TEvTestLoadRequest,
-        NKikimrBlobStorage::TEvTestLoadRequest, TEvBlobStorage::EvTestLoadRequest>
-    {};
-
-    struct TEvBlobStorage::TEvTestLoadResponse : public TEventPB<TEvBlobStorage::TEvTestLoadResponse,
-        NKikimrBlobStorage::TEvTestLoadResponse, TEvBlobStorage::EvTestLoadResponse>
-    {};
 
     struct TEvRegisterPDiskLoadActor: public TEventLocal<TEvRegisterPDiskLoadActor,
             TEvBlobStorage::EvRegisterPDiskLoadActor> {

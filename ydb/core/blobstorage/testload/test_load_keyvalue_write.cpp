@@ -36,7 +36,7 @@ class TWorker {
     bool IsDying = false;
 public:
 
-    TWorker(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart::TWorkerConfig& cmd,
+    TWorker(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart::TWorkerConfig& cmd,
             ui32 idx, TReallyFastRng32 *gen)
         : MaxInFlight(1, 0, 65536)
         , Idx(idx)
@@ -137,7 +137,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 
-    TKeyValueWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
+    TKeyValueWriterTestLoadActor(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
             const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -359,7 +359,7 @@ public:
     )
 };
 
-IActor * CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
+IActor * CreateKeyValueWriterTestLoad(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TKeyValueWriterTestLoadActor(cmd, parent, counters, index, tag);
 }

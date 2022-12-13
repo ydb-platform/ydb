@@ -1,5 +1,5 @@
 #include "msgbus_servicereq.h"
-#include <ydb/core/blobstorage/testload/test_load_events.h>
+#include <ydb/core/load_test/events.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -27,7 +27,7 @@ public:
             auto msg = MakeHolder<TEvLoad::TEvTestLoadRequest>();
             msg->Record = Cmd;
             msg->Record.SetCookie(nodeId);
-            ctx.Send(MakeBlobStorageLoadID(nodeId), msg.Release());
+            ctx.Send(MakeLoadServiceID(nodeId), msg.Release());
             ++ResponsesPending;
         }
         TVector<ui32>().swap(NodeIds);

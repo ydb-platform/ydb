@@ -18,7 +18,6 @@ add_subdirectory(other)
 add_subdirectory(pdisk)
 add_subdirectory(storagepoolmon)
 add_subdirectory(testing)
-add_subdirectory(testload)
 add_subdirectory(ut_blobstorage)
 add_subdirectory(ut_group)
 add_subdirectory(ut_mirror3of4)
@@ -44,6 +43,5 @@ target_link_libraries(ydb-core-blobstorage INTERFACE
   core-blobstorage-other
   core-blobstorage-pdisk
   core-blobstorage-storagepoolmon
-  core-blobstorage-testload
   core-blobstorage-vdisk
 )

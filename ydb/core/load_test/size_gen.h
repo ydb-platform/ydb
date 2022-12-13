@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "test_load_gen.h"
+#include "gen.h"
 #include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {

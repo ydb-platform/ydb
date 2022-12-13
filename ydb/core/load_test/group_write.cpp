@@ -1,8 +1,8 @@
-#include "test_load_actor.h"
-#include "test_load_size_gen.h"
-#include "test_load_interval_gen.h"
-#include "test_load_quantile.h"
-#include "test_load_speed.h"
+#include "service_actor.h"
+#include "size_gen.h"
+#include "interval_gen.h"
+#include "quantile.h"
+#include "speed.h"
 
 #include <ydb/core/util/yverify_stream.h>
 #include <ydb/core/util/lz4_data_generator.h>

@@ -1,6 +1,6 @@
-#include "test_load_actor.h"
-#include "test_load_interval_gen.h"
-#include "test_load_size_gen.h"
+#include "service_actor.h"
+#include "interval_gen.h"
+#include "size_gen.h"
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>

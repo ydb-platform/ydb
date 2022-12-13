@@ -27,7 +27,6 @@
 #include <ydb/core/blobstorage/backpressure/unisched.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
-#include <ydb/core/blobstorage/testload/test_load_actor.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -65,6 +64,8 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+
+#include <ydb/core/load_test/service_actor.h>
 
 #include <ydb/core/metering/metering.h>
 
@@ -1855,7 +1856,7 @@ TLoadInitializer::TLoadInitializer(const TKikimrRunConfig& runConfig)
 
 void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
     IActor *bsActor = CreateTestLoadActor(appData->Counters);
-    setup->LocalServices.emplace_back(MakeBlobStorageLoadID(NodeId), TActorSetupCmd(bsActor, TMailboxType::HTSwap, appData->UserPoolId));
+    setup->LocalServices.emplace_back(MakeLoadServiceID(NodeId), TActorSetupCmd(bsActor, TMailboxType::HTSwap, appData->UserPoolId));
     // FIXME: correct service id
 
     IActor *dsActor = NDataShardLoad::CreateTestLoadActor(appData->Counters);

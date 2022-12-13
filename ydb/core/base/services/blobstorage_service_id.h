@@ -14,8 +14,8 @@ inline TActorId MakeBlobStorageProxyID(ui32 blobStorageGroup) {
     return TActorId(0, TStringBuf(x, 12));
 }
 
-inline TActorId MakeBlobStorageLoadID(ui32 nodeId) {
-    char x[12] = {'b', 's', 'l', 'o', 'a', 'd', 'd', 0};
+inline TActorId MakeLoadServiceID(ui32 nodeId) {
+    char x[12] = {'l', 'o', 'a', 'd', 't', 'e', 's', 't'};
     x[8] = (char)(nodeId >> 24);
     x[9] = (char)(nodeId >> 16);
     x[10] = (char)(nodeId >> 8);

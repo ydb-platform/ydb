@@ -44,7 +44,6 @@ target_link_libraries(run PUBLIC
   core-blobstorage-nodewarden
   core-blobstorage-other
   core-blobstorage-pdisk
-  core-blobstorage-testload
   blobstorage-vdisk-common
   core-client-minikql_compile
   core-client-scheme_cache_lib
@@ -65,6 +64,7 @@ target_link_libraries(run PUBLIC
   ydb-core-keyvalue
   ydb-core-kqp
   core-kqp-rm_service
+  ydb-core-load_test
   ydb-core-metering
   ydb-core-mind
   core-mind-address_classification

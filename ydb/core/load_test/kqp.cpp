@@ -1,4 +1,4 @@
-#include "test_load_actor.h"
+#include "service_actor.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipe.h>

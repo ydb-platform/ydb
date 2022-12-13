@@ -1,4 +1,4 @@
-#include "test_load_actor.h"
+#include "service_actor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -401,7 +401,7 @@ public:
                 auto msg = MakeHolder<TEvLoad::TEvTestLoadRequest>();
                 msg->Record = cmd;
                 msg->Record.SetCookie(id);
-                ctx.Send(MakeBlobStorageLoadID(id), msg.Release());
+                ctx.Send(MakeLoadServiceID(id), msg.Release());
             }
         }
 

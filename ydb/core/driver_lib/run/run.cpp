@@ -1206,7 +1206,7 @@ void TKikimrRunner::InitializeActorSystem(
                 "Load",
                 false,
                 ActorSystem.Get(),
-                MakeBlobStorageLoadID(runConfig.NodeId));
+                MakeLoadServiceID(runConfig.NodeId));
 
             Monitoring->RegisterActorPage(
                 ActorsMonPage,

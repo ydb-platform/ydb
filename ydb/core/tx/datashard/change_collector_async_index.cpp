@@ -30,7 +30,9 @@ public:
         }
 
         for (const auto tag : DataTags) {
-            tags.push_back(tag);
+            if (!IndexTags.contains(tag)) {
+                tags.push_back(tag);
+            }
         }
 
         Y_VERIFY(!tags.empty());

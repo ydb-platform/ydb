@@ -43,8 +43,6 @@
 #define ARROW_JSON
 
 /* #undef ARROW_S3 */
-#ifdef __GNUC__
 #define ARROW_USE_NATIVE_INT128
-#endif
 
 /* #undef GRPCPP_PP_INCLUDE */

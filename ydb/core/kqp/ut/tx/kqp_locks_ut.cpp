@@ -193,13 +193,10 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
 
-        // TODO: Should contain table name.
-        /*
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
                 return issue.GetMessage().Contains("/Root/Test");
             }));
-        */
 
         result = session1.ExecuteDataQuery(Q1_(R"(
             SELECT * FROM Test WHERE Group = 11;

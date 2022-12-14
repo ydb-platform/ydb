@@ -1056,11 +1056,8 @@ public:
     bool CheckTransacionLocks() {
         auto& txCtx = *QueryState->TxCtx;
         if (!txCtx.DeferredEffects.Empty() && txCtx.Locks.Broken()) {
-            std::vector<TIssue> issues{
-                YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated.")
-            };
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but lock is broken",
-                MessageFromIssues(issues));
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
             return false;
         }
         return true;

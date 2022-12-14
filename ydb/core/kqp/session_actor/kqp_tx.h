@@ -51,6 +51,11 @@ struct TKqpTxLocks {
     ui64 GetLockTxId() const { return LockHandle ? LockHandle.GetLockId() : HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
     size_t Size() const { return LocksMap.size(); }
 
+    NYql::TIssue GetIssue() {
+        Y_ENSURE(LockIssue);
+        return *LockIssue;
+    }
+
     void ReportIssues(NYql::TExprContext& ctx) {
         if (LockIssue)
             ctx.AddError(*LockIssue);

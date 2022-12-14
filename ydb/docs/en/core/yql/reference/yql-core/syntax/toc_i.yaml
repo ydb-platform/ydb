@@ -3,18 +3,18 @@ items:
 - { name: Lexical structure,            href: lexer.md }
 - { name: Expressions,                  href: expressions.md }
 - { name: ACTION,                       href: action.md }
-- { name: ALTER GROUP,                  href: alter-group.md }
+- { name: ALTER GROUP,                  href: alter-group.md,                when: feature_user_and_group }
 - { name: ALTER TABLE,                  href: alter_table.md,                when: feature_map_tables }
-- { name: ALTER USER,                   href: alter-user.md }
-- { name: CREATE GROUP,                 href: create-group.md }
+- { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
+- { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE TABLE,                 href: create_table.md }
-- { name: CREATE USER,                  href: create-user.md }
+- { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
 - { name: DECLARE,                      href: declare.md }
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
 - { name: DISCARD,                      href: discard.md }
-- { name: DROP GROUP,                   href: drop-group.md }
+- { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
 - { name: DROP TABLE,                   href: drop_table.md }
-- { name: DROP USER,                    href: drop-user.md }
+- { name: DROP USER,                    href: drop-user.md,                  when: feature_user_and_group }
 - { name: GROUP BY,                     href: group_by.md }
 - { name: EXPORT and IMPORT,            href: export_import.md,              when: feature_mapreduce }
 - { name: FLATTEN,                      href: flatten.md }

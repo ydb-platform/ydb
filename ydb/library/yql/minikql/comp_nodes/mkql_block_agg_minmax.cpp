@@ -308,14 +308,55 @@ private:
     const std::shared_ptr<arrow::DataType> BuilderDataType_;
 };
 
+template <typename TIn, typename TInScalar, typename TBuilder, bool IsMin>
+class TPreparedMinMaxBlockAggregatorNullableOrScalar : public IPreparedBlockAggregator {
+public:
+    TPreparedMinMaxBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn,
+        const std::shared_ptr<arrow::DataType>& builderDataType)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+        , BuilderDataType_(builderDataType)
+    {}
+
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<TIn, TInScalar, TBuilder, IsMin>>(FilterColumn_, ArgColumn_, BuilderDataType_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
+    const std::shared_ptr<arrow::DataType> BuilderDataType_;
+};
+
+template <typename TIn, typename TInScalar, typename TBuilder, bool IsMin>
+class TPreparedMinMaxBlockAggregator : public IPreparedBlockAggregator {
+public:
+    TPreparedMinMaxBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
+        const std::shared_ptr<arrow::DataType>& builderDataType)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+        , BuilderDataType_(builderDataType)
+    {}
+
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TMinMaxBlockAggregator<TIn, TInScalar, TBuilder, IsMin>>(FilterColumn_, ArgColumn_, BuilderDataType_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
+    const std::shared_ptr<arrow::DataType> BuilderDataType_;
+};
+
 template <bool IsMin>
 class TBlockMinMaxFactory : public IBlockAggregatorFactory {
 public:
-   std::unique_ptr<IBlockAggregator> Make(
+   std::unique_ptr<IPreparedBlockAggregator> Prepare(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       TComputationContext& ctx) const final {
+       const TTypeEnvironment& env) const final {
+       Y_UNUSED(env);
        auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]));
        auto argType = blockType->GetItemType();
        bool isOptional;
@@ -323,52 +364,52 @@ public:
        if (blockType->GetShape() == TBlockType::EShape::Scalar || isOptional) {
            switch (*dataType->GetDataSlot()) {
            case NUdf::EDataSlot::Int8:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i8, arrow::Int8Scalar, arrow::Int8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int8(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<i8, arrow::Int8Scalar, arrow::Int8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int8());
            case NUdf::EDataSlot::Bool:
            case NUdf::EDataSlot::Uint8:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui8, arrow::UInt8Scalar, arrow::UInt8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint8(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<ui8, arrow::UInt8Scalar, arrow::UInt8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint8());
            case NUdf::EDataSlot::Int16:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i16, arrow::Int16Scalar, arrow::Int16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int16(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<i16, arrow::Int16Scalar, arrow::Int16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int16());
            case NUdf::EDataSlot::Uint16:
            case NUdf::EDataSlot::Date:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui16, arrow::UInt16Scalar, arrow::UInt16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint16(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<ui16, arrow::UInt16Scalar, arrow::UInt16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint16());
            case NUdf::EDataSlot::Int32:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i32, arrow::Int32Scalar, arrow::Int32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int32(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<i32, arrow::Int32Scalar, arrow::Int32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int32());
            case NUdf::EDataSlot::Uint32:
            case NUdf::EDataSlot::Datetime:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui32, arrow::UInt32Scalar, arrow::UInt32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint32(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<ui32, arrow::UInt32Scalar, arrow::UInt32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint32());
            case NUdf::EDataSlot::Int64:
            case NUdf::EDataSlot::Interval:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<i64, arrow::Int64Scalar, arrow::Int64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<i64, arrow::Int64Scalar, arrow::Int64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint64:
            case NUdf::EDataSlot::Timestamp:
-               return std::make_unique<TMinMaxBlockAggregatorNullableOrScalar<ui64, arrow::UInt64Scalar, arrow::UInt64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregatorNullableOrScalar<ui64, arrow::UInt64Scalar, arrow::UInt64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint64());
            default:
                throw yexception() << "Unsupported MIN/MAX input type";
            }
        } else {
            switch (*dataType->GetDataSlot()) {
            case NUdf::EDataSlot::Int8:
-               return std::make_unique<TMinMaxBlockAggregator<i8, arrow::Int8Scalar, arrow::Int8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int8(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<i8, arrow::Int8Scalar, arrow::Int8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int8());
            case NUdf::EDataSlot::Uint8:
            case NUdf::EDataSlot::Bool:
-               return std::make_unique<TMinMaxBlockAggregator<ui8, arrow::UInt8Scalar, arrow::UInt8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint8(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<ui8, arrow::UInt8Scalar, arrow::UInt8Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint8());
            case NUdf::EDataSlot::Int16:
-               return std::make_unique<TMinMaxBlockAggregator<i16, arrow::Int16Scalar, arrow::Int16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int16(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<i16, arrow::Int16Scalar, arrow::Int16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int16());
            case NUdf::EDataSlot::Uint16:
            case NUdf::EDataSlot::Date:
-               return std::make_unique<TMinMaxBlockAggregator<ui16, arrow::UInt16Scalar, arrow::UInt16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint16(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<ui16, arrow::UInt16Scalar, arrow::UInt16Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint16());
            case NUdf::EDataSlot::Int32:
-               return std::make_unique<TMinMaxBlockAggregator<i32, arrow::Int32Scalar, arrow::Int32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int32(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<i32, arrow::Int32Scalar, arrow::Int32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int32());
            case NUdf::EDataSlot::Uint32:
            case NUdf::EDataSlot::Datetime:
-               return std::make_unique<TMinMaxBlockAggregator<ui32, arrow::UInt32Scalar, arrow::UInt32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint32(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<ui32, arrow::UInt32Scalar, arrow::UInt32Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint32());
            case NUdf::EDataSlot::Int64:
            case NUdf::EDataSlot::Interval:
-               return std::make_unique<TMinMaxBlockAggregator<i64, arrow::Int64Scalar, arrow::Int64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<i64, arrow::Int64Scalar, arrow::Int64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint64:
            case NUdf::EDataSlot::Timestamp:
-               return std::make_unique<TMinMaxBlockAggregator<ui64, arrow::UInt64Scalar, arrow::UInt64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedMinMaxBlockAggregator<ui64, arrow::UInt64Scalar, arrow::UInt64Builder, IsMin>>(filterColumn, argsColumns[0], arrow::uint64());
            default:
                throw yexception() << "Unsupported MIN/MAX input type";
            }

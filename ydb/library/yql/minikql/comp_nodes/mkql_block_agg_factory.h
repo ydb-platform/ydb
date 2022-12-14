@@ -52,24 +52,29 @@ protected:
     TComputationContext& Ctx_;
 };
 
-class THolderFactory;
+class IPreparedBlockAggregator {
+public:
+    virtual ~IPreparedBlockAggregator() = default;
 
-std::unique_ptr<IBlockAggregator> MakeBlockAggregator(
+    virtual std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const = 0;
+};
+
+std::unique_ptr<IPreparedBlockAggregator> PrepareBlockAggregator(
     TStringBuf name,
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    TComputationContext& ctx);
+    const TTypeEnvironment& env);
 
 class IBlockAggregatorFactory {
 public:
    virtual ~IBlockAggregatorFactory() = default;
 
-   virtual std::unique_ptr<IBlockAggregator> Make(
+   virtual std::unique_ptr<IPreparedBlockAggregator> Prepare(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       TComputationContext& ctx) const = 0;
+       const TTypeEnvironment& env) const = 0;
 };
 
 }

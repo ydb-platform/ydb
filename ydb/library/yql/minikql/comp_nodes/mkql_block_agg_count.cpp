@@ -195,28 +195,60 @@ private:
     const ui32 ArgColumn_;
 };
 
+class TPreparedCountAllBlockAggregator : public IPreparedBlockAggregator {
+public:
+    TPreparedCountAllBlockAggregator(std::optional<ui32> filterColumn)
+        : FilterColumn_(filterColumn)
+    {}
+
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TCountAllBlockAggregator>(FilterColumn_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+};
+
 class TBlockCountAllFactory : public IBlockAggregatorFactory {
 public:
-   std::unique_ptr<IBlockAggregator> Make(
+   std::unique_ptr<IPreparedBlockAggregator> Prepare(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       TComputationContext& ctx) const final {
+       const TTypeEnvironment& env) const final {
        Y_UNUSED(tupleType);
        Y_UNUSED(argsColumns);
-       return std::make_unique<TCountAllBlockAggregator>(filterColumn, ctx);
+       Y_UNUSED(env);
+       return std::make_unique<TPreparedCountAllBlockAggregator>(filterColumn);
    }
+};
+
+class TPreparedCountBlockAggregator : public IPreparedBlockAggregator {
+public:
+    TPreparedCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+    {}
+
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TCountBlockAggregator>(FilterColumn_, ArgColumn_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
 };
 
 class TBlockCountFactory : public IBlockAggregatorFactory {
 public:
-   std::unique_ptr<IBlockAggregator> Make(
+   std::unique_ptr<IPreparedBlockAggregator> Prepare(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       TComputationContext& ctx) const final {
+       const TTypeEnvironment& env) const final {
        Y_UNUSED(tupleType);
-       return std::make_unique<TCountBlockAggregator>(filterColumn, argsColumns[0], ctx);
+       Y_UNUSED(env);
+       return std::make_unique<TPreparedCountBlockAggregator>(filterColumn, argsColumns[0]);
    }
 };
 

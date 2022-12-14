@@ -111,9 +111,7 @@ namespace NMiniKQL {
 namespace {
 
 struct TAggParams {
-    TStringBuf Name;
-    TTupleType* TupleType;
-    std::vector<ui32> ArgColumns;
+    std::unique_ptr<IPreparedBlockAggregator> Prepared_;
 };
 
 struct TKeyParams {
@@ -412,8 +410,7 @@ private:
 
             ui32 totalStateSize = 0;
             for (const auto& p : params) {
-                Aggs_.emplace_back(MakeBlockAggregator(p.Name, p.TupleType, filterColumn, p.ArgColumns, ctx));
-
+                Aggs_.emplace_back(p.Prepared_->Make(ctx));
                 totalStateSize += Aggs_.back()->StateSize;
             }
 
@@ -716,8 +713,7 @@ private:
             }
 
             for (const auto& p : params) {
-                Aggs_.emplace_back(MakeBlockAggregator(p.Name, p.TupleType, filterColumn, p.ArgColumns, ctx));
-
+                Aggs_.emplace_back(p.Prepared_->Make(ctx));
                 TotalStateSize_ += Aggs_.back()->StateSize;
             }
 
@@ -756,7 +752,7 @@ private:
     std::vector<std::unique_ptr<IKeySerializer>> KeySerializers_;
 };
 
-void FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, TVector<TAggParams>& aggsParams) {
+void FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams>& aggsParams, const TTypeEnvironment& env) {
     for (ui32 i = 0; i < aggsVal->GetValuesCount(); ++i) {
         auto aggVal = AS_VALUE(TTupleLiteral, aggsVal->GetValue(i));
         auto name = AS_VALUE(TDataLiteral, aggVal->GetValue(0))->AsValue().AsStringRef();
@@ -766,7 +762,9 @@ void FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, TVector<TAggPa
             argColumns.push_back(AS_VALUE(TDataLiteral, aggVal->GetValue(j))->AsValue().Get<ui32>());
         }
 
-        aggsParams.emplace_back(TAggParams{ TStringBuf(name), tupleType, argColumns });
+        TAggParams p;
+        p.Prepared_ = PrepareBlockAggregator(name, tupleType, filterColumn, argColumns, env);
+        aggsParams.emplace_back(std::move(p));
     }
 }
 
@@ -809,7 +807,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams> aggsParams;
-    FillAggParams(aggsVal, tupleType, aggsParams);
+    FillAggParams(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env);
     return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
 
@@ -836,7 +834,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TAggParams> aggsParams;
-    FillAggParams(aggsVal, tupleType, aggsParams);
+    FillAggParams(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env);
 
     ui32 totalKeysSize = 0;
     std::vector<std::unique_ptr<IKeySerializer>> keySerializers;

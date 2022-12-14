@@ -20,19 +20,19 @@ struct TAggregatorFactories {
     }
 };
 
-std::unique_ptr<IBlockAggregator> MakeBlockAggregator(
+std::unique_ptr<IPreparedBlockAggregator> PrepareBlockAggregator(
     TStringBuf name,
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    TComputationContext& ctx) {
+    const TTypeEnvironment& env) {
     const auto& f = Singleton<TAggregatorFactories>()->Factories;
     auto it = f.find(name);
     if (it == f.end()) {
         throw yexception() << "Unsupported block aggregation function: " << name;
     }
 
-    return it->second->Make(tupleType, filterColumn, argsColumns, ctx);
+    return it->second->Prepare(tupleType, filterColumn, argsColumns, env);
 }
 
 }

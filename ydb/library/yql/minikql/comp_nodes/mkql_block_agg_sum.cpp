@@ -288,9 +288,62 @@ public:
         ui64 Count_ = 0;
     };
 
-    TAvgBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+    class TColumnBuilder : public IAggColumnBuilder {
+    public:
+        TColumnBuilder(ui64 size, const std::shared_ptr<arrow::DataType>& arrowType, TComputationContext& ctx)
+            : ArrowType_(arrowType)
+            , Ctx_(ctx)
+            , NullBitmapBuilder_(&ctx.ArrowMemoryPool)
+            , SumBuilder_(arrow::float64(), &ctx.ArrowMemoryPool)
+            , CountBuilder_(arrow::uint64(), &ctx.ArrowMemoryPool)
+        {
+            ARROW_OK(NullBitmapBuilder_.Reserve(size));
+            ARROW_OK(SumBuilder_.Reserve(size));
+            ARROW_OK(CountBuilder_.Reserve(size));
+        }
+
+        void Add(const void* state) final {
+            auto typedState = static_cast<const TState*>(state);
+            if (typedState->Count_) {
+                NullBitmapBuilder_.UnsafeAppend(true);
+                SumBuilder_.UnsafeAppend(typedState->Sum_);
+                CountBuilder_.UnsafeAppend(typedState->Count_);
+            } else {
+                NullBitmapBuilder_.UnsafeAppend(false);
+                SumBuilder_.UnsafeAppendNull();
+                CountBuilder_.UnsafeAppendNull();
+            }
+        }
+
+        NUdf::TUnboxedValue Build() final {
+            std::shared_ptr<arrow::ArrayData> sumResult;
+            std::shared_ptr<arrow::ArrayData> countResult;
+            ARROW_OK(SumBuilder_.FinishInternal(&sumResult));
+            ARROW_OK(CountBuilder_.FinishInternal(&countResult));
+            std::shared_ptr<arrow::Buffer> nullBitmap;
+            auto length = NullBitmapBuilder_.length();
+            auto nullCount = NullBitmapBuilder_.false_count();
+            ARROW_OK(NullBitmapBuilder_.Finish(&nullBitmap));
+
+            auto arrayData = arrow::ArrayData::Make(ArrowType_, length, { nullBitmap }, nullCount, 0);
+            arrayData->child_data.push_back(sumResult);
+            arrayData->child_data.push_back(countResult);
+            return Ctx_.HolderFactory.CreateArrowBlock(arrow::Datum(arrayData));
+        }
+
+    private:
+        const std::shared_ptr<arrow::DataType> ArrowType_;
+        TComputationContext& Ctx_;
+        arrow::TypedBufferBuilder<bool> NullBitmapBuilder_;
+        arrow::DoubleBuilder SumBuilder_;
+        arrow::UInt64Builder CountBuilder_;
+    };
+
+    TAvgBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
+        const std::shared_ptr<arrow::DataType> builderDataType, TComputationContext& ctx)
         : TBlockAggregatorBase(sizeof(TState), filterColumn, ctx)
         , ArgColumn_(argColumn)
+        , BuilderDataType_(builderDataType)
     {
     }
 
@@ -411,21 +464,62 @@ public:
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeBuilder(ui64 size) final {
-        Y_UNUSED(size);
-        MKQL_ENSURE(false, "TODO: support of tuples");
+        return std::make_unique<TColumnBuilder>(size, BuilderDataType_, Ctx_);
     }
 
 private:
     const ui32 ArgColumn_;
+    const std::shared_ptr<arrow::DataType> BuilderDataType_;
+};
+
+template <typename TIn, typename TSum, typename TBuilder, typename TInScalar>
+class TPreparedSumBlockAggregatorNullableOrScalar : public IPreparedBlockAggregator {
+public:
+    TPreparedSumBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn,
+        const std::shared_ptr<arrow::DataType>& builderDataType)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+        , BuilderDataType_(builderDataType)
+    {}
+
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TSumBlockAggregatorNullableOrScalar<TIn, TSum, TBuilder, TInScalar>>(FilterColumn_, ArgColumn_, BuilderDataType_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
+    const std::shared_ptr<arrow::DataType> BuilderDataType_;
+};
+
+template <typename TIn, typename TSum, typename TBuilder, typename TInScalar>
+class TPreparedSumBlockAggregator : public IPreparedBlockAggregator {
+public:
+    TPreparedSumBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
+        const std::shared_ptr<arrow::DataType>& builderDataType)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+        , BuilderDataType_(builderDataType)
+    {}
+
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TSumBlockAggregator<TIn, TSum, TBuilder, TInScalar>>(FilterColumn_, ArgColumn_, BuilderDataType_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
+    const std::shared_ptr<arrow::DataType> BuilderDataType_;
 };
 
 class TBlockSumFactory : public IBlockAggregatorFactory {
 public:
-   std::unique_ptr<IBlockAggregator> Make(
+   std::unique_ptr<IPreparedBlockAggregator> Prepare(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       TComputationContext& ctx) const final {
+       const TTypeEnvironment& env) const final {
+       Y_UNUSED(env);
        auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]));
        auto argType = blockType->GetItemType();
        bool isOptional;
@@ -433,50 +527,42 @@ public:
        if (blockType->GetShape() == TBlockType::EShape::Scalar || isOptional) {
            switch (*dataType->GetDataSlot()) {
            case NUdf::EDataSlot::Int8:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i8, i64, arrow::Int64Builder, arrow::Int8Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<i8, i64, arrow::Int64Builder, arrow::Int8Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint8:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui8, ui64, arrow::UInt64Builder, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<ui8, ui64, arrow::UInt64Builder, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            case NUdf::EDataSlot::Int16:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i16, i64, arrow::Int64Builder, arrow::Int16Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<i16, i64, arrow::Int64Builder, arrow::Int16Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint16:
-           case NUdf::EDataSlot::Date:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui16, ui64, arrow::UInt64Builder, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<ui16, ui64, arrow::UInt64Builder, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            case NUdf::EDataSlot::Int32:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i32, i64, arrow::Int64Builder, arrow::Int32Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<i32, i64, arrow::Int64Builder, arrow::Int32Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint32:
-           case NUdf::EDataSlot::Datetime:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui32, ui64, arrow::UInt64Builder, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<ui32, ui64, arrow::UInt64Builder, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            case NUdf::EDataSlot::Int64:
-           case NUdf::EDataSlot::Interval:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<i64, i64, arrow::Int64Builder, arrow::Int64Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<i64, i64, arrow::Int64Builder, arrow::Int64Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint64:
-           case NUdf::EDataSlot::Timestamp:
-               return std::make_unique<TSumBlockAggregatorNullableOrScalar<ui64, ui64, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregatorNullableOrScalar<ui64, ui64, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            default:
                throw yexception() << "Unsupported SUM input type";
            }
        } else {
            switch (*dataType->GetDataSlot()) {
            case NUdf::EDataSlot::Int8:
-               return std::make_unique<TSumBlockAggregator<i8, i64, arrow::Int64Builder, arrow::Int8Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<i8, i64, arrow::Int64Builder, arrow::Int8Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint8:
-               return std::make_unique<TSumBlockAggregator<ui8, ui64, arrow::UInt64Builder, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<ui8, ui64, arrow::UInt64Builder, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            case NUdf::EDataSlot::Int16:
-               return std::make_unique<TSumBlockAggregator<i16, i64, arrow::Int64Builder, arrow::Int16Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<i16, i64, arrow::Int64Builder, arrow::Int16Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint16:
-           case NUdf::EDataSlot::Date:
-               return std::make_unique<TSumBlockAggregator<ui16, ui64, arrow::UInt64Builder, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<ui16, ui64, arrow::UInt64Builder, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            case NUdf::EDataSlot::Int32:
-               return std::make_unique<TSumBlockAggregator<i32, i64, arrow::Int64Builder, arrow::Int32Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<i32, i64, arrow::Int64Builder, arrow::Int32Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint32:
-           case NUdf::EDataSlot::Datetime:
-               return std::make_unique<TSumBlockAggregator<ui32, ui64, arrow::UInt64Builder, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<ui32, ui64, arrow::UInt64Builder, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            case NUdf::EDataSlot::Int64:
-           case NUdf::EDataSlot::Interval:
-               return std::make_unique<TSumBlockAggregator<i64, i64, arrow::Int64Builder, arrow::Int64Scalar>>(filterColumn, argsColumns[0], arrow::int64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<i64, i64, arrow::Int64Builder, arrow::Int64Scalar>>(filterColumn, argsColumns[0], arrow::int64());
            case NUdf::EDataSlot::Uint64:
-           case NUdf::EDataSlot::Timestamp:
-               return std::make_unique<TSumBlockAggregator<ui64, ui64, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], arrow::uint64(), ctx);
+               return std::make_unique<TPreparedSumBlockAggregator<ui64, ui64, arrow::UInt64Builder, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], arrow::uint64());
            default:
                throw yexception() << "Unsupported SUM input type";
            }
@@ -484,37 +570,61 @@ public:
    }
 };
 
+template <typename TIn, typename TInScalar>
+class TPreparedAvgBlockAggregator : public IPreparedBlockAggregator {
+public:
+    TPreparedAvgBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
+        const std::shared_ptr<arrow::DataType>& builderDataType)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+        , BuilderDataType_(builderDataType)
+    {}
+    
+    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TAvgBlockAggregator<TIn, TInScalar>>(FilterColumn_, ArgColumn_, BuilderDataType_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
+    const std::shared_ptr<arrow::DataType> BuilderDataType_;
+};
+
 class TBlockAvgFactory : public IBlockAggregatorFactory {
 public:
-   std::unique_ptr<IBlockAggregator> Make(
+   std::unique_ptr<IPreparedBlockAggregator> Prepare(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
-       TComputationContext& ctx) const final {
-       auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
+       const TTypeEnvironment& env) const final {
+
+       auto doubleType = TDataType::Create(NUdf::TDataType<double>::Id, env);
+       auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
+       TVector<TType*> tupleElements = { doubleType, ui64Type };
+       auto avgRetType = TTupleType::Create(2, tupleElements.data(), env);
+       std::shared_ptr<arrow::DataType> builderDataType;
        bool isOptional;
+       MKQL_ENSURE(ConvertArrowType(avgRetType, isOptional, builderDataType), "Unsupported builder type");
+
+       auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
        auto dataType = UnpackOptionalData(argType, isOptional);
        switch (*dataType->GetDataSlot()) {
        case NUdf::EDataSlot::Int8:
-           return std::make_unique<TAvgBlockAggregator<i8, arrow::Int8Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<i8, arrow::Int8Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Uint8:
-           return std::make_unique<TAvgBlockAggregator<ui8, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<ui8, arrow::UInt8Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Int16:
-           return std::make_unique<TAvgBlockAggregator<i16, arrow::Int16Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<i16, arrow::Int16Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Uint16:
-       case NUdf::EDataSlot::Date:
-           return std::make_unique<TAvgBlockAggregator<ui16, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<ui16, arrow::UInt16Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Int32:
-           return std::make_unique<TAvgBlockAggregator<i32, arrow::Int32Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<i32, arrow::Int32Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Uint32:
-       case NUdf::EDataSlot::Datetime:
-           return std::make_unique<TAvgBlockAggregator<ui32, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<ui32, arrow::UInt32Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Int64:
-       case NUdf::EDataSlot::Interval:
-           return std::make_unique<TAvgBlockAggregator<i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<i64, arrow::Int64Scalar>>(filterColumn, argsColumns[0], builderDataType);
        case NUdf::EDataSlot::Uint64:
-       case NUdf::EDataSlot::Timestamp:
-           return std::make_unique<TAvgBlockAggregator<ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], ctx);
+           return std::make_unique<TPreparedAvgBlockAggregator<ui64, arrow::UInt64Scalar>>(filterColumn, argsColumns[0], builderDataType);
        default:
            throw yexception() << "Unsupported AVG input type";
        }
@@ -528,6 +638,6 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockSumFactory() {
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockAvgFactory() {
     return std::make_unique<TBlockAvgFactory>();
 }
- 
+
 }
 }

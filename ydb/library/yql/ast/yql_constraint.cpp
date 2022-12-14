@@ -176,16 +176,7 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&&
 {
     YQL_ENSURE(!Content_.empty());
     for (const auto& c : Content_) {
-        Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-    }
-}
-
-TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, const TSortedConstraintNode& constr, size_t prefixLength)
-    : TConstraintNode(ctx, Name()), Content_(constr.Content_)
-{
-    YQL_ENSURE(prefixLength > 0U);
-    Content_.resize(prefixLength);
-    for (const auto& c : Content_) {
+        YQL_ENSURE(!c.first.empty());
         Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
     }
 }
@@ -253,16 +244,6 @@ bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const 
     return node.Includes(*this);
 }
 
-size_t TSortedConstraintNode::GetCommonPrefixLength(const TSortedConstraintNode& node) const {
-    const size_t minSize = std::min(Content_.size(), node.Content_.size());
-    for (size_t i = 0U; i < minSize; ++i) {
-        if (Content_[i] != node.Content_[i]) {
-            return i;
-        }
-    }
-    return minSize;
-}
-
 const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;
@@ -272,25 +253,63 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
         return constraints.front()->GetConstraint<TSortedConstraintNode>();
     }
 
-    size_t commonPrefixLength = 0;
-    const TSortedConstraintNode* sort = nullptr;
-    for (size_t i = 0; i < constraints.size(); ++i) {
-        if (const auto nextSort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
-            if (sort) {
-                commonPrefixLength = std::min(commonPrefixLength, nextSort->GetCommonPrefixLength(*sort));
+    std::optional<TContainerType> content;
+    for (size_t i = 0U; i < constraints.size(); ++i) {
+        if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
+            if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
+                const auto& nextContent = sort->GetContent();
+                if (content) {
+                    const auto size = std::min(content->size(), nextContent.size());
+                    content->resize(size);
+                    for (auto j = 0U; j < size; ++j) {
+                        auto& one = (*content)[j];
+                        auto& two = nextContent[j];
+                        TColumnsSet common;
+                        common.reserve(std::min(one.first.size(), two.first.size()));
+                        std::set_intersection(one.first.cbegin(), one.first.cend(), two.first.cbegin(), two.first.cend(), std::back_inserter(common));
+                        if (common.empty() || one.second != two.second) {
+                            content->resize(j);
+                            break;
+                        } else
+                            one.first = std::move(common);
+                    }
+                    if (content->empty())
+                        break;
+                } else {
+                    content = nextContent;
+                }
             } else {
-                sort = nextSort;
-                commonPrefixLength = sort->GetContent().size();
+                content.reset();
+                break;
             }
-        } else if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
-            return nullptr;
         }
     }
-    if (commonPrefixLength) {
-        return ctx.MakeConstraint<TSortedConstraintNode>(*sort, commonPrefixLength);
+
+    return !content || content->empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(*content));
+}
+
+const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const {
+    if (!other) {
+        return nullptr;
     }
 
-    return nullptr;
+    auto content = other->GetContent();
+    const auto size = std::min(content.size(), Content_.size());
+    content.resize(size);
+    for (auto j = 0U; j < size; ++j) {
+        auto& one = content[j];
+        auto& two = Content_[j];
+        TColumnsSet common;
+        common.reserve(std::min(one.first.size(), two.first.size()));
+        std::set_intersection(one.first.cbegin(), one.first.cend(), two.first.cbegin(), two.first.cend(), std::back_inserter(common));
+        if (common.empty() || one.second != two.second) {
+            content.resize(j);
+            break;
+        } else
+            one.first = std::move(common);
+    }
+
+    return content.empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
 }
 
 const TSortedConstraintNode* TSortedConstraintNode::FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx) {
@@ -408,7 +427,7 @@ TUniqueConstraintNode::TFullSetType DedupSets(TUniqueConstraintNode::TFullSetTyp
         found = false;
         for (auto ot = sets.cbegin(); !found && sets.cend() != ot; ++ot) {
             for (auto it = sets.cbegin(); sets.cend() != it;) {
-                if (ot->size() < it->size() && std::all_of(ot->cbegin(), ot->cend(), [it](const TConstraintNode::TPathType& path) { return it->cend() != it->find(path); })) {
+                if (ot->size() < it->size() && std::all_of(ot->cbegin(), ot->cend(), [it](const TConstraintNode::TPathType& path) { return it->contains(path); })) {
                     it = sets.erase(it);
                     found = true;
                 } else
@@ -852,7 +871,7 @@ const TUniqueConstraintNode* TPartOfUniqueConstraintNode::MakeComplete(TExprCont
             for (const auto& map : it->second)
                 reverseMap[map.second].insert_unique(map.first);
 
-            if (std::all_of(set.cbegin(), set.cend(), [reverseMap] (const TPathType& path) { return reverseMap.cend() != reverseMap.find(path); })) {
+            if (std::all_of(set.cbegin(), set.cend(), [reverseMap] (const TPathType& path) { return reverseMap.contains(path); })) {
                 TUniqueConstraintNode::TFullSetType addSets = {TUniqueConstraintNode::TSetType()};
                 for (const auto& old : set) {
                     const auto& renamed = reverseMap[old];

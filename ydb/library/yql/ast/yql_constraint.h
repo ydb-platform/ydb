@@ -168,13 +168,12 @@ protected:
 
 class TSortedConstraintNode final: public TConstraintNode {
 public:
-    using TContainerType = TSmallVec<std::pair<NSorted::TSimpleSet<std::string_view>, bool>>;
-
+    using TColumnsSet = NSorted::TSimpleSet<std::string_view>;
+    using TContainerType = TSmallVec<std::pair<TColumnsSet, bool>>;
 private:
     friend struct TExprContext;
 
     TSortedConstraintNode(TExprContext& ctx, TContainerType&& content);
-    TSortedConstraintNode(TExprContext& ctx, const TSortedConstraintNode& constr, size_t prefixLength);
     TSortedConstraintNode(TSortedConstraintNode&& constr);
 public:
     static constexpr std::string_view Name() {
@@ -200,11 +199,11 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     bool IsPrefixOf(const TSortedConstraintNode& node) const;
-    size_t GetCommonPrefixLength(const TSortedConstraintNode& node) const;
 
     const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const;
 
     static const TSortedConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+    const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
     static const TSortedConstraintNode* FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx);
 
 protected:

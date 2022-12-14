@@ -2978,13 +2978,8 @@ public:
         };
         PG_TRY();
         {
-            if (PassByValue) {
-                datumL = ScalarDatumFromData(dataL, sizeL);
-                datumR = ScalarDatumFromData(dataR, sizeR);
-            } else {
-                datumL = PointerDatumFromData(dataL, sizeL);
-                datumR = PointerDatumFromData(dataR, sizeR);
-            }
+            datumL = Receive(dataL, sizeL);
+            datumR = Receive(dataR, sizeR);
             FmgrInfo finfo;
             InitFunc(CompareProcId, &finfo, 2, 2);
             LOCAL_FCINFO(callInfo, 2);
@@ -3003,7 +2998,7 @@ public:
         PG_CATCH();
         {
             // TODO
-            Y_VERIFY(false, "PG error in Compare");
+            Y_FAIL("PG error in Compare");
         }
         PG_END_TRY();
         return 0;
@@ -3020,11 +3015,7 @@ public:
         };
         PG_TRY();
         {
-            if (PassByValue) {
-                datum = ScalarDatumFromData(data, size);
-            } else {
-                datum = PointerDatumFromData(data, size);
-            }
+            datum = Receive(data, size);
             FmgrInfo finfo;
             InitFunc(HashProcId, &finfo, 1, 1);
             LOCAL_FCINFO(callInfo, 1);
@@ -3042,7 +3033,7 @@ public:
         PG_CATCH();
         {
             // TODO
-            Y_VERIFY(false, "PG error in Hash");
+            Y_FAIL("PG error in Hash");
         }
         PG_END_TRY();
         return 0;
@@ -3096,7 +3087,7 @@ public:
         PG_CATCH();
         {
             // TODO
-            Y_VERIFY(false, "PG error in NativeBinaryFromNativeText");
+            Y_FAIL("PG error in NativeBinaryFromNativeText");
         }
         PG_END_TRY();
         return 0;
@@ -3117,11 +3108,7 @@ public:
         };
         PG_TRY();
         {
-            if (PassByValue) {
-                datum = ScalarDatumFromData(binary.Data(), binary.Size());
-            } else {
-                datum = PointerDatumFromData(binary.Data(), binary.Size());
-            }
+            datum = Receive(binary.Data(), binary.Size());
             FmgrInfo finfo;
             InitFunc(OutFuncId, &finfo, 1, 1);
             LOCAL_FCINFO(callInfo, 1);
@@ -3139,46 +3126,14 @@ public:
         PG_CATCH();
         {
             // TODO
-            Y_VERIFY(false, "PG error in NativeTextFromNativeBinary");
+            Y_FAIL("PG error in NativeTextFromNativeBinary");
         }
         PG_END_TRY();
         return 0;
     }
 
 private:
-    Datum ScalarDatumFromData(const char* data, size_t size) const {
-        switch (TypeId) {
-        case BOOLOID:
-            Y_ENSURE(size == sizeof(bool));
-            return BoolGetDatum(ReadUnaligned<bool>(data));
-        case CHAROID:
-            Y_ENSURE(size == sizeof(char));
-            return CharGetDatum(ReadUnaligned<char>(data));
-        case INT2OID:
-            Y_ENSURE(size == sizeof(i16));
-            return Int16GetDatum(ReadUnaligned<i16>(data));
-        case INT4OID:
-            Y_ENSURE(size == sizeof(i32));
-            return Int32GetDatum(ReadUnaligned<i32>(data));
-        case INT8OID:
-            Y_ENSURE(size == sizeof(i64));
-            return Int64GetDatum(ReadUnaligned<i64>(data));
-        case FLOAT4OID:
-            Y_ENSURE(size == sizeof(float));
-            return Float4GetDatum(ReadUnaligned<float>(data));
-        case FLOAT8OID:
-            Y_ENSURE(size == sizeof(double));
-            return Float8GetDatum(ReadUnaligned<double>(data));
-        default: {
-            Y_ENSURE(size <= sizeof(ui64));
-            ui64 val = 0;
-            std::memcpy(&val, data, size);
-            return (Datum)val;
-        }
-        }
-    }
-
-    Datum PointerDatumFromData(const char* data, size_t size) const {
+    Datum Receive(const char* data, size_t size) const {
         StringInfoData stringInfo;
         stringInfo.data = (char*)data;
         stringInfo.len = size;

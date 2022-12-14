@@ -76,7 +76,7 @@ namespace NKikimr {
                 return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
             }
 
-            TVDiskLoadActor(const NKikimr::TEvTestLoadRequest::TVDiskLoadStart& cmd,
+            TVDiskLoadActor(const NKikimr::TEvLoadTestRequest::TVDiskLoadStart& cmd,
                     const NActors::TActorId& parent, ui64 tag)
                 : ParentActorId(parent)
                 , Tag(tag)
@@ -144,7 +144,7 @@ namespace NKikimr {
 
             void HandlePoison(const TActorContext& ctx) {
                 ctx.Send(QueueActorId, new TEvents::TEvPoisonPill);
-                ctx.Send(ParentActorId, new TEvTestLoadFinished(Tag, nullptr, "Poison pill"));
+                ctx.Send(ParentActorId, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, "Poison pill"));
                 Die(ctx);
             }
 
@@ -342,7 +342,7 @@ namespace NKikimr {
 
     } // <anonymous>
 
-    IActor *CreateVDiskWriterTestLoad(const NKikimr::TEvTestLoadRequest::TVDiskLoadStart& cmd,
+    IActor *CreateVDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TVDiskLoadStart& cmd,
             const NActors::TActorId& parent, ui64 tag) {
         return new TVDiskLoadActor(cmd, parent, tag);
     }

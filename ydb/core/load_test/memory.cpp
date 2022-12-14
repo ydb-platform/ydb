@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-class TMemoryTestLoadActor : public TActorBootstrapped<TMemoryTestLoadActor> {
+class TMemoryLoadTestActor : public TActorBootstrapped<TMemoryLoadTestActor> {
     enum {
         EvAllocateBlock = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvEnd
@@ -30,7 +30,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 
-    TMemoryTestLoadActor(const NKikimr::TEvTestLoadRequest::TMemoryLoadStart& cmd,
+    TMemoryLoadTestActor(const NKikimr::TEvLoadTestRequest::TMemoryLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -52,9 +52,9 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-            << " TMemoryTestLoadActor Bootstrap called");
+            << " TMemoryLoadTestActor Bootstrap called");
 
-        Become(&TMemoryTestLoadActor::StateFunc);
+        Become(&TMemoryLoadTestActor::StateFunc);
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
             << " Schedule PoisonPill");
@@ -68,9 +68,9 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
             << " Handle PoisonPill");
 
-        TIntrusivePtr<TLoadReport> report(new TLoadReport());
+        TIntrusivePtr<TEvLoad::TLoadReport> report(new TEvLoad::TLoadReport());
         report->Duration = Duration;
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, report, "OK"));
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, report, "OK"));
         Die(ctx);
     }
 
@@ -128,14 +128,14 @@ public:
     )
 };
 
-IActor* CreateMemoryTestLoad(
-    const NKikimr::TEvTestLoadRequest::TMemoryLoadStart& cmd,
+IActor* CreateMemoryLoadTest(
+    const NKikimr::TEvLoadTestRequest::TMemoryLoadStart& cmd,
     const TActorId& parent,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     ui64 index,
     ui64 tag)
 {
-    return new TMemoryTestLoadActor(cmd, parent, counters, index, tag);
+    return new TMemoryLoadTestActor(cmd, parent, counters, index, tag);
 }
 
 } // NKikimr

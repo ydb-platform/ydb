@@ -8,7 +8,7 @@
 #include <util/generic/queue.h>
 
 namespace NKikimr {
-class TPDiskLogWriterTestLoadActor;
+class TPDiskLogWriterLoadTestActor;
 
 #define VAR_OUT(x) #x "# " << x << "; "
 
@@ -19,7 +19,7 @@ class TPDiskLogWriterTestLoadActor;
     }
 
 class TWorker {
-    friend class TPDiskLogWriterTestLoadActor;
+    friend class TPDiskLogWriterLoadTestActor;
 
     TVDiskID VDiskId;
     ui32 Idx;
@@ -72,7 +72,7 @@ class TWorker {
 
 public:
 
-    TWorker(const NKikimr::TEvTestLoadRequest::TPDiskLogLoadStart::TWorkerConfig& cmd,
+    TWorker(const NKikimr::TEvLoadTestRequest::TPDiskLogLoadStart::TWorkerConfig& cmd,
             ui32 idx, TReallyFastRng32 *gen)
         : Idx(idx)
         , MaxInFlight(1, 0, 65536)
@@ -255,7 +255,7 @@ public:
     }
 };
 
-class TPDiskLogWriterTestLoadActor : public TActorBootstrapped<TPDiskLogWriterTestLoadActor> {
+class TPDiskLogWriterLoadTestActor : public TActorBootstrapped<TPDiskLogWriterLoadTestActor> {
     struct TRequestInfo {
         ui32 Size;
         TInstant LogStartTime;
@@ -305,12 +305,12 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 
-    TPDiskLogWriterTestLoadActor(const NKikimr::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
+    TPDiskLogWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskLogLoadStart& cmd,
             const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , Rng(Now().GetValue())
-        // , Report(new TLoadReport())
+        // , Report(new TEvLoad::TLoadReport())
     {
         VERIFY_PARAM(PDiskId);
         PDiskId = cmd.GetPDiskId();
@@ -344,12 +344,12 @@ public:
         LogResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorLogWriteDuration", "Time in microseconds", percentiles);
     }
 
-    ~TPDiskLogWriterTestLoadActor() {
+    ~TPDiskLogWriterLoadTestActor() {
         LoadCounters->ResetCounters();
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&TPDiskLogWriterTestLoadActor::StateFunc);
+        Become(&TPDiskLogWriterLoadTestActor::StateFunc);
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
@@ -385,7 +385,7 @@ public:
             TStringStream str;
             str << "TEvYardInitResult is not OK, msg.ToString()# " << msg->ToString();
             LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, str.Str()));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
@@ -461,7 +461,7 @@ public:
     }
 
     void StartDeathProcess(const TActorContext& ctx) {
-        Become(&TPDiskLogWriterTestLoadActor::StateEndOfWork);
+        Become(&TPDiskLogWriterLoadTestActor::StateEndOfWork);
         if (IsWardenlessTest) {
             for (auto& worker : Workers) {
                 ++worker->OwnerRound;
@@ -505,7 +505,7 @@ public:
             TStringStream str;
             str << "TEvYardInitResult is not OK, msg.ToString()# " << msg->ToString();
             LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, str.Str()));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
@@ -549,7 +549,7 @@ public:
             TStringStream str;
             str << "TEvHarakiriResult is not OK, msg.ToString()# " << msg->ToString();
             LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, str.Str()));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
@@ -563,11 +563,11 @@ public:
                         << " GetReallyWrittenBytes()# " << worker->GetReallyWrittenBytes()
                         << " GetGlobalWrittenBytes()# " << worker->GetGlobalWrittenBytes());
             }
-            auto report = std::make_unique<TLoadReport>();
-            report->LoadType = TLoadReport::LOAD_LOG_WRITE;
+            auto report = std::make_unique<TEvLoad::TLoadReport>();
+            report->LoadType = TEvLoad::TLoadReport::LOAD_LOG_WRITE;
             report->Duration = TAppData::TimeProvider->Now() - TestStartTime;
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, report.release(), "OK"));
-            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " End of work, TEvTestLoadFinished is sent");
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, report.release(), "OK"));
+            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " End of work, TEvLoadTestFinished is sent");
             Die(ctx);
         }
 
@@ -609,7 +609,7 @@ public:
             TStringStream str;
             str << " TEvLogResult is not OK, msg.ToString()# " << msg->ToString();
             LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, str.Str()));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
@@ -693,9 +693,9 @@ public:
     )
 };
 
-IActor *CreatePDiskLogWriterTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
+IActor *CreatePDiskLogWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLogLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TPDiskLogWriterTestLoadActor(cmd, parent, counters, index, tag);
+    return new TPDiskLogWriterLoadTestActor(cmd, parent, counters, index, tag);
 }
 
 } // NKikimr

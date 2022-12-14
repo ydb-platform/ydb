@@ -850,11 +850,6 @@ struct TEvBlobStorage {
         EvVMockCtlRequest,
         EvVMockCtlResponse,
 
-        // load actor control
-        EvTestLoadRequest = EvPut + 16 * 512,
-        EvTestLoadFinished,
-        EvTestLoadResponse,
-
         // incremental huge blob keeper
         EvIncrHugeInit = EvPut + 17 * 512,
         EvIncrHugeInitResult,

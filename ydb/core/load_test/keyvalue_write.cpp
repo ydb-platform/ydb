@@ -10,7 +10,7 @@
 #include <util/generic/queue.h>
 
 namespace NKikimr {
-class TKeyValueWriterTestLoadActor;
+class TKeyValueWriterLoadTestActor;
 
 #define PARAM(NAME, VALUE) \
     TABLER() { \
@@ -19,7 +19,7 @@ class TKeyValueWriterTestLoadActor;
     }
 
 class TWorker {
-    friend class TKeyValueWriterTestLoadActor;
+    friend class TKeyValueWriterLoadTestActor;
 
     TString KeyPrefix;
     TControlWrapper MaxInFlight;
@@ -36,7 +36,7 @@ class TWorker {
     bool IsDying = false;
 public:
 
-    TWorker(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart::TWorkerConfig& cmd,
+    TWorker(const NKikimr::TEvLoadTestRequest::TKeyValueLoadStart::TWorkerConfig& cmd,
             ui32 idx, TReallyFastRng32 *gen)
         : MaxInFlight(1, 0, 65536)
         , Idx(idx)
@@ -91,7 +91,7 @@ public:
     }
 };
 
-class TKeyValueWriterTestLoadActor : public TActorBootstrapped<TKeyValueWriterTestLoadActor> {
+class TKeyValueWriterLoadTestActor : public TActorBootstrapped<TKeyValueWriterLoadTestActor> {
     struct TRequestInfo {
         ui32 Size;
         TInstant LogStartTime;
@@ -137,7 +137,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 
-    TKeyValueWriterTestLoadActor(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
+    TKeyValueWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TKeyValueLoadStart& cmd,
             const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -166,12 +166,12 @@ public:
         ResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorLogWriteDuration", "Time in microseconds", percentiles);
     }
 
-    ~TKeyValueWriterTestLoadActor() {
+    ~TKeyValueWriterLoadTestActor() {
         LoadCounters->ResetCounters();
     }
 
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " TKeyValueWriterTestLoadActor Connect called");
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " TKeyValueWriterLoadTestActor Connect called");
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
         for (auto& worker : Workers) {
             worker->ItemsInFlight = 0;
@@ -181,8 +181,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterTestLoadActor Bootstrap called");
-        Become(&TKeyValueWriterTestLoadActor::StateFunc);
+                << " TKeyValueWriterLoadTestActor Bootstrap called");
+        Become(&TKeyValueWriterLoadTestActor::StateFunc);
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
@@ -215,11 +215,11 @@ public:
 
     void StartDeathProcess(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterTestLoadActor StartDeathProcess called");
-        Become(&TKeyValueWriterTestLoadActor::StateEndOfWork);
-        TIntrusivePtr<TLoadReport> Report(new TLoadReport());
+                << " TKeyValueWriterLoadTestActor StartDeathProcess called");
+        Become(&TKeyValueWriterLoadTestActor::StateEndOfWork);
+        TIntrusivePtr<TEvLoad::TLoadReport> Report(new TEvLoad::TLoadReport());
         Report->Duration = TDuration::Seconds(DurationSeconds);
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, "OK called StartDeathProcess"));
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK called StartDeathProcess"));
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);
     }
@@ -266,7 +266,7 @@ public:
             TStringStream str;
             str << " TEvKeyValue::TEvResponse is not OK, msg.ToString()# " << msg->ToString();
             LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, str.Str()));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             NTabletPipe::CloseClient(SelfId(), Pipe);
             Die(ctx);
             return;
@@ -317,7 +317,7 @@ public:
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterTestLoadActor Handle TEvClientConnected called, Status# " << msg->Status);
+                << " TKeyValueWriterLoadTestActor Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
             if (msg->ClientId == Pipe) {
@@ -330,7 +330,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterTestLoadActor Handle TEvClientDestroyed called");
+                << " TKeyValueWriterLoadTestActor Handle TEvClientDestroyed called");
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
         if (msg->ClientId == Pipe) {
             Pipe = TActorId();
@@ -359,9 +359,9 @@ public:
     )
 };
 
-IActor * CreateKeyValueWriterTestLoad(const NKikimr::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
+IActor * CreateKeyValueWriterLoadTest(const NKikimr::TEvLoadTestRequest::TKeyValueLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TKeyValueWriterTestLoadActor(cmd, parent, counters, index, tag);
+    return new TKeyValueWriterLoadTestActor(cmd, parent, counters, index, tag);
 }
 
 } // NKikimr

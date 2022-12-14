@@ -4,7 +4,7 @@ import "ydb/core/protos/blobstorage_disk.proto";
 package NKikimr;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TEvTestLoadRequest {
+message TEvLoadTestRequest {
     // an item for interval distribution setting
     message TIntervalInfo {
         message TIntervalUniform {
@@ -242,7 +242,7 @@ message TEvTestLoadRequest {
     }
 }
 
-message TEvTestLoadResponse {
+message TEvLoadTestResponse {
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
     optional string ErrorReason = 2;
     optional uint64 Cookie = 3;

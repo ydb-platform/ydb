@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "gen.h"
-#include <ydb/core/protos/testload.pb.h>
 #include <util/generic/variant.h>
 
 namespace NKikimr {
@@ -50,7 +49,7 @@ namespace NKikimr {
         struct TItem : public std::variant<TUniformItem, TPoissonItem> {
             using TBase = std::variant<TUniformItem, TPoissonItem>;
 
-            TItem(const NKikimr::TEvTestLoadRequest::TIntervalInfo& x)
+            TItem(const NKikimr::TEvLoadTestRequest::TIntervalInfo& x)
                 : TBase(CreateVariantFromProtobuf(x))
             {}
 

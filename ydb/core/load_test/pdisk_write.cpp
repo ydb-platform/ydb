@@ -9,7 +9,7 @@
 
 namespace NKikimr {
 
-class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoadActor> {
+class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTestActor> {
     struct TChunkInfo {
         TDeque<std::pair<TChunkIdx, ui32>> WriteQueue;
         ui32 NumSlots;
@@ -96,7 +96,7 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     TBuffer DataBuffer;
     ui64 Lsn = 1;
     TChunkInfo *ReservePending = nullptr;
-    NKikimr::TEvTestLoadRequest::ELogMode LogMode;
+    NKikimr::TEvLoadTestRequest::ELogMode LogMode;
     THashMap<TChunkIdx, ui32> ChunkUsageCount;
     TQueue<TChunkIdx> AllocationQueue;
     TMultiMap<TInstant, TRequestStat> TimeSeries;
@@ -123,7 +123,7 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> LogResponseTimes;
 
-    TIntrusivePtr<TLoadReport> Report;
+    TIntrusivePtr<TEvLoad::TLoadReport> Report;
     TIntrusivePtr<NMonitoring::TCounterForPtr> PDiskBytesWritten;
     TMap<double, TIntrusivePtr<NMonitoring::TCounterForPtr>> DevicePercentiles;
 
@@ -132,14 +132,14 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
     }
 
-    TPDiskWriterTestLoadActor(const NKikimr::TEvTestLoadRequest::TPDiskLoadStart& cmd, const TActorId& parent,
+    TPDiskWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskLoadStart& cmd, const TActorId& parent,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
         , OwnerRound(1000 + index)
         , Rng(Now().GetValue())
-        , Report(new TLoadReport())
+        , Report(new TEvLoad::TLoadReport())
     {
 
         VERIFY_PARAM(DurationSeconds);
@@ -208,12 +208,12 @@ public:
         }
     }
 
-    ~TPDiskWriterTestLoadActor() {
+    ~TPDiskWriterLoadTestActor() {
         LoadCounters->ResetCounters();
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&TPDiskWriterTestLoadActor::StateFunc);
+        Become(&TPDiskWriterLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
@@ -235,7 +235,7 @@ public:
             TStringStream str;
             str << "yard init failed, Status# " << NKikimrProto::EReplyStatus_Name(msg->Status);
             LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, str.Str()));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
@@ -324,7 +324,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandlePoisonPill(const TActorContext& ctx) {
-        Report->LoadType = TLoadReport::LOAD_WRITE;
+        Report->LoadType = TEvLoad::TLoadReport::LOAD_WRITE;
         MaxInFlight = 0;
         CheckDie(ctx);
     }
@@ -335,14 +335,14 @@ public:
                 SendRequest(ctx, std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, PDiskParams->OwnerRound));
                 Harakiri = true;
             } else {
-                ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, "OK, but can't send TEvHarakiri to PDisk"));
+                ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK, but can't send TEvHarakiri to PDisk"));
                 Die(ctx);
             }
         }
     }
 
     void Handle(NPDisk::TEvHarakiriResult::TPtr& /*ev*/, const TActorContext& ctx) {
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, "OK"));
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK"));
         Die(ctx);
     }
 
@@ -427,7 +427,7 @@ public:
             ui32 offset = slotIndex * size;
             const TInstant now = TAppData::TimeProvider->Now();
             // like the parallel mode, but log is treated already written
-            bool isLogWritten = (LogMode == NKikimr::TEvTestLoadRequest::LOG_NONE);
+            bool isLogWritten = (LogMode == NKikimr::TEvLoadTestRequest::LOG_NONE);
             ui64 requestIdx = NewTRequestInfo(size, chunkIdx, now, now, false, isLogWritten);
             SendRequest(ctx, std::make_unique<NPDisk::TEvChunkWrite>(PDiskParams->Owner, PDiskParams->OwnerRound,
                     chunkIdx, offset,
@@ -435,7 +435,7 @@ public:
                     reinterpret_cast<void*>(requestIdx), true, NPriWrite::HullHugeAsyncBlob, Sequential));
             ++ChunkWrite_RequestsSent;
 
-            if (LogMode == NKikimr::TEvTestLoadRequest::LOG_PARALLEL) {
+            if (LogMode == NKikimr::TEvLoadTestRequest::LOG_PARALLEL) {
                 SendLogRequest(ctx, requestIdx, chunkIdx);
             }
 
@@ -461,10 +461,10 @@ public:
         if (info->LogWritten) {
             // both data and log are written, this could happen only in LOG_PARALLEL mode; this request is done
             FinishRequest(ctx, requestIdx);
-        } else if (LogMode == NKikimr::TEvTestLoadRequest::LOG_SEQUENTIAL) {
+        } else if (LogMode == NKikimr::TEvLoadTestRequest::LOG_SEQUENTIAL) {
             // in sequential mode we send log request after completion of data write request
             SendLogRequest(ctx, requestIdx, msg->ChunkIdx);
-        } else if (LogMode == NKikimr::TEvTestLoadRequest::LOG_PARALLEL) {
+        } else if (LogMode == NKikimr::TEvLoadTestRequest::LOG_PARALLEL) {
             // this is parallel mode and log is not written yet, so request is not complete; we release it to avoid
             // being deleted
         }
@@ -639,9 +639,9 @@ public:
     )
 };
 
-IActor *CreatePDiskWriterTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskLoadStart& cmd,
+IActor *CreatePDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TPDiskWriterTestLoadActor(cmd, parent, counters, index, tag);
+    return new TPDiskWriterLoadTestActor(cmd, parent, counters, index, tag);
 }
 
 } // NKikimr

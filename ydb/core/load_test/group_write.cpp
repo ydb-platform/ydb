@@ -19,7 +19,7 @@
 
 namespace NKikimr {
 
-class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActor> {
+class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActor> {
     class TWakeupQueue {
         using TCallback = std::function<void(const TActorContext&)>;
 
@@ -771,7 +771,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
     }
 
-    TLogWriterTestLoadActor(const NKikimr::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent,
+    TLogWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TLoadStart& cmd, const TActorId& parent,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
         : Tag(tag)
         , Parent(parent)
@@ -851,7 +851,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&TLogWriterTestLoadActor::StateFunc);
+        Become(&TLogWriterLoadTestActor::StateFunc);
         if (TestDuration) {
             ctx.Schedule(*TestDuration, new TEvents::TEvPoisonPill());
         }
@@ -872,7 +872,7 @@ public:
     void HandleStopTest(const TActorContext& ctx) {
         ++TestStoppedRecieved;
         if (TestStoppedRecieved == TabletWriters.size()) {
-            ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, "HandleStopTest"));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, "HandleStopTest"));
             Die(ctx);
         }
     }
@@ -971,9 +971,9 @@ public:
     )
 };
 
-IActor *CreateWriterTestLoad(const NKikimr::TEvTestLoadRequest::TLoadStart& cmd, const TActorId& parent,
+IActor *CreateWriterLoadTest(const NKikimr::TEvLoadTestRequest::TLoadStart& cmd, const TActorId& parent,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag) {
-    return new TLogWriterTestLoadActor(cmd, parent, std::move(counters), tag);
+    return new TLogWriterLoadTestActor(cmd, parent, std::move(counters), tag);
 }
 
 } // NKikimr

@@ -76,7 +76,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     ui64 NextTag = 1;
 
     // queue for all-nodes load
-    TVector<NKikimr::TEvTestLoadRequest> AllNodesLoadConfigs;
+    TVector<NKikimr::TEvLoadTestRequest> AllNodesLoadConfigs;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -94,7 +94,7 @@ public:
         Become(&TLoadActor::StateFunc);
     }
 
-    void Handle(TEvLoad::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvLoad::TEvLoadTestRequest::TPtr& ev, const TActorContext& ctx) {
         ui32 status = NMsgBusProxy::MSTATUS_OK;
         TString error;
         ui64 tag = 0;
@@ -107,7 +107,7 @@ public:
             status = NMsgBusProxy::MSTATUS_ERROR;
             error = ex.what();
         }
-        auto response = std::make_unique<TEvLoad::TEvTestLoadResponse>();
+        auto response = std::make_unique<TEvLoad::TEvLoadTestResponse>();
         response->Record.SetStatus(status);
         if (error) {
             response->Record.SetErrorReason(error);
@@ -128,22 +128,22 @@ public:
         }
     }
 
-    ui64 ProcessCmd(const NKikimr::TEvTestLoadRequest& record, const TActorContext& ctx) {
+    ui64 ProcessCmd(const NKikimr::TEvLoadTestRequest& record, const TActorContext& ctx) {
         ui64 tag = 0;
         switch (record.Command_case()) {
-            case NKikimr::TEvTestLoadRequest::CommandCase::kLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kLoadStart: {
                 const auto& cmd = record.GetLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateWriterTestLoad(cmd, ctx.SelfID,
+                LoadActors.emplace(tag, ctx.Register(CreateWriterLoadTest(cmd, ctx.SelfID,
                                 GetServiceCounters(Counters, "load_actor"), tag)));
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kLoadStop: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kLoadStop: {
                 const auto& cmd = record.GetLoadStop();
                 if (cmd.HasRemoveAllTags() && cmd.GetRemoveAllTags()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Delete all running load actors");
@@ -165,54 +165,54 @@ public:
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kPDiskLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLoadStart: {
                 const auto& cmd = record.GetPDiskLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreatePDiskWriterTestLoad(
+                LoadActors.emplace(tag, ctx.Register(CreatePDiskWriterLoadTest(
                                 cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kPDiskReadLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskReadLoadStart: {
                 const auto& cmd = record.GetPDiskReadLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreatePDiskReaderTestLoad(
+                LoadActors.emplace(tag, ctx.Register(CreatePDiskReaderLoadTest(
                                 cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kPDiskLogLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLogLoadStart: {
                 const auto& cmd = record.GetPDiskLogLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreatePDiskLogWriterTestLoad(
+                LoadActors.emplace(tag, ctx.Register(CreatePDiskLogWriterLoadTest(
                                 cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kVDiskLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kVDiskLoadStart: {
                 const auto& cmd = record.GetVDiskLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateVDiskWriterTestLoad(cmd, ctx.SelfID, tag)));
+                LoadActors.emplace(tag, ctx.Register(CreateVDiskWriterLoadTest(cmd, ctx.SelfID, tag)));
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kKeyValueLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kKeyValueLoadStart: {
                 const auto& cmd = record.GetKeyValueLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -220,12 +220,12 @@ public:
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateKeyValueWriterTestLoad(
+                LoadActors.emplace(tag, ctx.Register(CreateKeyValueWriterLoadTest(
                                 cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kKqpLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kKqpLoadStart: {
                 const auto& cmd = record.GetKqpLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -238,7 +238,7 @@ public:
                 break;
             }
 
-            case NKikimr::TEvTestLoadRequest::CommandCase::kMemoryLoadStart: {
+            case NKikimr::TEvLoadTestRequest::CommandCase::kMemoryLoadStart: {
                 const auto& cmd = record.GetMemoryLoadStart();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
@@ -246,7 +246,7 @@ public:
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new memory load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateMemoryTestLoad(
+                LoadActors.emplace(tag, ctx.Register(CreateMemoryLoadTest(
                             cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
@@ -255,7 +255,7 @@ public:
                 TString protoTxt;
                 google::protobuf::TextFormat::PrintToString(record, &protoTxt);
                 ythrow TLoadActorException() << (TStringBuilder()
-                        << "TLoadActor::Handle(TEvLoad::TEvTestLoadRequest): unexpected command case: "
+                        << "TLoadActor::Handle(TEvLoad::TEvLoadTestRequest): unexpected command case: "
                         << ui32(record.Command_case())
                         << " protoTxt# " << protoTxt.Quote());
             }
@@ -263,7 +263,7 @@ public:
         return tag;
     }
 
-    void Handle(TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvLoad::TEvLoadTestFinished::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get();
         auto iter = LoadActors.find(msg->Tag);
         Y_VERIFY(iter != LoadActors.end());
@@ -328,7 +328,7 @@ public:
 
         if (params.Has("protobuf")) {
             TString errorMsg = "ok";
-            NKikimr::TEvTestLoadRequest record;
+            NKikimr::TEvLoadTestRequest record;
             bool status = google::protobuf::TextFormat::ParseFromString(params.Get("protobuf"), &record);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST,
                 "received protobuf: " << params.Get("protobuf") << " | "
@@ -356,7 +356,7 @@ public:
             return;
         } else if (params.Has("stop_request")) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
-            NKikimr::TEvTestLoadRequest record;
+            NKikimr::TEvLoadTestRequest record;
             record.MutableLoadStop()->SetRemoveAllTags(true);
             if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
@@ -398,7 +398,7 @@ public:
         for (const auto& cmd : AllNodesLoadConfigs) {
             for (const auto& id : dyn_node_ids) {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "sending load request to: " << id);
-                auto msg = MakeHolder<TEvLoad::TEvTestLoadRequest>();
+                auto msg = MakeHolder<TEvLoad::TEvLoadTestRequest>();
                 msg->Record = cmd;
                 msg->Record.SetCookie(id);
                 ctx.Send(MakeLoadServiceID(id), msg.Release());
@@ -582,15 +582,15 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvLoad::TEvTestLoadRequest, Handle)
-        HFunc(TEvTestLoadFinished, Handle)
+        HFunc(TEvLoad::TEvLoadTestRequest, Handle)
+        HFunc(TEvLoad::TEvLoadTestFinished, Handle)
         HFunc(NMon::TEvHttpInfo, Handle)
         HFunc(NMon::TEvHttpInfoRes, Handle)
         HFunc(TEvInterconnect::TEvNodesInfo, Handle)
     )
 };
 
-IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
+IActor *CreateLoadTestActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new TLoadActor(counters);
 }
 

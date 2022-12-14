@@ -1855,7 +1855,7 @@ TLoadInitializer::TLoadInitializer(const TKikimrRunConfig& runConfig)
 {}
 
 void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
-    IActor *bsActor = CreateTestLoadActor(appData->Counters);
+    IActor *bsActor = CreateLoadTestActor(appData->Counters);
     setup->LocalServices.emplace_back(MakeLoadServiceID(NodeId), TActorSetupCmd(bsActor, TMailboxType::HTSwap, appData->UserPoolId));
     // FIXME: correct service id
 

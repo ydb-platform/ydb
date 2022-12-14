@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
+#include <ydb/core/protos/load_test.pb.h>
 #include <ydb/core/protos/services.pb.h>
-#include <ydb/core/protos/testload.pb.h>
 
 #include <ydb/core/load_test/events.h>

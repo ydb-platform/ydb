@@ -90,6 +90,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/labeled_counters.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/load_test.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/local.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/long_tx_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/metrics.proto
@@ -129,7 +130,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_pool.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_slot_broker.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/test_shard.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/testload.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tracing.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_whiteboard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx.proto

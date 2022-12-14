@@ -298,7 +298,7 @@ public:
         return NKikimrServices::TActivity::KQP_TEST_WORKLOAD;
     }
 
-    TKqpLoadActor(const NKikimr::TEvTestLoadRequest::TKqpLoadStart& cmd,
+    TKqpLoadActor(const NKikimr::TEvLoadTestRequest::TKqpLoadStart& cmd,
             const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             ui64 index, ui64 tag)
         : Parent(parent)
@@ -326,7 +326,7 @@ public:
 
         NYdbWorkload::TWorkloadFactory factory;
 
-        if (cmd.Workload_case() == NKikimr::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) {
+        if (cmd.Workload_case() == NKikimr::TEvLoadTestRequest_TKqpLoadStart::WorkloadCase::kStock) {
             WorkloadClass = NYdbWorkload::EWorkload::STOCK;
             NYdbWorkload::TStockWorkloadParams params;
             params.PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
@@ -337,7 +337,7 @@ public:
             params.DbPath = WorkingDir;
             params.MinPartitions = UniformPartitionsCount;
             WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::STOCK, &params);
-        } else if (cmd.Workload_case() == NKikimr::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kKv) {
+        } else if (cmd.Workload_case() == NKikimr::TEvLoadTestRequest_TKqpLoadStart::WorkloadCase::kKv) {
             WorkloadClass = NYdbWorkload::EWorkload::KV;
             NYdbWorkload::TKvWorkloadParams params;
             params.InitRowCount = cmd.GetKv().GetInitRowCount();
@@ -469,10 +469,10 @@ private:
     void DeathReport(const TActorContext& ctx) {
         CloseSession(ctx);
 
-        TIntrusivePtr<TLoadReport> Report(new TLoadReport());
+        TIntrusivePtr<TEvLoad::TLoadReport> Report(new TEvLoad::TLoadReport());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 
-        auto* finishEv = new TEvTestLoadFinished(Tag, Report, "OK called StartDeathProcess");
+        auto* finishEv = new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK called StartDeathProcess");
         finishEv->LastHtmlPage = RenderHTML();
         finishEv->JsonResult = GetJsonResult();
         ctx.Send(Parent, finishEv);
@@ -749,7 +749,7 @@ private:
 
 };
 
-IActor * CreateKqpLoadActor(const NKikimr::TEvTestLoadRequest::TKqpLoadStart& cmd,
+IActor * CreateKqpLoadActor(const NKikimr::TEvLoadTestRequest::TKqpLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TKqpLoadActor(cmd, parent, counters, index, tag);
 }

@@ -11,7 +11,7 @@
 
 namespace NKikimr {
 
-class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoadActor> {
+class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTestActor> {
     struct TChunkInfo {
         TChunkIdx Idx;
         ui32 NumSlots;
@@ -112,7 +112,7 @@ class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoad
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
-    TIntrusivePtr<TLoadReport> Report;
+    TIntrusivePtr<TEvLoad::TLoadReport> Report;
     TIntrusivePtr<NMonitoring::TCounterForPtr> PDiskBytesRead;
     TMap<double, TIntrusivePtr<NMonitoring::TCounterForPtr>> DevicePercentiles;
 
@@ -122,14 +122,14 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_READ;
     }
 
-    TPDiskReaderTestLoadActor(const NKikimr::TEvTestLoadRequest::TPDiskReadLoadStart& cmd, const TActorId& parent,
+    TPDiskReaderLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskReadLoadStart& cmd, const TActorId& parent,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
         , OwnerRound(1000 + index)
         , Rng(Now().GetValue())
-        , Report(new TLoadReport())
+        , Report(new TEvLoad::TLoadReport())
     {
         ErrorReason = "Still waiting for TEvRegisterPDiskLoadActorResult";
 
@@ -192,12 +192,12 @@ public:
         }
     }
 
-    ~TPDiskReaderTestLoadActor() {
+    ~TPDiskReaderLoadTestActor() {
         LoadCounters->ResetCounters();
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&TPDiskReaderTestLoadActor::StateFunc);
+        Become(&TPDiskReaderLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
@@ -310,7 +310,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandlePoisonPill(const TActorContext& ctx) {
-        Report->LoadType = TLoadReport::LOAD_READ;
+        Report->LoadType = TEvLoad::TLoadReport::LOAD_READ;
         MaxInFlight = 0;
         CheckDie(ctx);
     }
@@ -321,14 +321,14 @@ public:
                 SendRequest(ctx, std::make_unique<NPDisk::TEvHarakiri>(PDiskParams->Owner, PDiskParams->OwnerRound));
                 Harakiri = true;
             } else {
-                ctx.Send(Parent, new TEvTestLoadFinished(Tag, nullptr, ErrorReason));
+                ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, ErrorReason));
                 Die(ctx);
             }
         }
     }
 
     void Handle(NPDisk::TEvHarakiriResult::TPtr& /*ev*/, const TActorContext& ctx) {
-        ctx.Send(Parent, new TEvTestLoadFinished(Tag, Report, ErrorReason));
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, ErrorReason));
         Die(ctx);
     }
 
@@ -585,10 +585,10 @@ public:
     )
 };
 
-IActor *CreatePDiskReaderTestLoad(const NKikimr::TEvTestLoadRequest::TPDiskReadLoadStart& cmd,
+IActor *CreatePDiskReaderLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskReadLoadStart& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         ui64 index, ui64 tag) {
-    return new TPDiskReaderTestLoadActor(cmd, parent, counters, index, tag);
+    return new TPDiskReaderLoadTestActor(cmd, parent, counters, index, tag);
 }
 
 } // NKikimr

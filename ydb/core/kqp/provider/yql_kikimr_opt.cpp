@@ -75,7 +75,7 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
             if (auto maybeDatasink = node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
                 auto cluster = TString(maybeDatasink.Cast().Cluster());
 
-                ret = KiBuildQuery(node, ctx);
+                ret = KiBuildQuery(node, ctx, sessionCtx->TablesPtr());
 
                 if (ret != inputNode) {
                     return ret;

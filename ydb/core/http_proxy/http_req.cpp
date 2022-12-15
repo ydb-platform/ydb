@@ -6,6 +6,7 @@
 
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
+#include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/http/server/response.h>
 #include <library/cpp/json/json_reader.h>
@@ -197,6 +198,7 @@ namespace NKikimr::NHttpProxy {
     constexpr TStringBuf REQUEST_FORWARDED_FOR = "x-forwarded-for";
     constexpr TStringBuf REQUEST_TARGET_HEADER = "x-amz-target";
     constexpr TStringBuf REQUEST_CONTENT_TYPE_HEADER = "content-type";
+    constexpr TStringBuf CRC32_HEADER = "x-amz-crc32";
     static const TString CREDENTIAL_PARAM = "credential";
 
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
@@ -683,8 +685,8 @@ namespace NKikimr::NHttpProxy {
                 new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", status, message);
             response->Set<&NHttp::THttpResponse::Connection>(request->GetConnection());
             response->Set(REQUEST_ID_HEADER_EXT, RequestId);
-
             if (!contentType.empty() && !body.empty()) {
+                response->Set(CRC32_HEADER, ToString(crc32(body.data(), body.size())));
                 response->Set<&NHttp::THttpResponse::ContentType>(contentType);
                 if (!request->Endpoint->CompressContentTypes.empty()) {
                     contentType = contentType.Before(';');
@@ -704,6 +706,16 @@ namespace NKikimr::NHttpProxy {
             }
             return response;
         };
+        auto strByMimeAws = [](MimeTypes contentType) {
+            switch (contentType) {
+            case MIME_JSON:
+                return "application/x-amz-json-1.1";
+            case MIME_CBOR:
+                return "application/x-amz-cbor-1.1";
+            default:
+                return strByMime(contentType);
+            }
+        };
 
         if (ResponseData.Status == NYdb::EStatus::SUCCESS) {
             LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply ok");
@@ -716,11 +728,12 @@ namespace NKikimr::NHttpProxy {
             ResponseData.Body["message"] = ResponseData.ErrorText;
             ResponseData.Body["__type"] = StatusToErrorType(ResponseData.Status);
         }
+
         auto response = createResponse(
             Request,
             TStringBuilder() << (ui32)StatusToHttpCode(ResponseData.Status),
             StatusToErrorType(ResponseData.Status),
-            strByMime(ContentType),
+            strByMimeAws(ContentType),
             ResponseData.DumpBody(ContentType)
         );
 
@@ -758,7 +771,7 @@ namespace NKikimr::NHttpProxy {
         switch (contentType) {
         case MIME_CBOR: {
             auto toCborStr = NJson::WriteJson(Body, false);
-            auto toCbor =  nlohmann::json::to_cbor({toCborStr.begin(), toCborStr.end()});
+            auto toCbor = nlohmann::json::to_cbor(nlohmann::json::parse(toCborStr));
             return {(char*)&toCbor[0], toCbor.size()};
         }
         default: {

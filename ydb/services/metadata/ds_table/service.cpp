@@ -99,7 +99,7 @@ void TService::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
     auto it = ManagersInRegistration.find(initId);
     Y_VERIFY(it != ManagersInRegistration.end());
     if (it->second->GetOperationsManager()) {
-        Register(new TSchemeDescriptionActor(InternalController, initId, it->second->GetStorageTablePath(), TDuration::Seconds(5)));
+        Register(new TSchemeDescriptionActor(InternalController, initId, it->second->GetStorageTablePath()));
     } else {
         InitializationFinished(initId);
     }
@@ -164,7 +164,7 @@ void TServiceInternalController::OnDescriptionFailed(const TString& errorMessage
     ActorId.Send(ActorId, new TEvTableDescriptionFailed(errorMessage, requestId));
 }
 
-void TServiceInternalController::OnDescriptionSuccess(Ydb::Table::DescribeTableResult&& result, const TString& requestId) const {
+void TServiceInternalController::OnDescriptionSuccess(THashMap<ui32, TSysTables::TTableColumnInfo>&& result, const TString& requestId) const {
     ActorId.Send(ActorId, new TEvTableDescriptionSuccess(std::move(result), requestId));
 }
 

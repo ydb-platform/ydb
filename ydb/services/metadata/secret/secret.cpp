@@ -28,8 +28,7 @@ NInternal::TTableRecord TSecret::SerializeToRecord() const {
 }
 
 IClassBehaviour::TPtr TSecret::GetBehaviour() {
-    static std::shared_ptr<NSecret::TSecretBehaviour> result = std::make_shared<NSecret::TSecretBehaviour>();
-    return result;
+    return TSecretBehaviour::GetInstance();
 }
 
 TString TSecretId::SerializeToString() const {

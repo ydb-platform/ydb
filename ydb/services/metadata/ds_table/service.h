@@ -29,10 +29,11 @@ public:
 
 class TEvTableDescriptionSuccess: public TEventLocal<TEvTableDescriptionSuccess, EEvents::EvTableDescriptionSuccess> {
 private:
+    using TDescription = THashMap<ui32, TSysTables::TTableColumnInfo>;
     YDB_READONLY_DEF(TString, RequestId);
-    YDB_READONLY_DEF(Ydb::Table::DescribeTableResult, Description);
+    YDB_READONLY_DEF(TDescription, Description);
 public:
-    TEvTableDescriptionSuccess(Ydb::Table::DescribeTableResult&& description, const TString& reqId)
+    TEvTableDescriptionSuccess(TDescription&& description, const TString& reqId)
         : RequestId(reqId)
         , Description(std::move(description))
     {
@@ -56,7 +57,7 @@ public:
     virtual void InitializationFinished(const TString& id) const override;
 
     virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) const override;
-    virtual void OnDescriptionSuccess(Ydb::Table::DescribeTableResult&& result, const TString& requestId) const override;
+    virtual void OnDescriptionSuccess(THashMap<ui32, TSysTables::TTableColumnInfo>&& result, const TString& requestId) const override;
 };
 
 class TManagersId {

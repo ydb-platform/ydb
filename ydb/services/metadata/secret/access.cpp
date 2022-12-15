@@ -7,8 +7,7 @@
 namespace NKikimr::NMetadata::NSecret {
 
 IClassBehaviour::TPtr TAccess::GetBehaviour() {
-    static std::shared_ptr<NSecret::TAccessBehaviour> result = std::make_shared<NSecret::TAccessBehaviour>();
-    return result;
+    return TAccessBehaviour::GetInstance();
 }
 
 bool TAccess::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {

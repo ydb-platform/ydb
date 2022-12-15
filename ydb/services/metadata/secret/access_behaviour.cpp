@@ -23,4 +23,9 @@ TString TAccessBehaviour::GetTypeId() const {
     return TAccess::GetTypeId();
 }
 
+IClassBehaviour::TPtr TAccessBehaviour::GetInstance() {
+    static std::shared_ptr<TAccessBehaviour> result = std::make_shared<TAccessBehaviour>();
+    return result;
+}
+
 }

@@ -22,4 +22,9 @@ TString TSecretBehaviour::GetTypeId() const {
     return TSecret::GetTypeId();
 }
 
+IClassBehaviour::TPtr TSecretBehaviour::GetInstance() {
+    static std::shared_ptr<TSecretBehaviour> result = std::make_shared<TSecretBehaviour>();
+    return result;
+}
+
 }

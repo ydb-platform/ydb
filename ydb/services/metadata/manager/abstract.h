@@ -2,6 +2,7 @@
 #include "common.h"
 #include "table_record.h"
 
+#include <ydb/core/tx/datashard/sys_tables.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/ast/yql_expr_builder.h>
@@ -117,7 +118,7 @@ private:
 
     TTableSchema& AddColumn(const bool primary, const Ydb::Column& info) noexcept;
 public:
-    TTableSchema(const Ydb::Table::DescribeTableResult& description);
+    TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& description);
 };
 
 class IOperationsManager {

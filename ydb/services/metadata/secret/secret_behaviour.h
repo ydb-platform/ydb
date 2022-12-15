@@ -14,6 +14,9 @@ protected:
     virtual TString GetInternalStorageTablePath() const override;
 
 public:
+    TSecretBehaviour() = default;
+    static IClassBehaviour::TPtr GetInstance();
+
     virtual TString GetTypeId() const override;
 };
 

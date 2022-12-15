@@ -957,5 +957,6 @@ message TActivity {
         AUDIT_WRITER_ACTOR = 596;
         SCHEMESHARD_SVP_MIGRATOR = 597;
         SS_FETCHING_ACTOR = 598;
+        METADATA_SCHEME_DESCRIPTION_ACTOR = 599;
     };
 };

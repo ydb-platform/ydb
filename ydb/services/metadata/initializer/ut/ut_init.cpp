@@ -70,12 +70,16 @@ Y_UNIT_TEST_SUITE(Initializer) {
         virtual TString GetTypeId() const override {
             return TypeName<TInitBehaviourTest>();
         }
+
+        static IClassBehaviour::TPtr GetInstant() {
+            static std::shared_ptr<TInitBehaviourTest> result = std::make_shared<TInitBehaviourTest>();
+            return result;
+        }
     };
 
     class TInitUserEmulator: public NActors::TActorBootstrapped<TInitUserEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TInitUserEmulator>;
-        std::shared_ptr<TInitBehaviourTest> Manager = std::make_shared<TInitBehaviourTest>();
         YDB_READONLY_FLAG(Initialized, false);
     public:
 
@@ -93,7 +97,8 @@ Y_UNIT_TEST_SUITE(Initializer) {
 
         void Bootstrap() {
             Become(&TThis::StateWork);
-            Sender<NMetadata::NProvider::TEvPrepareManager>(Manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
+            Sender<NMetadata::NProvider::TEvPrepareManager>(TInitBehaviourTest::GetInstant()).
+                SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
         }
     };
 

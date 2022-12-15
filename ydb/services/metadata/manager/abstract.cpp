@@ -2,23 +2,21 @@
 
 namespace NKikimr::NMetadata::NModifications {
 
-TTableSchema::TTableSchema(const Ydb::Table::DescribeTableResult& description) {
+TTableSchema::TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& description) {
     std::map<TString, Ydb::Column> columns;
-    for (auto&& i : description.columns()) {
+    std::map<ui32, Ydb::Column> pkColumns;
+    for (auto&& [_, i] : description) {
         Ydb::Column column;
-        column.set_name(i.name());
-        if (i.type().has_optional_type()) {
-            *column.mutable_type() = i.type().optional_type().item();
+        column.set_name(i.Name);
+        column.mutable_type()->set_type_id(::Ydb::Type::PrimitiveTypeId(i.PType.GetTypeId()));
+        if (i.KeyOrder >= 0) {
+            Y_VERIFY(pkColumns.emplace(i.KeyOrder, std::move(column)).second);
         } else {
-            *column.mutable_type() = i.type();
+            Y_VERIFY(columns.emplace(i.Name, std::move(column)).second);
         }
-        columns.emplace(i.name(), std::move(column));
     }
-    for (auto&& i : description.primary_key()) {
-        auto it = columns.find(i);
-        Y_VERIFY(it != columns.end());
-        AddColumn(true, it->second);
-        columns.erase(it);
+    for (auto&& i : pkColumns) {
+        AddColumn(true, i.second);
     }
     for (auto&& i : columns) {
         AddColumn(false, i.second);

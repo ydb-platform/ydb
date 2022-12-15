@@ -125,7 +125,6 @@ class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTest
 
     TIntrusivePtr<TEvLoad::TLoadReport> Report;
     TIntrusivePtr<NMonitoring::TCounterForPtr> PDiskBytesWritten;
-    TMap<double, TIntrusivePtr<NMonitoring::TCounterForPtr>> DevicePercentiles;
 
 public:
     static constexpr auto ActorActivityType() {
@@ -195,13 +194,6 @@ public:
         TIntrusivePtr<::NMonitoring::TDynamicCounters> pDiskCounters = GetServiceCounters(counters, "pdisks")->
              GetSubgroup("pdisk", Sprintf("%09" PRIu32, PDiskId));
         PDiskBytesWritten = pDiskCounters->GetSubgroup("subsystem", "device")->GetCounter("DeviceBytesWritten", true);
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> percentilesGroup;
-        percentilesGroup = pDiskCounters-> GetSubgroup("subsystem", "deviceWriteDuration")->GetSubgroup("sensor", "Time in microsec");
-        for (double percentile : {0.1, 0.5, 0.9, 0.99, 0.999,  1.0}) {
-            DevicePercentiles.emplace(percentile, percentilesGroup->GetNamedCounter("percentile",
-                Sprintf("%.1f", percentile * 100.f)));
-        }
-
 
         if (Chunks.empty()) {
             ythrow TLoadActorException() << "Chunks may not be empty";
@@ -515,9 +507,6 @@ public:
 
         if (now > MeasurementStartTime) {
             Report->LatencyUs.Increment((now - request->StartTime).MicroSeconds());
-            for(const auto& perc : DevicePercentiles) {
-                Report->DeviceLatency[perc.first] = Max(Report->DeviceLatency[perc.first], (ui64)*perc.second);
-            }
         }
 
         TimeSeries.emplace(now, TRequestStat{

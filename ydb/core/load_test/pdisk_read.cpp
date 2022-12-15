@@ -465,9 +465,6 @@ public:
 
         if (now > MeasurementStartTime) {
             Report->LatencyUs.Increment((now - request->StartTime).MicroSeconds());
-            for(const auto& perc : DevicePercentiles) {
-                Report->DeviceLatency[perc.first] = Max(Report->DeviceLatency[perc.first], (ui64)*perc.second);
-            }
         }
 
         TimeSeries.emplace(now, TRequestStat{

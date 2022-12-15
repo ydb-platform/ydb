@@ -36,6 +36,19 @@ void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
 class TKeyLevel;
 struct TMirrorerInfo;
 
+struct TTransaction {
+    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
+                          TMaybe<bool> predicate = Nothing()) :
+        Tx(tx),
+        Predicate(predicate)
+    {
+        Y_VERIFY(Tx);
+    }
+
+    TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
+    TMaybe<bool> Predicate;
+};
+
 class TPartition : public TActorBootstrapped<TPartition> {
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
@@ -91,6 +104,9 @@ private:
     void Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
@@ -98,7 +114,7 @@ private:
     void HandleDataRead(const NKikimrClient::TResponse& range, const TActorContext& ctx);
     void HandleGetDiskStatus(const NKikimrClient::TResponse& res, const TActorContext& ctx);
     void HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
-    void HandleMetaRead(const NKikimrClient::TKeyValueResponse::TReadResult& response, const TActorContext& ctx);
+    void HandleMetaRead(const NKikimrClient::TResponse& response, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -176,6 +192,12 @@ private:
     ui64 GetUsedStorage(const TActorContext& ctx);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
+    void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
+
+    void AddDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
+    void RemoveDistrTx();
+    void ProcessDistrTxs(const TActorContext& ctx);
+    void ProcessDistrTx(const TActorContext& ctx);
 
     void AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> event);
     void RemoveImmediateTx();
@@ -203,12 +225,16 @@ private:
                             const TString& error);
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+    void ScheduleReplyCommitDone(ui64 step, ui64 txId);
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                      const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
                      ui64 offset, ui32 gen, ui32 step, const TString& session,
                      ui64 readOffsetRewindSum,
                      ui64 readRuleGeneration);
+    void AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request,
+                           ui64 step, ui64 txId);
+    void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
     void AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                            const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated);
                      
@@ -224,6 +250,7 @@ private:
                                             const TString& error);
     THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+    THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -233,7 +260,8 @@ public:
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
-               bool newPartition = false);
+               bool newPartition = false,
+               TVector<TTransaction> distrTxs = {});
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -329,6 +357,9 @@ private:
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+            HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+            HFuncTraced(TEvPQ::TEvTxCommit, Handle);
+            HFuncTraced(TEvPQ::TEvTxRollback, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
@@ -378,6 +409,9 @@ private:
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+            HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+            HFuncTraced(TEvPQ::TEvTxCommit, Handle);
+            HFuncTraced(TEvPQ::TEvTxRollback, Handle);
 
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
@@ -390,7 +424,8 @@ private:
         WaitInfoRange,
         WaitDataRange,
         WaitDataRead,
-        WaitMetaRead
+        WaitMetaRead,
+        WaitTxInfo
     };
 
     ui64 TabletID;
@@ -452,11 +487,16 @@ private:
     //
     std::deque<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>> UserActs;
     std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
+    std::deque<TTransaction> DistrTxs;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfo> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
     bool UsersInfoWriteInProgress = false;
+    bool TxInProgress = false;
+    TMaybe<ui64> PlanStep;
+    TMaybe<ui64> TxId;
+    bool TxIdHasChanged = false;
     //
     //
     //

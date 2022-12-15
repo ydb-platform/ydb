@@ -118,6 +118,11 @@ struct TEvPQ {
         EvRequestPartitionStatus,
         EvReaderEventArrived,
         EvMetering,
+        EvTxCalcPredicate,
+        EvTxCalcPredicateResult,
+        EvTxCommit,
+        EvTxCommitDone,
+        EvTxRollback,
         EvEnd
     };
 
@@ -654,6 +659,77 @@ struct TEvPQ {
 
         NPQ::EMeteringJson Type;
         ui64 Quantity;
+    };
+
+    struct TEvTxCalcPredicate : public TEventLocal<TEvTxCalcPredicate, EvTxCalcPredicate> {
+        TEvTxCalcPredicate(ui64 step, ui64 txId) :
+            Step(step),
+            TxId(txId)
+        {
+        }
+
+        void AddOperation(TString consumer, ui64 begin, ui64 end) {
+            NKikimrPQ::TPartitionOperation operation;
+            operation.SetBegin(begin);
+            operation.SetEnd(end);
+            operation.SetConsumer(std::move(consumer));
+
+            Operations.push_back(std::move(operation));
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        TVector<NKikimrPQ::TPartitionOperation> Operations;
+    };
+
+    struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
+        TEvTxCalcPredicateResult(ui64 step, ui64 txId, ui32 partition, bool predicate) :
+            Step(step),
+            TxId(txId),
+            Partition(partition),
+            Predicate(predicate)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        ui32 Partition;
+        bool Predicate = false;
+    };
+
+    struct TEvTxCommit : public TEventLocal<TEvTxCommit, EvTxCommit> {
+        TEvTxCommit(ui64 step, ui64 txId) :
+            Step(step),
+            TxId(txId)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+    };
+
+    struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
+        TEvTxCommitDone(ui64 step, ui64 txId, ui32 partition) :
+            Step(step),
+            TxId(txId),
+            Partition(partition)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        ui32 Partition;
+    };
+
+    struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {
+        TEvTxRollback(ui64 step, ui64 txId) :
+            Step(step),
+            TxId(txId)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
     };
 };
 

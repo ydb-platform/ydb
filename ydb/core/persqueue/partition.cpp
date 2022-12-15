@@ -37,6 +37,17 @@ static const ui32 MAX_USERS = 1000;
 static const ui64 SET_OFFSET_COOKIE = 1;
 static const ui32 MAX_TXS = 1000;
 
+auto GetStepAndTxId(ui64 step, ui64 txId)
+{
+    return std::make_pair(step, txId);
+}
+
+template<class E>
+auto GetStepAndTxId(const E& event)
+{
+    return GetStepAndTxId(event.Step, event.TxId);
+}
+
 struct TPartition::THasDataReq {
     ui64 Num;
     ui64 Offset;
@@ -392,10 +403,17 @@ void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partit
 }
 
 void RequestMetaRead(const TActorContext& ctx, const TActorId& dst, ui32 partition) {
+    auto addKey = [](NKikimrClient::TKeyValueRequest& request, TKeyPrefix::EType type, ui32 partition) {
+        auto read = request.AddCmdRead();
+        TKeyPrefix key{type, partition};
+        read->SetKey(key.Data(), key.Size());
+    };
+
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    auto read = request->Record.AddCmdRead();
-    TKeyPrefix key{TKeyPrefix::TypeMeta, partition};
-    read->SetKey(key.Data(), key.Size());
+
+    addKey(request->Record, TKeyPrefix::TypeMeta, partition);
+    addKey(request->Record, TKeyPrefix::TypeTxMeta, partition);
+
     ctx.Send(dst, request.Release());
 }
 
@@ -460,7 +478,8 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
-                       bool newPartition)
+                       bool newPartition,
+                       TVector<TTransaction> distrTxs)
     : TabletID(tabletId)
     , Partition(partition)
     , Config(config)
@@ -516,6 +535,12 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     }
 
     TabletCounters.Populate(counters);
+
+    if (!distrTxs.empty()) {
+        std::move(distrTxs.begin(), distrTxs.end(),
+                  std::back_inserter(DistrTxs));
+        TxInProgress = DistrTxs.front().Predicate.Defined();
+    }
 }
 
 void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1392,21 +1417,14 @@ void TPartition::HandleGetDiskStatus(const NKikimrClient::TResponse& response, c
     RequestMetaRead(ctx, Tablet, Partition);
 }
 
-void TPartition::HandleMetaRead(const NKikimrClient::TKeyValueResponse::TReadResult& response, const TActorContext& ctx) {
-    NKikimrPQ::TPartitionMeta meta;
-    switch (response.GetStatus()) {
-        case NKikimrProto::OK: {
-            bool res = meta.ParseFromString(response.GetValue());
-            Y_VERIFY(res);
-            /* Bring back later, when switch to 21-2 will be unable
-                StartOffset = meta.GetStartOffset();
-                EndOffset = meta.GetEndOffset();
-                if (StartOffset == EndOffset) {
-                    NewHead.Offset = Head.Offset = EndOffset;
-                }
-            */
+void TPartition::HandleMetaRead(const NKikimrClient::TResponse& response, const TActorContext& ctx)
+{
+    auto handleReadResult = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response,
+                                auto&& action) {
+        switch (response.GetStatus()) {
+        case NKikimrProto::OK:
+            action(response);
             break;
-        }
         case NKikimrProto::NODATA:
             break;
         case NKikimrProto::ERROR:
@@ -1419,13 +1437,40 @@ void TPartition::HandleMetaRead(const NKikimrClient::TKeyValueResponse::TReadRes
         default:
             Cerr << "ERROR " << response.GetStatus() << "\n";
             Y_FAIL("bad status");
+        };
     };
+
+    auto loadMeta = [](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
+        NKikimrPQ::TPartitionMeta meta;
+        bool res = meta.ParseFromString(response.GetValue());
+        Y_VERIFY(res);
+        /* Bring back later, when switch to 21-2 will be unable
+           StartOffset = meta.GetStartOffset();
+           EndOffset = meta.GetEndOffset();
+           if (StartOffset == EndOffset) {
+           NewHead.Offset = Head.Offset = EndOffset;
+           }
+           */
+    };
+    handleReadResult(response.GetReadResult(0), loadMeta);
+
+    auto loadTxMeta = [this](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
+        NKikimrPQ::TPartitionTxMeta meta;
+        bool res = meta.ParseFromString(response.GetValue());
+        Y_VERIFY(res);
+
+        if (meta.HasPlanStep()) {
+            PlanStep = meta.GetPlanStep();
+        }
+        if (meta.HasTxId()) {
+            TxId = meta.GetTxId();
+        }
+    };
+    handleReadResult(response.GetReadResult(1), loadTxMeta);
 
     InitState = WaitInfoRange;
     RequestInfoRange(ctx, Tablet, Partition, "");
 }
-
-
 
 void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) {
     //megaqc check here all results
@@ -1686,8 +1731,8 @@ void TPartition::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCo
             HandleGetDiskStatus(response, ctx);
             break;
         case WaitMetaRead:
-            Y_VERIFY(response.ReadResultSize() == 1);
-            HandleMetaRead(response.GetReadResult(0), ctx);
+            Y_VERIFY(response.ReadResultSize() == 2);
+            HandleMetaRead(response, ctx);
             break;
         case WaitInfoRange:
             Y_VERIFY(response.ReadRangeResultSize() == 1);
@@ -2267,6 +2312,77 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     AddImmediateTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx)
+{
+    AddDistrTx(ev->Release());
+
+    ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
+{
+    if (PlanStep.Defined() && TxId.Defined()) {
+        if (GetStepAndTxId(*ev->Get()) <= GetStepAndTxId(*PlanStep, *TxId)) {
+            ctx.Send(Tablet, MakeCommitDone(ev->Get()->Step, ev->Get()->TxId).Release());
+            return;
+        }
+    }
+
+    Y_VERIFY(TxInProgress);
+
+    Y_VERIFY(!DistrTxs.empty());
+    TTransaction& t = DistrTxs.front();
+
+    Y_VERIFY(GetStepAndTxId(*ev->Get()) == GetStepAndTxId(*t.Tx));
+    Y_VERIFY(t.Predicate.Defined() && *t.Predicate);
+
+    for (auto& operation : t.Tx->Operations) {
+        TUserInfo& userInfo = GetOrCreatePendingUser(operation.GetConsumer(), ctx);
+
+        Y_VERIFY(userInfo.Offset == (i64)operation.GetBegin());
+
+        userInfo.Offset = operation.GetEnd();
+        userInfo.Session = "";
+    }
+
+    PlanStep = t.Tx->Step;
+    TxId = t.Tx->TxId;
+    TxIdHasChanged = true;
+
+    ScheduleReplyCommitDone(t.Tx->Step, t.Tx->TxId);
+
+    RemoveDistrTx();
+    TxInProgress = false;
+
+    ContinueProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
+{
+    if (PlanStep.Defined() && TxId.Defined()) {
+        if (GetStepAndTxId(*ev->Get()) <= GetStepAndTxId(*PlanStep, *TxId)) {
+            return;
+        }
+    }
+
+    Y_VERIFY(TxInProgress);
+
+    Y_VERIFY(!DistrTxs.empty());
+    TTransaction& t = DistrTxs.front();
+
+    Y_VERIFY(GetStepAndTxId(*ev->Get()) == GetStepAndTxId(*t.Tx));
+    Y_VERIFY(t.Predicate.Defined());
+
+    PlanStep = t.Tx->Step;
+    TxId = t.Tx->TxId;
+    TxIdHasChanged = true;
+
+    RemoveDistrTx();
+    TxInProgress = false;
+
+    ContinueProcessTxsAndUserActs(ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
@@ -3604,7 +3720,15 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
     AffectedUsers.clear();
 
     UsersInfoWriteInProgress = false;
+
+    TxIdHasChanged = false;
+
     ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::AddDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
+{
+    DistrTxs.emplace_back(std::move(event));
 }
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
@@ -3651,7 +3775,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
-    if (UsersInfoWriteInProgress || (ImmediateTxs.empty() && UserActs.empty())) {
+    if (UsersInfoWriteInProgress || (ImmediateTxs.empty() && UserActs.empty() && DistrTxs.empty()) || TxInProgress) {
         return;
     }
 
@@ -3659,33 +3783,99 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     Y_VERIFY(Replies.empty());
     Y_VERIFY(AffectedUsers.empty());
 
+    ContinueProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
+{
+    if (!DistrTxs.empty()) {
+        ProcessDistrTxs(ctx);
+
+        if (!DistrTxs.empty()) {
+            return;
+        }
+    }
+
     ProcessUserActs(ctx);
     ProcessImmediateTxs(ctx);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-
     request->Record.SetCookie(SET_OFFSET_COOKIE);
 
-    for (auto& user : AffectedUsers) {
-        TKeyPrefix ikey(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUser);
-        ikey.Append(user.c_str(), user.size());
-        TKeyPrefix ikeyDeprecated(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUserDeprecated);
-        ikeyDeprecated.Append(user.c_str(), user.size());
-
-        if (TUserInfo* userInfo = GetPendingUserIfExists(user)) {
-            AddCmdWrite(request->Record,
-                        ikey, ikeyDeprecated,
-                        userInfo->Offset, userInfo->Generation, userInfo->Step, userInfo->Session,
-                        userInfo->ReadOffsetRewindSum,
-                        userInfo->ReadRuleGeneration);
-        } else {
-            AddCmdDeleteRange(request->Record,
-                              ikey, ikeyDeprecated);
-        }
+    if (TxIdHasChanged) {
+        AddCmdWriteTxMeta(request->Record,
+                          *PlanStep, *TxId);
     }
+    AddCmdWriteUserInfos(request->Record);
 
     ctx.Send(Tablet, request.Release());
     UsersInfoWriteInProgress = true;
+}
+
+void TPartition::RemoveDistrTx()
+{
+    Y_VERIFY(!DistrTxs.empty());
+
+    DistrTxs.pop_front();
+}
+
+void TPartition::ProcessDistrTxs(const TActorContext& ctx)
+{
+    Y_VERIFY(!TxInProgress);
+
+    while (!TxInProgress && !DistrTxs.empty()) {
+        ProcessDistrTx(ctx);
+    }
+}
+
+void TPartition::ProcessDistrTx(const TActorContext& ctx)
+{
+    Y_VERIFY(!TxInProgress);
+
+    Y_VERIFY(!DistrTxs.empty());
+    TTransaction& t = DistrTxs.front();
+
+    bool predicate = true;
+
+    for (auto& operation : t.Tx->Operations) {
+        const TString& consumer = operation.GetConsumer();
+
+        if (!UsersInfoStorage.GetIfExists(consumer)) {
+            predicate = false;
+            break;
+        }
+
+        bool isAffectedConsumer = AffectedUsers.contains(consumer);
+        TUserInfo& userInfo = GetOrCreatePendingUser(consumer, ctx);
+
+        if (operation.GetBegin() > operation.GetEnd()) {
+            // BAD_REQUEST
+            predicate = false;
+        } else if (userInfo.Offset != (i64)operation.GetBegin()) {
+            // ABORTED
+            predicate = false;
+        } else if (operation.GetEnd() > EndOffset) {
+            // BAD_REQUEST
+            predicate = false;
+        }
+
+        if (!predicate) {
+            if (!isAffectedConsumer) {
+                AffectedUsers.erase(consumer);
+            }
+            break;
+        }
+    }
+
+    t.Predicate = predicate;
+
+    auto response = MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
+                                                                t.Tx->TxId,
+                                                                Partition,
+                                                                predicate);
+    ctx.Send(Tablet, response.Release());
+
+    TxInProgress = true;
 }
 
 void TPartition::ProcessImmediateTxs(const TActorContext& ctx)
@@ -3973,6 +4163,12 @@ void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& ev
                                           statusCode).Release());
 }
 
+void TPartition::ScheduleReplyCommitDone(ui64 step, ui64 txId)
+{
+    Replies.emplace_back(Tablet,
+                         MakeCommitDone(step, txId).Release());
+}
+
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                                    const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated)
 {
@@ -4024,6 +4220,45 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
     write->SetKey(ikeyDeprecated.Data(), ikeyDeprecated.Size());
     write->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+}
+
+void TPartition::AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request,
+                                   ui64 step, ui64 txId)
+{
+    TKeyPrefix ikey(TKeyPrefix::TypeTxMeta, Partition);
+
+    NKikimrPQ::TPartitionTxMeta meta;
+    meta.SetPlanStep(step);
+    meta.SetTxId(txId);
+
+    TString out;
+    Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
+
+    auto write = request.AddCmdWrite();
+    write->SetKey(ikey.Data(), ikey.Size());
+    write->SetValue(out.c_str(), out.size());
+    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+}
+
+void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
+{
+    for (auto& user : AffectedUsers) {
+        TKeyPrefix ikey(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUser);
+        ikey.Append(user.c_str(), user.size());
+        TKeyPrefix ikeyDeprecated(TKeyPrefix::TypeInfo, Partition, TKeyPrefix::MarkUserDeprecated);
+        ikeyDeprecated.Append(user.c_str(), user.size());
+
+        if (TUserInfo* userInfo = GetPendingUserIfExists(user)) {
+            AddCmdWrite(request,
+                        ikey, ikeyDeprecated,
+                        userInfo->Offset, userInfo->Generation, userInfo->Step, userInfo->Session,
+                        userInfo->ReadOffsetRewindSum,
+                        userInfo->ReadRuleGeneration);
+        } else {
+            AddCmdDeleteRange(request,
+                              ikey, ikeyDeprecated);
+        }
+    }
 }
 
 TUserInfo& TPartition::GetOrCreatePendingUser(const TString& user,
@@ -4123,6 +4358,11 @@ THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(
     response->Record.SetTxId(event.GetTxId());
 
     return response;
+}
+
+THolder<TEvPQ::TEvTxCommitDone> TPartition::MakeCommitDone(ui64 step, ui64 txId)
+{
+    return MakeHolder<TEvPQ::TEvTxCommitDone>(step, txId, Partition);
 }
 
 void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {

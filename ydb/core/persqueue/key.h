@@ -16,7 +16,8 @@ public:
         TypeInfo = 'm',
         TypeData = 'd',
         TypeTmpData = 'x',
-        TypeMeta = 'i'
+        TypeMeta = 'i',
+        TypeTxMeta = 'I'
     };
 
     enum EMark : char {

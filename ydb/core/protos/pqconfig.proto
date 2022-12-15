@@ -20,6 +20,11 @@ message TPartitionMeta {
     optional uint64 EndOffset = 2;
 }
 
+message TPartitionTxMeta {
+    optional uint64 PlanStep = 1;
+    optional uint64 TxId = 2;
+}
+
 message TPQConfig {
     optional uint32 ACLRetryTimeoutSec = 1 [default = 300];
     optional uint32 BalancerMetadataRetryTimeoutSec = 2 [default = 240];

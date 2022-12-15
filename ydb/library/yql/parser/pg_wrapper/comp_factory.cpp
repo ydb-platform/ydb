@@ -2930,11 +2930,9 @@ class TPgTypeDescriptor
     : public NYql::NPg::TTypeDesc
 {
 public:
-    TPgTypeDescriptor()
-    {}
-
     explicit TPgTypeDescriptor(const NYql::NPg::TTypeDesc& desc)
         : NYql::NPg::TTypeDesc(desc)
+        , YdbTypeName(desc.Name + ".pg") // to distinguish from native ydb types (e.g. "int8")
     {
         if (TypeId == ArrayTypeId) {
             const auto& typeDesc = NYql::NPg::LookupType(ElementTypeId);
@@ -3166,6 +3164,7 @@ private:
     }
 
 public:
+    const TString YdbTypeName;
     ui32 StoredSize = 0; // size in local db, 0 for variable size
 };
 
@@ -3196,8 +3195,9 @@ public:
 
 private:
     void InitType(ui32 pgTypeId, const NYql::NPg::TTypeDesc& type) {
-        PgTypeDescriptors[pgTypeId] = TPgTypeDescriptor(type);
-        ByName[type.Name] = pgTypeId;
+        auto desc = TPgTypeDescriptor(type);
+        ByName[desc.YdbTypeName] = pgTypeId;
+        PgTypeDescriptors.emplace(pgTypeId, desc);
     }
 
 private:
@@ -3223,7 +3223,7 @@ const char* PgTypeNameFromTypeDesc(void* typeDesc) {
     if (!typeDesc) {
         return "";
     }
-    return static_cast<TPgTypeDescriptor*>(typeDesc)->Name.data();
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->YdbTypeName.data();
 }
 
 void* TypeDescFromPgTypeName(const TStringBuf name) {

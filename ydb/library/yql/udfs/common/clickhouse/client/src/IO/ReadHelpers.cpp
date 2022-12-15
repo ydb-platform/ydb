@@ -1169,17 +1169,18 @@ bool loadAtPosition(ReadBuffer & in, Memory<> & memory, char * & current)
 }
 
 void readDateTimeTextISO(time_t & x, ReadBuffer & istr) {
-    for (const auto& offset: {25, 20}) {
-        if (istr.position() + offset <= istr.buffer().end()) {
-            TInstant result;
-            if (TInstant::TryParseIso8601(TStringBuf{istr.position(), istr.position() + offset}, result)) {
-                x = result.GetValue() / 1000000;
-                istr.position() += offset;
-                return;
-            }
+    char prefix[26] = {};
+    int offset = 0;
+    for (const auto& len: {20, 25}) {
+        istr.readStrict(prefix + offset, len - offset);
+        offset = len;
+        TInstant result;
+        if (TInstant::TryParseIso8601(TStringBuf{prefix, prefix + len}, result)) {
+            x = result.GetValue() / 1000000;
+            return;
         }
     }
-    throw yexception() << "error in datetime parsing. Input data: " << istr.position();
+    throw yexception() << "error in datetime parsing. Input data: " << prefix;
 }
 
 char* readDateTimeTextFormat(time_t & x, char* str, const String& format)
@@ -1208,17 +1209,18 @@ void readDateTimeTextPOSIX(time_t & x, ReadBuffer & istr)
 }
 
 void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr) {
-    for (const auto& offset: {27, 25, 24, 20}) {
-        if (istr.position() + offset <= istr.buffer().end()) {
-            TInstant result;
-            if (TInstant::TryParseIso8601(TStringBuf{istr.position(), istr.position() + offset}, result)) {
-                x = result.GetValue();
-                istr.position() += offset;
-                return;
-            }
+    char prefix[28] = {};
+    int offset = 0;
+    for (const auto& len: {20, 24, 25, 27}) {
+        istr.readStrict(prefix + offset, len - offset);
+        offset = len;
+        TInstant result;
+        if (TInstant::TryParseIso8601(TStringBuf{prefix, prefix + len}, result)) {
+            x = result.GetValue();
+            return;
         }
     }
-    throw yexception() << "error in datetime parsing. Input data: " << istr.position();
+    throw yexception() << "error in timestamp parsing. Input data: " << prefix;
 }
 
 char* readTimestampTextFormat(DateTime64 & x, char* str, const String& format)

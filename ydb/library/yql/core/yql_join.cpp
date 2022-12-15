@@ -819,7 +819,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                 }
             }
 
-            if (isOptional) {
+            if (isOptional && commonType->GetKind() != ETypeAnnotationKind::Optional) {
                 commonType = ctx.MakeType<TOptionalExprType>(commonType);
             }
 

@@ -4449,15 +4449,18 @@ namespace NTypeAnnImpl {
         }
 
         const auto leftType = input->Head().GetTypeAnn();
+        const auto rightType = input->Tail().GetTypeAnn();
+
         auto leftItemType = leftType;
         if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
             leftItemType = leftType->Cast<TOptionalExprType>()->GetItemType();
-        } else if (leftType->GetKind() != ETypeAnnotationKind::Pg) {
+        } else if (leftType->GetKind() != ETypeAnnotationKind::Pg &&
+                   IsSameAnnotation(*RemoveOptionalType(leftType), *RemoveOptionalType(rightType)))
+        {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const auto rightType = input->Tail().GetTypeAnn();
         auto rightItemType = rightType;
         if (leftType->GetKind() != ETypeAnnotationKind::Optional &&
             rightType->GetKind() == ETypeAnnotationKind::Optional) {

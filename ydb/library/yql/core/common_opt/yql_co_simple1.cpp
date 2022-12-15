@@ -248,60 +248,33 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
 
     auto joins = node->Child(node->ChildrenSize() - 2);
     auto columnTypes = GetJoinColumnTypes(*joins, labels, ctx);
-    TMap<TString, std::pair<bool, TVector<TString>>> remap; // column -> isOptional, list of columns
+    TMap<TString, TVector<TString>> remap; // result column -> list of original columns
     for (auto it : labels.Inputs) {
         for (auto item : it.InputType->GetItems()) {
             TString fullName = it.FullName(item->GetName());
             auto type = columnTypes.FindPtr(fullName);
             if (type) {
-                auto columnName = it.ColumnName(fullName);
-                auto iter = remap.find(columnName);
-                if (iter != remap.end()) {
-                    if (iter->second.first) {
-                        // still optional
-                        if ((*type)->GetKind() == ETypeAnnotationKind::Optional) {
-                            iter->second.second.push_back(fullName);
-                        } else {
-                            iter->second.first = false;
-                            iter->second.second.clear();
-                            iter->second.second.push_back(fullName);
-                        }
-                    }
-                    continue;
-                }
-
-                remap.emplace(TString(columnName), std::make_pair((*type)->GetKind() == ETypeAnnotationKind::Optional,
-                    TVector<TString>(1, fullName)));
+                TString columnName(it.ColumnName(fullName));
+                remap[columnName].push_back(fullName);
             }
         }
     }
 
     auto lambdaArg = ctx.NewArgument(node->Pos(), "row");
     TExprNode::TListType remapItems;
-    for (auto& x : remap) {
-        TExprNode::TPtr value;
-        if (x.second.second.size() == 1) {
-            value = ctx.Builder(node->Pos())
+    for (auto& [resultName, sourceNames] : remap) {
+        TExprNode::TListType values;
+        for (auto& column : sourceNames) {
+            values.push_back(ctx.Builder(node->Pos())
                 .Callable("Member")
                     .Add(0, lambdaArg)
-                    .Atom(1, x.second.second.front())
+                    .Atom(1, column)
                 .Seal()
-                .Build();
-        } else {
-            TExprNode::TListType values;
-            for (auto& column : x.second.second) {
-                values.push_back(ctx.Builder(node->Pos())
-                    .Callable("Member")
-                        .Add(0, lambdaArg)
-                        .Atom(1, column)
-                    .Seal()
-                    .Build());
-            }
-
-            value = ctx.NewCallable(node->Pos(), "Coalesce", std::move(values));
+                .Build());
         }
 
-        remapItems.push_back(ctx.NewList(node->Pos(), { ctx.NewAtom(node->Pos(), x.first), value }));
+        TExprNode::TPtr coalesce = ctx.NewCallable(node->Pos(), "Coalesce", std::move(values));
+        remapItems.push_back(ctx.NewList(node->Pos(), { ctx.NewAtom(node->Pos(), resultName), coalesce }));
     }
 
     auto lambdaBody = ctx.NewCallable(node->Pos(), "AsStruct", std::move(remapItems));

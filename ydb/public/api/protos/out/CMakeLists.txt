@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(api-protos-out)
-target_link_libraries(api-protos-out PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  api-protos
-)
-target_sources(api-protos-out PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/out/out.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

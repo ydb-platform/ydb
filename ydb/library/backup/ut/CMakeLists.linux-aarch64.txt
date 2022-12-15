@@ -12,6 +12,7 @@ target_include_directories(ydb-library-backup-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/backup
 )
 target_link_libraries(ydb-library-backup-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

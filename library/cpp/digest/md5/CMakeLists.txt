@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-digest-md5)
-target_link_libraries(cpp-digest-md5 PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-nayuki_md5
-  cpp-string_utils-base64
-)
-target_sources(cpp-digest-md5 PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/md5/md5.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

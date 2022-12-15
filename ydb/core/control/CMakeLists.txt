@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-control)
-target_link_libraries(ydb-core-control PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-monlib-dynamic_counters
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-node_whiteboard
-  cpp-deprecated-atomic
-)
-target_sources(ydb-core-control PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

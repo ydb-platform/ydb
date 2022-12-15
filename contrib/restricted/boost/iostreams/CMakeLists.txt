@@ -6,51 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
-
-add_library(restricted-boost-iostreams)
-target_compile_options(restricted-boost-iostreams PRIVATE
-  -DBOOST_IOSTREAMS_USE_DEPRECATED
-  -Wno-everything
-)
-target_include_directories(restricted-boost-iostreams PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/include
-)
-target_include_directories(restricted-boost-iostreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libbz2
-  ${CMAKE_SOURCE_DIR}/contrib/libs/zstd/include
-)
-target_link_libraries(restricted-boost-iostreams PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-libbz2
-  contrib-libs-lzma
-  ZLIB::ZLIB
-  contrib-libs-zstd
-  restricted-boost-assert
-  restricted-boost-bind
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-function
-  restricted-boost-integer
-  restricted-boost-iterator
-  restricted-boost-mpl
-  restricted-boost-preprocessor
-  restricted-boost-random
-  restricted-boost-range
-  restricted-boost-regex
-  restricted-boost-smart_ptr
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-type_traits
-  restricted-boost-utility
-)
-target_sources(restricted-boost-iostreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/bzip2.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/file_descriptor.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/gzip.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/lzma.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/mapped_file.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zlib.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zstd.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

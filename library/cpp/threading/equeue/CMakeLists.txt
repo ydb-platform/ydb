@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-threading-equeue)
-target_link_libraries(cpp-threading-equeue PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-atomic
-)
-target_sources(cpp-threading-equeue PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/threading/equeue/equeue.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

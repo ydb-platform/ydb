@@ -9,6 +9,7 @@
 
 add_executable(ydb-core-blobstorage-ut_testshard)
 target_link_libraries(ydb-core-blobstorage-ut_testshard PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

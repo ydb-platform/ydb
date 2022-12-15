@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(yql-utils-actors)
-target_link_libraries(yql-utils-actors PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  common-token_accessor-client
-  yql-public-types
-  yql-public-udf
-  providers-solomon-proto
-)
-target_sources(yql-utils-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/rich_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/http_sender_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-dq-task_runner)
-target_compile_options(providers-dq-task_runner PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-dq-task_runner PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-svnversion
-  cpp-threading-task_scheduler
-  cpp-yson-node
-  library-yql-minikql
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
-  library-yql-protos
-  library-yql-utils
-  yql-utils-backtrace
-  yql-utils-log
-  yql-dq-proto
-  yql-dq-runtime
-  providers-common-proto
-  dq-api-protos
-  providers-dq-counters
-  providers-dq-interface
-)
-target_sources(providers-dq-task_runner PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/file_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_local.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

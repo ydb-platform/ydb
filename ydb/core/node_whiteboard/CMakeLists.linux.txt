@@ -1,0 +1,31 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(ydb-core-node_whiteboard INTERFACE)
+target_link_libraries(ydb-core-node_whiteboard INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  cpp-actors-helpers
+  cpp-actors-interconnect
+  cpp-actors-protos
+  cpp-deprecated-enum_codegen
+  library-cpp-logger
+  cpp-lwtrace-mon
+  library-cpp-random_provider
+  library-cpp-time_provider
+  ydb-core-base
+  core-base-services
+  core-blobstorage-base
+  core-blobstorage-groupinfo
+  ydb-core-debug
+  ydb-core-erasure
+  ydb-core-protos
+)

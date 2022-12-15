@@ -25,6 +25,7 @@ target_include_directories(libs-poco-JSON PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/JSON/src
 )
 target_link_libraries(libs-poco-JSON PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   libs-poco-Foundation
 )

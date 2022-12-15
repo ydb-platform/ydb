@@ -6,31 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(static)
-add_subdirectory(ut)
-
-add_library(stat_udf INTERFACE)
-target_link_libraries(stat_udf INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-stat-static
-)
-
-add_global_library_for(stat_udf.global stat_udf)
-target_compile_options(stat_udf.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=9
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(stat_udf.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-stat-static
-)
-target_sources(stat_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

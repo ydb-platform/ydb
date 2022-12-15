@@ -18,6 +18,7 @@ target_include_directories(libs-libevent-event_core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/include
 )
 target_link_libraries(libs-libevent-event_core PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-libc_compat
 )
 target_sources(libs-libevent-event_core PRIVATE

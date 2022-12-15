@@ -6,43 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Transforms-Instrumentation)
-target_compile_options(lib-Transforms-Instrumentation PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Transforms-Instrumentation PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation
-)
-target_link_libraries(lib-Transforms-Instrumentation PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-Analysis
-  llvm12-lib-IR
-  llvm12-lib-MC
-  llvm12-lib-ProfileData
-  llvm12-lib-Support
-  lib-Transforms-Utils
-)
-target_sources(lib-Transforms-Instrumentation PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/AddressSanitizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/BoundsChecking.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/CGProfile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/ControlHeightReduction.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/DataFlowSanitizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/GCOVProfiling.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/HWAddressSanitizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/IndirectCallPromotion.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/InstrOrderFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/InstrProfiling.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/Instrumentation.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/MemProfiler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/MemorySanitizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/PGOInstrumentation.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/PGOMemOPSizeOpt.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/PoisonChecking.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/SanitizerCoverage.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/ThreadSanitizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation/ValueProfileCollector.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

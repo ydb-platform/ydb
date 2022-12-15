@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(cpp-client-ydb_value)
-target_link_libraries(cpp-client-ydb_value PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-containers-stack_vector
-  api-protos
-  impl-ydb_internal-value_helpers
-  cpp-client-ydb_proto
-  client-ydb_types-fatal_error_handlers
-  yql-public-decimal
-  ydb-library-uuid
-)
-target_sources(cpp-client-ydb_value PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.cpp
-)
-generate_enum_serilization(cpp-client-ydb_value
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_value/value.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,49 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-add_subdirectory(ut)
-
-add_library(core-ymq-base)
-target_link_libraries(core-ymq-base PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  OpenSSL::OpenSSL
-  library-cpp-cgiparam
-  library-cpp-ipmath
-  library-cpp-lwtrace
-  cpp-monlib-dynamic_counters
-  library-cpp-scheme
-  cpp-string_utils-base64
-  ydb-core-base
-  ydb-core-protos
-  core-ymq-proto
-  ydb-library-aclib
-  library-http_proxy-authorization
-  library-http_proxy-error
-  ydb-library-protobuf_printer
-  public-lib-scheme_types
-)
-target_sources(core-ymq-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/acl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/dlq_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_attributes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_id.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/run_query.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/secure_protobuf_printer.cpp
-)
-generate_enum_serilization(core-ymq-base
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/query_id.h
-  INCLUDE_HEADERS
-  ydb/core/ymq/base/query_id.h
-)
-generate_enum_serilization(core-ymq-base
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/cloud_enums.h
-  INCLUDE_HEADERS
-  ydb/core/ymq/base/cloud_enums.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yql-utils-backtrace)
-target_link_libraries(yql-utils-backtrace PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  lib-DebugInfo-Symbolize
-  cpp-deprecated-atomic
-)
-target_sources(yql-utils-backtrace PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/backtrace.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

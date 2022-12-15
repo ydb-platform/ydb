@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-function_types INTERFACE)
-target_include_directories(restricted-boost-function_types INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/function_types/include
-)
-target_link_libraries(restricted-boost-function_types INTERFACE
-  contrib-libs-cxxsupp
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-mpl
-  restricted-boost-preprocessor
-  restricted-boost-type_traits
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

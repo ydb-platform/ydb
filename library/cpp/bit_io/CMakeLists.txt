@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-cpp-bit_io)
-target_link_libraries(library-cpp-bit_io PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-accessors
-)
-target_sources(library-cpp-bit_io PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/bit_io/bitinput.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/bit_io/bitinput_impl.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/bit_io/bitoutput.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

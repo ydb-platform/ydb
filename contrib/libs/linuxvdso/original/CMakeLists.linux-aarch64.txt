@@ -11,6 +11,9 @@ add_library(libs-linuxvdso-original)
 target_compile_options(libs-linuxvdso-original PRIVATE
   -Wno-everything
 )
+target_link_libraries(libs-linuxvdso-original PUBLIC
+  contrib-libs-linux-headers
+)
 target_sources(libs-linuxvdso-original PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/linuxvdso/original/vdso_support.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/linuxvdso/original/elf_mem_image.cc

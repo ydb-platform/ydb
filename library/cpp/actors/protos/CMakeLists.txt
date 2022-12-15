@@ -6,29 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-actors-protos)
-target_link_libraries(cpp-actors-protos PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-)
-target_proto_messages(cpp-actors-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/actors.proto
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/interconnect.proto
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/services_common.proto
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/unittests.proto
-)
-target_proto_addincls(cpp-actors-protos
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(cpp-actors-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

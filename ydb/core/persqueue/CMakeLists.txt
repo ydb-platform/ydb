@@ -6,61 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(codecs)
-add_subdirectory(config)
-add_subdirectory(events)
-add_subdirectory(partition_key_range)
-add_subdirectory(ut)
-add_subdirectory(writer)
-
-add_library(ydb-core-persqueue)
-target_link_libraries(ydb-core-persqueue PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
-  cpp-html-pcdata
-  library-cpp-json
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-keyvalue
-  ydb-core-metering
-  core-persqueue-codecs
-  core-persqueue-config
-  core-persqueue-events
-  core-persqueue-partition_key_range
-  core-persqueue-writer
-  ydb-core-protos
-  ydb-library-logger
-  library-persqueue-counter_time_keeper
-  library-persqueue-topic_parser
-  public-lib-base
-  cpp-client-ydb_persqueue_core
-)
-target_sources(ydb-core-persqueue PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/blob.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/cluster_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/event_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/header.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/metering_sink.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ownerinfo.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/percentile_counter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_database.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_l2_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/read_balancer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/read_speed_limiter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/subscriber.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/type_codecs_defs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/user_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/write_meta.cpp
-)
-generate_enum_serilization(ydb-core-persqueue
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid.h
-  INCLUDE_HEADERS
-  ydb/core/persqueue/sourceid.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

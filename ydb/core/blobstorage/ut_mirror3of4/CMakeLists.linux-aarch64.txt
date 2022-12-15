@@ -9,6 +9,7 @@
 
 add_executable(ydb-core-blobstorage-ut_mirror3of4)
 target_link_libraries(ydb-core-blobstorage-ut_mirror3of4 PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

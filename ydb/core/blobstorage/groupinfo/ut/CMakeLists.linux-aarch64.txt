@@ -12,6 +12,7 @@ target_include_directories(ydb-core-blobstorage-groupinfo-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo
 )
 target_link_libraries(ydb-core-blobstorage-groupinfo-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

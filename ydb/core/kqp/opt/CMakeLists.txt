@@ -6,38 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(logical)
-add_subdirectory(peephole)
-add_subdirectory(physical)
-
-add_library(core-kqp-opt)
-target_compile_options(core-kqp-opt PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-opt PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-kqp-common
-  kqp-opt-logical
-  kqp-opt-peephole
-  kqp-opt-physical
-  yql-dq-common
-  yql-dq-opt
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(core-kqp-opt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_build_txs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_effects.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_kql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phase.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_check.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_finalize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_range_legacy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.cpp
-)
-generate_enum_serilization(core-kqp-opt
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/opt/kqp_query_plan.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

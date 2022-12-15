@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(gencrc)
-
-add_library(cpp-digest-old_crc)
-target_link_libraries(cpp-digest-old_crc PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(cpp-digest-old_crc PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/crc.cpp
-  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
-)
-add_custom_command(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
-  DEPENDS
-  ${TOOLS_ROOT}/library/cpp/digest/old_crc/gencrc/gencrc
-  COMMAND
-  ${TOOLS_ROOT}/library/cpp/digest/old_crc/gencrc/gencrc
-  >
-  crc.inc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

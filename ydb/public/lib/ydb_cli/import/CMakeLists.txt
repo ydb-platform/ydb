@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-ydb_cli-import)
-target_link_libraries(lib-ydb_cli-import PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  api-protos
-  common
-  cpp-client-ydb_proto
-  public-lib-json_value
-  libs-apache-arrow
-)
-target_sources(lib-ydb_cli-import PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/import.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/cli_arrow_helpers.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

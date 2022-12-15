@@ -6,51 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-clickhouse-provider)
-target_compile_options(providers-clickhouse-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-clickhouse-provider PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  library-cpp-random_provider
-  library-cpp-time_provider
-  library-yql-ast
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  library-yql-core
-  yql-core-type_ann
-  yql-dq-expr_nodes
-  providers-common-db_id_async_resolver
-  providers-clickhouse-expr_nodes
-  providers-clickhouse-proto
-  providers-common-config
-  providers-common-dq
-  providers-common-http_gateway
-  providers-common-mkql
-  providers-common-proto
-  providers-common-provider
-  providers-common-transform
-  providers-dq-common
-  providers-dq-expr_nodes
-  providers-dq-interface
-)
-target_sources(providers-clickhouse-provider PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_execution.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_type_ann.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource_type_ann.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_dq_integration.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_io_discovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_load_meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_logical_opt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_mkql_compiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_physical_opt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_settings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_util.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

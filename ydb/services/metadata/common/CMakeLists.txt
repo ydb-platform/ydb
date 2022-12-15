@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-metadata-common)
-target_compile_options(services-metadata-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(services-metadata-common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-bg_tasks-abstract
-  core-tx-schemeshard
-)
-target_sources(services-metadata-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/common/timeout.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/common/ss_dialog.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

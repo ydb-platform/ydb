@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-s3-serializations)
-target_include_directories(providers-s3-serializations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-target_link_libraries(providers-s3-serializations PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  clickhouse_client_udf
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(providers-s3-serializations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.cpp
-)
-generate_enum_serilization(providers-s3-serializations
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/s3/serializations/serialization_interval.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

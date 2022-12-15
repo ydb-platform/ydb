@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-messagebus-oldmodule)
-target_link_libraries(cpp-messagebus-oldmodule PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-messagebus
-  messagebus_actor
-)
-target_sources(cpp-messagebus-oldmodule PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/oldmodule/module.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/oldmodule/startsession.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

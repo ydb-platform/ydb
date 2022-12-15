@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-messagebus-monitoring)
-target_link_libraries(cpp-messagebus-monitoring PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  encode-legacy_protobuf-protos
-  contrib-libs-protobuf
-)
-target_proto_messages(cpp-messagebus-monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/monitoring/mon_proto.proto
-)
-target_proto_addincls(cpp-messagebus-monitoring
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(cpp-messagebus-monitoring
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

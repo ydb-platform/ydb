@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(libs-checkpoint_storage-events)
-target_link_libraries(libs-checkpoint_storage-events PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-interconnect
-  yq-libs-checkpointing_common
-  yq-libs-events
-  libs-checkpoint_storage-proto
-  yql-public-issue
-)
-target_sources(libs-checkpoint_storage-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpoint_storage/events/events.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

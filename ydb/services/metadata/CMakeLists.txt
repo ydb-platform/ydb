@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(common)
-add_subdirectory(ds_table)
-add_subdirectory(initializer)
-add_subdirectory(manager)
-add_subdirectory(request)
-add_subdirectory(secret)
-
-add_library(ydb-services-metadata)
-target_link_libraries(ydb-services-metadata PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  services-metadata-abstract
-  services-metadata-manager
-)
-target_sources(ydb-services-metadata PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

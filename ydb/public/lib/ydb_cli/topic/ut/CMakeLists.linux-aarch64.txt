@@ -15,6 +15,7 @@ target_include_directories(ydb-public-lib-ydb_cli-topic-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic
 )
 target_link_libraries(ydb-public-lib-ydb_cli-topic-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

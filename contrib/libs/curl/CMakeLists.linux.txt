@@ -28,6 +28,7 @@ target_include_directories(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib
 )
 target_link_libraries(contrib-libs-curl PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-libc_compat
   OpenSSL::OpenSSL
   ZLIB::ZLIB

@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-variant2 INTERFACE)
-target_include_directories(restricted-boost-variant2 INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/variant2/include
-)
-target_link_libraries(restricted-boost-variant2 INTERFACE
-  contrib-libs-cxxsupp
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-mp11
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

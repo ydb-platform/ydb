@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-mkql_proto-protos)
-set_property(TARGET library-mkql_proto-protos PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(library-mkql_proto-protos PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  contrib-libs-protobuf
-)
-target_proto_messages(library-mkql_proto-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/protos/minikql.proto
-)
-target_proto_addincls(library-mkql_proto-protos
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(library-mkql_proto-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(library-mkql_proto-protos
-  grpc_cpp
-  grpc_cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

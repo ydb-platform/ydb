@@ -93,6 +93,7 @@ add_subdirectory(xpressive)
 
 add_library(contrib-restricted-boost INTERFACE)
 target_link_libraries(contrib-restricted-boost INTERFACE
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   restricted-boost-algorithm
   restricted-boost-array

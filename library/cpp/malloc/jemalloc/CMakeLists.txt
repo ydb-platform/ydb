@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-malloc-jemalloc)
-target_link_libraries(cpp-malloc-jemalloc PUBLIC
-  contrib-libs-cxxsupp
-  cpp-malloc-api
-  contrib-libs-jemalloc
-)
-target_sources(cpp-malloc-jemalloc PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/malloc/jemalloc/malloc-info.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

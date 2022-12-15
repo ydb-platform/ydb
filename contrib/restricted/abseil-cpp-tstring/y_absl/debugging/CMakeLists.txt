@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-tstring-y_absl-debugging)
-target_compile_options(abseil-cpp-tstring-y_absl-debugging PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-tstring-y_absl-debugging PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
-target_link_libraries(abseil-cpp-tstring-y_absl-debugging PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  abseil-cpp-tstring-y_absl-base
-)
-target_sources(abseil-cpp-tstring-y_absl-debugging PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/failure_signal_handler.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/internal/address_is_readable.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/internal/demangle.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/internal/elf_mem_image.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/internal/examine_stack.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/internal/vdso_support.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/leak_check.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/stacktrace.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/debugging/symbolize.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

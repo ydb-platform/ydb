@@ -442,6 +442,9 @@ target_include_directories(libs-hyperscan-runtime_avx512 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan/src
 )
+target_link_libraries(libs-hyperscan-runtime_avx512 PUBLIC
+  contrib-libs-linux-headers
+)
 target_sources(libs-hyperscan-runtime_avx512 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan/src/alloc.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan/src/crc32.c

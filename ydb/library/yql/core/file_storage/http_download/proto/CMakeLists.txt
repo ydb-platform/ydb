@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(file_storage-http_download-proto)
-target_link_libraries(file_storage-http_download-proto PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-)
-target_proto_messages(file_storage-http_download-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/http_download/proto/http_download.proto
-)
-target_proto_addincls(file_storage-http_download-proto
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(file_storage-http_download-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-solomon-gateway)
-target_link_libraries(providers-solomon-gateway PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  providers-common-gateway
-  providers-solomon-provider
-)
-target_sources(providers-solomon-gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

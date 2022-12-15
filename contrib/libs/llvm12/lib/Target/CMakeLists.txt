@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(X86)
-
-add_library(llvm12-lib-Target)
-target_compile_options(llvm12-lib-Target PRIVATE
-  -Wno-everything
-)
-target_include_directories(llvm12-lib-Target PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target
-)
-target_link_libraries(llvm12-lib-Target PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-Analysis
-  llvm12-lib-IR
-  llvm12-lib-MC
-  llvm12-lib-Support
-)
-target_sources(llvm12-lib-Target PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/Target.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetIntrinsicInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetLoweringObjectFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetMachine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/TargetMachineC.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

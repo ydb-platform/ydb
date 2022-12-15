@@ -15,6 +15,7 @@ target_include_directories(ydb-library-binary_json-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/binary_json
 )
 target_link_libraries(ydb-library-binary_json-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

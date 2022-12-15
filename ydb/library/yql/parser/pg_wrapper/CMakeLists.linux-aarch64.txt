@@ -108,6 +108,7 @@ target_include_directories(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port
 )
 target_link_libraries(yql-parser-pg_wrapper PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource

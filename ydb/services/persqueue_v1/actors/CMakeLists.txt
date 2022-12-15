@@ -6,33 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-persqueue_v1-actors)
-target_link_libraries(services-persqueue_v1-actors PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-containers-disjoint_interval_tree
-  ydb-core-base
-  ydb-core-grpc_services
-  ydb-core-persqueue
-  core-persqueue-events
-  ydb-core-protos
-  ydb-core-scheme
-  core-tx-scheme_cache
-  ydb-library-aclib
-  library-persqueue-topic_parser
-  api-protos
-  public-lib-base
-  services-lib-actors
-)
-target_sources(services-persqueue_v1-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/codecs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/persqueue_utils.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_init_auth_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_info_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/schema_actors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/add_offsets_to_transaction_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -1,0 +1,40 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(core-ymq-http)
+target_link_libraries(core-ymq-http PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-libxml
+  cpp-actors-core
+  library-cpp-cgiparam
+  cpp-http-misc
+  cpp-http-server
+  cpp-protobuf-json
+  cpp-string_utils-base64
+  cpp-string_utils-quote
+  cpp-string_utils-url
+  ydb-core-protos
+  core-ymq-actor
+  core-ymq-base
+  library-http_proxy-authorization
+  library-http_proxy-error
+)
+target_sources(core-ymq-http PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/http.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/xml.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/xml_builder.cpp
+)
+target_ragel_lexers(core-ymq-http
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/parser.rl6
+  -CG2
+)

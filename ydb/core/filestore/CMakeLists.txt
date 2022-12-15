@@ -6,11 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(core)
-
-add_library(ydb-core-filestore INTERFACE)
-target_link_libraries(ydb-core-filestore INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  core-filestore-core
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

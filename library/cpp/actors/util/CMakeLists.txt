@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-actors-util)
-target_link_libraries(cpp-actors-util PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-atomic
-  library-cpp-pop_count
-)
-target_sources(cpp-actors-util PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/affinity.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/memory_track.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/memory_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/shared_data.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/should_continue.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/threadparkpad.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

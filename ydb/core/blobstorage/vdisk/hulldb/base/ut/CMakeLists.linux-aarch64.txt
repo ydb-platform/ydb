@@ -12,6 +12,7 @@ target_include_directories(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base
 )
 target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-base-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

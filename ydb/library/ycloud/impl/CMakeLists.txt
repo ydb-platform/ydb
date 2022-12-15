@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(library-ycloud-impl)
-target_link_libraries(library-ycloud-impl PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-ycloud-api
-  cpp-actors-core
-  cpp-digest-crc32c
-  cpp-grpc-client
-  library-cpp-json
-  ydb-core-base
-  lib-deprecated-client
-  lib-deprecated-kicli
-)
-target_sources(library-ycloud-impl PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_adapter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,25 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-DebugInfo-Symbolize)
-target_compile_options(lib-DebugInfo-Symbolize PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-DebugInfo-Symbolize PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize
-)
-target_link_libraries(lib-DebugInfo-Symbolize PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  lib-DebugInfo-DWARF
-  lib-DebugInfo-PDB
-  llvm12-lib-Demangle
-  llvm12-lib-Object
-  llvm12-lib-Support
-)
-target_sources(lib-DebugInfo-Symbolize PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/DIPrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/SymbolizableObjectFile.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/Symbolize/Symbolize.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

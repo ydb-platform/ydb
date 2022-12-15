@@ -6,44 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-cpp-config)
-target_include_directories(library-cpp-config PUBLIC
-  ${CMAKE_BINARY_DIR}/library/cpp/config
-)
-target_link_libraries(library-cpp-config PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-archive
-  library-cpp-json
-  library-cpp-lua
-  cpp-string_utils-relaxed_escaper
-)
-target_sources(library-cpp-config PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/config.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/sax.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/value.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/markup.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/ini.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/domscheme.cpp
-  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
-)
-add_custom_command(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
-  DEPENDS
-  ${TOOLS_ROOT}/tools/archiver/archiver
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua
-  COMMAND
-  ${TOOLS_ROOT}/tools/archiver/archiver
-  -q
-  -x
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua:
-  -o
-  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
-)
-target_ragel_lexers(library-cpp-config
-  PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/config/markupfsm.h.rl6
-  -CG2
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-exception)
-target_compile_options(restricted-boost-exception PRIVATE
-  -Wno-everything
-)
-target_include_directories(restricted-boost-exception PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/exception/include
-)
-target_link_libraries(restricted-boost-exception PUBLIC
-  contrib-libs-cxxsupp
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-smart_ptr
-  restricted-boost-throw_exception
-  restricted-boost-tuple
-  restricted-boost-type_traits
-)
-target_sources(restricted-boost-exception PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/exception/src/clone_current_exception_non_intrusive.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

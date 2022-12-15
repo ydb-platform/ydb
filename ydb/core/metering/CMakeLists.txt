@@ -6,48 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-metering)
-target_link_libraries(ydb-core-metering PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
-  library-cpp-json
-  library-cpp-logger
-  ydb-core-base
-  library-cpp-resource
-)
-target_sources(ydb-core-metering PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/metering/bill_record.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/metering/metering.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/metering/stream_ru_calculator.cpp
-)
-generate_enum_serilization(ydb-core-metering
-  ${CMAKE_SOURCE_DIR}/ydb/core/metering/bill_record.h
-  INCLUDE_HEADERS
-  ydb/core/metering/bill_record.h
-)
-
-add_global_library_for(ydb-core-metering.global ydb-core-metering)
-target_link_libraries(ydb-core-metering.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
-  library-cpp-json
-  library-cpp-logger
-  ydb-core-base
-  library-cpp-resource
-)
-target_sources(ydb-core-metering.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
-)
-resources(ydb-core-metering.global
-  ${CMAKE_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
-  INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
-  KEYS
-  kqp_default_settings.txt
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

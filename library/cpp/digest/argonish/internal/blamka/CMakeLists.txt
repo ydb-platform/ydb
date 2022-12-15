@@ -6,10 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(argonish-internal-blamka INTERFACE)
-target_link_libraries(argonish-internal-blamka INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  argonish-internal-rotations
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,33 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yq-libs-events)
-target_compile_options(yq-libs-events PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-events PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
-  libs-graph_params-proto
-  yq-libs-protos
-  yql-core-facade
-  yql-public-issue
-  api-protos
-  public-lib-yq
-  cpp-client-ydb_table
-  providers-common-db_id_async_resolver
-  providers-dq-provider
-)
-generate_enum_serilization(yq-libs-events
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/events.h
-  INCLUDE_HEADERS
-  ydb/core/yq/libs/events/events.h
-)
-generate_enum_serilization(yq-libs-events
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/event_ids.h
-  INCLUDE_HEADERS
-  ydb/core/yq/libs/events/event_ids.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

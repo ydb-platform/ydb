@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-anubis_osiris)
-target_link_libraries(blobstorage-vdisk-anubis_osiris PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  vdisk-hulldb-barriers
-  vdisk-hulldb-generic
-  ydb-core-protos
-)
-target_sources(blobstorage-vdisk-anubis_osiris PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_algo.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisfinder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisproxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

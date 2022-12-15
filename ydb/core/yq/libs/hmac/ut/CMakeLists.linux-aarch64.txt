@@ -12,6 +12,7 @@ target_include_directories(ydb-core-yq-libs-hmac-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/hmac
 )
 target_link_libraries(ydb-core-yq-libs-hmac-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

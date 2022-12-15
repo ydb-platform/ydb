@@ -6,66 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(actor)
-add_subdirectory(config)
-add_subdirectory(monitoring)
-add_subdirectory(oldmodule)
-add_subdirectory(protobuf)
-add_subdirectory(scheduler)
-add_subdirectory(www)
-
-add_library(library-cpp-messagebus)
-target_link_libraries(library-cpp-messagebus PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-sparsehash
-  library-cpp-codecs
-  cpp-deprecated-enum_codegen
-  cpp-getopt-small
-  library-cpp-lwtrace
-  messagebus_actor
-  cpp-messagebus-config
-  cpp-messagebus-monitoring
-  cpp-messagebus-scheduler
-  cpp-string_utils-indent_text
-  cpp-threading-future
-  cpp-deprecated-atomic
-)
-target_sources(library-cpp-messagebus PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/acceptor.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/acceptor_status.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/connection.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/coreconn.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/duration_histogram.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/event_loop.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/futex_like.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/handler.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/key_value_printer.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/local_flags.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/locator.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/mb_lwtrace.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/message.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/message_counter.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/message_status.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/message_status_counter.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/messqueue.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/network.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/queue_config.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_client_connection.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_client_session.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_client_session_semaphore.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_connection.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_connection_status.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_server_connection.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_server_session.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/remote_server_session_semaphore.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/session.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/session_impl.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/session_job_count.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/shutdown_state.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/socket_addr.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/storage.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/synchandler.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/use_after_free_checker.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/use_count_checker.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

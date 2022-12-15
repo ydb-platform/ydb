@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(vdisk-hulldb-bulksst_add)
-target_link_libraries(vdisk-hulldb-bulksst_add PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-common
-  ydb-core-protos
-)
-target_sources(vdisk-hulldb-bulksst_add PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

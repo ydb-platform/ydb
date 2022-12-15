@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(yq-libs-signer)
-target_link_libraries(yq-libs-signer PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yq-libs-hmac
-)
-target_sources(yq-libs-signer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/signer/signer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(metadata)
-add_subdirectory(minikql_compile)
-add_subdirectory(minikql_result_lib)
-add_subdirectory(scheme_cache_lib)
-add_subdirectory(server)
-add_subdirectory(ut)
-
-add_library(ydb-core-client INTERFACE)
-target_link_libraries(ydb-core-client INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  ydb-core-base
-  core-client-scheme_cache_lib
-  core-client-server
-  ydb-core-engine
-  lib-deprecated-kicli
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

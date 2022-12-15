@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-histogram-hdr)
-target_link_libraries(cpp-histogram-hdr PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-hdr_histogram
-)
-target_sources(cpp-histogram-hdr PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/histogram/hdr/histogram.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/histogram/hdr/histogram_iter.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

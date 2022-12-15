@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Transforms-Vectorize)
-target_compile_options(lib-Transforms-Vectorize PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Transforms-Vectorize PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize
-)
-target_link_libraries(lib-Transforms-Vectorize PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-Analysis
-  llvm12-lib-IR
-  llvm12-lib-Support
-  lib-Transforms-Utils
-)
-target_sources(lib-Transforms-Vectorize PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/LoadStoreVectorizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/LoopVectorizationLegality.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/LoopVectorize.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/SLPVectorizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VPlan.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VPlanHCFGBuilder.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VPlanPredicator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VPlanSLP.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VPlanTransforms.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VPlanVerifier.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/VectorCombine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize/Vectorize.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

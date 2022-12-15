@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-config INTERFACE)
-target_compile_options(restricted-boost-config INTERFACE
-  -DBOOST_ALL_NO_LIB
-)
-target_include_directories(restricted-boost-config INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/config/include
-)
-target_link_libraries(restricted-boost-config INTERFACE
-  contrib-libs-cxxsupp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

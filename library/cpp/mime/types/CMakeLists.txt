@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-mime-types)
-target_link_libraries(cpp-mime-types PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(cpp-mime-types PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/mime/types/mime.cpp
-)
-generate_enum_serilization(cpp-mime-types
-  ${CMAKE_SOURCE_DIR}/library/cpp/mime/types/mime.h
-  INCLUDE_HEADERS
-  library/cpp/mime/types/mime.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

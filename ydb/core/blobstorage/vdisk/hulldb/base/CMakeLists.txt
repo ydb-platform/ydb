@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(vdisk-hulldb-base)
-target_link_libraries(vdisk-hulldb-base PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-pdisk
-)
-target_sources(vdisk-hulldb-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

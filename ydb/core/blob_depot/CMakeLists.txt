@@ -6,36 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(agent)
-
-add_library(ydb-core-blob_depot)
-target_link_libraries(ydb-core-blob_depot PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-common
-  ydb-core-tablet_flat
-  ydb-core-protos
-)
-target_sources(ydb-core-blob_depot PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blocks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_gc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_load.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_resolve.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_trash.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_uncertain.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/group_metrics_exchange.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/mon_main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/testing.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_apply_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_init_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_load.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_commit_blob_seq.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

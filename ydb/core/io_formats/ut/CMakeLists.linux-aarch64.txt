@@ -15,6 +15,7 @@ target_include_directories(ydb-core-io_formats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/io_formats
 )
 target_link_libraries(ydb-core-io_formats-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

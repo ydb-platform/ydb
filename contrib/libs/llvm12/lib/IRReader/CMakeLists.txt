@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(llvm12-lib-IRReader)
-target_compile_options(llvm12-lib-IRReader PRIVATE
-  -Wno-everything
-)
-target_include_directories(llvm12-lib-IRReader PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/IRReader
-)
-target_link_libraries(llvm12-lib-IRReader PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-AsmParser
-  lib-Bitcode-Reader
-  llvm12-lib-IR
-  llvm12-lib-Support
-)
-target_sources(llvm12-lib-IRReader PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/IRReader/IRReader.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

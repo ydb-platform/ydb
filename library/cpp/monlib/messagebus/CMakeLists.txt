@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-monlib-messagebus)
-target_link_libraries(cpp-monlib-messagebus PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-messagebus
-  cpp-messagebus-www
-  cpp-monlib-dynamic_counters
-)
-target_sources(cpp-monlib-messagebus PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/messagebus/mon_messagebus.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/messagebus/mon_service_messagebus.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

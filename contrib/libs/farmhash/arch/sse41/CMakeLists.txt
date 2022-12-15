@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(farmhash-arch-sse41)
-target_compile_options(farmhash-arch-sse41 PRIVATE
-  -msse4.1
-  -Wno-everything
-)
-target_link_libraries(farmhash-arch-sse41 PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(farmhash-arch-sse41 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashnt.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

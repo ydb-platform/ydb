@@ -15,6 +15,7 @@ target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
 )
 target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

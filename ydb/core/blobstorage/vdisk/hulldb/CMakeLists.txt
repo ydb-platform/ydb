@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(barriers)
-add_subdirectory(base)
-add_subdirectory(bulksst_add)
-add_subdirectory(cache_block)
-add_subdirectory(compstrat)
-add_subdirectory(fresh)
-add_subdirectory(generic)
-add_subdirectory(recovery)
-add_subdirectory(test)
-
-add_library(blobstorage-vdisk-hulldb INTERFACE)
-target_link_libraries(blobstorage-vdisk-hulldb INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  core-blobstorage-base
-  blobstorage-vdisk-common
-  vdisk-hulldb-barriers
-  vdisk-hulldb-base
-  vdisk-hulldb-compstrat
-  vdisk-hulldb-fresh
-  vdisk-hulldb-generic
-  vdisk-hulldb-recovery
-  vdisk-hulldb-bulksst_add
-  ydb-core-protos
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

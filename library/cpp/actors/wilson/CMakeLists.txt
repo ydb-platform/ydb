@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
-
-add_library(cpp-actors-wilson)
-target_link_libraries(cpp-actors-wilson PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-protos
-  actors-wilson-protos
-)
-target_sources(cpp-actors-wilson PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_event.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_span.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_profile_span.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_trace.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_uploader.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

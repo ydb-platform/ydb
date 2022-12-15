@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-client-minikql_result_lib)
-target_link_libraries(core-client-minikql_result_lib PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  ydb-core-protos
-  ydb-core-scheme
-  library-mkql_proto-protos
-  lib-deprecated-kicli
-)
-target_sources(core-client-minikql_result_lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/objects.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

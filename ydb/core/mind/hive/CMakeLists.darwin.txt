@@ -1,0 +1,84 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(core-mind-hive)
+target_link_libraries(core-mind-hive PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  cpp-actors-interconnect
+  library-cpp-json
+  cpp-monlib-dynamic_counters
+  ydb-core-base
+  core-blobstorage-base
+  core-blobstorage-crypto
+  core-blobstorage-nodewarden
+  core-engine-minikql
+  ydb-core-node_whiteboard
+  ydb-core-protos
+  core-sys_view-common
+  ydb-core-tablet
+  ydb-core-tablet_flat
+)
+target_sources(core-mind-hive PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/balancer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/boot_queue.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/drain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/fill.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_domains.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_log.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_statics.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/leader_tablet_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/monitoring.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/node_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/sequencer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/follower_tablet_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_group_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tablet_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__adopt_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__block_storage_result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__configure_subdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__create_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__cut_tablet_history.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__delete_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__delete_tablet_result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__disconnect_node.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__init_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__kill_node.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__load_everything.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__lock_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__process_boot_queue.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__process_pending_operations.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__reassign_groups.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__register_node.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__release_tablets.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__release_tablets_reply.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__request_tablet_owners.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__request_tablet_seq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__response_tablet_seq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__restart_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__seize_tablets.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__seize_tablets_reply.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__resume_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__start_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__stop_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__switch_drain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__sync_tablets.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__tablet_owners_reply.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__unlock_tablet.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_domain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_groups.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_metrics.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_status.cpp
+)

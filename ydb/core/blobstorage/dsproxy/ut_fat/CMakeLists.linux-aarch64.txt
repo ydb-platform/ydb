@@ -9,6 +9,7 @@
 
 add_executable(ydb-core-blobstorage-dsproxy-ut_fat)
 target_link_libraries(ydb-core-blobstorage-dsproxy-ut_fat PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

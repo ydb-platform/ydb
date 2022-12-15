@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-googletest-googletest)
-target_compile_options(restricted-googletest-googletest PUBLIC
-  -DGTEST_HAS_ABSL=0
-  -DGTEST_HAS_POSIX_RE=0
-  -DGTEST_HAS_STD_WSTRING=1
-  -DGTEST_USES_RE2=1
-)
-target_compile_options(restricted-googletest-googletest PRIVATE
-  -Wno-everything
-)
-target_include_directories(restricted-googletest-googletest PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
-)
-target_include_directories(restricted-googletest-googletest PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
-)
-target_link_libraries(restricted-googletest-googletest PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-re2
-)
-target_sources(restricted-googletest-googletest PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/src/gtest-all.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

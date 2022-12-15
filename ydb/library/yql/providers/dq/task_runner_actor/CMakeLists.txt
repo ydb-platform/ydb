@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-dq-task_runner_actor)
-target_compile_options(providers-dq-task_runner_actor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-dq-task_runner_actor PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  dq-actors-task_runner
-  dq-api-protos
-  providers-dq-runtime
-  yql-utils-actors
-  providers-dq-task_runner
-)
-target_sources(providers-dq-task_runner_actor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

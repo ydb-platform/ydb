@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ydb_persqueue_core-ut-ut_utils)
-target_compile_options(ydb_persqueue_core-ut-ut_utils PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb_persqueue_core-ut-ut_utils PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  cpp-testing-unittest
-  cpp-threading-chunk_queue
-  core-testlib-default
-  library-persqueue-topic_parser_public
-  cpp-client-ydb_driver
-  cpp-client-ydb_persqueue_core
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_table
-)
-target_sources(ydb_persqueue_core-ut-ut_utils PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

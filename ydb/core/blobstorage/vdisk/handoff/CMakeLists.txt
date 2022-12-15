@@ -6,25 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(blobstorage-vdisk-handoff)
-target_link_libraries(blobstorage-vdisk-handoff PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-common
-  vdisk-hulldb-generic
-  ydb-core-protos
-)
-target_sources(blobstorage-vdisk-handoff PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_basic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_delegate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_map.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/handoff/handoff_synclogproxy.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

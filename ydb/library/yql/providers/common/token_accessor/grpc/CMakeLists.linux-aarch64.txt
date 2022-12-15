@@ -1,0 +1,40 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(common-token_accessor-grpc)
+set_property(TARGET common-token_accessor-grpc PROPERTY
+  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
+)
+target_link_libraries(common-token_accessor-grpc PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  contrib-libs-protobuf
+)
+target_proto_messages(common-token_accessor-grpc PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.proto
+)
+target_proto_addincls(common-token_accessor-grpc
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(common-token_accessor-grpc
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
+target_proto_plugin(common-token_accessor-grpc
+  grpc_cpp
+  grpc_cpp
+)

@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(public-lib-json_value)
-target_link_libraries(public-lib-json_value PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-json-writer
-  cpp-string_utils-base64
-  cpp-client-ydb_result
-  cpp-client-ydb_value
-  ydb-library-uuid
-)
-target_sources(public-lib-json_value PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value/ydb_json_value.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value/ydb_json_value_ut.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

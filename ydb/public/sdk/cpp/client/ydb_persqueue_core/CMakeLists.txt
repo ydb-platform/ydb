@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(impl)
-add_subdirectory(ut)
-
-add_library(cpp-client-ydb_persqueue_core)
-target_link_libraries(cpp-client-ydb_persqueue_core PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-cpp-retry
-  client-ydb_persqueue_core-impl
-  cpp-client-ydb_proto
-  cpp-client-ydb_driver
-  api-grpc
-  api-grpc-draft
-  api-protos
-)
-generate_enum_serilization(cpp-client-ydb_persqueue_core
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

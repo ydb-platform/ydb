@@ -6,33 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yq-libs-ydb)
-target_compile_options(yq-libs-ydb PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-ydb PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  library-cpp-retry
-  ydb-core-base
-  yq-libs-config
-  yq-libs-events
-  ydb-library-security
-  cpp-client-ydb_coordination
-  cpp-client-ydb_rate_limiter
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(yq-libs-ydb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.cpp
-)
-generate_enum_serilization(yq-libs-ydb
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.h
-  INCLUDE_HEADERS
-  ydb/core/yq/libs/ydb/ydb.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,50 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-kqp-runtime)
-target_compile_options(core-kqp-runtime PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-runtime PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  ydb-core-actorlib_impl
-  ydb-core-base
-  ydb-core-engine
-  core-engine-minikql
-  ydb-core-formats
-  core-kqp-common
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-ydb_convert
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  library-yql-utils
-  dq-actors-protos
-  yql-dq-runtime
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(core-kqp-runtime PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_channel_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_compute.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_effects.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_output_stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_program_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_read_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_read_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_spilling_file.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_stream_lookup_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_stream_lookup_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_tasks_runner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_transport.cpp
-)
-generate_enum_serilization(core-kqp-runtime
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_spilling.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/runtime/kqp_spilling.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

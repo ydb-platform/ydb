@@ -6,37 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(actors-wilson-protos)
-set_property(TARGET actors-wilson-protos PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(actors-wilson-protos PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  contrib-libs-protobuf
-)
-target_proto_messages(actors-wilson-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/protos/common.proto
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/protos/resource.proto
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/protos/service.proto
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/protos/trace.proto
-)
-target_proto_addincls(actors-wilson-protos
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(actors-wilson-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(actors-wilson-protos
-  grpc_cpp
-  grpc_cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

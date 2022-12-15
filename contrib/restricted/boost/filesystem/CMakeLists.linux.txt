@@ -19,6 +19,7 @@ target_include_directories(restricted-boost-filesystem PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/filesystem/include
 )
 target_link_libraries(restricted-boost-filesystem PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   restricted-boost-assert
   restricted-boost-atomic

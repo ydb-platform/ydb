@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-grpc_services-base INTERFACE)
-target_link_libraries(core-grpc_services-base INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  cpp-string_utils-quote
-  ydb-core-base
-  core-grpc_services-counters
-  ydb-core-grpc_streaming
-  api-protos
-  cpp-client-resources
-  yql-public-issue
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

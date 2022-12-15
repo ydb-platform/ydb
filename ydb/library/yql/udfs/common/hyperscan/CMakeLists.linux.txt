@@ -9,6 +9,7 @@
 
 add_library(hyperscan_udf INTERFACE)
 target_link_libraries(hyperscan_udf INTERFACE
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   yql-public-udf
@@ -24,6 +25,7 @@ target_compile_options(hyperscan_udf.global PRIVATE
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(hyperscan_udf.global PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

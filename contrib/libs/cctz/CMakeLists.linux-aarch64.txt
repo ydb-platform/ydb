@@ -16,6 +16,7 @@ target_include_directories(contrib-libs-cctz PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/cctz/include
 )
 target_link_libraries(contrib-libs-cctz PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
 )
 target_sources(contrib-libs-cctz PRIVATE

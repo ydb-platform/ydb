@@ -6,11 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(contrib-libs-utf8proc)
-target_compile_options(contrib-libs-utf8proc PRIVATE
-  -Wno-everything
-)
-target_sources(contrib-libs-utf8proc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/utf8proc/utf8proc.c
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

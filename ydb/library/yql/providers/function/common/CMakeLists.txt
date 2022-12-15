@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-function-common)
-target_compile_options(providers-function-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-function-common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(providers-function-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/common/dq_function_types.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

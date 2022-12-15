@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ydb-services-auth)
-target_link_libraries(ydb-services-auth PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  library-cpp-lwtrace
-  ydb-core-grpc_services
-  ydb-core-protos
-  ydb-library-login
-  api-grpc
-  public-lib-operation_id
-)
-target_sources(ydb-services-auth PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/auth/grpc_service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

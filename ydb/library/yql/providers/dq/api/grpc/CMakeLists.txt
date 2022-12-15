@@ -6,35 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(dq-api-grpc)
-set_property(TARGET dq-api-grpc PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(dq-api-grpc PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  dq-api-protos
-  contrib-libs-protobuf
-)
-target_proto_messages(dq-api-grpc PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/grpc/api.proto
-)
-target_proto_addincls(dq-api-grpc
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(dq-api-grpc
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(dq-api-grpc
-  grpc_cpp
-  grpc_cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

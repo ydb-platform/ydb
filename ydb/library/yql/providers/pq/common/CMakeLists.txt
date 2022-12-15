@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-pq-common)
-target_compile_options(providers-pq-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-pq-common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-types
-)
-target_sources(providers-pq-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/common/pq_meta_fields.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/common/yql_names.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

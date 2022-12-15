@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-pq-cm_client)
-target_link_libraries(providers-pq-cm_client PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-threading-future
-  yql-public-issue
-  client-ydb_types-credentials
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(providers-pq-cm_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.cpp
-)
-generate_enum_serilization(providers-pq-cm_client
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/pq/cm_client/client.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -15,6 +15,7 @@ target_include_directories(ydb-core-quoter-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter
 )
 target_link_libraries(ydb-core-quoter-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

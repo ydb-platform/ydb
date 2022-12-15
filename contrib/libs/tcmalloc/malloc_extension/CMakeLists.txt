@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(libs-tcmalloc-malloc_extension)
-target_compile_options(libs-tcmalloc-malloc_extension PRIVATE
-  -DTCMALLOC_256K_PAGES
-  -Wno-everything
-)
-target_include_directories(libs-tcmalloc-malloc_extension PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/tcmalloc
-)
-target_link_libraries(libs-tcmalloc-malloc_extension PUBLIC
-  contrib-libs-cxxsupp
-  contrib-restricted-abseil-cpp
-)
-target_sources(libs-tcmalloc-malloc_extension PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/tcmalloc/tcmalloc/malloc_extension.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

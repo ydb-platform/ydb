@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yq-libs-private_client)
-target_compile_options(yq-libs-private_client PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-private_client PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-monlib-dynamic_counters
-  cpp-protobuf-json
-  cpp-client-ydb_table
-  libs-control_plane_storage-proto
-  yq-libs-grpc
-  yq-libs-shared_resources
-  ydb-core-protos
-)
-target_sources(yq-libs-private_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/internal_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/loopback_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/private_client.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

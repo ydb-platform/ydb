@@ -6,40 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-tx-coordinator)
-target_link_libraries(core-tx-coordinator PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-helpers
-  cpp-actors-interconnect
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-tx
-  ydb-core-util
-)
-target_sources(core-tx-coordinator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__acquire_read_step.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__configure.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__check.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__mediators_confirmations.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__monitoring.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__plan_step.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__read_step_subscriptions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restart_mediator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restore_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema_upgrade.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__stop_guard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/mediator_queue.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

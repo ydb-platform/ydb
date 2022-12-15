@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-add_subdirectory(ut_sequence)
-
-add_library(core-blobstorage-nodewarden)
-target_link_libraries(core-blobstorage-nodewarden PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  ydb-core-base
-  core-blob_depot-agent
-  core-blobstorage-crypto
-  core-blobstorage-groupinfo
-  core-blobstorage-pdisk
-  ydb-core-control
-  ydb-library-pdisk_io
-)
-target_sources(core-blobstorage-nodewarden PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_group.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_group_resolver.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_pdisk.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_resource.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_scrub.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_stat_aggr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_vdisk.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-property_tree INTERFACE)
-target_include_directories(restricted-boost-property_tree INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/property_tree/include
-)
-target_link_libraries(restricted-boost-property_tree INTERFACE
-  contrib-libs-cxxsupp
-  restricted-boost-any
-  restricted-boost-assert
-  restricted-boost-bind
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-format
-  restricted-boost-iterator
-  restricted-boost-mpl
-  restricted-boost-multi_index
-  restricted-boost-optional
-  restricted-boost-range
-  restricted-boost-serialization
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-type_traits
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,44 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(anubis_osiris)
-add_subdirectory(common)
-add_subdirectory(defrag)
-add_subdirectory(handoff)
-add_subdirectory(huge)
-add_subdirectory(hulldb)
-add_subdirectory(hullop)
-add_subdirectory(ingress)
-add_subdirectory(localrecovery)
-add_subdirectory(protos)
-add_subdirectory(query)
-add_subdirectory(repl)
-add_subdirectory(scrub)
-add_subdirectory(skeleton)
-add_subdirectory(syncer)
-add_subdirectory(synclog)
-
-add_library(core-blobstorage-vdisk)
-target_link_libraries(core-blobstorage-vdisk PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-anubis_osiris
-  blobstorage-vdisk-common
-  blobstorage-vdisk-defrag
-  blobstorage-vdisk-handoff
-  blobstorage-vdisk-huge
-  blobstorage-vdisk-hulldb
-  blobstorage-vdisk-hullop
-  blobstorage-vdisk-ingress
-  blobstorage-vdisk-localrecovery
-  blobstorage-vdisk-protos
-  blobstorage-vdisk-query
-  blobstorage-vdisk-repl
-  blobstorage-vdisk-scrub
-  blobstorage-vdisk-skeleton
-  blobstorage-vdisk-syncer
-  blobstorage-vdisk-synclog
-)
-target_sources(core-blobstorage-vdisk PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/vdisk_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

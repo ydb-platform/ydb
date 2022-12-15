@@ -30,6 +30,7 @@ target_include_directories(libs-poco-Foundation PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/src
 )
 target_link_libraries(libs-poco-Foundation PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   contrib-libs-double-conversion
   contrib-libs-pcre

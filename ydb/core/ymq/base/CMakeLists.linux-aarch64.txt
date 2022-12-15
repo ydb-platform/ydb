@@ -1,0 +1,55 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
+
+add_library(core-ymq-base)
+target_link_libraries(core-ymq-base PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  OpenSSL::OpenSSL
+  library-cpp-cgiparam
+  library-cpp-ipmath
+  library-cpp-lwtrace
+  cpp-monlib-dynamic_counters
+  library-cpp-scheme
+  cpp-string_utils-base64
+  ydb-core-base
+  ydb-core-protos
+  core-ymq-proto
+  ydb-library-aclib
+  library-http_proxy-authorization
+  library-http_proxy-error
+  ydb-library-protobuf_printer
+  public-lib-scheme_types
+)
+target_sources(core-ymq-base PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/acl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/dlq_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_attributes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/run_query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/secure_protobuf_printer.cpp
+)
+generate_enum_serilization(core-ymq-base
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/query_id.h
+  INCLUDE_HEADERS
+  ydb/core/ymq/base/query_id.h
+)
+generate_enum_serilization(core-ymq-base
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/cloud_enums.h
+  INCLUDE_HEADERS
+  ydb/core/ymq/base/cloud_enums.h
+)

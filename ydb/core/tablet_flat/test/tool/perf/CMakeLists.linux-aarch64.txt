@@ -9,6 +9,7 @@
 
 add_executable(table-perf)
 target_link_libraries(table-perf PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-actors-prof)
-target_link_libraries(cpp-actors-prof PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-tcmalloc-malloc_extension
-  library-cpp-charset
-  cpp-containers-atomizer
-)
-target_sources(cpp-actors-prof PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/prof/tag.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/prof/tcmalloc.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

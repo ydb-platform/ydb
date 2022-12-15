@@ -1,0 +1,24 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(ydb-services-auth)
+target_link_libraries(ydb-services-auth PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-grpc-server
+  library-cpp-lwtrace
+  ydb-core-grpc_services
+  ydb-core-protos
+  ydb-library-login
+  api-grpc
+  public-lib-operation_id
+)
+target_sources(ydb-services-auth PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/auth/grpc_service.cpp
+)

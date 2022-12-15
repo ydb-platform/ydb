@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-googletest-googlemock)
-target_compile_options(restricted-googletest-googlemock PRIVATE
-  -Wno-everything
-)
-target_include_directories(restricted-googletest-googlemock PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/include
-)
-target_include_directories(restricted-googletest-googlemock PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
-)
-target_link_libraries(restricted-googletest-googlemock PUBLIC
-  contrib-libs-cxxsupp
-  restricted-googletest-googletest
-)
-target_sources(restricted-googletest-googlemock PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/src/gmock-all.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(tools-enum_parser-parse_enum)
-target_link_libraries(tools-enum_parser-parse_enum PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cppparser
-)
-target_sources(tools-enum_parser-parse_enum PRIVATE
-  ${CMAKE_SOURCE_DIR}/tools/enum_parser/parse_enum/parse_enum.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

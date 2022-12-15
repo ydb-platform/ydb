@@ -6,32 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-kqp-host)
-target_compile_options(core-kqp-host PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-host PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-kqp-common
-  core-kqp-opt
-  core-kqp-provider
-  tx-long_tx_service-public
-  yql-core-services
-  yql-minikql-invoke_builtins
-  library-yql-sql
-  library-yql-core
-  providers-common-codec
-  providers-common-udf_resolve
-  yql-providers-config
-  providers-result-provider
-)
-target_sources(core-kqp-host PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_explain_prepared.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_host.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_runner.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_transform.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_type_ann.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

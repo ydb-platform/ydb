@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-metadata-ds_table)
-target_link_libraries(services-metadata-ds_table PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  services-metadata-common
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-  services-metadata-initializer
-  services-metadata-secret
-)
-target_sources(services-metadata-ds_table PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_refresh.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_subscribe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/scheme_describe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/config.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

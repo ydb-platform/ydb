@@ -6,30 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-tstring-y_absl-synchronization)
-target_compile_options(abseil-cpp-tstring-y_absl-synchronization PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-tstring-y_absl-synchronization PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
-target_link_libraries(abseil-cpp-tstring-y_absl-synchronization PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  abseil-cpp-tstring-y_absl-base
-  abseil-cpp-tstring-y_absl-debugging
-  abseil-cpp-tstring-y_absl-numeric
-  abseil-cpp-tstring-y_absl-strings
-  abseil-cpp-tstring-y_absl-time
-)
-target_sources(abseil-cpp-tstring-y_absl-synchronization PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/barrier.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/blocking_counter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal/create_thread_identity.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal/graphcycles.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal/per_thread_sem.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal/waiter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/mutex.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/notification.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

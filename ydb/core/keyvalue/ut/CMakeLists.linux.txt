@@ -15,6 +15,7 @@ target_include_directories(ydb-core-keyvalue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue
 )
 target_link_libraries(ydb-core-keyvalue-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

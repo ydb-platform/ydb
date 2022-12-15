@@ -1,0 +1,34 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(services-metadata-initializer)
+target_link_libraries(services-metadata-initializer PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  ydb-core-base
+  core-grpc_services-local_rpc
+  core-grpc_services-base
+  ydb-core-grpc_services
+  services-metadata-request
+)
+target_sources(services-metadata-initializer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/accessor_init.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/behaviour.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/controller.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/object.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/snapshot.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/initializer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/fetcher.cpp
+)

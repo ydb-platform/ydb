@@ -1,0 +1,33 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(effects)
+
+add_library(kqp-opt-physical)
+target_compile_options(kqp-opt-physical PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(kqp-opt-physical PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  core-kqp-common
+  opt-physical-effects
+  yql-dq-common
+  yql-dq-opt
+)
+target_sources(kqp-opt-physical PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_build_stage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_limit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_olap_agg.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_precompute.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_sort.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy_stage_float_up.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/physical/kqp_opt_phy.cpp
+)

@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(expr)
-add_subdirectory(mkql)
-add_subdirectory(parser)
-add_subdirectory(skiff)
-
-add_library(providers-common-schema)
-target_link_libraries(providers-common-schema PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yson-node
-  library-yql-utils
-)
-target_sources(providers-common-schema PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/yql_schema_utils.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,29 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(codecs)
-add_subdirectory(impl)
-add_subdirectory(ut)
-
-add_library(cpp-client-ydb_topic)
-target_link_libraries(cpp-client-ydb_topic PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  client-ydb_topic-codecs
-  library-cpp-retry
-  client-ydb_topic-impl
-  cpp-client-ydb_proto
-  cpp-client-ydb_driver
-  api-grpc
-  api-grpc-draft
-  api-protos
-)
-target_sources(cpp-client-ydb_topic PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/proto_accessor.cpp
-)
-generate_enum_serilization(cpp-client-ydb_topic
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/topic.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_topic/topic.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

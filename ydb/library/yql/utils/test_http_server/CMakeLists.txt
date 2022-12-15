@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yql-utils-test_http_server)
-target_link_libraries(yql-utils-test_http_server PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-http-server
-  cpp-http-misc
-)
-target_sources(yql-utils-test_http_server PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/test_http_server/test_http_server.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

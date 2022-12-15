@@ -6,35 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(blobstorage-ut_blobstorage-lib)
-target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-digest-md5
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-blob_depot
-  core-blobstorage-backpressure
-  blobstorage-dsproxy-mock
-  core-blobstorage-nodewarden
-  core-blobstorage-pdisk
-  blobstorage-pdisk-mock
-  blobstorage-vdisk-common
-  ydb-core-mind
-  core-mind-bscontroller
-  core-mind-hive
-  core-sys_view-service
-  core-tx-scheme_board
-  core-tx-tx_allocator
-  core-tx-mediator
-  core-tx-coordinator
-  ydb-core-util
-  udf-service-stub
-  yql-sql-pg_dummy
-)
-target_sources(blobstorage-ut_blobstorage-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_bsc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_state.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

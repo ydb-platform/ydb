@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-pretty_types_print-wilson)
-target_link_libraries(library-pretty_types_print-wilson PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-wilson
-)
-target_sources(library-pretty_types_print-wilson PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/pretty_types_print/wilson/out.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

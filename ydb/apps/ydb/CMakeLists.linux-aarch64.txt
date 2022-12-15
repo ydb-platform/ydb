@@ -10,6 +10,7 @@ add_subdirectory(commands)
 
 add_executable(ydb)
 target_link_libraries(ydb PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

@@ -6,49 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(common)
-target_link_libraries(common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-config
-  library-cpp-getopt
-  cpp-json-writer
-  cpp-yaml-as
-  public-lib-json_value
-  public-lib-operation_id
-  public-lib-yson_value
-  cpp-client-draft
-  cpp-client-ydb_result
-  cpp-client-ydb_scheme
-  client-ydb_types-credentials
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/aws.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/examples.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/format.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interactive.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interruptible.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pretty_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_operation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_utils.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/profile_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/query_stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_list.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/root.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/scheme_printers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/tabbed_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/ydb_updater.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yt.cpp
-)
-generate_enum_serilization(common
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/formats.h
-  INCLUDE_HEADERS
-  ydb/public/lib/ydb_cli/common/formats.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

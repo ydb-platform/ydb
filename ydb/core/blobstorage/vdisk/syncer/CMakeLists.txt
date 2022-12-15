@@ -6,35 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-syncer)
-target_link_libraries(blobstorage-vdisk-syncer PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-interconnect
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-anubis_osiris
-  blobstorage-vdisk-common
-  vdisk-hulldb-base
-)
-target_sources(blobstorage-vdisk-syncer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_firstrun.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_propagator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxywrite.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_recovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_task.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,64 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cli_utils)
-target_compile_options(cli_utils PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(cli_utils PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-enum_codegen
-  cpp-grpc-client
-  cpp-protobuf-json
-  library-cpp-yson
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-blobstorage-pdisk
-  core-client-minikql_compile
-  core-client-scheme_cache_lib
-  cli_base
-  ydb-core-engine
-  ydb-core-erasure
-  core-mind-bscontroller
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-library-aclib
-  library-folder_service-proto
-  ydb-library-yaml_config
-  api-grpc
-  api-grpc-draft
-  lib-deprecated-client
-  common
-)
-target_sources(cli_utils PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_actorsystem_perftest.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmd_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_admin.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_bs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_cms.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_console.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_debug.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_disk.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_genconfig.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_group.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_node.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_root.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_server.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_tablet.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_tenant.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_fakeinitshard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_keyvalue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_cluster_discovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_stress.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_load.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_minikql_compile_and_exec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_mb_trace.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_cache_append.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_initroot.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

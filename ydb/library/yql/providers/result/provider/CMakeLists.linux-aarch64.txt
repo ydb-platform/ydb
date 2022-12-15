@@ -1,0 +1,30 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(providers-result-provider)
+target_compile_options(providers-result-provider PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(providers-result-provider PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-yson-node
+  library-yql-ast
+  yql-utils-log
+  library-yql-core
+  yql-core-expr_nodes
+  providers-common-codec
+  providers-common-mkql
+  providers-common-provider
+  providers-result-expr_nodes
+)
+target_sources(providers-result-provider PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/result/provider/yql_result_provider.cpp
+)

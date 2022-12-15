@@ -1,0 +1,70 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(address_classification)
+add_subdirectory(bscontroller)
+add_subdirectory(hive)
+add_subdirectory(ut)
+add_subdirectory(ut_fat)
+
+add_library(ydb-core-mind)
+target_link_libraries(ydb-core-mind PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  ydb-core-actorlib_impl
+  ydb-core-base
+  ydb-core-blobstorage
+  core-blobstorage-crypto
+  blobstorage-dsproxy-mock
+  core-blobstorage-groupinfo
+  core-blobstorage-incrhuge
+  core-blobstorage-pdisk
+  core-engine-minikql
+  core-kesus-tablet
+  ydb-core-keyvalue
+  core-mind-bscontroller
+  ydb-core-node_whiteboard
+  ydb-core-protos
+  core-sys_view-processor
+  ydb-core-tablet
+  ydb-core-tablet_flat
+  ydb-core-test_tablet
+  tx-replication-controller
+  core-tx-scheme_board
+  core-tx-scheme_cache
+  core-tx-schemeshard
+)
+target_sources(ydb-core-mind PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/configured_tablet_bootstrapper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/dynamic_nameserver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/dynamic_nameserver_mon.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/labels_maintainer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/lease_holder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/local.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__extend_lease.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__init_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__load_state.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__register_node.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__update_config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__update_config_subscription.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker__update_epoch.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_node_enumeration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_pool.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__alter_tenant.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__assign_free_slots.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__check_slot_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__init_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__load_state.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__update_config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__update_pool_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__update_node_location.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_slot_broker__update_slot_status.cpp
+)

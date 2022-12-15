@@ -12,6 +12,7 @@ target_include_directories(ydb-library-protobuf_printer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer
 )
 target_link_libraries(ydb-library-protobuf_printer-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

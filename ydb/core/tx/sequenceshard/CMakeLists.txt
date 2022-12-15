@@ -6,35 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(public)
-add_subdirectory(ut)
-
-add_library(core-tx-sequenceshard)
-target_compile_options(core-tx-sequenceshard PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-tx-sequenceshard PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-erasure
-  ydb-core-protos
-  ydb-core-tablet_flat
-  tx-sequenceshard-public
-)
-target_sources(core-tx-sequenceshard PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_allocate_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_create_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_drop_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_freeze_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_mark_schemeshard_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_redirect_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_restore_sequence.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_update_sequence.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

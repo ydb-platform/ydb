@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-absl-hash)
-target_compile_options(abseil-cpp-absl-hash PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-absl-hash PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-target_link_libraries(abseil-cpp-absl-hash PUBLIC
-  contrib-libs-cxxsupp
-  abseil-cpp-absl-base
-  abseil-cpp-absl-numeric
-  abseil-cpp-absl-strings
-  abseil-cpp-absl-types
-)
-target_sources(abseil-cpp-absl-hash PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/city.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/hash.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/low_level_hash.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

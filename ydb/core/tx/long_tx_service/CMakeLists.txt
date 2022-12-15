@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(public)
-add_subdirectory(ut)
-
-add_library(core-tx-long_tx_service)
-target_compile_options(core-tx-long_tx_service PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-tx-long_tx_service PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-tx-columnshard
-  tx-long_tx_service-public
-)
-target_sources(core-tx-long_tx_service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/acquire_snapshot_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/commit_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/long_tx_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/long_tx_service_impl.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

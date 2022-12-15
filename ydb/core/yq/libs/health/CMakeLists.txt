@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yq-libs-health)
-target_compile_options(yq-libs-health PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-health PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-mon
-  yq-libs-shared_resources
-  cpp-client-ydb_discovery
-)
-target_sources(yq-libs-health PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/health/health.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

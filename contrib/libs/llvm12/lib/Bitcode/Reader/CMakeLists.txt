@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Bitcode-Reader)
-target_compile_options(lib-Bitcode-Reader PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Bitcode-Reader PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader
-)
-target_link_libraries(lib-Bitcode-Reader PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  lib-Bitstream-Reader
-  llvm12-lib-IR
-  llvm12-lib-Support
-)
-target_sources(lib-Bitcode-Reader PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader/BitReader.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader/BitcodeAnalyzer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader/BitcodeReader.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader/MetadataLoader.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader/ValueList.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

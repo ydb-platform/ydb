@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(common-url_base-lib)
-target_compile_options(common-url_base-lib PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=23
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(common-url_base-lib PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-charset
-  cpp-string_utils-quote
-  cpp-string_utils-url
-  library-cpp-tld
-  cpp-unicode-punycode
-  library-cpp-uri
-  yql-public-udf
-)
-target_sources(common-url_base-lib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_base_udf.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_parse.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/lib/url_query.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -12,6 +12,7 @@ target_include_directories(ydb-core-ydb_convert-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert
 )
 target_link_libraries(ydb-core-ydb_convert-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

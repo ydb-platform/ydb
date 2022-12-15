@@ -6,31 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-multi_index INTERFACE)
-target_include_directories(restricted-boost-multi_index INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/multi_index/include
-)
-target_link_libraries(restricted-boost-multi_index INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  restricted-boost-assert
-  restricted-boost-bind
-  restricted-boost-config
-  restricted-boost-container_hash
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-foreach
-  restricted-boost-integer
-  restricted-boost-iterator
-  restricted-boost-move
-  restricted-boost-mpl
-  restricted-boost-preprocessor
-  restricted-boost-serialization
-  restricted-boost-smart_ptr
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-tuple
-  restricted-boost-type_traits
-  restricted-boost-utility
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

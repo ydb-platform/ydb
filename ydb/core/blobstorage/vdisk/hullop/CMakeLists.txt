@@ -6,30 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(hullcompdelete)
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-hullop)
-target_link_libraries(blobstorage-vdisk-hullop PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  vdisk-hulldb-barriers
-  vdisk-hulldb-base
-  vdisk-hulldb-generic
-  vdisk-hulldb-cache_block
-  vdisk-hulldb-recovery
-  vdisk-hulldb-bulksst_add
-  vdisk-hulldb-compstrat
-  vdisk-hullop-hullcompdelete
-  blobstorage-vdisk-handoff
-  blobstorage-vdisk-synclog
-  ydb-core-protos
-)
-target_sources(blobstorage-vdisk-hullop PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllog.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllogcutternotify.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_compactfreshappendix.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_entryserialize.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

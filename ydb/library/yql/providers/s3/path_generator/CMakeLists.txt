@@ -6,25 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(providers-s3-path_generator)
-target_compile_options(providers-s3-path_generator PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-s3-path_generator PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-scheme
-  yql-minikql-datetime
-  yql-public-udf
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(providers-s3-path_generator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.cpp
-)
-generate_enum_serilization(providers-s3-path_generator
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

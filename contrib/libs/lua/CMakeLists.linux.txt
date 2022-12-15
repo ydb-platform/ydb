@@ -19,6 +19,7 @@ target_include_directories(contrib-libs-lua PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/lua-5.2.0/src
 )
 target_link_libraries(contrib-libs-lua PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-archive

@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-rewrapper-re2 INTERFACE)
-target_link_libraries(library-rewrapper-re2 INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-re2
-  ydb-library-rewrapper
-)
-
-add_global_library_for(library-rewrapper-re2.global library-rewrapper-re2)
-target_link_libraries(library-rewrapper-re2.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-re2
-  ydb-library-rewrapper
-)
-target_sources(library-rewrapper-re2.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/re2/re2.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

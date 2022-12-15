@@ -1,0 +1,182 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(out)
+
+add_library(ydb-core-protos)
+set_property(TARGET ydb-core-protos PROPERTY
+  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
+)
+target_link_libraries(ydb-core-protos PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  tools-enum_parser-enum_serialization_runtime
+  cpp-actors-protos
+  libs-config-protos
+  library-login-protos
+  library-mkql_proto-protos
+  api-protos
+  core-issue-protos
+  dq-actors-protos
+  yql-dq-proto
+  public-issue-protos
+  yql-public-types
+  contrib-libs-protobuf
+)
+target_proto_messages(ydb-core-protos PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/alloc.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/base.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/bind_channel_storage_pool.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_controller.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk_color.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_pdisk_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_vdisk_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_vdisk_internal.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blockstore_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/filestore_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/bootstrapper.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/channel_purpose.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/cms.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/config_units.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/console.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_base.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/console_tenant.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_tx_allocator.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_bs_controller.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_cms.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_coordinator.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_columnshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_datashard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_hive.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_kesus.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_keyvalue.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_pq.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_replication.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_schemeshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_sequenceshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_sysview_processor.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_testshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_tx_proxy.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_mediator.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/datashard_load.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/drivemodel.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/export.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/flat_tx_scheme.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/flat_scheme_op.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/health.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/hive.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/http_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/import.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/index_builder.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/issue_id.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kesus.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_stats.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/labeled_counters.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/load_test.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/local.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/long_tx_service.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/metrics.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/minikql_engine.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/mon.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus_health.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus_kv.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus_pq.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/netclassifier.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_broker.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_limits.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/profiler.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/query_stats.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/replication.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/resource_broker.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_log.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_type_metadata.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_type_operation.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/serverless_proxy_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/services.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/shared_cache.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/sqs.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/follower_group.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/ssa.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/statestorage.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/stream.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/subdomains.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/table_stats.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_counters.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_counters_aggregator.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_database.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_pipe.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_tracing_signals.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_tx.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_pool.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tenant_slot_broker.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/test_shard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tracing.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/node_whiteboard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_columnshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_datashard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_mediator_timecast.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_proxy.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_scheme.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_sequenceshard.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/type_info.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/pdiskfit.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/pqconfig.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/auth.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/key.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc_pq_old.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/grpc_status_proxy.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/ydb_result_set_old.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/ydb_table_impl.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_board.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_board_mon.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/sys_view.proto
+)
+generate_enum_serilization(ydb-core-protos
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/blobstorage_pdisk_config.pb.h
+  INCLUDE_HEADERS
+  ydb/core/protos/blobstorage_pdisk_config.pb.h
+)
+generate_enum_serilization(ydb-core-protos
+  ${CMAKE_BINARY_DIR}/ydb/core/protos/datashard_load.pb.h
+  INCLUDE_HEADERS
+  ydb/core/protos/datashard_load.pb.h
+)
+target_proto_addincls(ydb-core-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(ydb-core-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
+target_proto_plugin(ydb-core-protos
+  grpc_cpp
+  grpc_cpp
+)

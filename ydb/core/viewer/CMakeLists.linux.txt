@@ -1,0 +1,317 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(json)
+add_subdirectory(protos)
+add_subdirectory(ut)
+
+add_library(ydb-core-viewer)
+target_compile_options(ydb-core-viewer PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(ydb-core-viewer PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-actors-core
+  library-cpp-archive
+  cpp-mime-types
+  cpp-protobuf-json
+  ydb-core-base
+  core-blobstorage-base
+  blobstorage-vdisk-common
+  core-client-server
+  ydb-core-grpc_services
+  core-grpc_services-local_rpc
+  ydb-core-health_check
+  ydb-core-node_whiteboard
+  ydb-core-protos
+  ydb-core-scheme
+  core-tx-schemeshard
+  core-tx-tx_proxy
+  ydb-core-util
+  core-viewer-json
+  core-viewer-protos
+  library-persqueue-topic_parser
+  api-protos
+  lib-deprecated-kicli
+  public-lib-json_value
+  api-grpc
+  cpp-client-ydb_types
+)
+target_sources(ydb-core-viewer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_vdisk.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_viewer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_aggregate.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_filter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_merge.cpp
+)
+
+add_global_library_for(ydb-core-viewer.global ydb-core-viewer)
+target_compile_options(ydb-core-viewer.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(ydb-core-viewer.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-actors-core
+  library-cpp-archive
+  cpp-mime-types
+  cpp-protobuf-json
+  ydb-core-base
+  core-blobstorage-base
+  blobstorage-vdisk-common
+  core-client-server
+  ydb-core-grpc_services
+  core-grpc_services-local_rpc
+  ydb-core-health_check
+  ydb-core-node_whiteboard
+  ydb-core-protos
+  ydb-core-scheme
+  core-tx-schemeshard
+  core-tx-tx_proxy
+  ydb-core-util
+  core-viewer-json
+  core-viewer-protos
+  library-persqueue-topic_parser
+  api-protos
+  lib-deprecated-kicli
+  public-lib-json_value
+  api-grpc
+  cpp-client-ydb_types
+)
+target_sources(ydb-core-viewer.global PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/viewer/1cdc663173c623f6a008fb99b02498f1.cpp
+)
+resources(ydb-core-viewer.global
+  ${CMAKE_BINARY_DIR}/ydb/core/viewer/1cdc663173c623f6a008fb99b02498f1.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/index.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/viewer.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/jstree.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/style.min.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/throbber.gif
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/32px.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/40px.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/cpu
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/cpu_view.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/disk_cell.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/disk_map.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/index.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/man-green.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/man-orange.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/man-red.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/man-yellow.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/net_view.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/network
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/node_group.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/node.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/node_map.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/nodes
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/node_view.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/overview
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/overview.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/pdisk.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/pool_block.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/pool_map.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/runner.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/stats.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/storage
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/storage_group.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/storage.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/storage_view.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/tablet_cell.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/tablet_map.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/tenant.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/tenants
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/tenant_view.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/throbber.gif
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/util.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/vdisk.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/viewer.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/v2/viewer.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/css/print.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/css/reset.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/css/screen.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/css/style.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/css/typography.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/fonts/DroidSans-Bold.ttf
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/fonts/DroidSans.ttf
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/collapse.gif
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/expand.gif
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/explorer_icons.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/favicon-16x16.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/favicon-32x32.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/favicon.ico
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/logo_small.png
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/images/throbber.gif
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/index.html
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ca.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/en.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/es.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/fr.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/geo.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/it.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ja.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ko-kr.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/pl.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/pt.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ru.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/tr.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/translator.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lang/zh-cn.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/backbone-min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/es5-shim.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/handlebars-4.0.5.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/highlight.9.1.0.pack.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/highlight.9.1.0.pack_extended.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery-1.8.0.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery.ba-bbq.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery.slideto.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery.wiggle.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/js-yaml.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jsoneditor.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/lodash.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/marked.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/object-assign-pollyfill.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/sanitize-html.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/lib/swagger-oauth.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/content/api/swagger-ui.min.js
+  KEYS
+  viewer/index.html
+  viewer/viewer.js
+  viewer/jstree.min.js
+  viewer/style.min.css
+  viewer/throbber.gif
+  viewer/32px.png
+  viewer/40px.png
+  viewer/v2/cpu
+  viewer/v2/cpu_view.js
+  viewer/v2/disk_cell.js
+  viewer/v2/disk_map.js
+  viewer/v2/index.html
+  viewer/v2/man-green.png
+  viewer/v2/man-orange.png
+  viewer/v2/man-red.png
+  viewer/v2/man-yellow.png
+  viewer/v2/net_view.js
+  viewer/v2/network
+  viewer/v2/node_group.js
+  viewer/v2/node.js
+  viewer/v2/node_map.js
+  viewer/v2/nodes
+  viewer/v2/node_view.js
+  viewer/v2/overview
+  viewer/v2/overview.js
+  viewer/v2/pdisk.js
+  viewer/v2/pool_block.js
+  viewer/v2/pool_map.js
+  viewer/v2/runner.html
+  viewer/v2/stats.js
+  viewer/v2/storage
+  viewer/v2/storage_group.js
+  viewer/v2/storage.js
+  viewer/v2/storage_view.js
+  viewer/v2/tablet_cell.js
+  viewer/v2/tablet_map.js
+  viewer/v2/tenant.js
+  viewer/v2/tenants
+  viewer/v2/tenant_view.js
+  viewer/v2/throbber.gif
+  viewer/v2/util.js
+  viewer/v2/vdisk.js
+  viewer/v2/viewer.css
+  viewer/v2/viewer.js
+  viewer/api/css/print.css
+  viewer/api/css/reset.css
+  viewer/api/css/screen.css
+  viewer/api/css/style.css
+  viewer/api/css/typography.css
+  viewer/api/fonts/DroidSans-Bold.ttf
+  viewer/api/fonts/DroidSans.ttf
+  viewer/api/images/collapse.gif
+  viewer/api/images/expand.gif
+  viewer/api/images/explorer_icons.png
+  viewer/api/images/favicon-16x16.png
+  viewer/api/images/favicon-32x32.png
+  viewer/api/images/favicon.ico
+  viewer/api/images/logo_small.png
+  viewer/api/images/throbber.gif
+  viewer/api/index.html
+  viewer/api/lang/ca.js
+  viewer/api/lang/en.js
+  viewer/api/lang/es.js
+  viewer/api/lang/fr.js
+  viewer/api/lang/geo.js
+  viewer/api/lang/it.js
+  viewer/api/lang/ja.js
+  viewer/api/lang/ko-kr.js
+  viewer/api/lang/pl.js
+  viewer/api/lang/pt.js
+  viewer/api/lang/ru.js
+  viewer/api/lang/tr.js
+  viewer/api/lang/translator.js
+  viewer/api/lang/zh-cn.js
+  viewer/api/lib/backbone-min.js
+  viewer/api/lib/es5-shim.js
+  viewer/api/lib/handlebars-4.0.5.js
+  viewer/api/lib/highlight.9.1.0.pack.js
+  viewer/api/lib/highlight.9.1.0.pack_extended.js
+  viewer/api/lib/jquery-1.8.0.min.js
+  viewer/api/lib/jquery.ba-bbq.min.js
+  viewer/api/lib/jquery.slideto.min.js
+  viewer/api/lib/jquery.wiggle.min.js
+  viewer/api/lib/js-yaml.min.js
+  viewer/api/lib/jsoneditor.min.js
+  viewer/api/lib/lodash.min.js
+  viewer/api/lib/marked.js
+  viewer/api/lib/object-assign-pollyfill.js
+  viewer/api/lib/sanitize-html.min.js
+  viewer/api/lib/swagger-oauth.js
+  viewer/api/swagger-ui.min.js
+)
+option(YDB_EMBEDDED_UI_DEV_SNAPSHOT "Use latest dev version of embedded UI git repo" Off)
+include(${CMAKE_CURRENT_SOURCE_DIR}/recursive_resources.cmake)
+
+if (YDB_EMBEDDED_UI_DEV_SNAPSHOT)
+  find_program(NPM_PATH NAMES npm REQUIRED)
+
+  include(ExternalProject)
+  ExternalProject_Add(ydb-embedded-ui-git
+    GIT_REPOSITORY https://github.com/ydb-platform/ydb-embedded-ui.git
+    GIT_TAG main
+    USES_TERMINAL_DOWNLOAD On
+    USES_TERMINAL_UPDATE On
+    USES_TERMINAL_BUILD On
+    CONFIGURE_COMMAND ""
+    TEST_COMMAND ""
+    INSTALL_COMMAND ""
+    BUILD_IN_SOURCE On
+    BUILD_COMMAND ${NPM_PATH} ci
+    COMMAND       ${NPM_PATH} run build:embedded
+  )
+  ExternalProject_Get_property(ydb-embedded-ui-git SOURCE_DIR)
+  add_gen_resources(ydb-embedded-ui-git ${CMAKE_BINARY_DIR}/ydb/core/viewer/ydb_embedded_ui_monitoring.cpp
+    IN_DIR  ${SOURCE_DIR}/build
+    PREFIX monitoring
+  )
+
+else()
+  add_dir_resources(${CMAKE_BINARY_DIR}/ydb/core/viewer/ydb_embedded_ui_monitoring.cpp
+    IN_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/monitoring
+    PREFIX monitoring
+  )
+endif()
+target_sources(ydb-core-viewer.global PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/viewer/ydb_embedded_ui_monitoring.cpp
+)
+

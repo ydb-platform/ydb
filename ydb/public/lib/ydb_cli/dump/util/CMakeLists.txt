@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ydb_cli-dump-util)
-target_link_libraries(ydb_cli-dump-util PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  common
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  client-ydb_types-status
-)
-target_sources(ydb_cli-dump-util PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/dump/util/util.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

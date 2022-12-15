@@ -6,39 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(actors)
-add_subdirectory(ut)
-
-add_library(ydb-services-persqueue_v1)
-target_link_libraries(ydb-services-persqueue_v1 PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-containers-disjoint_interval_tree
-  cpp-grpc-server
-  ydb-core-base
-  ydb-core-grpc_services
-  ydb-core-kqp
-  ydb-core-persqueue
-  core-persqueue-codecs
-  core-persqueue-writer
-  ydb-core-protos
-  ydb-core-ydb_convert
-  ydb-library-aclib
-  library-persqueue-obfuscate
-  library-persqueue-tests
-  library-persqueue-topic_parser
-  api-grpc
-  api-grpc-draft
-  api-protos
-  services-lib-actors
-  services-lib-sharding
-  services-persqueue_v1-actors
-)
-target_sources(ydb-services-persqueue_v1 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/topic.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

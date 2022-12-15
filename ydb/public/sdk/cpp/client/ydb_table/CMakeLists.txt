@@ -6,32 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(impl)
-add_subdirectory(query_stats)
-
-add_library(cpp-client-ydb_table)
-target_link_libraries(cpp-client-ydb_table PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  api-protos
-  impl-ydb_internal-make_request
-  cpp-client-ydb_driver
-  cpp-client-ydb_params
-  cpp-client-ydb_proto
-  cpp-client-ydb_result
-  cpp-client-ydb_scheme
-  client-ydb_table-impl
-  client-ydb_table-query_stats
-  client-ydb_types-operation
-  cpp-client-ydb_value
-)
-target_sources(cpp-client-ydb_table PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/proto_accessor.cpp
-)
-generate_enum_serilization(cpp-client-ydb_table
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/table_enum.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_table/table_enum.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

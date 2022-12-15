@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yq-libs-logs)
-target_compile_options(yq-libs-logs PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-logs PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-protos
-  yql-utils-actor_log
-)
-target_sources(yq-libs-logs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/logs/log.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

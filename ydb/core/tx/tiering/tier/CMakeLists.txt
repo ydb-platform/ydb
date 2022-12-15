@@ -6,38 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(tx-tiering-tier)
-target_compile_options(tx-tiering-tier PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(tx-tiering-tier PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  core-tx-schemeshard
-)
-target_sources(tx-tiering-tier PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/initializer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/checker.cpp
-)
-
-add_global_library_for(tx-tiering-tier.global tx-tiering-tier)
-target_compile_options(tx-tiering-tier.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(tx-tiering-tier.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  core-tx-schemeshard
-)
-target_sources(tx-tiering-tier.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/tier/behaviour.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

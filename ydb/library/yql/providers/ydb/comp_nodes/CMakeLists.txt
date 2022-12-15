@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-ydb-comp_nodes)
-target_compile_options(providers-ydb-comp_nodes PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-ydb-comp_nodes PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-scheme
-  library-yql-minikql
-  yql-minikql-computation
-  providers-common-structured_token
-  public-lib-experimental
-  cpp-client-ydb_driver
-  providers-ydb-proto
-)
-target_sources(providers-ydb-comp_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_kik_scan.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

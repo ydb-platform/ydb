@@ -1,0 +1,35 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(yq-libs-result_formatter)
+target_compile_options(yq-libs-result_formatter PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(yq-libs-result_formatter PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-json
+  cpp-json-yson
+  ydb-core-engine
+  library-yql-ast
+  library-yql-minikql
+  yql-minikql-computation
+  yql-public-udf
+  api-protos
+  cpp-client-ydb_proto
+  cpp-client-ydb_result
+  cpp-client-ydb_value
+  providers-common-codec
+  common-schema-expr
+  common-schema-mkql
+)
+target_sources(yq-libs-result_formatter PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/result_formatter/result_formatter.cpp
+)

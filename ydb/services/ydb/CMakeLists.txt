@@ -6,41 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-add_subdirectory(index_ut)
-add_subdirectory(sdk_credprovider_ut)
-add_subdirectory(ut)
-
-add_library(ydb-services-ydb)
-target_link_libraries(ydb-services-ydb PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-monlib-encode
-  library-cpp-uri
-  ydb-core-base
-  ydb-core-client
-  ydb-core-formats
-  ydb-core-grpc_services
-  core-grpc_services-base
-  ydb-core-grpc_streaming
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-library-aclib
-  api-grpc
-  api-grpc-draft
-  api-protos
-  yql-public-types
-  OpenSSL::OpenSSL
-)
-target_sources(ydb-services-ydb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_dummy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_export.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_operation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

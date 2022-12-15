@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-common-dq)
-target_link_libraries(providers-common-dq PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  providers-dq-interface
-)
-target_sources(providers-common-dq PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/dq/yql_dq_integration_impl.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

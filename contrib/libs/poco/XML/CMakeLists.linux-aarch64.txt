@@ -29,6 +29,7 @@ target_include_directories(libs-poco-XML PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/XML/src
 )
 target_link_libraries(libs-poco-XML PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   contrib-libs-expat
   libs-poco-Foundation

@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(public-lib-idx_test)
-target_link_libraries(public-lib-idx_test PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-string_utils-base64
-  cpp-client-ydb_table
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(public-lib-idx_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_checker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_data_provider.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_stderr_progress_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_loader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_upload.cpp
-)
-generate_enum_serilization(public-lib-idx_test
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test.h
-  INCLUDE_HEADERS
-  ydb/public/lib/idx_test/idx_test.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

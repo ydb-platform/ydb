@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-library-protobuf_printer)
-target_link_libraries(ydb-library-protobuf_printer PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  ydb-library-security
-  api-protos-annotations
-)
-target_sources(ydb-library-protobuf_printer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/hide_field_printer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/size_printer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/stream_helper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/token_field_printer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

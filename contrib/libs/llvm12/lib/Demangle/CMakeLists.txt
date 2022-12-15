@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(llvm12-lib-Demangle)
-target_compile_options(llvm12-lib-Demangle PRIVATE
-  -Wno-everything
-)
-target_include_directories(llvm12-lib-Demangle PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Demangle
-)
-target_link_libraries(llvm12-lib-Demangle PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-)
-target_sources(llvm12-lib-Demangle PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Demangle/Demangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Demangle/ItaniumDemangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Demangle/MicrosoftDemangle.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Demangle/MicrosoftDemangleNodes.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

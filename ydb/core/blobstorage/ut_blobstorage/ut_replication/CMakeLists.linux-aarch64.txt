@@ -12,6 +12,7 @@ target_include_directories(core-blobstorage-ut_blobstorage-ut_replication PRIVAT
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(core-blobstorage-ut_blobstorage-ut_replication PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

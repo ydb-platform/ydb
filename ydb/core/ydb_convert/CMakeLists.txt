@@ -6,32 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-ydb_convert)
-target_compile_options(ydb-core-ydb_convert PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-ydb_convert PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-engine
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-util
-  ydb-library-binary_json
-  ydb-library-dynumber
-  library-mkql_proto-protos
-  yql-minikql-dom
-  yql-public-udf
-  api-protos
-)
-target_sources(ydb-core-ydb_convert PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/column_families.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/compression.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_settings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_description.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_profiles.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/ydb_convert.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

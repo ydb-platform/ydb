@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-health_check)
-target_link_libraries(ydb-core-health_check PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  core-blobstorage-base
-  ydb-library-aclib
-  api-protos
-  api-grpc
-  public-issue-protos
-)
-target_sources(ydb-core-health_check PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/health_check/health_check.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

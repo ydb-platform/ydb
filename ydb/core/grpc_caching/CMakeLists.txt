@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ydb-core-grpc_caching)
-target_link_libraries(ydb-core-grpc_caching PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-protos
-  ydb-core-base
-)
-target_sources(ydb-core-grpc_caching PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_caching/cached_grpc_request_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

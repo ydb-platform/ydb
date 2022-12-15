@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-unicode-set)
-target_link_libraries(cpp-unicode-set PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(cpp-unicode-set PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/set.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/quoted_pair.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_parser.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_token.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/generated/category_ranges.cpp
-)
-generate_enum_serilization(cpp-unicode-set
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_token.h
-  INCLUDE_HEADERS
-  library/cpp/unicode/set/unicode_set_token.h
-)
-target_ragel_lexers(cpp-unicode-set
-  PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_lexer.rl6
-  -CG2
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

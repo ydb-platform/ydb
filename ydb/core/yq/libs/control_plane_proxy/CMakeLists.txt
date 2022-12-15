@@ -6,30 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(events)
-add_subdirectory(ut)
-
-add_library(yq-libs-control_plane_proxy)
-target_compile_options(yq-libs-control_plane_proxy PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-control_plane_proxy PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  ydb-core-mon
-  libs-actors-logging
-  yq-libs-actors
-  yq-libs-control_plane_config
-  libs-control_plane_proxy-events
-  yq-libs-control_plane_storage
-  libs-rate_limiter-events
-  ydb-library-folder_service
-  ydb-library-security
-)
-target_sources(yq-libs-control_plane_proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_proxy/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_proxy/probes.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

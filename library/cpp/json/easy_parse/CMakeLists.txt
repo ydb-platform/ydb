@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-json-easy_parse)
-target_link_libraries(cpp-json-easy_parse PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-)
-target_sources(cpp-json-easy_parse PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/json/easy_parse/json_easy_parser.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,37 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(client-yc_private-servicecontrol)
-set_property(TARGET client-yc_private-servicecontrol PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(client-yc_private-servicecontrol PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  contrib-libs-googleapis-common-protos
-  contrib-libs-protobuf
-)
-target_proto_messages(client-yc_private-servicecontrol PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/servicecontrol/access_service.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/servicecontrol/resource.proto
-)
-target_proto_addincls(client-yc_private-servicecontrol
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(client-yc_private-servicecontrol
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(client-yc_private-servicecontrol
-  grpc_cpp
-  grpc_cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,42 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(backpressure)
-add_subdirectory(base)
-add_subdirectory(crypto)
-add_subdirectory(dsproxy)
-add_subdirectory(groupinfo)
-add_subdirectory(incrhuge)
-add_subdirectory(lwtrace_probes)
-add_subdirectory(nodewarden)
-add_subdirectory(other)
-add_subdirectory(pdisk)
-add_subdirectory(storagepoolmon)
-add_subdirectory(testing)
-add_subdirectory(ut_blobstorage)
-add_subdirectory(ut_group)
-add_subdirectory(ut_mirror3of4)
-add_subdirectory(ut_pdiskfit)
-add_subdirectory(ut_testshard)
-add_subdirectory(ut_vdisk)
-add_subdirectory(ut_vdisk2)
-add_subdirectory(vdisk)
-
-add_library(ydb-core-blobstorage INTERFACE)
-target_link_libraries(ydb-core-blobstorage INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-crypto
-  core-blobstorage-dsproxy
-  core-blobstorage-groupinfo
-  core-blobstorage-incrhuge
-  core-blobstorage-lwtrace_probes
-  core-blobstorage-nodewarden
-  core-blobstorage-other
-  core-blobstorage-pdisk
-  core-blobstorage-storagepoolmon
-  core-blobstorage-vdisk
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

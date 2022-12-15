@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Bitstream-Reader)
-target_compile_options(lib-Bitstream-Reader PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Bitstream-Reader PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitstream/Reader
-)
-target_link_libraries(lib-Bitstream-Reader PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  llvm12-lib-Support
-)
-target_sources(lib-Bitstream-Reader PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitstream/Reader/BitstreamReader.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

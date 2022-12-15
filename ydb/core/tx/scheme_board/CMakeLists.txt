@@ -6,39 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut_cache)
-add_subdirectory(ut_double_indexed)
-add_subdirectory(ut_monitoring)
-add_subdirectory(ut_populator)
-add_subdirectory(ut_replica)
-add_subdirectory(ut_subscriber)
-
-add_library(core-tx-scheme_board)
-target_link_libraries(core-tx-scheme_board PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-protos
-  core-sys_view-common
-  core-tx-scheme_cache
-  ydb-core-util
-  ydb-library-aclib
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(core-tx-scheme_board PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/load_test.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/populator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/replica.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/two_part_description.cpp
-)
-generate_enum_serilization(core-tx-scheme_board
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber.h
-  INCLUDE_HEADERS
-  ydb/core/tx/scheme_board/subscriber.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

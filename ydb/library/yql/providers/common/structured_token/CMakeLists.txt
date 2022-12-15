@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(providers-common-structured_token)
-target_link_libraries(providers-common-structured_token PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  cpp-string_utils-base64
-  library-yql-utils
-)
-target_sources(providers-common-structured_token PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/yql_structured_token.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/yql_token_builder.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

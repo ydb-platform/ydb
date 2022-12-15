@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Transforms-AggressiveInstCombine)
-target_compile_options(lib-Transforms-AggressiveInstCombine PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Transforms-AggressiveInstCombine PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine
-)
-target_link_libraries(lib-Transforms-AggressiveInstCombine PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-Analysis
-  llvm12-lib-IR
-  llvm12-lib-Support
-  lib-Transforms-Utils
-)
-target_sources(lib-Transforms-AggressiveInstCombine PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine/TruncInstCombine.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

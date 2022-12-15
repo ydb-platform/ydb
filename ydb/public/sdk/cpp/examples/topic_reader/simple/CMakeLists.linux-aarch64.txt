@@ -9,6 +9,7 @@
 
 add_executable(simple_persqueue_reader)
 target_link_libraries(simple_persqueue_reader PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

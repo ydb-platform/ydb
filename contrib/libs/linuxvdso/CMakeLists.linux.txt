@@ -10,6 +10,7 @@ add_subdirectory(original)
 
 add_library(contrib-libs-linuxvdso)
 target_link_libraries(contrib-libs-linuxvdso PUBLIC
+  contrib-libs-linux-headers
   libs-linuxvdso-original
 )
 target_sources(contrib-libs-linuxvdso PRIVATE

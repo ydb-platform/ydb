@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(llvm12-lib-Linker)
-target_compile_options(llvm12-lib-Linker PRIVATE
-  -Wno-everything
-)
-target_include_directories(llvm12-lib-Linker PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker
-)
-target_link_libraries(llvm12-lib-Linker PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-IR
-  llvm12-lib-Object
-  llvm12-lib-Support
-  lib-Transforms-Utils
-)
-target_sources(llvm12-lib-Linker PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker/IRMover.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker/LinkModules.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

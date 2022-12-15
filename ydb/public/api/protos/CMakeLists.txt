@@ -6,84 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(annotations)
-add_subdirectory(out)
-
-add_library(api-protos)
-target_link_libraries(api-protos PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  api-protos-annotations
-  tools-enum_parser-enum_serialization_runtime
-  contrib-libs-protobuf
-)
-target_proto_messages(api-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/datastreams.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_common.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_long_tx.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_query.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/fq.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_auth.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_cms.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_common.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_coordination.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_discovery.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_export.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_formats.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_import.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_issue_message.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_monitoring.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_operation.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_query_stats.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_rate_limiter.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_scheme.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_scripting.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_status_codes.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_table.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/yq.proto
-)
-generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
-  INCLUDE_HEADERS
-  ydb/public/api/protos/draft/persqueue_common.pb.h
-)
-generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
-  INCLUDE_HEADERS
-  ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
-)
-generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.h
-  INCLUDE_HEADERS
-  ydb/public/api/protos/draft/datastreams.pb.h
-)
-generate_enum_serilization(api-protos
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
-  INCLUDE_HEADERS
-  ydb/public/api/protos/ydb_topic.pb.h
-)
-target_proto_addincls(api-protos
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(api-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(api-protos
-  validation
-  validation
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

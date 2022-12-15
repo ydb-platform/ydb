@@ -6,30 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-tx-mediator)
-target_link_libraries(core-tx-mediator PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-scheme_types
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-tx
-  core-tx-coordinator
-  core-tx-time_cast
-  ydb-core-util
-)
-target_sources(core-tx-mediator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__configure.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/mediator__schema_upgrade.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/tablet_queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/mediator/execute_queue.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

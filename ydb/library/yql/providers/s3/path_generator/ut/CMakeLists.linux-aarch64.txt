@@ -15,6 +15,7 @@ target_include_directories(ydb-library-yql-providers-s3-path_generator-ut PRIVAT
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/path_generator
 )
 target_link_libraries(ydb-library-yql-providers-s3-path_generator-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

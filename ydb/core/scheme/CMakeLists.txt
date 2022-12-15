@@ -6,29 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-scheme)
-target_link_libraries(ydb-core-scheme PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  library-cpp-charset
-  cpp-containers-bitseq
-  cpp-deprecated-enum_codegen
-  library-cpp-yson
-  ydb-core-base
-  ydb-core-scheme_types
-  ydb-core-util
-  ydb-library-aclib
-  parser-pg_wrapper-interface
-  public-lib-scheme_types
-)
-target_sources(ydb-core-scheme PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_borders.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_tablecell.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_tabledefs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_types_defs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_type_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_types_proto.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

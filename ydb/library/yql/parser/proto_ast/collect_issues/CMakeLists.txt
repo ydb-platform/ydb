@@ -6,11 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(parser-proto_ast-collect_issues INTERFACE)
-target_link_libraries(parser-proto_ast-collect_issues INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-issue
-  yql-parser-proto_ast
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

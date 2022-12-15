@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-blob_depot-agent)
-target_link_libraries(core-blob_depot-agent PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-common
-  ydb-core-blob_depot
-  ydb-core-protos
-)
-target_sources(core-blob_depot-agent PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/blob_mapping_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/blocks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/channel_kind.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/comm.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/garbage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/query.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/status.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_put.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_block.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_discover.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_collect_garbage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_status.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_patch.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_assimilate.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

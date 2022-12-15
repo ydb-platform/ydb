@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-defrag)
-target_link_libraries(blobstorage-vdisk-defrag PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  blobstorage-vdisk-common
-  blobstorage-vdisk-hulldb
-)
-target_sources(blobstorage-vdisk-defrag PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_quantum.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_rewriter.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

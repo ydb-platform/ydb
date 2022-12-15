@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(mock)
-
-add_library(providers-common-http_gateway)
-target_compile_options(providers-common-http_gateway PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-common-http_gateway PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-curl
-  cpp-actors-prof
-  cpp-monlib-dynamic_counters
-  library-cpp-retry
-  providers-common-proto
-  yql-public-issue
-)
-target_sources(providers-common-http_gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_gateway.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

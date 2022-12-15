@@ -6,49 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-DebugInfo-DWARF)
-target_compile_options(lib-DebugInfo-DWARF PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-DebugInfo-DWARF PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF
-)
-target_link_libraries(lib-DebugInfo-DWARF PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  llvm12-lib-BinaryFormat
-  llvm12-lib-MC
-  llvm12-lib-Object
-  llvm12-lib-Support
-)
-target_sources(lib-DebugInfo-DWARF PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFAbbreviationDeclaration.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFAddressRange.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFCompileUnit.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFContext.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDataExtractor.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugAbbrev.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugAddr.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugArangeSet.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugAranges.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugFrame.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugInfoEntry.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugLine.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugLoc.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugMacro.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugPubTable.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugRangeList.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDebugRnglists.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFDie.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFExpression.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFFormValue.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFGdbIndex.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFListTable.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFLocationExpression.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFTypeUnit.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFUnit.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFUnitIndex.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF/DWARFVerifier.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

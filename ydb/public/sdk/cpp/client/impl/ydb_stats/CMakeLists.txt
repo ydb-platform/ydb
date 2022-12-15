@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(client-impl-ydb_stats)
-target_link_libraries(client-impl-ydb_stats PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-client
-  cpp-monlib-metrics
-)
-target_sources(client-impl-ydb_stats PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_stats/stats.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

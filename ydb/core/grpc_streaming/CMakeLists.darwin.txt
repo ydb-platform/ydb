@@ -1,0 +1,22 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(ydb-core-grpc_streaming)
+target_link_libraries(ydb-core-grpc_streaming PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  cpp-actors-core
+  cpp-grpc-server
+  ydb-core-base
+)
+target_sources(ydb-core-grpc_streaming PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming.cpp
+)

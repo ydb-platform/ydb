@@ -1,0 +1,63 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(lib-CodeGen-AsmPrinter)
+target_compile_options(lib-CodeGen-AsmPrinter PRIVATE
+  -Wno-everything
+)
+target_include_directories(lib-CodeGen-AsmPrinter PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter
+)
+target_link_libraries(lib-CodeGen-AsmPrinter PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm12
+  libs-llvm12-include
+  llvm12-lib-Analysis
+  llvm12-lib-BinaryFormat
+  llvm12-lib-CodeGen
+  lib-DebugInfo-CodeView
+  lib-DebugInfo-DWARF
+  lib-DebugInfo-MSF
+  llvm12-lib-IR
+  llvm12-lib-MC
+  lib-MC-MCParser
+  llvm12-lib-Remarks
+  llvm12-lib-Support
+  llvm12-lib-Target
+)
+target_sources(lib-CodeGen-AsmPrinter PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/AIXException.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/ARMException.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/AccelTable.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/AddressPool.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/AsmPrinterDwarf.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/AsmPrinterInlineAsm.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/CodeViewDebug.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DIE.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DIEHash.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DbgEntityHistoryCalculator.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DebugHandlerBase.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DebugLocStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfCFIException.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfCompileUnit.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfDebug.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfExpression.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfFile.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfStringPool.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/DwarfUnit.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/EHStreamer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/ErlangGCPrinter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/OcamlGCPrinter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/PseudoProbePrinter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/WasmException.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/WinCFGuard.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter/WinException.cpp
+)

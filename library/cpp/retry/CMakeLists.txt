@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
-
-add_library(library-cpp-retry)
-target_link_libraries(library-cpp-retry PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-retry-protos
-)
-target_sources(library-cpp-retry PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/retry/retry.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/retry/utils.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

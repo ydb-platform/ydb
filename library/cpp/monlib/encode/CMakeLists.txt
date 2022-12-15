@@ -6,29 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(buffered)
-add_subdirectory(json)
-add_subdirectory(legacy_protobuf)
-add_subdirectory(prometheus)
-add_subdirectory(spack)
-add_subdirectory(text)
-
-add_library(cpp-monlib-encode)
-target_link_libraries(cpp-monlib-encode PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-monlib-metrics
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(cpp-monlib-encode PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/encoder.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/encoder_state.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/format.cpp
-)
-generate_enum_serilization(cpp-monlib-encode
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/encoder_state_enum.h
-  GEN_HEADER
-  ${CMAKE_BINARY_DIR}/library/cpp/monlib/encode/encoder_state_enum.h_serialized.h
-  INCLUDE_HEADERS
-  library/cpp/monlib/encode/encoder_state_enum.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

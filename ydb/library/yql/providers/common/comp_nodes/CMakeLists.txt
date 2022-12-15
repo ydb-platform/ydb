@@ -6,42 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-common-comp_nodes)
-target_compile_options(providers-common-comp_nodes PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-common-comp_nodes PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-yql-ast
-  yql-ast-serialize
-  library-yql-minikql
-  yql-minikql-computation
-  library-yql-core
-  yql-core-type_ann
-  providers-common-codec
-  common-schema-expr
-  yql-minikql-codegen
-  llvm12-lib-IR
-  lib-ExecutionEngine-MCJIT
-  llvm12-lib-Linker
-  lib-Target-X86
-  Target-X86-AsmParser
-  lib-Transforms-IPO
-)
-target_sources(providers-common-comp_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formatcode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formattype.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_makecode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_maketype.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_parsetypehandle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_position.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_reprcode.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_serializetypehandle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_splittype.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_type_resource.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_typehandle.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_typekind.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

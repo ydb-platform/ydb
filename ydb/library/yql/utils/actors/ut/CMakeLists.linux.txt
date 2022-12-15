@@ -12,6 +12,7 @@ target_include_directories(ydb-library-yql-utils-actors-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors
 )
 target_link_libraries(ydb-library-yql-utils-actors-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

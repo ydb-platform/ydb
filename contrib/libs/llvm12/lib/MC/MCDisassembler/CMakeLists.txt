@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-MC-MCDisassembler)
-target_compile_options(lib-MC-MCDisassembler PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-MC-MCDisassembler PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler
-)
-target_link_libraries(lib-MC-MCDisassembler PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  llvm12-lib-MC
-  llvm12-lib-Support
-)
-target_sources(lib-MC-MCDisassembler PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler/Disassembler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler/MCDisassembler.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler/MCExternalSymbolizer.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler/MCRelocationInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler/MCSymbolizer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

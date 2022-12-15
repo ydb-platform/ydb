@@ -9,6 +9,7 @@
 
 add_library(library-rewrapper-hyperscan INTERFACE)
 target_link_libraries(library-rewrapper-hyperscan INTERFACE
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-regex-hyperscan
@@ -17,6 +18,7 @@ target_link_libraries(library-rewrapper-hyperscan INTERFACE
 
 add_global_library_for(library-rewrapper-hyperscan.global library-rewrapper-hyperscan)
 target_link_libraries(library-rewrapper-hyperscan.global PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-regex-hyperscan

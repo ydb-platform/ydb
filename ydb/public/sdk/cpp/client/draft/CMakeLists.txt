@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(cpp-client-draft)
-target_link_libraries(cpp-client-draft PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  api-grpc-draft
-  cpp-client-ydb_table
-  client-ydb_types-operation
-  cpp-client-ydb_value
-)
-target_sources(cpp-client-draft PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_scripting.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_long_tx.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

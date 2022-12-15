@@ -9,6 +9,7 @@
 
 add_executable(surg)
 target_link_libraries(surg PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

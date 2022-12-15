@@ -6,29 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-kqp-rm_service)
-target_compile_options(core-kqp-rm_service PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-rm_service PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-cms-console
-  core-kqp-common
-  core-kqp-counters
-  ydb-core-mind
-  ydb-core-mon
-  ydb-core-protos
-  ydb-core-tablet
-)
-target_sources(core-kqp-rm_service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_resource_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_resource_estimation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_rm_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_snapshot_manager.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

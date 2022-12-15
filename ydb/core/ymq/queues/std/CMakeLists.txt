@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ymq-queues-std)
-target_link_libraries(ymq-queues-std PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-ymq-base
-)
-target_sources(ymq-queues-std PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/std/queries.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/std/schema.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

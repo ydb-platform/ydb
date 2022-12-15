@@ -6,52 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(mock)
-add_subdirectory(ut)
-add_subdirectory(ut_fat)
-
-add_library(core-blobstorage-dsproxy)
-target_link_libraries(core-blobstorage-dsproxy PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  monlib-dynamic_counters-percentile
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  core-blobstorage-storagepoolmon
-  blobstorage-vdisk-ingress
-  ydb-core-control
-  ydb-core-util
-)
-target_sources(core-blobstorage-dsproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_encrypt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_stat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_blackboard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_assimilate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_block.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_collect.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover_m3dc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover_m3of4.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_indexrestoreget.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_monactor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_multicollect.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_multiget.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_patch.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_put.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_put_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_status.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/group_sessions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/blobstorage_backoff.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

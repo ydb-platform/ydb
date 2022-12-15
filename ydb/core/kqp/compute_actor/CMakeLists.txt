@@ -6,35 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-kqp-compute_actor)
-target_compile_options(core-kqp-compute_actor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-compute_actor PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-kqp-runtime
-  core-tx-datashard
-  core-tx-scheme_cache
-  dq-actors-compute
-  yql-public-issue
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(core-kqp-compute_actor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_pure_compute_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_stat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_actor.cpp
-)
-generate_enum_serilization(core-kqp-compute_actor
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/compute_actor/kqp_compute_state.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

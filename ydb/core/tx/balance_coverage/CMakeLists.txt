@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-tx-balance_coverage)
-target_link_libraries(core-tx-balance_coverage PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-protos
-)
-target_sources(core-tx-balance_coverage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage/balance_coverage_builder.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

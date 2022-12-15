@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-add_subdirectory(ut)
-
-add_library(yq-libs-hmac)
-target_link_libraries(yq-libs-hmac PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  OpenSSL::OpenSSL
-  cpp-string_utils-base64
-)
-target_sources(yq-libs-hmac PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/hmac/hmac.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

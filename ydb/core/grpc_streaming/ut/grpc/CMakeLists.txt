@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(grpc_streaming-ut-grpc)
-set_property(TARGET grpc_streaming-ut-grpc PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(grpc_streaming-ut-grpc PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  contrib-libs-protobuf
-)
-target_proto_messages(grpc_streaming-ut-grpc PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/ut/grpc/streaming_service.proto
-)
-target_proto_addincls(grpc_streaming-ut-grpc
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(grpc_streaming-ut-grpc
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(grpc_streaming-ut-grpc
-  grpc_cpp
-  grpc_cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

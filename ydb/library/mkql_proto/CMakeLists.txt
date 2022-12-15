@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-library-mkql_proto)
-target_compile_options(ydb-library-mkql_proto PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-library-mkql_proto PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-mkql_proto-protos
-  library-yql-minikql
-  yql-minikql-computation
-  yql-parser-pg_catalog
-  providers-common-codec
-  api-protos
-)
-target_sources(ydb-library-mkql_proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/mkql_proto.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-client-ydb_proto)
-target_link_libraries(cpp-client-ydb_proto PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  api-grpc
-  api-grpc-draft
-  api-protos
-  lib-operation_id-protos
-  public-issue-protos
-)
-target_sources(cpp-client-ydb_proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_proto/accessor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

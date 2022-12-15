@@ -15,6 +15,7 @@ target_include_directories(ydb-core-kqp-ut-spilling PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
 )
 target_link_libraries(ydb-core-kqp-ut-spilling PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(event_core)
-add_subdirectory(event_extra)
-add_subdirectory(event_openssl)
-add_subdirectory(event_thread)
-
-add_library(contrib-libs-libevent INTERFACE)
-target_include_directories(contrib-libs-libevent INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/include
-)
-target_link_libraries(contrib-libs-libevent INTERFACE
-  libs-libevent-event_core
-  libs-libevent-event_extra
-  libs-libevent-event_openssl
-  libs-libevent-event_thread
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

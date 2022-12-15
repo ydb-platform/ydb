@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(IDN REQUIRED)
-
-add_library(cpp-unicode-punycode)
-target_link_libraries(cpp-unicode-punycode PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  IDN::IDN
-)
-target_sources(cpp-unicode-punycode PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/punycode/punycode.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(test-libs-rows)
-target_link_libraries(test-libs-rows PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-tablet_flat
-)
-target_sources(test-libs-rows PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/libs/rows/all.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

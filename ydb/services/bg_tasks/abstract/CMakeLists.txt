@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-bg_tasks-abstract)
-target_link_libraries(services-bg_tasks-abstract PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-library-accessor
-  cpp-actors-core
-  api-protos
-  services-bg_tasks-protos
-  ydb-core-base
-)
-target_sources(services-bg_tasks-abstract PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/abstract/common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/abstract/interface.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/abstract/scheduler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/abstract/activity.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/abstract/task.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/abstract/state.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

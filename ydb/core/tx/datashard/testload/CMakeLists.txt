@@ -6,25 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(tx-datashard-testload)
-target_link_libraries(tx-datashard-testload PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  monlib-dynamic_counters-percentile
-  monlib-service-pages
-  ydb-core-base
-  ydb-core-control
-  ydb-core-keyvalue
-  public-lib-base
-  public-lib-operation_id
-  cpp-client-ydb_proto
-)
-target_sources(tx-datashard-testload PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/bulk_mkql_upsert.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/info_collector.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/kqp_upsert.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/testload/test_load_read_iterator.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

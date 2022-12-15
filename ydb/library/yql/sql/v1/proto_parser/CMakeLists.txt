@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(sql-v1-proto_parser)
-target_link_libraries(sql-v1-proto_parser PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-yql-utils
-  yql-parser-proto_ast
-  parser-proto_ast-collect_issues
-  proto_ast-gen-v1
-  proto_ast-gen-v1_ansi
-  proto_ast-gen-v1_proto
-)
-target_sources(sql-v1-proto_parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/proto_parser/proto_parser.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

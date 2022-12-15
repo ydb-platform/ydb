@@ -6,12 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-lib-sharding)
-target_link_libraries(services-lib-sharding PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(services-lib-sharding PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/lib/sharding/sharding.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,29 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(top_udf INTERFACE)
-target_link_libraries(top_udf INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  cpp-containers-top_keeper
-)
-
-add_global_library_for(top_udf.global top_udf)
-target_compile_options(top_udf.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=10
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(top_udf.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  cpp-containers-top_keeper
-)
-target_sources(top_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

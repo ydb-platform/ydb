@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(providers-s3-range_helpers)
-target_compile_options(providers-s3-range_helpers PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-s3-range_helpers PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  providers-common-provider
-  providers-s3-proto
-  library-yql-utils
-  cpp-protobuf-util
-)
-target_sources(providers-s3-range_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/file_tree_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/path_list_reader.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

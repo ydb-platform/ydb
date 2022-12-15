@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(vdisk-hulldb-recovery)
-target_link_libraries(vdisk-hulldb-recovery PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-blobstorage-base
-  blobstorage-vdisk-common
-  vdisk-hulldb-bulksst_add
-  ydb-core-protos
-)
-target_sources(vdisk-hulldb-recovery PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

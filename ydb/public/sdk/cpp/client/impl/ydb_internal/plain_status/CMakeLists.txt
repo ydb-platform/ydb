@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(impl-ydb_internal-plain_status)
-target_link_libraries(impl-ydb_internal-plain_status PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  cpp-grpc-client
-  yql-public-issue
-)
-target_sources(impl-ydb_internal-plain_status PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

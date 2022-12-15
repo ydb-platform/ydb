@@ -12,6 +12,7 @@ target_include_directories(ut_group_reconfiguration PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
 target_link_libraries(ut_group_reconfiguration PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

@@ -6,50 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-CodeGen-SelectionDAG)
-target_compile_options(lib-CodeGen-SelectionDAG PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-CodeGen-SelectionDAG PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG
-)
-target_link_libraries(lib-CodeGen-SelectionDAG PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-Analysis
-  llvm12-lib-CodeGen
-  llvm12-lib-IR
-  llvm12-lib-MC
-  llvm12-lib-Support
-  llvm12-lib-Target
-  lib-Transforms-Utils
-)
-target_sources(lib-CodeGen-SelectionDAG PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/DAGCombiner.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/FastISel.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/InstrEmitter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeDAG.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeFloatTypes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeIntegerTypes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeTypes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeTypesGeneric.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeVectorOps.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/LegalizeVectorTypes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/ResourcePriorityQueue.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/ScheduleDAGFast.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/ScheduleDAGRRList.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/ScheduleDAGVLIW.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAG.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAGAddressAnalysis.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAGDumper.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAGPrinter.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/SelectionDAGTargetInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/SelectionDAG/TargetLowering.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

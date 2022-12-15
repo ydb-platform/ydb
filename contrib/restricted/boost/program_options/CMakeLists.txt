@@ -6,40 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-program_options)
-target_compile_options(restricted-boost-program_options PRIVATE
-  -Wno-everything
-)
-target_include_directories(restricted-boost-program_options PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/include
-)
-target_link_libraries(restricted-boost-program_options PUBLIC
-  contrib-libs-cxxsupp
-  restricted-boost-any
-  restricted-boost-bind
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-function
-  restricted-boost-iterator
-  restricted-boost-lexical_cast
-  restricted-boost-smart_ptr
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-tokenizer
-  restricted-boost-type_traits
-)
-target_sources(restricted-boost-program_options PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/cmdline.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/config_file.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/convert.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/options_description.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/parsers.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/positional_options.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/split.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/utf8_codecvt_facet.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/value_semantic.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/variables_map.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/winmain.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

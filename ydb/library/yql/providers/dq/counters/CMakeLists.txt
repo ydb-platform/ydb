@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-dq-counters)
-target_compile_options(providers-dq-counters PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-dq-counters PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-dq-runtime
-)
-target_sources(providers-dq-counters PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/counters/counters.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

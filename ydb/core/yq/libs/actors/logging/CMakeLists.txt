@@ -6,11 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(libs-actors-logging INTERFACE)
-target_link_libraries(libs-actors-logging INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-protos
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -9,6 +9,7 @@
 
 add_executable(ydb-core-ymq-base-ut)
 target_link_libraries(ydb-core-ymq-base-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

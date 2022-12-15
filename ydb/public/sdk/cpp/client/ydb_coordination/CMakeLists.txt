@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(cpp-client-ydb_coordination)
-target_link_libraries(cpp-client-ydb_coordination PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  api-grpc
-  impl-ydb_internal-make_request
-  cpp-client-ydb_common_client
-  client-ydb_common_client-impl
-  cpp-client-ydb_driver
-  cpp-client-ydb_types
-  client-ydb_types-status
-)
-target_sources(cpp-client-ydb_coordination PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination.cpp
-)
-generate_enum_serilization(cpp-client-ydb_coordination
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_coordination/coordination.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

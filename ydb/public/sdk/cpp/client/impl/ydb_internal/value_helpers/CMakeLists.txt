@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(impl-ydb_internal-value_helpers)
-target_link_libraries(impl-ydb_internal-value_helpers PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  api-protos
-  client-ydb_types-fatal_error_handlers
-)
-target_sources(impl-ydb_internal-value_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/value_helpers/helpers.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

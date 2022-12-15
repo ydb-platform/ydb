@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(vdisk-hulldb-generic)
-target_link_libraries(vdisk-hulldb-generic PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  vdisk-hulldb-base
-  vdisk-hulldb-fresh
-  blobstorage-vdisk-protos
-  ydb-core-protos
-)
-target_sources(vdisk-hulldb-generic PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulloptlsn.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstmngr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

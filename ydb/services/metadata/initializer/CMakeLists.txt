@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(services-metadata-initializer)
-target_link_libraries(services-metadata-initializer PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-  services-metadata-request
-)
-target_sources(services-metadata-initializer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/accessor_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/behaviour.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/controller.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/object.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/initializer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/initializer/fetcher.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yql-utils-fetch)
-target_link_libraries(yql-utils-fetch PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-charset
-  cpp-http-io
-  cpp-http-misc
-  cpp-openssl-io
-  library-cpp-uri
-  yql-utils-log
-)
-target_sources(yql-utils-fetch PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/fetch/fetch.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

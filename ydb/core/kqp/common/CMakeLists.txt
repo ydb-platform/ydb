@@ -6,43 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-kqp-common)
-target_compile_options(core-kqp-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-engine
-  core-kqp-expr_nodes
-  core-kqp-provider
-  tx-long_tx_service-public
-  ydb-library-aclib
-  yql-core-issue
-  yql-dq-actors
-  yql-dq-common
-  parser-pg_wrapper-interface
-  library-cpp-lwtrace
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(core-kqp-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_resolve.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_ru_calc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_lwtrace_probes.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp.cpp
-)
-generate_enum_serilization(core-kqp-common
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx_info.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/common/kqp_tx_info.h
-)
-generate_enum_serilization(core-kqp-common
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/common/kqp_yql.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

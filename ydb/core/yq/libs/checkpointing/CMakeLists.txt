@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(events)
-add_subdirectory(ut)
-
-add_library(yq-libs-checkpointing)
-target_compile_options(yq-libs-checkpointing PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yq-libs-checkpointing PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  libs-actors-logging
-  yq-libs-checkpointing_common
-  libs-checkpoint_storage-events
-  dq-actors-compute
-  yql-dq-proto
-  yql-dq-state
-  dq-api-protos
-)
-target_sources(yq-libs-checkpointing PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/checkpoint_coordinator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/checkpoint_id_generator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/pending_checkpoint.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/utils.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

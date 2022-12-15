@@ -12,6 +12,7 @@ target_include_directories(client-extensions-discovery_mutator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator
 )
 target_link_libraries(client-extensions-discovery_mutator-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

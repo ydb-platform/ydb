@@ -9,6 +9,7 @@
 
 add_executable(secondary_index)
 target_link_libraries(secondary_index PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

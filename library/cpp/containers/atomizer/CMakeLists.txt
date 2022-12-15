@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-containers-atomizer)
-target_link_libraries(cpp-containers-atomizer PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-str_map
-)
-target_sources(cpp-containers-atomizer PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/containers/atomizer/atomizer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

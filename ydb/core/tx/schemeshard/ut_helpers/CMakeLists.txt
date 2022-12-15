@@ -6,36 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(tx-schemeshard-ut_helpers)
-target_compile_options(tx-schemeshard-ut_helpers PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest
-  ydb-core-base
-  core-blockstore-core
-  ydb-core-engine
-  core-engine-minikql
-  core-filestore-core
-  ydb-core-metering
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-tablet_flat
-  ydb-core-testlib
-  ydb-core-tx
-  core-tx-datashard
-  core-tx-schemeshard
-  core-tx-tx_allocator
-  core-tx-tx_proxy
-  public-lib-scheme_types
-)
-target_sources(tx-schemeshard-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/failing_mtpq.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

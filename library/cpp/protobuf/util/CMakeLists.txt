@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(proto)
-
-add_library(cpp-protobuf-util)
-target_link_libraries(cpp-protobuf-util PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-binsaver
-  protobuf-util-proto
-  cpp-string_utils-base64
-)
-target_sources(cpp-protobuf-util PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/is_equal.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/merge.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/path.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/pb_io.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/simple_reflection.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/walk.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

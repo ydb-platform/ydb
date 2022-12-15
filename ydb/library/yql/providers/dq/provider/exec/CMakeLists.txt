@@ -6,38 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(dq-provider-exec)
-target_compile_options(dq-provider-exec PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(dq-provider-exec PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-client
-  cpp-threading-task_scheduler
-  public-lib-yson_value
-  cpp-client-ydb_driver
-  library-yql-core
-  yql-dq-runtime
-  yql-dq-tasks
-  yql-dq-type_ann
-  providers-common-gateway
-  providers-common-metrics
-  common-schema-expr
-  providers-common-transform
-  providers-dq-actors
-  dq-api-grpc
-  dq-api-protos
-  providers-dq-common
-  providers-dq-counters
-  providers-dq-expr_nodes
-  providers-dq-interface
-  providers-dq-opt
-  providers-dq-planner
-  providers-dq-runtime
-  providers-result-expr_nodes
-)
-target_sources(dq-provider-exec PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -15,6 +15,7 @@ target_include_directories(restricted-boost-graph PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/include
 )
 target_link_libraries(restricted-boost-graph PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   restricted-boost-algorithm
   restricted-boost-any

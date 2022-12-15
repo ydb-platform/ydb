@@ -1,0 +1,36 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(service-pages-tablesorter INTERFACE)
+target_link_libraries(service-pages-tablesorter INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-monlib-dynamic_counters
+)
+
+add_global_library_for(service-pages-tablesorter.global service-pages-tablesorter)
+target_link_libraries(service-pages-tablesorter.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-monlib-dynamic_counters
+)
+target_sources(service-pages-tablesorter.global PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/0c255888afcc3e2adc5fd360ee152bac.cpp
+)
+resources(service-pages-tablesorter.global
+  ${CMAKE_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/0c255888afcc3e2adc5fd360ee152bac.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/tablesorter/resources/jquery.tablesorter.css
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/service/pages/tablesorter/resources/jquery.tablesorter.js
+  KEYS
+  jquery.tablesorter.css
+  jquery.tablesorter.js
+)

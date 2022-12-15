@@ -6,44 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-actorlib_impl)
-target_compile_options(ydb-core-actorlib_impl PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-actorlib_impl PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-dnscachelib
-  cpp-actors-protos
-  cpp-containers-stack_vector
-  cpp-digest-crc32c
-  cpp-html-pcdata
-  library-cpp-lwtrace
-  cpp-lwtrace-mon
-  cpp-messagebus-monitoring
-  cpp-monlib-dynamic_counters
-  service-pages-tablesorter
-  library-cpp-packedtypes
-  library-cpp-sliding_window
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-node_whiteboard
-  ydb-core-protos
-  ydb-core-util
-)
-target_sources(ydb-core-actorlib_impl PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/connect_socket_protocol.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/load_network.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/long_timer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/mad_squirrel.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/melancholic_gopher.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/name_service_client_protocol.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/node_identifier.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/read_data_protocol.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/read_http_reply_protocol.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/send_data_protocol.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

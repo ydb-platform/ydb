@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-common-ut_helpers)
-target_compile_options(providers-common-ut_helpers PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-common-ut_helpers PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-retry
-  core-testlib-basics
-  library-yql-minikql
-  yql-minikql-computation
-  udf-service-exception_policy
-  library-yql-sql
-  providers-common-comp_nodes
-)
-target_sources(providers-common-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(c-ares REQUIRED)
-
-add_library(cpp-actors-dnsresolver)
-target_include_directories(cpp-actors-dnsresolver PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/include
-)
-target_link_libraries(cpp-actors-dnsresolver PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  c-ares::c-ares
-)
-target_sources(cpp-actors-dnsresolver PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_caching.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_ondemand.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(udf-service-stub)
-target_compile_options(udf-service-stub PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(udf-service-stub PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-)
-target_sources(udf-service-stub PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/stub/udf_service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

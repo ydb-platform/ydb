@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
-
-add_library(providers-common-metrics)
-target_link_libraries(providers-common-metrics PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-logger-global
-  cpp-monlib-dynamic_counters
-  common-metrics-protos
-)
-target_sources(providers-common-metrics PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/metrics_registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/sensors_group.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/service_counters.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

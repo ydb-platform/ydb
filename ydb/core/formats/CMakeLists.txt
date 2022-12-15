@@ -6,31 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-core-formats)
-target_compile_options(ydb-core-formats PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-formats PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
-)
-target_link_libraries(ydb-core-formats PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  ydb-core-scheme
-  ydb-library-arrow_kernels
-  ydb-library-binary_json
-  ydb-library-dynumber
-  ydb-library-arrow_clickhouse
-)
-target_sources(ydb-core-formats PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow_batch_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/clickhouse_block.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/custom_registry.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/merging_sorted_input_stream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/program.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/ssa_program_optimizer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

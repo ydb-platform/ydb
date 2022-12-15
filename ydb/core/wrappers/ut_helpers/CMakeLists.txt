@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-wrappers-ut_helpers)
-target_link_libraries(core-wrappers-ut_helpers PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-digest-md5
-  cpp-http-server
-  cpp-xml-document
-  library-cpp-cgiparam
-)
-target_sources(core-wrappers-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/ut_helpers/s3_mock.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

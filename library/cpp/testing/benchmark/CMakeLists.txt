@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(main)
-
-add_library(cpp-testing-benchmark)
-target_link_libraries(cpp-testing-benchmark PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-re2
-  library-cpp-colorizer
-  cpp-getopt-small
-  library-cpp-json
-  library-cpp-linear_regression
-  cpp-threading-poor_man_openmp
-)
-target_sources(cpp-testing-benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/testing/benchmark/bench.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/testing/benchmark/dummy.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

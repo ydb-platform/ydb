@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(common-schema-skiff)
-target_link_libraries(common-schema-skiff PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yson-node
-  yql-public-udf
-  providers-common-codec
-  common-schema-parser
-)
-target_sources(common-schema-skiff PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/skiff/yql_skiff_schema.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

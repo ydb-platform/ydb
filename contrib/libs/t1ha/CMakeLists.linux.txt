@@ -12,6 +12,9 @@ target_compile_options(contrib-libs-t1ha PRIVATE
   -maes
   -Wno-everything
 )
+target_link_libraries(contrib-libs-t1ha PUBLIC
+  contrib-libs-linux-headers
+)
 target_sources(contrib-libs-t1ha PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/t1ha/src/t1ha0.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/t1ha/src/t1ha0_ia32aes_avx.c

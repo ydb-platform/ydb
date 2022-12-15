@@ -1,0 +1,65 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(static)
+add_subdirectory(test)
+
+add_library(library-schlab-mon)
+target_link_libraries(library-schlab-mon PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-html-pcdata
+  cpp-monlib-dynamic_counters
+  library-schlab-schemu
+)
+target_sources(library-schlab-mon PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/mon.cpp
+)
+
+add_global_library_for(library-schlab-mon.global library-schlab-mon)
+target_link_libraries(library-schlab-mon.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-html-pcdata
+  cpp-monlib-dynamic_counters
+  library-schlab-schemu
+)
+target_sources(library-schlab-mon.global PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
+)
+resources(library-schlab-mon.global
+  ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/bootstrap.min.css
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/scharm.css
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/css/schviz.css
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/jquery.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/bootstrap.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3-tip-0.8.0-alpha.1.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3.v4.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/schviz.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm-test0.js
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/scharm.html
+  KEYS
+  schlab/css/bootstrap.min.css
+  schlab/css/scharm.css
+  schlab/css/schviz.css
+  schlab/js/jquery.min.js
+  schlab/js/bootstrap.min.js
+  schlab/js/d3-tip-0.8.0-alpha.1.js
+  schlab/js/d3.v4.min.js
+  schlab/js/scharm.js
+  schlab/js/schviz.js
+  schlab/js/scharm-test0.js
+  schlab/scharm.html
+)

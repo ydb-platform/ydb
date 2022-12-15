@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-tstring-y_absl-numeric)
-target_compile_options(abseil-cpp-tstring-y_absl-numeric PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-tstring-y_absl-numeric PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
-target_link_libraries(abseil-cpp-tstring-y_absl-numeric PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(abseil-cpp-tstring-y_absl-numeric PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/numeric/int128.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

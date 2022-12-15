@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ydb-core-mon_alloc)
-target_link_libraries(ydb-core-mon_alloc PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-tcmalloc-malloc_extension
-  cpp-actors-core
-  cpp-actors-prof
-  cpp-html-pcdata
-  cpp-lfalloc-alloc_profiler
-  cpp-lfalloc-dbg_info
-  cpp-malloc-api
-  monlib-service-pages
-  cpp-ytalloc-api
-  ydb-core-base
-  ydb-core-control
-)
-target_sources(ydb-core-mon_alloc PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/monitor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/profiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/tcmalloc.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

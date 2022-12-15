@@ -1,0 +1,49 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(library-cpp-config)
+target_include_directories(library-cpp-config PUBLIC
+  ${CMAKE_BINARY_DIR}/library/cpp/config
+)
+target_link_libraries(library-cpp-config PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-archive
+  library-cpp-json
+  library-cpp-lua
+  cpp-string_utils-relaxed_escaper
+)
+target_sources(library-cpp-config PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/config.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/sax.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/value.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/markup.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/ini.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/domscheme.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
+  DEPENDS
+  ${TOOLS_ROOT}/tools/archiver/archiver
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua
+  COMMAND
+  ${TOOLS_ROOT}/tools/archiver/archiver
+  -q
+  -x
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua:
+  -o
+  ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
+)
+target_ragel_lexers(library-cpp-config
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/config/markupfsm.h.rl6
+  -CG2
+)

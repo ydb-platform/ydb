@@ -6,39 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-absl-flags)
-target_compile_options(abseil-cpp-absl-flags PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-absl-flags PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-target_link_libraries(abseil-cpp-absl-flags PUBLIC
-  contrib-libs-cxxsupp
-  abseil-cpp-absl-base
-  abseil-cpp-absl-container
-  abseil-cpp-absl-debugging
-  abseil-cpp-absl-hash
-  abseil-cpp-absl-memory
-  abseil-cpp-absl-numeric
-  abseil-cpp-absl-profiling
-  abseil-cpp-absl-strings
-  abseil-cpp-absl-synchronization
-  abseil-cpp-absl-time
-  abseil-cpp-absl-types
-)
-target_sources(abseil-cpp-absl-flags PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/commandlineflag.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/flag.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/internal/commandlineflag.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/internal/flag.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/internal/private_handle_accessor.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/internal/program_name.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/internal/usage.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/marshalling.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/parse.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/reflection.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/usage.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/flags/usage_config.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

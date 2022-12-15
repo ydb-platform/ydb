@@ -36,6 +36,7 @@ target_include_directories(restricted-aws-aws-c-io PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/include
 )
 target_link_libraries(restricted-aws-aws-c-io PUBLIC
+  contrib-libs-linux-headers
   restricted-aws-aws-c-cal
   restricted-aws-aws-c-common
   restricted-aws-s2n

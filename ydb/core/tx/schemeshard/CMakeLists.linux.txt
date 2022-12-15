@@ -1,0 +1,253 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut_async_index)
+add_subdirectory(ut_backup)
+add_subdirectory(ut_base)
+add_subdirectory(ut_base_reboots)
+add_subdirectory(ut_bsvolume)
+add_subdirectory(ut_bsvolume_reboots)
+add_subdirectory(ut_cdc_stream)
+add_subdirectory(ut_cdc_stream_reboots)
+add_subdirectory(ut_compaction)
+add_subdirectory(ut_export)
+add_subdirectory(ut_export_reboots_s3)
+add_subdirectory(ut_extsubdomain)
+add_subdirectory(ut_extsubdomain_reboots)
+add_subdirectory(ut_filestore_reboots)
+add_subdirectory(ut_helpers)
+add_subdirectory(ut_index_build)
+add_subdirectory(ut_index_build_reboots)
+add_subdirectory(ut_login)
+add_subdirectory(ut_move)
+add_subdirectory(ut_move_reboots)
+add_subdirectory(ut_olap)
+add_subdirectory(ut_olap_reboots)
+add_subdirectory(ut_pq)
+add_subdirectory(ut_pq_reboots)
+add_subdirectory(ut_reboots)
+add_subdirectory(ut_replication)
+add_subdirectory(ut_replication_reboots)
+add_subdirectory(ut_restore)
+add_subdirectory(ut_rtmr)
+add_subdirectory(ut_rtmr_reboots)
+add_subdirectory(ut_ru_calculator)
+add_subdirectory(ut_sequence)
+add_subdirectory(ut_sequence_reboots)
+add_subdirectory(ut_serverless)
+add_subdirectory(ut_split_merge)
+add_subdirectory(ut_split_merge_reboots)
+add_subdirectory(ut_stats)
+add_subdirectory(ut_subdomain)
+add_subdirectory(ut_subdomain_reboots)
+add_subdirectory(ut_ttl)
+add_subdirectory(ut_user_attributes)
+add_subdirectory(ut_user_attributes_reboots)
+
+add_library(core-tx-schemeshard)
+target_compile_options(core-tx-schemeshard PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(core-tx-schemeshard PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  contrib-libs-protobuf
+  cpp-deprecated-enum_codegen
+  cpp-html-pcdata
+  ydb-core-actorlib_impl
+  ydb-core-audit
+  ydb-core-base
+  ydb-core-blob_depot
+  core-blockstore-core
+  ydb-core-engine
+  core-engine-minikql
+  core-filestore-core
+  core-kesus-tablet
+  ydb-core-metering
+  core-persqueue-config
+  core-persqueue-events
+  core-persqueue-writer
+  ydb-core-protos
+  ydb-core-scheme
+  core-sys_view-partition_stats
+  ydb-core-tablet
+  ydb-core-tablet_flat
+  ydb-core-tx
+  core-tx-datashard
+  core-tx-scheme_board
+  core-tx-tx_allocator_client
+  ydb-core-util
+  ydb-core-wrappers
+  ydb-core-ydb_convert
+  ydb-library-aclib
+  library-aclib-protos
+  ydb-library-login
+  library-login-protos
+  library-yql-minikql
+  ydb-services-bg_tasks
+)
+target_sources(core-tx-schemeshard PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__borrowed_compaction.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__compaction.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__clean_pathes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__conditional_erase.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__describe_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__delete_tablet_reply.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__find_subdomain_path_id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__fix_bad_paths.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__init.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__init_populator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__init_root.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__init_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__serverless_storage_billing.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__sync_update_tenants.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__login.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__monitoring.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__notify.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_blob_depot.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_side_effects.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_memory_changes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_db_changes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_bsv.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_extsubdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_fs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_kesus.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_login.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_olap_store.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_olap_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_solomon.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_subdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_user_attrs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_assign_bsv.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cancel_tx.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_consistent_copy_tables.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_copy_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_backup.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_bsv.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_extsubdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_fs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_indexed_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_kesus.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_lock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_olap_store.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_olap_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_replication.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_restore.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_rtmr.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_sequence.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_solomon.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_subdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_bsv.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_extsubdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_fs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_indexed_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_kesus.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_lock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_olap_store.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_olap_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_replication.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_sequence.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_solomon.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_subdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_unsafe.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_mkdir.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_modify_acl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_tables.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_table_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_part.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_rmdir.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_split_merge.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_just_reject.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_upgrade_subdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_initiate_build_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_finalize_build_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_build_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_apply_build_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cansel_build_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_cdc_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_cdc_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_allocate_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_deallocate_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__publish_to_scheme_board.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__state_changed_reply.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__table_stats.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_access_database.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__make_access_database_no_inheritable.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log_fragment.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_billing_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_domain_links.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_effective_acl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_identificators.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_info_types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_describer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_element.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_tables_storage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_ui64id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_utils.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__cancel.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__create.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__forget.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__get.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__list.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export_flow_proposals.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import__cancel.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import__create.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import__forget.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import__get.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import__list.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_flow_proposals.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__cancel.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__forget.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__list.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__create.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__get.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_build_index__progress.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_validate_ttl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_scheme_getter.cpp
+)
+generate_enum_serilization(core-tx-schemeshard
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_info_types.h
+  INCLUDE_HEADERS
+  ydb/core/tx/schemeshard/schemeshard_info_types.h
+)
+generate_enum_serilization(core-tx-schemeshard
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.h
+  INCLUDE_HEADERS
+  ydb/core/tx/schemeshard/schemeshard_types.h
+)
+generate_enum_serilization(core-tx-schemeshard
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h
+  INCLUDE_HEADERS
+  ydb/core/tx/schemeshard/operation_queue_timer.h
+)

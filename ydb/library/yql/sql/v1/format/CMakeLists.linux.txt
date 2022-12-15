@@ -1,0 +1,47 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(sql-v1-format)
+target_link_libraries(sql-v1-format PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  yql-parser-lexer_common
+  yql-sql-settings
+  sql-v1-lexer
+  sql-v1-proto_parser
+  cpp-protobuf-util
+)
+target_sources(sql-v1-format PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format.cpp
+)
+
+add_global_library_for(sql-v1-format.global sql-v1-format)
+target_link_libraries(sql-v1-format.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  yql-parser-lexer_common
+  yql-sql-settings
+  sql-v1-lexer
+  sql-v1-proto_parser
+  cpp-protobuf-util
+)
+target_sources(sql-v1-format.global PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
+)
+resources(sql-v1-format.global
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
+  KEYS
+  SQLv1.g.in
+)

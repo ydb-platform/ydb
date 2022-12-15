@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-function-gateway)
-target_compile_options(providers-function-gateway PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-function-gateway PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  common-token_accessor-client
-  providers-function-common
-  cpp-threading-future
-)
-target_sources(providers-function-gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/gateway/dq_function_gateway.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

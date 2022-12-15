@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-query)
-target_link_libraries(blobstorage-vdisk-query PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-streams-bzip2
-  ydb-core-base
-  core-blobstorage-base
-  vdisk-hulldb-barriers
-  vdisk-hulldb-base
-)
-target_sources(blobstorage-vdisk-query PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/assimilation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_barrier.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_extr.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_public.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readactor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readbatch.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_statdb.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stathuge.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stattablet.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

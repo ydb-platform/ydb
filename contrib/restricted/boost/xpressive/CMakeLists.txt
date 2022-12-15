@@ -6,32 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-xpressive INTERFACE)
-target_include_directories(restricted-boost-xpressive INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/xpressive/include
-)
-target_link_libraries(restricted-boost-xpressive INTERFACE
-  contrib-libs-cxxsupp
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-conversion
-  restricted-boost-core
-  restricted-boost-exception
-  restricted-boost-fusion
-  restricted-boost-integer
-  restricted-boost-iterator
-  restricted-boost-lexical_cast
-  restricted-boost-mpl
-  restricted-boost-numeric_conversion
-  restricted-boost-optional
-  restricted-boost-preprocessor
-  restricted-boost-proto
-  restricted-boost-range
-  restricted-boost-smart_ptr
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-type_traits
-  restricted-boost-typeof
-  restricted-boost-utility
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

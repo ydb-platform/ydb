@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-client-ydb_extension)
-target_link_libraries(cpp-client-ydb_extension PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-monlib-metrics
-  cpp-client-ydb_driver
-)
-target_sources(cpp-client-ydb_extension PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_extension/extension.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

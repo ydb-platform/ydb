@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-sys_view-processor)
-target_compile_options(core-sys_view-processor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-sys_view-processor PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-engine-minikql
-  core-grpc_services-counters
-  core-kqp-counters
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  core-tx-scheme_cache
-)
-target_sources(core-sys_view-processor PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/db_counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_configure.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_collect.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_aggregate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_summary.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_metrics.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_top_partitions.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(public-lib-base)
-target_link_libraries(public-lib-base PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-enum_codegen
-  library-cpp-messagebus
-  messagebus_protobuf
-  ydb-core-protos
-)
-target_sources(public-lib-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/base/msgbus.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

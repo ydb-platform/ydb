@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(public-lib-yson_value)
-target_link_libraries(public-lib-yson_value PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-yson
-  cpp-yson-node
-  cpp-client-ydb_result
-  cpp-client-ydb_value
-  ydb-library-uuid
-)
-target_sources(public-lib-yson_value PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/yson_value/ydb_yson_value.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(contrib-libs-fmt)
-target_compile_options(contrib-libs-fmt PUBLIC
-  -DFMT_EXPORT
-)
-target_compile_options(contrib-libs-fmt PRIVATE
-  -Wno-everything
-)
-target_include_directories(contrib-libs-fmt PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/include
-)
-target_link_libraries(contrib-libs-fmt PUBLIC
-  contrib-libs-cxxsupp
-)
-target_sources(contrib-libs-fmt PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/format.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/fmt/src/os.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

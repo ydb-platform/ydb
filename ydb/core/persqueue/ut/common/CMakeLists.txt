@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(persqueue-ut-common)
-target_compile_options(persqueue-ut-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(persqueue-ut-common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-testlib
-  ydb-core-persqueue
-)
-target_sources(persqueue-ut-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/common/pq_ut_common.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

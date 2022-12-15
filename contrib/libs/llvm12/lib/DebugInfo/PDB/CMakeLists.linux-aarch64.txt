@@ -1,0 +1,118 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(lib-DebugInfo-PDB)
+target_compile_options(lib-DebugInfo-PDB PRIVATE
+  -Wno-everything
+)
+target_include_directories(lib-DebugInfo-PDB PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB
+)
+target_link_libraries(lib-DebugInfo-PDB PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm12
+  llvm12-lib-BinaryFormat
+  lib-DebugInfo-CodeView
+  lib-DebugInfo-MSF
+  llvm12-lib-Object
+  llvm12-lib-Support
+)
+target_sources(lib-DebugInfo-PDB PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/GenericError.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/IPDBSourceFile.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/DbiModuleDescriptor.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/DbiModuleDescriptorBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/DbiModuleList.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/DbiStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/DbiStreamBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/EnumTables.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/GSIStreamBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/GlobalsStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/Hash.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/HashTable.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/InfoStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/InfoStreamBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/InjectedSourceStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/ModuleDebugStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NamedStreamMap.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeCompilandSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeEnumGlobals.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeEnumInjectedSources.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeEnumLineNumbers.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeEnumModules.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeEnumSymbols.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeEnumTypes.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeExeSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeFunctionSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeInlineSiteSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeLineNumber.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativePublicSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeRawSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeSession.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeSourceFile.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeSymbolEnumerator.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeArray.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeBuiltin.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeEnum.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeFunctionSig.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypePointer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeTypedef.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeUDT.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/NativeTypeVTShape.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/PDBFile.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/PDBFileBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/PDBStringTable.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/PDBStringTableBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/PublicsStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/RawError.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/SymbolCache.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/SymbolStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/TpiHashing.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/TpiStream.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/Native/TpiStreamBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDB.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBContext.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBExtras.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBInterfaceAnchors.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymDumper.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolAnnotation.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolBlock.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolCompiland.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolCompilandDetails.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolCompilandEnv.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolCustom.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolData.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolExe.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolFunc.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolFuncDebugEnd.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolFuncDebugStart.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolLabel.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolPublicSymbol.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolThunk.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeArray.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeBaseClass.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeBuiltin.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeCustom.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeDimension.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeEnum.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeFriend.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeFunctionArg.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeFunctionSig.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeManaged.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypePointer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeTypedef.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeUDT.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeVTable.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolTypeVTableShape.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolUnknown.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/PDBSymbolUsingNamespace.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB/UDTLayout.cpp
+)

@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(c-ares REQUIRED)
-
-add_library(cpp-actors-dnscachelib)
-target_link_libraries(cpp-actors-dnscachelib PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  c-ares::c-ares
-  library-cpp-lwtrace
-  cpp-deprecated-atomic
-)
-target_sources(cpp-actors-dnscachelib PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/dnscache.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/probes.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

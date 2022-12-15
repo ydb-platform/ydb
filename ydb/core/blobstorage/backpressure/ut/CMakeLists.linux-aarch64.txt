@@ -12,6 +12,7 @@ target_include_directories(ydb-core-blobstorage-backpressure-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure
 )
 target_link_libraries(ydb-core-blobstorage-backpressure-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

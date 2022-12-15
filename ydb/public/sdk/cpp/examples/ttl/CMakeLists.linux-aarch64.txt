@@ -9,6 +9,7 @@
 
 add_executable(ttl)
 target_link_libraries(ttl PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

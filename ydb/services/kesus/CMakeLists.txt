@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(ydb-services-kesus)
-target_link_libraries(ydb-services-kesus PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  ydb-core-base
-  ydb-core-grpc_services
-  ydb-core-grpc_streaming
-  core-kesus-proxy
-  core-kesus-tablet
-  api-grpc
-  api-grpc-draft
-  public-lib-operation_id
-)
-target_sources(ydb-services-kesus PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/kesus/grpc_service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

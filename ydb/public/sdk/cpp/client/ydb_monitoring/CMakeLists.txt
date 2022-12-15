@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-client-ydb_monitoring)
-target_link_libraries(cpp-client-ydb_monitoring PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-client-ydb_proto
-  impl-ydb_internal-make_request
-  client-ydb_common_client-impl
-  cpp-client-ydb_driver
-)
-target_sources(cpp-client-ydb_monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.cpp
-)
-generate_enum_serilization(cpp-client-ydb_monitoring
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

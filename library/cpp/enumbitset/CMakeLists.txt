@@ -6,12 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-cpp-enumbitset)
-target_link_libraries(library-cpp-enumbitset PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(library-cpp-enumbitset PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/enumbitset/enumbitset.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

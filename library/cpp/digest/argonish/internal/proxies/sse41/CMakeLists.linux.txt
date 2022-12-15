@@ -9,6 +9,7 @@
 
 add_library(internal-proxies-sse41)
 target_link_libraries(internal-proxies-sse41 PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   internal-proxies-macro
   argonish-internal-argon2

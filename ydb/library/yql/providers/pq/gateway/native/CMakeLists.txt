@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(pq-gateway-native)
-target_link_libraries(pq-gateway-native PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  common-token_accessor-client
-  providers-common-metrics
-  providers-common-proto
-  providers-pq-cm_client
-  providers-pq-provider
-  library-yql-utils
-  cpp-client-ydb_datastreams
-  cpp-client-ydb_driver
-  cpp-client-ydb_persqueue_core
-)
-target_sources(pq-gateway-native PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_session.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

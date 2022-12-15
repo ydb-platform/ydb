@@ -6,40 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(sql-v1-format)
-target_link_libraries(sql-v1-format PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  yql-parser-lexer_common
-  yql-sql-settings
-  sql-v1-lexer
-  sql-v1-proto_parser
-  cpp-protobuf-util
-)
-target_sources(sql-v1-format PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format.cpp
-)
-
-add_global_library_for(sql-v1-format.global sql-v1-format)
-target_link_libraries(sql-v1-format.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  yql-parser-lexer_common
-  yql-sql-settings
-  sql-v1-lexer
-  sql-v1-proto_parser
-  cpp-protobuf-util
-)
-target_sources(sql-v1-format.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
-)
-resources(sql-v1-format.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
-  INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
-  KEYS
-  SQLv1.g.in
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

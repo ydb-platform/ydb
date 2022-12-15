@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-kqp-gateway)
-target_compile_options(core-kqp-gateway PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-gateway PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-actorlib_impl
-  ydb-core-base
-  providers-result-expr_nodes
-)
-target_sources(core-kqp-gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_ic_gateway.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_metadata_loader.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

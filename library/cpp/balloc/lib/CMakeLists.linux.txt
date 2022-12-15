@@ -12,6 +12,7 @@ target_compile_options(cpp-balloc-lib PRIVATE
   -Wno-everything
 )
 target_link_libraries(cpp-balloc-lib PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   contrib-libs-linuxvdso
   cpp-balloc-setup

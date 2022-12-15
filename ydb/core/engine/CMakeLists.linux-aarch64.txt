@@ -1,0 +1,43 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(minikql)
+add_subdirectory(ut)
+
+add_library(ydb-core-engine)
+target_compile_options(ydb-core-engine PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(ydb-core-engine PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-containers-stack_vector
+  cpp-deprecated-enum_codegen
+  library-cpp-random_provider
+  library-cpp-time_provider
+  ydb-core-base
+  ydb-core-scheme
+  ydb-core-tablet
+  ydb-library-mkql_proto
+  library-mkql_proto-protos
+  mkql_proto-ut-helpers
+  api-protos
+  library-yql-minikql
+  yql-minikql-comp_nodes
+  yql-minikql-computation
+  yql-public-decimal
+)
+target_sources(ydb-core-engine PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_extfunc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_keys.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto.cpp
+)

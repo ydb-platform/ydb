@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yql-sql-pg)
-target_compile_options(yql-sql-pg PRIVATE
-  -Wno-everything
-)
-target_include_directories(yql-sql-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
-)
-target_link_libraries(yql-sql-pg PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-yql-ast
-  yql-parser-pg_catalog
-  yql-parser-pg_wrapper
-  yql-sql-settings
-)
-target_sources(yql-sql-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

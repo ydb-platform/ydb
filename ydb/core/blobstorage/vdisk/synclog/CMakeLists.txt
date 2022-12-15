@@ -6,42 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-synclog)
-target_link_libraries(blobstorage-vdisk-synclog PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-interconnect
-  library-cpp-blockcodecs
-  library-cpp-codecs
-  cpp-containers-intrusive_avl_tree
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-common
-  vdisk-hulldb-base
-  vdisk-hulldb-generic
-  blobstorage-vdisk-ingress
-  ydb-core-util
-)
-target_sources(blobstorage-vdisk-synclog PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_syncloghttp.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogneighbors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

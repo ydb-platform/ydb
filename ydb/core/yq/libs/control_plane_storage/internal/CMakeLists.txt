@@ -6,39 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(libs-control_plane_storage-internal)
-target_compile_options(libs-control_plane_storage-internal PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(libs-control_plane_storage-internal PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-lwtrace-mon
-  monlib-service-pages
-  ydb-core-base
-  ydb-core-metering
-  ydb-core-mon
-  yq-libs-common
-  yq-libs-config
-  libs-control_plane_storage-proto
-  yq-libs-quota_manager
-  libs-quota_manager-events
-  libs-rate_limiter-events
-  yq-libs-ydb
-  ydb-library-security
-  cpp-client-ydb_scheme
-  cpp-client-ydb_value
-  ydb-library-protobuf_printer
-  yql-public-issue
-)
-target_sources(libs-control_plane_storage-internal PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/nodes_health_check.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/rate_limiter_resources.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/response_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/task_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/task_ping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/task_result_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/utils.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

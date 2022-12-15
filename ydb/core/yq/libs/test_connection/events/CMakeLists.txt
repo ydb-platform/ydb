@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(libs-test_connection-events)
-target_link_libraries(libs-test_connection-events PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-control_plane_storage-events
-  yq-libs-events
-  api-protos
-  public-issue-protos
-)
-target_sources(libs-test_connection-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/events/events.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

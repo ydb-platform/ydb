@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(topic)
-target_link_libraries(topic PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  common
-  cpp-client-ydb_proto
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_topic
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(topic PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
-)
-generate_enum_serilization(topic
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
-  INCLUDE_HEADERS
-  ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

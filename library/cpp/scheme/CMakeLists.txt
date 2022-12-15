@@ -6,30 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-cpp-scheme)
-target_link_libraries(library-cpp-scheme PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-json
-  cpp-string_utils-relaxed_escaper
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(library-cpp-scheme PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scheme.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_private.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_protobuf.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_json_read.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_json_write.cpp
-)
-generate_enum_serilization(library-cpp-scheme
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scheme.h
-  INCLUDE_HEADERS
-  library/cpp/scheme/scheme.h
-)
-target_ragel_lexers(library-cpp-scheme
-  PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/scheme/scimpl_select.rl6
-  -CG2
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

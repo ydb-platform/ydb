@@ -6,46 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(client-yc_private-iam)
-set_property(TARGET client-yc_private-iam PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(client-yc_private-iam PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  contrib-libs-googleapis-common-protos
-  client-yc_private-operation
-  contrib-libs-protobuf
-)
-target_proto_messages(client-yc_private-iam PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service_subject.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/iam_token.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/oauth_request.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/reference.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/service_account_service.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/service_account.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/user_account_service.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/user_account.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/yandex_passport_cookie.proto
-)
-target_proto_addincls(client-yc_private-iam
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(client-yc_private-iam
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(client-yc_private-iam
-  grpc_cpp
-  grpc_cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-metadata-abstract)
-target_link_libraries(services-metadata-abstract PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  ydb-library-accessor
-  cpp-actors-core
-  services-metadata-request
-  api-protos
-  ydb-core-base
-)
-target_sources(services-metadata-abstract PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/decoder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/fetcher.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/initialization.cpp
-)
-generate_enum_serilization(services-metadata-abstract
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.h
-  INCLUDE_HEADERS
-  ydb/services/metadata/abstract/kqp_common.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

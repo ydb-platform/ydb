@@ -12,6 +12,7 @@ target_include_directories(ydb-core-tablet_flat-ut_large PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat
 )
 target_link_libraries(ydb-core-tablet_flat-ut_large PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

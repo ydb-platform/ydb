@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(client-ydb_types-operation)
-target_link_libraries(client-ydb_types-operation PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  cpp-threading-future
-  public-lib-operation_id
-  cpp-client-ydb_types
-)
-target_sources(client-ydb_types-operation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/operation/operation.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

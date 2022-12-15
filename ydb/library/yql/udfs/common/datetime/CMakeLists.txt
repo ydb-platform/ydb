@@ -6,31 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(datetime_udf INTERFACE)
-target_link_libraries(datetime_udf INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  library-cpp-timezone_conversion
-  util-draft
-)
-
-add_global_library_for(datetime_udf.global datetime_udf)
-target_compile_options(datetime_udf.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=9
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(datetime_udf.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  library-cpp-timezone_conversion
-  util-draft
-)
-target_sources(datetime_udf.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/datetime/datetime_udf.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

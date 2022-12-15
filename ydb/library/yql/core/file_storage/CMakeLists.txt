@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(defs)
-add_subdirectory(download)
-add_subdirectory(http_download)
-add_subdirectory(proto)
-add_subdirectory(ut)
-
-add_library(yql-core-file_storage)
-target_link_libraries(yql-core-file_storage PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cache
-  cpp-digest-md5
-  cpp-logger-global
-  cpp-threading-future
-  cpp-protobuf-util
-  library-cpp-uri
-  core-file_storage-proto
-  core-file_storage-defs
-  core-file_storage-download
-  core-file_storage-http_download
-  library-yql-utils
-  yql-utils-log
-  yql-utils-fetch
-)
-target_sources(yql-core-file_storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/file_storage_decorator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/file_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/sized_cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/url_meta.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

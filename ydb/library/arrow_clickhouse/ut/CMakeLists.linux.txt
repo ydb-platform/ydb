@@ -12,6 +12,7 @@ target_include_directories(ydb-library-arrow_clickhouse-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
 target_link_libraries(ydb-library-arrow_clickhouse-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

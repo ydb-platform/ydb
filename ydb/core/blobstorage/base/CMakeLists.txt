@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-blobstorage-base)
-target_link_libraries(core-blobstorage-base PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-wilson
-  cpp-deprecated-atomic
-  library-cpp-lwtrace
-  ydb-core-protos
-)
-target_sources(core-blobstorage-base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/html.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

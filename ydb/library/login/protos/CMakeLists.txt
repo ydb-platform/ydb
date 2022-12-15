@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-login-protos)
-target_link_libraries(library-login-protos PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-)
-target_proto_messages(library-login-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/login/protos/login.proto
-)
-target_proto_addincls(library-login-protos
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(library-login-protos
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

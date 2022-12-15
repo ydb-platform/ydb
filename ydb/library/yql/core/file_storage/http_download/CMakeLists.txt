@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(proto)
-
-add_library(core-file_storage-http_download)
-target_link_libraries(core-file_storage-http_download PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-file_storage-defs
-  core-file_storage-download
-  core-file_storage-proto
-  file_storage-http_download-proto
-  yql-utils-fetch
-  yql-utils-log
-  library-yql-utils
-  cpp-digest-md5
-  cpp-http-misc
-)
-target_sources(core-file_storage-http_download PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/http_download/http_download.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

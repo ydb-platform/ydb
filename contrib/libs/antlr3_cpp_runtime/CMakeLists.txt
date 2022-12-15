@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(contrib-libs-antlr3_cpp_runtime)
-target_compile_options(contrib-libs-antlr3_cpp_runtime PRIVATE
-  -Wno-everything
-)
-target_include_directories(contrib-libs-antlr3_cpp_runtime PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/libs/antlr3_cpp_runtime/include
-)
-target_link_libraries(contrib-libs-antlr3_cpp_runtime PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(contrib-libs-antlr3_cpp_runtime PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/antlr3_cpp_runtime/antlr3.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

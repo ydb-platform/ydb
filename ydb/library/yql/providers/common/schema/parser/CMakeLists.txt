@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(common-schema-parser)
-target_link_libraries(common-schema-parser PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yson-node
-  library-cpp-yson
-)
-target_sources(common-schema-parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/parser/yql_type_parser.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

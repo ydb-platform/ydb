@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(tx-replication-ydb_proxy)
-target_compile_options(tx-replication-ydb_proxy PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(tx-replication-ydb_proxy PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-protos
-  cpp-client-ydb_driver
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  client-ydb_types-credentials
-  ydb_types-credentials-login
-)
-target_sources(tx-replication-ydb_proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

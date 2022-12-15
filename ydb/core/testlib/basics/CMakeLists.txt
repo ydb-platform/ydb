@@ -6,39 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(default)
-
-add_library(core-testlib-basics)
-target_compile_options(core-testlib-basics PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-testlib-basics PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-dnsresolver
-  cpp-regex-pcre
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-blobstorage
-  core-blobstorage-crypto
-  core-blobstorage-nodewarden
-  core-blobstorage-pdisk
-  core-client-server
-  ydb-core-formats
-  ydb-core-mind
-  ydb-core-node_whiteboard
-  ydb-core-quoter
-  ydb-core-tablet_flat
-  core-testlib-actors
-  core-tx-columnshard
-  core-tx-scheme_board
-  ydb-core-util
-  yql-minikql-invoke_builtins
-  udf-service-exception_policy
-)
-target_sources(core-testlib-basics PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/appdata.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/runtime.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/services.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

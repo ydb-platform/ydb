@@ -6,37 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-core-keyvalue)
-target_link_libraries(ydb-core-keyvalue PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-protos
-  ydb-core-base
-  core-blobstorage-base
-  core-blobstorage-dsproxy
-  core-engine-minikql
-  core-keyvalue-protos
-  ydb-core-protos
-  ydb-core-tablet_flat
-  ydb-core-tx
-  public-lib-base
-)
-target_sources(ydb-core-keyvalue PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collect_operation.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collector.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_index_record.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_intermediate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_simple_db_flat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_state.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_state_collect.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_read_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_stored_state_data.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

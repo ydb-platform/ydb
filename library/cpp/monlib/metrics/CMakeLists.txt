@@ -6,33 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-monlib-metrics)
-target_link_libraries(cpp-monlib-metrics PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(cpp-monlib-metrics PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/ewma.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/fake.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_explicit.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_exponential.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_linear.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/log_histogram_snapshot.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/labels.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_registry.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_consumer.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_type.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/summary_collector.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/summary_snapshot.cpp
-)
-generate_enum_serilization(cpp-monlib-metrics
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value_type.h
-  GEN_HEADER
-  ${CMAKE_BINARY_DIR}/library/cpp/monlib/metrics/metric_value_type.h_serialized.h
-  INCLUDE_HEADERS
-  library/cpp/monlib/metrics/metric_value_type.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,65 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(mock)
-add_subdirectory(ut)
-
-add_library(core-blobstorage-pdisk)
-target_link_libraries(core-blobstorage-pdisk PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-lz4
-  cpp-actors-core
-  cpp-actors-protos
-  cpp-actors-util
-  cpp-actors-wilson
-  cpp-containers-stack_vector
-  cpp-deprecated-atomic
-  library-cpp-lwtrace
-  monlib-dynamic_counters-percentile
-  monlib-service-pages
-  ydb-core-base
-  core-base-services
-  core-blobstorage-base
-  core-blobstorage-crypto
-  core-blobstorage-groupinfo
-  core-blobstorage-lwtrace_probes
-  ydb-core-control
-  ydb-core-protos
-  ydb-core-util
-  ydb-library-pdisk_io
-  ydb-library-schlab
-  library-schlab-mon
-  library-schlab-schine
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(core-blobstorage-pdisk PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_async.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_delayed_cost_loop.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_driveestimator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_log.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_logreader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_syslogreader.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_sectorrestorator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_atomicblockcounter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_flightcontrol.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_signal_event.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/drivedata_serializer.cpp
-)
-generate_enum_serilization(core-blobstorage-pdisk
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
-  INCLUDE_HEADERS
-  ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

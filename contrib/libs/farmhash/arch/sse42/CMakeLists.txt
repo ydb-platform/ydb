@@ -6,17 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(farmhash-arch-sse42)
-target_compile_options(farmhash-arch-sse42 PRIVATE
-  -msse4.2
-  -Wno-everything
-)
-target_link_libraries(farmhash-arch-sse42 PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(farmhash-arch-sse42 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashsa.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/farmhashte.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

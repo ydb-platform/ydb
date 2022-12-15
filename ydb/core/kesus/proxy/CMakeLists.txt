@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-kesus-proxy)
-target_link_libraries(core-kesus-proxy PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-erasure
-  core-kesus-tablet
-  ydb-core-scheme
-  core-tx-scheme_cache
-  api-protos
-)
-target_sources(core-kesus-proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/events.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -12,6 +12,7 @@ target_include_directories(ydb-core-pgproxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy
 )
 target_link_libraries(ydb-core-pgproxy-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

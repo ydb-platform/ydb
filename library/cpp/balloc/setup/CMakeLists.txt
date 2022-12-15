@@ -6,12 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-balloc-setup)
-target_link_libraries(cpp-balloc-setup PUBLIC
-  contrib-libs-cxxsupp
-)
-target_sources(cpp-balloc-setup PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/balloc/setup/alloc.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/balloc/setup/enable.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

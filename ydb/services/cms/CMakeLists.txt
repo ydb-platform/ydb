@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(ydb-services-cms)
-target_link_libraries(ydb-services-cms PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  ydb-core-grpc_services
-  ydb-core-mind
-  ydb-library-aclib
-  api-grpc
-  public-lib-operation_id
-  cpp-client-resources
-)
-target_sources(ydb-services-cms PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/cms/grpc_service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

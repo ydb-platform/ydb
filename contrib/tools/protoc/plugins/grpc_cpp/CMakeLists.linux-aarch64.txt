@@ -17,6 +17,7 @@ target_include_directories(grpc_cpp PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
 )
 target_link_libraries(grpc_cpp PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

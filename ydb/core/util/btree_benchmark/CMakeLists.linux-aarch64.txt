@@ -9,6 +9,7 @@
 
 add_executable(btree_benchmark)
 target_link_libraries(btree_benchmark PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

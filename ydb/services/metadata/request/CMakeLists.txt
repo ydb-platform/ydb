@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-metadata-request)
-target_link_libraries(services-metadata-request PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-)
-target_sources(services-metadata-request PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/request_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/request/common.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

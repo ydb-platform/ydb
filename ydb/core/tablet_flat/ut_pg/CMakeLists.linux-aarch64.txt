@@ -17,6 +17,7 @@ target_include_directories(ydb-core-tablet_flat-ut_pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-core-tablet_flat-ut_pg PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

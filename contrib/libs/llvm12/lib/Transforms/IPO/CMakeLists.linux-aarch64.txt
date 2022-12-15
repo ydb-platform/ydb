@@ -1,0 +1,82 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(lib-Transforms-IPO)
+target_compile_options(lib-Transforms-IPO PRIVATE
+  -Wno-everything
+)
+target_include_directories(lib-Transforms-IPO PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO
+)
+target_link_libraries(lib-Transforms-IPO PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  contrib-libs-llvm12
+  libs-llvm12-include
+  llvm12-lib-Analysis
+  lib-Bitcode-Reader
+  lib-Bitcode-Writer
+  lib-Frontend-OpenMP
+  llvm12-lib-IR
+  llvm12-lib-IRReader
+  llvm12-lib-Linker
+  llvm12-lib-Object
+  llvm12-lib-ProfileData
+  llvm12-lib-Support
+  lib-Transforms-AggressiveInstCombine
+  lib-Transforms-InstCombine
+  lib-Transforms-Instrumentation
+  lib-Transforms-Scalar
+  lib-Transforms-Utils
+  lib-Transforms-Vectorize
+)
+target_sources(lib-Transforms-IPO PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/AlwaysInliner.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/Annotation2Metadata.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/ArgumentPromotion.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/Attributor.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/AttributorAttributes.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/BarrierNoopPass.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/BlockExtractor.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/CalledValuePropagation.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/ConstantMerge.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/CrossDSOCFI.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/DeadArgumentElimination.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/ElimAvailExtern.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/ExtractGV.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/ForceFunctionAttrs.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/FunctionAttrs.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/FunctionImport.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/GlobalDCE.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/GlobalOpt.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/GlobalSplit.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/HotColdSplitting.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/IPO.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/IROutliner.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/InferFunctionAttrs.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/InlineSimple.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/Inliner.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/Internalize.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/LoopExtractor.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/LowerTypeTests.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/MergeFunctions.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/OpenMPOpt.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/PartialInlining.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/PassManagerBuilder.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/PruneEH.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/SCCP.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/SampleContextTracker.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/SampleProfile.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/SampleProfileProbe.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/StripDeadPrototypes.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/StripSymbols.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/SyntheticCountsPropagation.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/ThinLTOBitcodeWriter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/IPO/WholeProgramDevirt.cpp
+)

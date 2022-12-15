@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(events)
-add_subdirectory(ut)
-add_subdirectory(ut_helpers)
-
-add_library(ydb-core-wrappers)
-target_link_libraries(ydb-core-wrappers PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-aws-sdk-cpp-aws-cpp-sdk-s3
-  contrib-libs-curl
-  cpp-actors-core
-  ydb-core-base
-  ydb-core-protos
-  core-wrappers-ut_helpers
-  core-wrappers-events
-)
-target_sources(ydb-core-wrappers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_storage_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/fake_storage_config.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

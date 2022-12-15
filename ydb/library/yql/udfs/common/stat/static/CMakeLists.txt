@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(common-stat-static)
-target_compile_options(common-stat-static PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=9
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(common-stat-static PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  library-cpp-tdigest
-)
-target_sources(common-stat-static PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/static_udf.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

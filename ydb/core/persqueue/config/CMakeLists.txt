@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-persqueue-config)
-target_link_libraries(core-persqueue-config PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-)
-target_sources(core-persqueue-config PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/config/config.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-arrow_clickhouse-DataStreams)
-target_include_directories(library-arrow_clickhouse-DataStreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/base
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
-)
-target_link_libraries(library-arrow_clickhouse-DataStreams PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-)
-target_sources(library-arrow_clickhouse-DataStreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/AggregatingBlockInputStream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/IBlockInputStream.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/DataStreams/MergingAggregatedBlockInputStream.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

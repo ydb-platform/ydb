@@ -6,13 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-unicode-normalization)
-target_link_libraries(cpp-unicode-normalization PUBLIC
-  contrib-libs-cxxsupp
-)
-target_sources(cpp-unicode-normalization PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/normalization/generated/composition.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/normalization/generated/decomposition.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/unicode/normalization/normalization.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

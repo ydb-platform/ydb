@@ -15,6 +15,7 @@ target_include_directories(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/static
 )
 target_link_libraries(ydb-library-yql-udfs-common-topfreq-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

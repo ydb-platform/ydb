@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-dq-interface)
-target_compile_options(providers-dq-interface PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-dq-interface PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-yson
-  library-yql-ast
-  library-yql-core
-  yql-dq-tasks
-)
-target_sources(providers-dq-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_full_result_writer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_integration.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_task_transform.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

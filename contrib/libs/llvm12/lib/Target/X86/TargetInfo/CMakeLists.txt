@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(Target-X86-TargetInfo)
-target_compile_options(Target-X86-TargetInfo PRIVATE
-  -Wno-everything
-)
-target_include_directories(Target-X86-TargetInfo PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86/TargetInfo
-)
-target_link_libraries(Target-X86-TargetInfo PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  llvm12-lib-Support
-)
-target_sources(Target-X86-TargetInfo PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86/TargetInfo/X86TargetInfo.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

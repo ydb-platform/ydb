@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Transforms-CFGuard)
-target_compile_options(lib-Transforms-CFGuard PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Transforms-CFGuard PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/CFGuard
-)
-target_link_libraries(lib-Transforms-CFGuard PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-IR
-  llvm12-lib-Support
-)
-target_sources(lib-Transforms-CFGuard PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/CFGuard/CFGuard.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

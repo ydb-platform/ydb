@@ -6,28 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-pq-proto)
-target_link_libraries(providers-pq-proto PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-)
-target_proto_messages(providers-pq-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/proto/dq_io.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/proto/dq_io_state.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/proto/dq_task_params.proto
-)
-target_proto_addincls(providers-pq-proto
-  ./
-  ${CMAKE_SOURCE_DIR}/
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${CMAKE_BINARY_DIR}
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-target_proto_outs(providers-pq-proto
-  --cpp_out=${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

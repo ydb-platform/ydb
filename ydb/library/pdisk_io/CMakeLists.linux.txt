@@ -11,6 +11,7 @@ add_subdirectory(protos)
 
 add_library(ydb-library-pdisk_io)
 target_link_libraries(ydb-library-pdisk_io PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime

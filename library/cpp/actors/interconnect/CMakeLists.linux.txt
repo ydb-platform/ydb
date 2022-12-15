@@ -11,6 +11,7 @@ add_subdirectory(mock)
 
 add_library(cpp-actors-interconnect)
 target_link_libraries(cpp-actors-interconnect PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   contrib-libs-libc_compat

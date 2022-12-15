@@ -6,25 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cli_base)
-target_compile_options(cli_base PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(cli_base PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-driver_lib-cli_config_base
-  ydb-library-aclib
-  lib-deprecated-kicli
-  common
-  cpp-client-resources
-  cpp-client-ydb_table
-)
-target_sources(cli_base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_discovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_root.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_whoami.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_kicli.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

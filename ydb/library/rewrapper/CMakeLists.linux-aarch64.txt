@@ -11,6 +11,7 @@ add_subdirectory(re2)
 
 add_library(ydb-library-rewrapper)
 target_link_libraries(ydb-library-rewrapper PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-rewrapper-proto

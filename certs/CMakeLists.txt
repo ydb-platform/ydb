@@ -6,27 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(certs INTERFACE)
-target_link_libraries(certs INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-)
-
-add_global_library_for(certs.global certs)
-target_link_libraries(certs.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-)
-target_sources(certs.global PRIVATE
-  ${CMAKE_BINARY_DIR}/certs/b03c08f91a00a60ac9d7daef45f3075a.cpp
-)
-resources(certs.global
-  ${CMAKE_BINARY_DIR}/certs/b03c08f91a00a60ac9d7daef45f3075a.cpp
-  INPUTS
-  ${CMAKE_SOURCE_DIR}/certs/cacert.pem
-  KEYS
-  /builtin/cacert
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

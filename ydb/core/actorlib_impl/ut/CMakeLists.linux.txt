@@ -15,6 +15,7 @@ target_include_directories(ydb-core-actorlib_impl-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl
 )
 target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

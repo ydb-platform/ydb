@@ -6,34 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-chrono)
-target_compile_options(restricted-boost-chrono PRIVATE
-  -Wno-everything
-)
-target_include_directories(restricted-boost-chrono PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/include
-)
-target_link_libraries(restricted-boost-chrono PUBLIC
-  contrib-libs-cxxsupp
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-integer
-  restricted-boost-move
-  restricted-boost-mpl
-  restricted-boost-predef
-  restricted-boost-ratio
-  restricted-boost-static_assert
-  restricted-boost-system
-  restricted-boost-throw_exception
-  restricted-boost-type_traits
-  restricted-boost-typeof
-  restricted-boost-utility
-  restricted-boost-winapi
-)
-target_sources(restricted-boost-chrono PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/src/chrono.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/src/process_cpu_clocks.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/chrono/src/thread_clock.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

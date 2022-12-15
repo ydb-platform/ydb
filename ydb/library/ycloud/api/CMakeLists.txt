@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-ycloud-api INTERFACE)
-target_link_libraries(library-ycloud-api INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  client-yc_private-iam
-  client-yc_private-servicecontrol
-  client-yc_private-resourcemanager
-  cpp-actors-core
-  cpp-grpc-client
-  ydb-core-base
-  ydb-core-grpc_caching
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

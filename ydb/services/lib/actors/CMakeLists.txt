@@ -6,26 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(services-lib-actors)
-target_link_libraries(services-lib-actors PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-grpc-server
-  cpp-digest-md5
-  ydb-core-grpc_services
-  core-grpc_services-base
-  ydb-core-metering
-  ydb-core-mind
-  ydb-core-protos
-  library-persqueue-obfuscate
-  library-persqueue-topic_parser
-  api-grpc
-  api-grpc-draft
-  public-lib-jwt
-  public-lib-operation_id
-)
-target_sources(services-lib-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/lib/actors/pq_schema_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/lib/actors/pq_rl_helpers.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

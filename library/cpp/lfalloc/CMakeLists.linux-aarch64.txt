@@ -11,6 +11,7 @@ add_subdirectory(dbg_info)
 
 add_library(library-cpp-lfalloc INTERFACE)
 target_link_libraries(library-cpp-lfalloc INTERFACE
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   cpp-malloc-jemalloc
   cpp-malloc-api

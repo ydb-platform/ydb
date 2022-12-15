@@ -1,0 +1,30 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(core-blobstorage-incrhuge)
+target_link_libraries(core-blobstorage-incrhuge PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-base
+  ydb-core-protos
+)
+target_sources(core-blobstorage-incrhuge PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_alloc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_defrag.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_delete.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_log.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery_read_log.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery_scan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_write.cpp
+)

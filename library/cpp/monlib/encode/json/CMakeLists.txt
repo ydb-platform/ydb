@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(monlib-encode-json)
-target_link_libraries(monlib-encode-json PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-monlib-encode
-  monlib-encode-buffered
-  cpp-monlib-exception
-  library-cpp-json
-  cpp-json-writer
-)
-target_sources(monlib-encode-json PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/json/json_decoder.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/json/json_encoder.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

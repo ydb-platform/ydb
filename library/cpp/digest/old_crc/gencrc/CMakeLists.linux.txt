@@ -9,6 +9,7 @@
 
 add_executable(gencrc)
 target_link_libraries(gencrc PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

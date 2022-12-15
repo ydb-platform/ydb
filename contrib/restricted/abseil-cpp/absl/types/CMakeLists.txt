@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-absl-types)
-target_compile_options(abseil-cpp-absl-types PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-absl-types PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-target_link_libraries(abseil-cpp-absl-types PUBLIC
-  contrib-libs-cxxsupp
-  abseil-cpp-absl-base
-  abseil-cpp-absl-memory
-)
-target_sources(abseil-cpp-absl-types PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/types/bad_any_cast.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/types/bad_optional_access.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/types/bad_variant_access.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

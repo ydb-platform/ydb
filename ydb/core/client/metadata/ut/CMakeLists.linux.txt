@@ -15,6 +15,7 @@ target_include_directories(ydb-core-client-metadata-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata
 )
 target_link_libraries(ydb-core-client-metadata-ut PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-malloc-tcmalloc

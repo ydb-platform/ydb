@@ -6,18 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-common-arrow_resolve)
-target_compile_options(providers-common-arrow_resolve PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-common-arrow_resolve PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-minikql-arrow
-  yql-public-udf
-  providers-common-mkql
-)
-target_sources(providers-common-arrow_resolve PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,63 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-core-public_http)
-target_compile_options(ydb-core-public_http PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-public_http PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-http
-  cpp-protobuf-json
-  library-cpp-resource
-  ydb-core-base
-  ydb-core-http_proxy
-  core-grpc_services-local_rpc
-  ydb-core-protos
-  core-public_http-protos
-  core-viewer-json
-  yq-libs-result_formatter
-  yql-public-issue
-)
-target_sources(ydb-core-public_http PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_req.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_router.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/http_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/grpc_request_context_wrapper.cpp
-)
-
-add_global_library_for(ydb-core-public_http.global ydb-core-public_http)
-target_compile_options(ydb-core-public_http.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-public_http.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-http
-  cpp-protobuf-json
-  library-cpp-resource
-  ydb-core-base
-  ydb-core-http_proxy
-  core-grpc_services-local_rpc
-  ydb-core-protos
-  core-public_http-protos
-  core-viewer-json
-  yq-libs-result_formatter
-  yql-public-issue
-)
-target_sources(ydb-core-public_http.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
-)
-resources(ydb-core-public_http.global
-  ${CMAKE_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
-  INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/public_http/openapi/openapi.yaml
-  KEYS
-  resources/openapi.yaml
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

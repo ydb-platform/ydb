@@ -6,37 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(minikql)
-add_subdirectory(ut)
-
-add_library(ydb-core-engine)
-target_compile_options(ydb-core-engine PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-engine PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-stack_vector
-  cpp-deprecated-enum_codegen
-  library-cpp-random_provider
-  library-cpp-time_provider
-  ydb-core-base
-  ydb-core-scheme
-  ydb-core-tablet
-  ydb-library-mkql_proto
-  library-mkql_proto-protos
-  mkql_proto-ut-helpers
-  api-protos
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  yql-public-decimal
-)
-target_sources(ydb-core-engine PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_extfunc.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_keys.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

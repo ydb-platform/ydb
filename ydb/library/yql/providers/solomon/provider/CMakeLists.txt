@@ -6,37 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-solomon-provider)
-target_compile_options(providers-solomon-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-solomon-provider PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-protos
-  yql-dq-expr_nodes
-  providers-common-config
-  providers-common-proto
-  providers-common-provider
-  providers-common-transform
-  providers-dq-expr_nodes
-  providers-result-expr_nodes
-  providers-solomon-expr_nodes
-  providers-solomon-proto
-  yql-dq-opt
-)
-target_sources(providers-solomon-provider PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_config.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasink_execution.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasink_type_ann.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasink.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasource_execution.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasource_type_ann.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasource.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_io_discovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_load_meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_physical_optimize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_provider.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

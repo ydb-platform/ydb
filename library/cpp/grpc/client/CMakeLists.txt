@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-grpc-client)
-target_link_libraries(cpp-grpc-client PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  cpp-deprecated-atomic
-)
-target_sources(cpp-grpc-client PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/grpc/client/grpc_client_low.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -12,6 +12,7 @@ target_include_directories(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board
 )
 target_link_libraries(ydb-core-tx-scheme_board-ut_double_indexed PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc

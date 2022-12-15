@@ -6,33 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-skeleton)
-target_link_libraries(blobstorage-vdisk-skeleton PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  vdisk-hulldb-base
-  vdisk-hulldb-bulksst_add
-  blobstorage-vdisk-synclog
-  ydb-core-protos
-)
-target_sources(blobstorage-vdisk-skeleton PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_db.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_monactors.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeleton.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonfront.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_syncfull.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/blobstorage_syncfullhandler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_block_and_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_compactionstate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_loggedrec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_mon_dbmainpage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_overload_handler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmultiput_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vmovedpatch_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

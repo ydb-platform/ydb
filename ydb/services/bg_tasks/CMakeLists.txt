@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(ds_table)
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-services-bg_tasks)
-target_link_libraries(ydb-services-bg_tasks PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  services-metadata-abstract
-  services-bg_tasks-abstract
-  services-bg_tasks-protos
-)
-target_sources(ydb-services-bg_tasks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

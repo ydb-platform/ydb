@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-huge)
-target_link_libraries(blobstorage-vdisk-huge PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  monlib-service-pages
-  ydb-core-base
-  blobstorage-vdisk-common
-  vdisk-hulldb-base
-)
-target_sources(blobstorage-vdisk-huge PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

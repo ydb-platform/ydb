@@ -6,20 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-kqp-compile_service)
-target_compile_options(core-kqp-compile_service PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-compile_service PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-kqp-host
-)
-target_sources(core-kqp-compile_service PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compile_service/kqp_compile_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compile_service/kqp_compile_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compile_service/kqp_compile_service.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

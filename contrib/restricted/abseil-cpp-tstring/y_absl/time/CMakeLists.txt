@@ -6,35 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(abseil-cpp-tstring-y_absl-time)
-target_compile_options(abseil-cpp-tstring-y_absl-time PRIVATE
-  -Wno-everything
-)
-target_include_directories(abseil-cpp-tstring-y_absl-time PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
-target_link_libraries(abseil-cpp-tstring-y_absl-time PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  abseil-cpp-tstring-y_absl-base
-  abseil-cpp-tstring-y_absl-numeric
-  abseil-cpp-tstring-y_absl-strings
-)
-target_sources(abseil-cpp-tstring-y_absl-time PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/clock.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/duration.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/format.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/civil_time_detail.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_fixed.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_format.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_if.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_impl.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_info.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_libc.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_lookup.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_posix.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/zone_info_source.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/time.cc
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

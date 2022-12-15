@@ -16,6 +16,7 @@ target_include_directories(contrib-libs-highwayhash PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash
 )
 target_link_libraries(contrib-libs-highwayhash PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   highwayhash-arch-avx2

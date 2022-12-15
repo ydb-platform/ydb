@@ -6,19 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-persqueue-writer)
-target_link_libraries(core-persqueue-writer PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-string_utils-base64
-  ydb-core-base
-  core-persqueue-events
-  ydb-core-protos
-  public-lib-base
-)
-target_sources(core-persqueue-writer PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/writer/source_id_encoding.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/writer/writer.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

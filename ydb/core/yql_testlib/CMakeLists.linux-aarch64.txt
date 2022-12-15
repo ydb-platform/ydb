@@ -1,0 +1,41 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(ydb-core-yql_testlib)
+target_compile_options(ydb-core-yql_testlib PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(ydb-core-yql_testlib PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-grpc-client
+  cpp-regex-pcre
+  cpp-testing-unittest
+  ydb-core-base
+  ydb-core-client
+  core-client-minikql_compile
+  core-client-server
+  ydb-core-engine
+  ydb-core-keyvalue
+  ydb-core-mind
+  ydb-core-protos
+  core-testlib-default
+  core-testlib-actors
+  core-testlib-basics
+  yql-core-facade
+  yql-public-udf
+  public-lib-base
+  library-yql-core
+  providers-common-provider
+  providers-common-udf_resolve
+)
+target_sources(ydb-core-yql_testlib PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yql_testlib/yql_testlib.cpp
+)

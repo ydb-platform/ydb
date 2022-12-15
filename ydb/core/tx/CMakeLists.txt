@@ -6,38 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(balance_coverage)
-add_subdirectory(columnshard)
-add_subdirectory(coordinator)
-add_subdirectory(datashard)
-add_subdirectory(long_tx_service)
-add_subdirectory(mediator)
-add_subdirectory(replication)
-add_subdirectory(scheme_board)
-add_subdirectory(scheme_cache)
-add_subdirectory(schemeshard)
-add_subdirectory(sequenceproxy)
-add_subdirectory(sequenceshard)
-add_subdirectory(tiering)
-add_subdirectory(time_cast)
-add_subdirectory(tx_allocator)
-add_subdirectory(tx_allocator_client)
-add_subdirectory(tx_proxy)
-
-add_library(ydb-core-tx)
-target_link_libraries(ydb-core-tx PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  core-persqueue-config
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-util
-  ydb-library-aclib
-)
-target_sources(ydb-core-tx PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy_schemereq.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

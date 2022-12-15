@@ -6,31 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-Transforms-ObjCARC)
-target_compile_options(lib-Transforms-ObjCARC PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-Transforms-ObjCARC PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC
-)
-target_link_libraries(lib-Transforms-ObjCARC PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  libs-llvm12-include
-  llvm12-lib-Analysis
-  llvm12-lib-IR
-  llvm12-lib-Support
-  lib-Transforms-Utils
-)
-target_sources(lib-Transforms-ObjCARC PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/DependencyAnalysis.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ObjCARC.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ObjCARCAPElim.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ObjCARCContract.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ObjCARCExpand.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ObjCARCOpts.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ProvenanceAnalysis.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/ProvenanceAnalysisEvaluator.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC/PtrState.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

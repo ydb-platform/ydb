@@ -26,6 +26,7 @@ target_include_directories(restricted-aws-s2n PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/api
 )
 target_link_libraries(restricted-aws-s2n PUBLIC
+  contrib-libs-linux-headers
   OpenSSL::OpenSSL
 )
 target_sources(restricted-aws-s2n PRIVATE

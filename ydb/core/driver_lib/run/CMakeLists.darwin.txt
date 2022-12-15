@@ -1,0 +1,150 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(ut)
+
+add_library(run)
+target_compile_options(run PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(run PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+  cpp-actors-core
+  cpp-actors-dnsresolver
+  cpp-actors-interconnect
+  cpp-actors-memory_log
+  cpp-actors-prof
+  cpp-actors-protos
+  cpp-actors-util
+  cpp-getopt-small
+  cpp-grpc-client
+  cpp-grpc-server
+  grpc-server-actors
+  library-cpp-logger
+  cpp-malloc-api
+  library-cpp-messagebus
+  cpp-monlib-dynamic_counters
+  cpp-monlib-messagebus
+  library-cpp-sighandler
+  cpp-string_utils-parse_size
+  library-cpp-svnversion
+  ydb-core-actorlib_impl
+  ydb-core-audit
+  ydb-core-base
+  ydb-core-blob_depot
+  ydb-core-blobstorage
+  core-blobstorage-backpressure
+  core-blobstorage-nodewarden
+  core-blobstorage-other
+  core-blobstorage-pdisk
+  blobstorage-vdisk-common
+  core-client-minikql_compile
+  core-client-scheme_cache_lib
+  core-client-server
+  ydb-core-cms
+  core-cms-console
+  ydb-core-control
+  base_utils
+  core-driver_lib-cli_config_base
+  cli_utils
+  ydb-core-formats
+  ydb-core-grpc_services
+  core-grpc_services-base
+  ydb-core-health_check
+  ydb-core-http_proxy
+  core-kesus-proxy
+  core-kesus-tablet
+  ydb-core-keyvalue
+  ydb-core-kqp
+  core-kqp-rm_service
+  ydb-core-load_test
+  ydb-core-metering
+  ydb-core-mind
+  core-mind-address_classification
+  core-mind-bscontroller
+  core-mind-hive
+  ydb-core-mon
+  ydb-core-mon_alloc
+  ydb-core-node_whiteboard
+  ydb-core-persqueue
+  ydb-core-protos
+  ydb-core-public_http
+  ydb-core-quoter
+  ydb-core-scheme
+  ydb-core-scheme_types
+  ydb-core-security
+  core-sys_view-processor
+  core-sys_view-service
+  ydb-core-tablet
+  ydb-core-tablet_flat
+  ydb-core-test_tablet
+  ydb-core-tracing
+  ydb-core-tx
+  core-tx-columnshard
+  core-tx-coordinator
+  core-tx-datashard
+  core-tx-long_tx_service
+  tx-long_tx_service-public
+  core-tx-mediator
+  tx-replication-controller
+  core-tx-scheme_board
+  core-tx-schemeshard
+  core-tx-sequenceproxy
+  core-tx-sequenceshard
+  core-tx-time_cast
+  core-tx-tx_allocator
+  core-tx-tx_proxy
+  ydb-core-util
+  ydb-core-viewer
+  core-ymq-actor
+  core-ymq-http
+  yq-libs-init
+  yq-libs-logs
+  ydb-library-folder_service
+  library-folder_service-proto
+  ydb-library-pdisk_io
+  ydb-library-security
+  yql-minikql-comp_nodes
+  yql-minikql-computation
+  providers-pq-cm_client
+  udf-service-exception_policy
+  public-lib-base
+  lib-deprecated-client
+  ydb-services-auth
+  ydb-services-cms
+  ydb-services-datastreams
+  ydb-services-discovery
+  ydb-services-fq
+  ydb-services-kesus
+  ydb-services-local_discovery
+  services-metadata-ds_table
+  ydb-services-metadata
+  services-bg_tasks-ds_table
+  ydb-services-bg_tasks
+  ydb-services-monitoring
+  ydb-services-persqueue_cluster_discovery
+  ydb-services-persqueue_v1
+  ydb-services-rate_limiter
+  ydb-services-ydb
+  ydb-services-yq
+)
+target_sources(run PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config_parser.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/dummy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/factories.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/kikimr_services_initializers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/log_backend.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/run.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/service_initializer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/version.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/cert_auth_props.cpp
+)

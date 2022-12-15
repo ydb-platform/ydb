@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(core-tx-tx_allocator)
-target_link_libraries(core-tx-tx_allocator PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-helpers
-  cpp-actors-interconnect
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-)
-target_sources(core-tx-tx_allocator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator__reserve.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator__scheme.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

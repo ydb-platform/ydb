@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-kqp-topics)
-target_compile_options(core-kqp-topics PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-kqp-topics PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-)
-target_sources(core-kqp-topics PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/topics/kqp_topics.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

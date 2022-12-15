@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(yql-sql-pg_dummy)
-target_compile_options(yql-sql-pg_dummy PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(yql-sql-pg_dummy PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  parser-pg_wrapper-interface
-)
-target_sources(yql-sql-pg_dummy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg_dummy/pg_sql_dummy.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

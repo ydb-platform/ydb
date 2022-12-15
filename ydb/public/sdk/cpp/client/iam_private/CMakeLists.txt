@@ -6,14 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-client-iam_private)
-target_link_libraries(cpp-client-iam_private PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  client-yc_private-iam
-  client-iam-common
-)
-target_sources(cpp-client-iam_private PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam_private/iam.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

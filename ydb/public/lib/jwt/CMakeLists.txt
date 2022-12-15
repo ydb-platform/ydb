@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(public-lib-jwt)
-target_link_libraries(public-lib-jwt PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-jwt-cpp
-  library-cpp-json
-  impl-ydb_internal-common
-)
-target_sources(public-lib-jwt PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/jwt/jwt.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

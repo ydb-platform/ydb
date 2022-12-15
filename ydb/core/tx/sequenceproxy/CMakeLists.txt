@@ -6,21 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(public)
-add_subdirectory(ut)
-
-add_library(core-tx-sequenceproxy)
-target_link_libraries(core-tx-sequenceproxy PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-tx-scheme_cache
-  tx-sequenceproxy-public
-  tx-sequenceshard-public
-)
-target_sources(core-tx-sequenceproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_allocate.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_resolve.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

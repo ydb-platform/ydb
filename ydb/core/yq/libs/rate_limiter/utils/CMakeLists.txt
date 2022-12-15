@@ -6,12 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(libs-rate_limiter-utils)
-target_link_libraries(libs-rate_limiter-utils PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-)
-target_sources(libs-rate_limiter-utils PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/utils/path.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

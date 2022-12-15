@@ -6,44 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-s3-actors)
-target_compile_options(providers-s3-actors PRIVATE
-  -DARCADIA_BUILD
-  -DUSE_PARQUET
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(providers-s3-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-target_link_libraries(providers-s3-actors PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  libs-poco-Util
-  cpp-actors-http
-  cpp-string_utils-base64
-  cpp-string_utils-quote
-  cpp-xml-document
-  dq-actors-compute
-  yql-minikql-computation
-  providers-common-http_gateway
-  common-schema-mkql
-  common-token_accessor-client
-  providers-s3-common
-  providers-s3-compressors
-  providers-s3-proto
-  providers-s3-range_helpers
-  providers-s3-serializations
-  yql-public-types
-  clickhouse_client_udf
-)
-target_sources(providers-s3-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

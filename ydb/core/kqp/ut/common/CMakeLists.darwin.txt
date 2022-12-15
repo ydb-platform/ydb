@@ -1,0 +1,29 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(kqp-ut-common)
+target_compile_options(kqp-ut-common PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(kqp-ut-common PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  ydb-core-testlib
+  yql-public-udf
+  yql-utils-backtrace
+  public-lib-yson_value
+  cpp-client-draft
+  cpp-client-ydb_proto
+  cpp-client-ydb_scheme
+  cpp-client-ydb_table
+  cpp-client-ydb_topic
+)
+target_sources(kqp-ut-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.cpp
+)

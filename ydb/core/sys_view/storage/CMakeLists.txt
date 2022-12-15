@@ -6,23 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(core-sys_view-storage)
-target_compile_options(core-sys_view-storage PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(core-sys_view-storage PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  ydb-core-base
-  core-kqp-runtime
-  core-sys_view-common
-)
-target_sources(core-sys_view-storage PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/groups.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/vslots.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

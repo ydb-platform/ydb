@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-
-add_library(yql-parser-lexer_common)
-target_link_libraries(yql-parser-lexer_common PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-issue
-)
-target_sources(yql-parser-lexer_common PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/tokens.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/hints.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/parse_hints_impl.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

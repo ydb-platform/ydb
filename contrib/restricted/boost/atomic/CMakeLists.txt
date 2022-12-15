@@ -6,31 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-atomic)
-target_compile_options(restricted-boost-atomic PRIVATE
-  -DBOOST_ATOMIC_SOURCE
-  -Wno-everything
-)
-target_include_directories(restricted-boost-atomic PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/include
-)
-target_include_directories(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/winapi/include
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src
-)
-target_link_libraries(restricted-boost-atomic PUBLIC
-  contrib-libs-cxxsupp
-  restricted-boost-align
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-predef
-  restricted-boost-preprocessor
-  restricted-boost-static_assert
-  restricted-boost-type_traits
-)
-target_sources(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse41.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

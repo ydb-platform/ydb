@@ -6,44 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(btree_benchmark)
-add_subdirectory(ut)
-
-add_library(ydb-core-util)
-target_link_libraries(ydb-core-util PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  actors-interconnect-mock
-  cpp-actors-util
-  cpp-containers-stack_vector
-  cpp-html-escape
-  library-cpp-ipmath
-  library-cpp-json
-  library-cpp-lwtrace
-  cpp-monlib-dynamic_counters
-  library-cpp-random_provider
-  ydb-core-base
-  ydb-core-protos
-  cpp-deprecated-atomic
-)
-target_sources(ydb-core-util PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/address_classifier.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/cache.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/console.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/failure_injection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/fast_tls.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/format.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/fragmented_buffer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/hazard.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/hyperlog_counter.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/intrusive_heap.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/memory_tracker.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/page_map.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/single_thread_ic_mock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/stlog.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/testactorsys.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/text.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/ulid.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

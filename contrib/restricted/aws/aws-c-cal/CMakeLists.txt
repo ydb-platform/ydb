@@ -6,30 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-
-add_library(restricted-aws-aws-c-cal)
-target_compile_options(restricted-aws-aws-c-cal PRIVATE
-  -DAWS_CAL_USE_IMPORT_EXPORT
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DHAVE_SYSCONF
-  -Wno-everything
-)
-target_include_directories(restricted-aws-aws-c-cal PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
-)
-target_link_libraries(restricted-aws-aws-c-cal PUBLIC
-  OpenSSL::OpenSSL
-  restricted-aws-aws-c-common
-)
-target_sources(restricted-aws-aws-c-cal PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_platform_init.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_ecc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hmac.c
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

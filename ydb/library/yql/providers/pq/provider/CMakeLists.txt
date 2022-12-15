@@ -6,59 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(providers-pq-provider)
-target_compile_options(providers-pq-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(providers-pq-provider PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-random_provider
-  library-cpp-time_provider
-  library-yql-ast
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  providers-common-db_id_async_resolver
-  providers-common-structured_token
-  yql-public-udf
-  cpp-client-ydb_driver
-  library-yql-core
-  yql-core-type_ann
-  yql-dq-expr_nodes
-  yql-dq-opt
-  providers-common-config
-  providers-common-dq
-  providers-common-proto
-  providers-common-provider
-  providers-common-transform
-  providers-dq-common
-  providers-dq-expr_nodes
-  providers-dq-interface
-  dq-provider-exec
-  providers-pq-cm_client
-  providers-pq-common
-  providers-pq-expr_nodes
-  providers-pq-proto
-  providers-result-expr_nodes
-)
-target_sources(providers-pq-provider PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_execution.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_io_discovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_type_ann.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasource.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasource_type_ann.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_io_discovery.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_load_meta.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_logical_opt.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_mkql_compiler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_physical_optimize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_provider.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_provider_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_settings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_helpers.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,36 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-find_package(Python3 REQUIRED)
-
-add_library(providers-s3-expr_nodes)
-target_link_libraries(providers-s3-expr_nodes PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-core-expr_nodes
-  providers-common-provider
-)
-target_sources(providers-s3-expr_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.gen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.decl.inl.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.defs.inl.h
-)
-add_custom_command(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.gen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.decl.inl.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.defs.inl.h
-  DEPENDS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.json
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
-  COMMAND
-  Python3::Interpreter
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.json
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.gen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.decl.inl.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.defs.inl.h
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

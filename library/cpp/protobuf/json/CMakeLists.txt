@@ -6,24 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-protobuf-json)
-target_link_libraries(cpp-protobuf-json PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-json
-  cpp-protobuf-util
-  cpp-string_utils-relaxed_escaper
-)
-target_sources(cpp-protobuf-json PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/json2proto.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/json_output_create.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/json_value_output.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/json_writer_output.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/name_generator.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/proto2json.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/proto2json_printer.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/string_transform.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/util.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

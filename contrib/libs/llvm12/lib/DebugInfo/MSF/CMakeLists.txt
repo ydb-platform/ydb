@@ -6,22 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(lib-DebugInfo-MSF)
-target_compile_options(lib-DebugInfo-MSF PRIVATE
-  -Wno-everything
-)
-target_include_directories(lib-DebugInfo-MSF PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/MSF
-)
-target_link_libraries(lib-DebugInfo-MSF PUBLIC
-  contrib-libs-cxxsupp
-  contrib-libs-llvm12
-  llvm12-lib-Support
-)
-target_sources(lib-DebugInfo-MSF PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/MSF/MSFBuilder.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/MSF/MSFCommon.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/MSF/MSFError.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/MSF/MappedBlockStream.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

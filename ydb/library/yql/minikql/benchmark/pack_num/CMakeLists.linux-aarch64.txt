@@ -9,6 +9,7 @@
 
 add_executable(pack_num)
 target_link_libraries(pack_num PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-balloc

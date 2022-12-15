@@ -6,15 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-cpp-linear_regression)
-target_link_libraries(library-cpp-linear_regression PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-accurate_accumulate
-)
-target_sources(library-cpp-linear_regression PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/linear_regression/linear_regression.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/linear_regression/unimodal.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/linear_regression/welford.cpp
-)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND UNIX AND NOT APPLE AND NOT ANDROID)
+  include(CMakeLists.linux.txt)
+endif()

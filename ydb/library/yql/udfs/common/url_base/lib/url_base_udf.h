@@ -59,7 +59,7 @@ namespace {
     SIMPLE_UDF(TGetSchemeHost, TOptional<char*>(TOptional<char*>)) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
         const std::string_view url(args[0].AsStringRef());
-        const std::string_view host(GetHost(url));
+        const std::string_view host(GetSchemeHost(url, /* trimHttp */ false));
         return host.empty() ? TUnboxedValue() :
             valueBuilder->SubString(args[0], 0U, std::distance(url.begin(), host.end()));
     }
@@ -67,7 +67,7 @@ namespace {
     SIMPLE_UDF(TGetSchemeHostPort, TOptional<char*>(TOptional<char*>)) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
         const std::string_view url(args[0].AsStringRef());
-        const std::string_view host(GetHostAndPort(url));
+        const std::string_view host(GetSchemeHostAndPort(url, /* trimHttp */ false, /* trimDefaultPort */ false));
         return host.empty() ? TUnboxedValue() :
             valueBuilder->SubString(args[0], 0U, std::distance(url.begin(), host.end()));
     }

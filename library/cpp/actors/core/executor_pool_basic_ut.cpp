@@ -11,9 +11,8 @@ using namespace NActors;
 
 #define VALUES_EQUAL(a, b, ...) \
         UNIT_ASSERT_VALUES_EQUAL_C((a), (b), (i64)semaphore.OldSemaphore \
-                << ' ' << (i64)semaphore.Reserved1 \
                 << ' ' << (i64)semaphore.CurrentSleepThreadCount \
-                << ' ' << (i64)semaphore.Reserved2 __VA_ARGS__);
+                << ' ' << (i64)semaphore.CurrentThreadCount __VA_ARGS__);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -124,10 +123,10 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
                 semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(value);
                 UNIT_ASSERT_VALUES_EQUAL_C(expected, semaphore.OldSemaphore, (i64)semaphore.OldSemaphore
                         << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.Reserved2);
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
                 UNIT_ASSERT_VALUES_EQUAL_C(sleepThreads, semaphore.CurrentSleepThreadCount, (i64)semaphore.OldSemaphore
                         << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.Reserved2);
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
                 semaphore = TBasicExecutorPool::TSemaphore();
                 semaphore.OldSemaphore = expected;
                 semaphore.CurrentSleepThreadCount = sleepThreads;
@@ -139,10 +138,10 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
                 semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(value);
                 UNIT_ASSERT_VALUES_EQUAL_C(expected, semaphore.OldSemaphore, (i64)semaphore.OldSemaphore
                         << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.Reserved2);
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
                 UNIT_ASSERT_VALUES_EQUAL_C(sleepThreads, semaphore.CurrentSleepThreadCount, (i64)semaphore.OldSemaphore
                         << ' ' << (i64)semaphore.CurrentSleepThreadCount
-                        << ' ' << (i64)semaphore.Reserved2);
+                        << ' ' << (i64)semaphore.CurrentThreadCount);
                 value--;
             }
         }

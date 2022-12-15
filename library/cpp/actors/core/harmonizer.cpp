@@ -117,6 +117,8 @@ struct TPoolInfo {
     ui32 MaxAvgPingUs = 0;
     ui64 LastUpdateTs = 0;
 
+    TAtomic LastFlags = 0; // 0 - isNeedy; 1 - isStarved
+
     bool IsBeingStopped(i16 threadIdx);
     double GetBooked(i16 threadIdx);
     double GetlastSecondPoolBooked(i16 threadIdx);
@@ -210,6 +212,7 @@ public:
     void DeclareEmergency(ui64 ts) override;
     void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) override;
     void Enable(bool enable) override;
+    TPoolStateFlags GetPoolFlags(i16 poolId) const override;
 };
 
 THarmonizer::THarmonizer(ui64 ts) {
@@ -283,6 +286,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         }
         booked += poolBooked;
         consumed += poolConsumed;
+        AtomicSet(pool.LastFlags, (i64)isNeedy | ((i64)isStarved << 1));
         LWPROBE(HarmonizeCheckPool, poolIdx, pool.Pool->GetName(), poolBooked, poolConsumed, lastSecondPoolBooked, lastSecondPoolConsumed, pool.GetThreadCount(), pool.MaxThreadCount, isStarved, isNeedy, isHoggish);
     }
     double budget = total - Max(booked, lastSecondBooked);
@@ -403,6 +407,14 @@ void THarmonizer::Enable(bool enable) {
 
 IHarmonizer* MakeHarmonizer(ui64 ts) {
     return new THarmonizer(ts);
+}
+
+TPoolStateFlags THarmonizer::GetPoolFlags(i16 poolId) const {
+    ui64 flags = RelaxedLoad(&Pools[poolId].LastFlags);
+    return TPoolStateFlags {
+        .IsNeedy = static_cast<bool>(flags & 1),
+        .IsStarved = static_cast<bool>(flags & 2)
+    };
 }
 
 }

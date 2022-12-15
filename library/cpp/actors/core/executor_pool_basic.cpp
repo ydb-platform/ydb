@@ -39,6 +39,7 @@ namespace NActors {
         , ThreadUtilization(0)
         , MaxUtilizationCounter(0)
         , MaxUtilizationAccumulator(0)
+        , WrongWakenedThreadCount(0)
         , ThreadCount(threads)
         , MinThreadCount(minThreadCount)
         , MaxThreadCount(maxThreadCount)
@@ -62,6 +63,7 @@ namespace NActors {
         }
         ThreadCount = MaxThreadCount;
         auto semaphore = TSemaphore();
+        semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConverToI64();
     }
 
@@ -273,22 +275,26 @@ namespace NActors {
         return 0;
     }
 
-    inline void TBasicExecutorPool::WakeUpLoop() {
-        for (ui32 i = 0;;) {
-            TThreadCtx& threadCtx = Threads[i % PoolThreads];
-            switch (AtomicLoad(&threadCtx.WaitingFlag)) {
+    inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
+        for (i16 i = 0;;) {
+            TThreadCtx& threadCtx = Threads[i];
+            TThreadCtx::EWaitState state = static_cast<TThreadCtx::EWaitState>(AtomicLoad(&threadCtx.WaitingFlag));
+            switch (state) {
                 case TThreadCtx::WS_NONE:
                 case TThreadCtx::WS_RUNNING:
-                    ++i;
-                    break;
-                case TThreadCtx::WS_ACTIVE: // in active spin-lock, just set flag
-                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_ACTIVE)) {
-                        return;
+                    if (++i >= MaxThreadCount) {
+                        i = 0;
                     }
                     break;
+                case TThreadCtx::WS_ACTIVE:
                 case TThreadCtx::WS_BLOCKED:
-                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, TThreadCtx::WS_BLOCKED)) {
-                        threadCtx.Pad.Unpark();
+                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, state)) {
+                        if (state  == TThreadCtx::WS_BLOCKED) {
+                            threadCtx.Pad.Unpark();
+                        }
+                        if (i >= currentThreadCount) {
+                            AtomicIncrement(WrongWakenedThreadCount);
+                        }
                         return;
                     }
                     break;
@@ -319,12 +325,19 @@ namespace NActors {
         } while (true);
 
         if (needToWakeUp) { // we must find someone to wake-up
-            WakeUpLoop();
+            WakeUpLoop(semaphore.CurrentThreadCount);
         }
     }
 
     void TBasicExecutorPool::GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
         poolStats.MaxUtilizationTime = RelaxedLoad(&MaxUtilizationAccumulator) / (i64)(NHPTimer::GetCyclesPerSecond() / 1000);
+        poolStats.WrongWakenedThreadCount = RelaxedLoad(&WrongWakenedThreadCount);
+        poolStats.CurrentThreadCount = RelaxedLoad(&ThreadCount);
+        if (Harmonizer) {
+            TPoolStateFlags flags = Harmonizer->GetPoolFlags(PoolId);
+            poolStats.IsNeedy = flags.IsNeedy;
+            poolStats.IsStarved = flags.IsStarved;
+        }
 
         statsCopy.resize(PoolThreads + 1);
         // Save counters from the pool object
@@ -436,6 +449,7 @@ namespace NActors {
             AtomicSet(ThreadCount, threads);
             TSemaphore semaphore = TSemaphore::GetSemaphore(AtomicGet(Semaphore));
             i64 oldX = semaphore.ConverToI64();
+            semaphore.CurrentThreadCount = threads;
             if (threads > prevCount) {
                 semaphore.CurrentSleepThreadCount += (i64)threads - prevCount;
                 semaphore.OldSemaphore -= (i64)threads - prevCount;

@@ -150,6 +150,8 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                         statusMessage = TStringBuilder()
                             << "Commit TxId# " << txId << " references WriteId# " << writeId
                             << " that is already locked by TxId# " << lw.PreparedTxId;
+                        failed = true;
+                        break;
                     }
                 }
                 if (failed) {

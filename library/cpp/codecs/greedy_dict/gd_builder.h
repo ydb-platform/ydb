@@ -69,11 +69,11 @@ namespace NGreedyDict {
             return std::move(Current);
         }
 
-        ui32 /*iters*/ Build(ui32 maxentries, ui32 maxiters = 16, ui32 mindiff = 10);
+        ui32 /*iters*/ Build(ui32 maxentries, ui32 maxiters = 16, ui32 maxlen = -1, ui32 mindiff = 10);
 
     public:
         void RebuildCounts(ui32 maxcand, bool final);
-        ui32 /*diff size*/ BuildNextGeneration(ui32 maxent);
+        ui32 /*diff size*/ BuildNextGeneration(ui32 maxent, ui32 maxlen);
 
         static bool IsCompound(ui64 ent) {
             return ent & 0xFFFFFFFF00000000ULL;

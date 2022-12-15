@@ -17,6 +17,8 @@ namespace NCodecs {
     void TSolarCodec::DoLearn(ISequenceReader& r) {
         using namespace NGreedyDict;
 
+        const ui32 maxlen = Max<ui32>() / Max<ui32>(MaxEntries, 1);
+
         Decoder.clear();
         Pool.Clear();
 
@@ -34,7 +36,7 @@ namespace NCodecs {
             {
                 TDictBuilder b(Settings);
                 b.SetInput(bufs);
-                b.Build(MaxEntries, MaxIterations);
+                b.Build(MaxEntries, MaxIterations, maxlen);
 
                 set = b.ReleaseEntrySet();
             }
@@ -47,7 +49,8 @@ namespace NCodecs {
             tmp.reserve(set->size());
 
             for (const auto& it : *set) {
-                tmp.push_back(std::make_pair(-it.Score, TStringBuf(it.Str).Trunc(Max<ui32>() / Max<ui32>(MaxEntries, 1))));
+                Y_ENSURE(it.Str.Size() <= maxlen);
+                tmp.push_back(std::make_pair(-it.Score, it.Str));
             }
 
             Sort(tmp.begin(), tmp.end());

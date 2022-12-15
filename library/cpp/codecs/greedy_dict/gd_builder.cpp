@@ -53,7 +53,7 @@ namespace NGreedyDict {
         Current->SetModelP();
     }
 
-    ui32 TDictBuilder::BuildNextGeneration(ui32 maxent) {
+    ui32 TDictBuilder::BuildNextGeneration(ui32 maxent, ui32 maxlen) {
         TAutoPtr<TEntrySet> newset = new TEntrySet;
         newset->InitWithAlpha();
         maxent -= newset->size();
@@ -86,7 +86,7 @@ namespace NGreedyDict {
                     const TEntry& next = set.Get(Next(it->first));
                     float modelp = ModelP(prev.Count, next.Count, total);
                     ui32 cnt = it->second;
-                    if (cnt > mincnt && StatTest(test, modelp, cnt, total) > minpval)
+                    if (cnt > mincnt && StatTest(test, modelp, cnt, total) > minpval && prev.Len() + next.Len() <= maxlen)
                         Candidates.push_back(TCandidate(-Score(score, prev.Len() + next.Len(), modelp, cnt, total), it->first));
                 }
             }
@@ -113,7 +113,7 @@ namespace NGreedyDict {
         return deletions + additions;
     }
 
-    ui32 TDictBuilder::Build(ui32 maxentries, ui32 maxiters, ui32 mindiff) {
+    ui32 TDictBuilder::Build(ui32 maxentries, ui32 maxiters, ui32 maxlen, ui32 mindiff) {
         /* size_t totalsz = 0;
         for (auto it : Input)
             totalsz += it.size();*/
@@ -128,7 +128,7 @@ namespace NGreedyDict {
                 Clog << Sprintf("%-110s RSS=%" PRIu32 "M", mess.data(), (ui32)(TRusage::Get().MaxRss >> 20)) << Endl;
             }
 
-            ui32 diff = BuildNextGeneration(maxentries);
+            ui32 diff = BuildNextGeneration(maxentries, maxlen);
 
             if (Current->size() == maxentries && diff < mindiff)
                 break;

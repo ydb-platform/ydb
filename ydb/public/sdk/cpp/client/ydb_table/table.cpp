@@ -3232,7 +3232,11 @@ protected:
         if (self->RetryNumber >= self->Settings.MaxRetries_) {
             return self->Promise.SetValue(status);
         }
-
+        if (self->Settings.Verbose_) {
+            Cerr << "Previous query attempt was finished with unsuccessful status: "
+                << status.GetIssues().ToString() << ". Status is " << status.GetStatus() << "."
+                << "Send retry attempt " << self->RetryNumber << " of " << self->Settings.MaxRetries_ << Endl;
+        }
         self->RetryNumber++;
         self->TableClient.Impl_->RetryOperationStatCollector.IncAsyncRetryOperation(status.GetStatus());
 

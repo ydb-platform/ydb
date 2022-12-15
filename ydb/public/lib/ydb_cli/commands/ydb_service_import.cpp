@@ -162,7 +162,7 @@ void TCommandImportFileBase::Config(TConfig& config) {
             "Use portions of this size in bytes to parse and upload file data")
         .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
     config.Opts->AddLongOption("max-in-flight",
-            "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
+        "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
         .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests);
 }
 
@@ -220,7 +220,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
         settings.Delimiter(Delimiter);
     }
 
-    TImportFileClient client(CreateDriver(config));
+    TImportFileClient client(CreateDriver(config), config);
     ThrowOnError(client.Import(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
@@ -250,7 +250,7 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
 
-    TImportFileClient client(CreateDriver(config));
+    TImportFileClient client(CreateDriver(config), config);
     ThrowOnError(client.Import(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
@@ -267,7 +267,7 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
 
-    TImportFileClient client(CreateDriver(config));
+    TImportFileClient client(CreateDriver(config), config);
     ThrowOnError(client.Import(FilePath, Path, settings));
 
     return EXIT_SUCCESS;

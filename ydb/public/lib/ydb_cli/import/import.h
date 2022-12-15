@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
@@ -46,7 +47,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
 
 class TImportFileClient {
 public:
-    explicit TImportFileClient(const TDriver& driver);
+    explicit TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig);
     TImportFileClient(const TImportFileClient&) = delete;
 
     // Ingest data from the input file to the database table.

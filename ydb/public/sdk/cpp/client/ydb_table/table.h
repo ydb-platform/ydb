@@ -859,6 +859,7 @@ struct TRetryOperationSettings {
     FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings());
     FLUENT_SETTING_FLAG(Idempotent);
+    FLUENT_SETTING_FLAG(Verbose);
 
     static TBackoffSettings DefaultFastBackoffSettings() {
         return TBackoffSettings()

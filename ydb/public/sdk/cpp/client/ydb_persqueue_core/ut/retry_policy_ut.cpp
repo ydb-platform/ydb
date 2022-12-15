@@ -158,10 +158,9 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         setup2.Start();
         setup1->AddDataCenter("dc2", setup2, true);
         setup1->Start();
-        TString tmpSrcId = "tmp-src-seqno-shift", noShiftSrcId = "tmp-src-no-seqno-shift";
-        auto helper = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1);
-        auto helper2 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, tmpSrcId);
-        //auto helperNoShift = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, tmpSrcId);
+        TString tmpSrcId = "tmp-src-seqno-shift";
+        auto helper = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, TString(), true);
+        auto helper2 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, tmpSrcId, true);
 
         auto settings = setup1->GetWriteSessionSettings();
         auto& client = setup1->GetPersQueueClient();
@@ -177,18 +176,18 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         helper->Policy->WaitForRetriesSync(1);
 
         //! Re-create helpers, kill previous sessions. New sessions will connect to dc2.
-        helper = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1);
-        helper2 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, tmpSrcId);
+        helper = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, TString(), true);
+        helper2 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, tmpSrcId, true);
 
         //! Write some data and await confirmation - just to ensure sessions are started.
         helper->Write(true);
         helper2->Write(true);
 
         helper->Policy->ExpectBreakDown();
-        Cerr << "===Disable dc2\n";
+        Cerr << "Disable dc2\n";
         //! Leave no available DCs
         setup1->DisableDataCenter("dc2");
-        Cerr << "=== Wait for retries after initial dc2 shutdown\n";
+        Cerr << "Wait for retries after initial dc2 shutdown\n";
         helper->Policy->WaitForRetriesSync(1);
 
         //! Put some data inflight. It cannot be written now, but SeqNo will be assigned.
@@ -199,11 +198,11 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         auto f = helper->Write(false);
         auto f2 = helper2->Write(false);
         //! Enable DC1. Now writers gonna write collected data to DC1 having LastSeqNo = 10
-        //! (because of data written and the very beginning), and inflight data has SeqNo assingned = 2..5,
+        //! (because of data written in the very beginning), and inflight data has SeqNo assigned = 2..5,
         //! so the SeqNo shift takes place.
         setup1->EnableDataCenter("dc1");
 
-        Cerr << "=====Wait for writes to complete\n";
+        Cerr << "Wait for writes to complete\n";
         f.Wait();
         f2.Wait();
         //! Writer1 is not used any more.
@@ -220,13 +219,13 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
             helper2->Write(false);
         }
         f = helper2->Write(false);
-        Cerr << "===Enable dc2\n";
+        Cerr << "Enable dc2\n";
         setup1->EnableDataCenter("dc2");
         f.Wait();
         helper2->EventLoop->AllowStop();
         helper2->Policy->ExpectBreakDown();
 
-        Cerr << "===Enable dc1\n";
+        Cerr << "Enable dc1\n";
         setup1->EnableDataCenter("dc1");
         auto CheckSeqNo = [&] (const TString& dcName, ui64 expectedSeqNo) {
             settings.PreferredCluster(dcName);
@@ -239,19 +238,19 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         };
 
         //!check SeqNo in both DC. For writer1 We expect 14 messages in DC1
-        //! (10 written initially + 4 wriiten after recoonect) and 1 message in DC2 (only initial message).
-        Cerr << "===Check SeqNo writer1, dc2\n";
+        //! (10 written initially + 4 written after reconnect) and 1 message in DC2 (only initial message).
+        Cerr << "Check SeqNo writer1, dc2\n";
         CheckSeqNo("dc2", 1);
-        Cerr << "===Check SeqNo writer1, dc1\n";
+        Cerr << "Check SeqNo writer1, dc1\n";
         CheckSeqNo("dc1", 14);
 
         //! Check SeqNo for writer 2; Expect to have 6 messages on DC2 with MaxSeqNo = 6;
         helper2 = nullptr;
         settings.MessageGroupId(tmpSrcId);
-        Cerr << "===Check SeqNo writer2 dc2\n";
-        //!DC2 has no a ap in SeqNo since 5 messages were written ot dc 1.
-        CheckSeqNo("dc2", 11);
-        Cerr << "===Check SeqNo writer2 dc1\n";
+        Cerr << "Check SeqNo writer2 dc2\n";
+        //!DC2 has no shift in SeqNo since 5 messages were written to dc 1.
+        CheckSeqNo("dc2", 15);
+        Cerr << "Check SeqNo writer2 dc1\n";
         CheckSeqNo("dc1", 14);
 
 
@@ -296,13 +295,19 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
                             } else {
                                 UNIT_ASSERT_VALUES_EQUAL(sourceId, tmpSrcId);
                                 auto& prevSeqNo = SeqNoByClusterSrc2[clusterName];
-                                if (clusterName == "dc1" || prevSeqNo != 1) {
+                                if (clusterName == "dc1") {
                                     UNIT_ASSERT_VALUES_EQUAL(seqNo, prevSeqNo + 1);
                                     prevSeqNo++;
                                 } else {
                                     UNIT_ASSERT_VALUES_EQUAL(clusterName, "dc2");
-                                    UNIT_ASSERT_VALUES_EQUAL(seqNo, prevSeqNo + 6);
-                                    prevSeqNo+= 6;
+                                    if (prevSeqNo == 0) {
+                                        UNIT_ASSERT_VALUES_EQUAL(seqNo, 1);
+                                    } else if (prevSeqNo == 1) {
+                                        UNIT_ASSERT_VALUES_EQUAL(seqNo, 11);
+                                    } else {
+                                        UNIT_ASSERT_VALUES_EQUAL(seqNo, prevSeqNo + 1);
+                                    }
+                                    prevSeqNo = seqNo;
                                 }
                                 auto& msgRemaining = MsgCountByClusterSrc2[clusterName];
                                 UNIT_ASSERT(msgRemaining > 0);

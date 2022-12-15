@@ -78,10 +78,12 @@ public:
             IRetryPolicy::TPtr retryPolicy = nullptr,
             IExecutor::TPtr compressExecutor = nullptr,
             const TString& preferredCluster = TString(),
-            const TString& sourceId = TString()
+            const TString& sourceId = TString(),
+            bool autoSeqNo = false
     )
         : IClientEventLoop()
         , Setup(setup)
+        , AutoSeqNo(autoSeqNo)
     {
         Log = Setup->GetLog();
         Thread = std::make_unique<TThread>([setup, retryPolicy, compressExecutor, preferredCluster, sourceId, this]() {
@@ -101,6 +103,7 @@ public:
             TMaybe<TContinuationToken> continueToken;
             NThreading::TFuture<void> waitEventFuture = writer->WaitEvent();
             THashMap<ui64, NThreading::TPromise<::NPersQueue::TWriteResult>> ackPromiseBySequenceNumber;
+            TDeque<NThreading::TPromise<::NPersQueue::TWriteResult>> ackPromiseQueue;
             while (!MustStop) {
                 if (!continueToken) {
                     Log << TLOG_INFO << "Wait for writer event";
@@ -113,12 +116,16 @@ public:
                     waitEventFuture = writer->WaitEvent();
                     std::visit(TOverloaded {
                             [&](const TWriteSessionEvent::TAcksEvent& event) {
-                                TVector<ui64> sequenceNumbers;
                                 for (const auto& ack : event.Acks) {
-                                    UNIT_ASSERT(ackPromiseBySequenceNumber.contains(ack.SeqNo));
-                                    sequenceNumbers.push_back(ack.SeqNo);
-                                    ackPromiseBySequenceNumber[ack.SeqNo].SetValue({true, false});
-                                    ackPromiseBySequenceNumber.erase(ack.SeqNo);
+                                    if (AutoSeqNo) {
+                                        UNIT_ASSERT(!ackPromiseQueue.empty());
+                                        ackPromiseQueue.front().SetValue({true, false});
+                                        ackPromiseQueue.pop_front();
+                                    } else {
+                                        UNIT_ASSERT(ackPromiseBySequenceNumber.contains(ack.SeqNo));
+                                        ackPromiseBySequenceNumber[ack.SeqNo].SetValue({true, false});
+                                        ackPromiseBySequenceNumber.erase(ack.SeqNo);
+                                    }
                                 }
                             },
                             [&](TWriteSessionEvent::TReadyToAcceptEvent& event) {
@@ -126,11 +133,12 @@ public:
                                 continueToken = std::move(event.ContinuationToken);
                             },
                             [&](const TSessionClosedEvent& event) {
-                                Log << TLOG_INFO << "===Got close event: " << event.DebugString() << Endl;
+                                Log << TLOG_INFO << "Got close event: " << event.DebugString() << Endl;
                                 if (!MayStop) {
                                     UNIT_ASSERT(MustStop);
                                     UNIT_ASSERT(MessageBuffer.IsEmpty());
                                     UNIT_ASSERT(ackPromiseBySequenceNumber.empty());
+                                    UNIT_ASSERT(ackPromiseQueue.empty());
                                 } else {
                                     MustStop = true;
                                     closed = true;
@@ -142,13 +150,24 @@ public:
                 if (continueToken && !MessageBuffer.IsEmpty()) {
                     ::NPersQueue::TAcknowledgableMessage acknowledgeableMessage;
                     Y_VERIFY(MessageBuffer.Dequeue(acknowledgeableMessage));
-                    ackPromiseBySequenceNumber.emplace(acknowledgeableMessage.SequenceNumber, acknowledgeableMessage.AckPromise);
+                    if (AutoSeqNo) {
+                        ackPromiseQueue.emplace_back(acknowledgeableMessage.AckPromise);
+                    } else {
+                        ackPromiseBySequenceNumber.emplace(acknowledgeableMessage.SequenceNumber,
+                                                           acknowledgeableMessage.AckPromise);
+                    }
                     Y_VERIFY(continueToken);
-                    Log << TLOG_INFO << "Write messages with sequence numbers " << acknowledgeableMessage.SequenceNumber;
+
+                    TMaybe<ui64> seqNo = Nothing();
+                    if (!AutoSeqNo) {
+                        seqNo = acknowledgeableMessage.SequenceNumber;
+                        Log << TLOG_INFO << "[" << sourceId << "] Write messages with sequence numbers "
+                            << acknowledgeableMessage.SequenceNumber;
+                    }
                     writer->Write(
                             std::move(*continueToken),
                             std::move(acknowledgeableMessage.Value),
-                            acknowledgeableMessage.SequenceNumber,
+                            seqNo,
                             acknowledgeableMessage.CreatedAt
                     );
                     continueToken = Nothing();
@@ -161,6 +180,9 @@ public:
         });
         Thread->Start();
     }
+
+private:
+    bool AutoSeqNo;
 };
 
 struct TYdbPqTestRetryState : NYdb::NPersQueue::IRetryPolicy::IRetryState {
@@ -369,14 +391,16 @@ public:
             std::shared_ptr<TLockFreeQueue<ui64>> executorQueue = nullptr,
             const TString& preferredCluster = TString(),
             std::shared_ptr<TPersQueueYdbSdkTestSetup> setup = nullptr,
-            const TString& sourceId = TString()
+            const TString& sourceId = TString(),
+            bool autoSeqNo = false
     )
         : Setup(setup ? setup : std::make_shared<TPersQueueYdbSdkTestSetup>(name))
         , Policy(std::make_shared<TYdbPqTestRetryPolicy>())
     {
         if (executorQueue)
             CompressExecutor = MakeIntrusive<TYdbPqTestExecutor>(executorQueue);
-        EventLoop = std::make_unique<TYDBClientEventLoop>(Setup, Policy, CompressExecutor, preferredCluster, sourceId);
+        EventLoop = std::make_unique<TYDBClientEventLoop>(Setup, Policy, CompressExecutor, preferredCluster, sourceId,
+                                                          autoSeqNo);
     }
 
     NThreading::TFuture<::NPersQueue::TWriteResult> Write(bool doWait = false, const TString& message = TString()) {

@@ -246,8 +246,9 @@ void TWriteSession::OnCdsResponse(
                 OnSeqNoShift = false;
             } else { // Switched from initial cluster to second one;
                 Y_VERIFY(CurrentCluster == InitialCluster);
-                if (AutoSeqNoMode.GetOrElse(true))
+                if (AutoSeqNoMode.GetOrElse(true)) {
                     OnSeqNoShift = true;
+                }
             }
 
         }
@@ -694,7 +695,7 @@ TWriteSession::TProcessSrvMessageResult TWriteSession::ProcessServerMessageImpl(
             // SeqNo increased, so there's a risk of loss, apply SeqNo shift.
             // MinUnsentSeqNo must be > 0 if anything was ever sent yet
             if (MinUnsentSeqNo && OnSeqNoShift && newLastSeqNo > MinUnsentSeqNo) {
-                 SeqNoShift = newLastSeqNo - MinUnsentSeqNo;
+                SeqNoShift = newLastSeqNo - MinUnsentSeqNo;
             }
             result.InitSeqNo = newLastSeqNo;
             LastSeqNo = newLastSeqNo;

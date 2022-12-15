@@ -29,7 +29,7 @@ message TEvLoadTestRequest {
         optional uint32 Max = 2;
         optional double Weight = 3;
     }
-    message TLoadStart {
+    message TStorageLoad {
         message TRequestInfo {
             optional float SendTime = 1;
             optional uint64 Type = 2;
@@ -67,7 +67,7 @@ message TEvLoadTestRequest {
         optional uint64 ScheduleThresholdUs = 5;
         optional uint64 ScheduleRoundingUs = 6;
     }
-    message TLoadStop {
+    message TStop {
         optional uint64 Tag = 1;
         optional bool RemoveAllTags = 2;
     }
@@ -76,7 +76,7 @@ message TEvLoadTestRequest {
         LOG_SEQUENTIAL = 2;
         LOG_NONE = 3;
     }
-    message TPDiskLoadStart {
+    message TPDiskWriteLoad {
         message TChunkInfo {
             optional uint32 Slots = 1; // number of slots per chunk
             optional uint32 Weight = 2; // probability weight
@@ -95,7 +95,7 @@ message TEvLoadTestRequest {
         optional bool Reuse = 12 [default = false];
         optional bool IsWardenlessTest = 13 [default = false];
     }
-    message TVDiskLoadStart {
+    message TVDiskLoad {
         optional uint64 Tag = 1;
 
         // full VDisk identifier
@@ -134,7 +134,7 @@ message TEvLoadTestRequest {
         // minimum distance kept between current Step of written blobs and CollectStep of barriers
         optional uint32 StepDistance = 15;
     }
-    message TPDiskReadLoadStart {
+    message TPDiskReadLoad {
         message TChunkInfo {
             optional uint32 Slots = 1; // number of slots per chunk
             optional uint32 Weight = 2; // probability weight
@@ -153,7 +153,7 @@ message TEvLoadTestRequest {
 
         optional bool IsWardenlessTest = 13 [default = false];
     }
-    message TPDiskLogLoadStart {
+    message TPDiskLogLoad {
         message TWorkerConfig {
             optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
             optional uint32 MaxInFlight = 2;
@@ -177,7 +177,7 @@ message TEvLoadTestRequest {
 
         optional bool IsWardenlessTest = 8 [default = false];
     }
-    message TKeyValueLoadStart {
+    message TKeyValueLoad {
         message TWorkerConfig {
             optional string KeyPrefix = 1;
             optional uint32 MaxInFlight = 2;
@@ -191,7 +191,7 @@ message TEvLoadTestRequest {
         repeated TWorkerConfig Workers = 7;
     }
 
-    message TKqpLoadStart {
+    message TKqpLoad {
         message TStockWorkload {
             optional uint64 ProductCount = 1 [default = 100];
             optional uint64 Quantity = 2 [default = 1000];
@@ -221,7 +221,7 @@ message TEvLoadTestRequest {
         }
     }
 
-    message TMemoryLoadStart {
+    message TMemoryLoad {
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;
         optional uint64 BlockSize = 3;
@@ -230,15 +230,15 @@ message TEvLoadTestRequest {
 
     optional uint64 Cookie = 1;
     oneof Command {
-        TLoadStart LoadStart = 2;
-        TLoadStop LoadStop = 3;
-        TPDiskLoadStart PDiskLoadStart = 4;
-        TVDiskLoadStart VDiskLoadStart = 5;
-        TPDiskReadLoadStart PDiskReadLoadStart = 6;
-        TPDiskLogLoadStart PDiskLogLoadStart = 7;
-        TKeyValueLoadStart KeyValueLoadStart = 8;
-        TKqpLoadStart KqpLoadStart = 9;
-        TMemoryLoadStart MemoryLoadStart = 10;
+        TStop Stop = 3;
+        TStorageLoad StorageLoad = 2;
+        TPDiskWriteLoad PDiskWriteLoad = 4;
+        TVDiskLoad VDiskLoad = 5;
+        TPDiskReadLoad PDiskReadLoad = 6;
+        TPDiskLogLoad PDiskLogLoad = 7;
+        TKeyValueLoad KeyValueLoad = 8;
+        TKqpLoad KqpLoad = 9;
+        TMemoryLoad MemoryLoad = 10;
     }
 }
 

@@ -72,7 +72,7 @@ class TWorker {
 
 public:
 
-    TWorker(const NKikimr::TEvLoadTestRequest::TPDiskLogLoadStart::TWorkerConfig& cmd,
+    TWorker(const NKikimr::TEvLoadTestRequest::TPDiskLogLoad::TWorkerConfig& cmd,
             ui32 idx, TReallyFastRng32 *gen)
         : Idx(idx)
         , MaxInFlight(1, 0, 65536)
@@ -305,7 +305,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 
-    TPDiskLogWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskLogLoadStart& cmd,
+    TPDiskLogWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskLogLoad& cmd,
             const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -693,7 +693,7 @@ public:
     )
 };
 
-IActor *CreatePDiskLogWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLogLoadStart& cmd,
+IActor *CreatePDiskLogWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLogLoad& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TPDiskLogWriterLoadTestActor(cmd, parent, counters, index, tag);
 }

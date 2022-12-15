@@ -131,7 +131,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
     }
 
-    TPDiskWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskLoadStart& cmd, const TActorId& parent,
+    TPDiskWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPDiskWriteLoad& cmd, const TActorId& parent,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -628,7 +628,7 @@ public:
     )
 };
 
-IActor *CreatePDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLoadStart& cmd,
+IActor *CreatePDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskWriteLoad& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TPDiskWriterLoadTestActor(cmd, parent, counters, index, tag);
 }

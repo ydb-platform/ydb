@@ -771,7 +771,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
     }
 
-    TLogWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TLoadStart& cmd, const TActorId& parent,
+    TLogWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TStorageLoad& cmd, const TActorId& parent,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
         : Tag(tag)
         , Parent(parent)
@@ -971,7 +971,7 @@ public:
     )
 };
 
-IActor *CreateWriterLoadTest(const NKikimr::TEvLoadTestRequest::TLoadStart& cmd, const TActorId& parent,
+IActor *CreateWriterLoadTest(const NKikimr::TEvLoadTestRequest::TStorageLoad& cmd, const TActorId& parent,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag) {
     return new TLogWriterLoadTestActor(cmd, parent, std::move(counters), tag);
 }

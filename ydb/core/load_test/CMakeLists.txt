@@ -27,13 +27,13 @@ target_link_libraries(ydb-core-load_test PUBLIC
   cpp-client-ydb_proto
 )
 target_sources(ydb-core-load_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/service_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/keyvalue_write.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/kqp.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/memory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/pdisk_log.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/pdisk_read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/pdisk_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/pdisk_log.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/vdisk_write.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/service_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/group_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/kqp.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/vdisk_write.cpp
 )

@@ -14,7 +14,7 @@ namespace NKikimr {
 
 namespace NKqpConstants {
     const TString DEFAULT_PROTO = R"_(
-KqpLoadStart: {
+KqpLoad: {
     DurationSeconds: 30
     WindowDuration: 1
     WorkingDir: "/slice/db"
@@ -131,8 +131,8 @@ public:
     ui64 ProcessCmd(const NKikimr::TEvLoadTestRequest& record, const TActorContext& ctx) {
         ui64 tag = 0;
         switch (record.Command_case()) {
-            case NKikimr::TEvLoadTestRequest::CommandCase::kLoadStart: {
-                const auto& cmd = record.GetLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kStorageLoad: {
+                const auto& cmd = record.GetStorageLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -143,8 +143,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kLoadStop: {
-                const auto& cmd = record.GetLoadStop();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kStop: {
+                const auto& cmd = record.GetStop();
                 if (cmd.HasRemoveAllTags() && cmd.GetRemoveAllTags()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Delete all running load actors");
                     for (auto& actorPair : LoadActors) {
@@ -165,8 +165,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLoadStart: {
-                const auto& cmd = record.GetPDiskLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskWriteLoad: {
+                const auto& cmd = record.GetPDiskWriteLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -177,8 +177,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskReadLoadStart: {
-                const auto& cmd = record.GetPDiskReadLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskReadLoad: {
+                const auto& cmd = record.GetPDiskReadLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -189,8 +189,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLogLoadStart: {
-                const auto& cmd = record.GetPDiskLogLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLogLoad: {
+                const auto& cmd = record.GetPDiskLogLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -201,8 +201,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kVDiskLoadStart: {
-                const auto& cmd = record.GetVDiskLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kVDiskLoad: {
+                const auto& cmd = record.GetVDiskLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -212,8 +212,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kKeyValueLoadStart: {
-                const auto& cmd = record.GetKeyValueLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kKeyValueLoad: {
+                const auto& cmd = record.GetKeyValueLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -225,8 +225,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kKqpLoadStart: {
-                const auto& cmd = record.GetKqpLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kKqpLoad: {
+                const auto& cmd = record.GetKqpLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -238,8 +238,8 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kMemoryLoadStart: {
-                const auto& cmd = record.GetMemoryLoadStart();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kMemoryLoad: {
+                const auto& cmd = record.GetMemoryLoad();
                 tag = GetOrGenerateTag(cmd);
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
@@ -357,7 +357,7 @@ public:
         } else if (params.Has("stop_request")) {
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
             NKikimr::TEvLoadTestRequest record;
-            record.MutableLoadStop()->SetRemoveAllTags(true);
+            record.MutableStop()->SetRemoveAllTags(true);
             if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
                 RunRecordOnAllNodes(record, ctx);

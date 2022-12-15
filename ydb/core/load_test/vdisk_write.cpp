@@ -76,7 +76,7 @@ namespace NKikimr {
                 return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
             }
 
-            TVDiskLoadActor(const NKikimr::TEvLoadTestRequest::TVDiskLoadStart& cmd,
+            TVDiskLoadActor(const NKikimr::TEvLoadTestRequest::TVDiskLoad& cmd,
                     const NActors::TActorId& parent, ui64 tag)
                 : ParentActorId(parent)
                 , Tag(tag)
@@ -342,7 +342,7 @@ namespace NKikimr {
 
     } // <anonymous>
 
-    IActor *CreateVDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TVDiskLoadStart& cmd,
+    IActor *CreateVDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TVDiskLoad& cmd,
             const NActors::TActorId& parent, ui64 tag) {
         return new TVDiskLoadActor(cmd, parent, tag);
     }

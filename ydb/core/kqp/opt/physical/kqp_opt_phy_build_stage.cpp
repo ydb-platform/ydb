@@ -59,8 +59,11 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         return node;
     }
     const TKqlReadTable& read = node.Cast<TKqlReadTable>();
+    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
     useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
+    useSource = useSource && tableDesc.Metadata->Kind != EKikimrTableKind::SysView;
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -169,8 +172,6 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
             .Done());
     }
 
-    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
-
     TMaybeNode<TExprBase> phyRead;
     switch (tableDesc.Metadata->Kind) {
         case EKikimrTableKind::Datashard:
@@ -227,6 +228,8 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
 
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
     useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
+    useSource = useSource && tableDesc.Metadata->Kind != EKikimrTableKind::SysView;
+
     bool fullScan = TCoVoid::Match(ranges.Raw());
 
     TVector<TExprBase> input;

@@ -2560,8 +2560,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
     }
 
     if (node->Tail().Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-        const auto keyType = node->Tail().Tail().GetTypeAnn()->Cast<TTupleExprType>();
-        if (1U == keyType->GetSize()) {
+        if (const auto keyType = node->Tail().Tail().GetTypeAnn()->Cast<TTupleExprType>(); 1U == keyType->GetSize()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " unpack single item tuple";
             auto unpack = node->Tail().Tail().IsList() ?
                 ctx.Builder(node->Tail().Pos())
@@ -2580,16 +2579,41 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
                         .Seal()
                     .Seal().Build();
             return ctx.ChangeChild(*node, node->ChildrenSize() - 1U, {std::move(unpack)});
+        } else if (node->Tail().Tail().IsList()) {
+            TNodeSet set(node->Tail().Tail().ChildrenSize());
+            node->Tail().Tail().ForEachChild([&set](const TExprNode& key) { set.emplace(&key); });
+            if (set.size() < node->Tail().Tail().ChildrenSize()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " leave " << set.size() << " keys out of " << node->Tail().Tail().ChildrenSize();
+                auto keys = node->Tail().Tail().ChildrenList();
+                auto dirs = node->Child(ascIndex)->IsList() ? node->Child(ascIndex)->ChildrenList() : TExprNode::TListType();
+                for (auto it = keys.cbegin(); keys.cend() != it;) {
+                    if (set.erase(it->Get()))
+                        ++it;
+                    else {
+                        if (!dirs.empty()) {
+                            auto jt = dirs.cbegin();
+                            std::advance(jt, std::distance(keys.cbegin(), it));
+                            dirs.erase(jt);
+                        }
+                        it = keys.erase(it);
+                    }
+                }
+                auto children = node->ChildrenList();
+                children.back() = ctx.DeepCopyLambda(node->Tail(), ctx.NewList(node->Tail().Tail().Pos(), std::move(keys)));
+                if (!dirs.empty())
+                    children[ascIndex] = ctx.ChangeChildren(*children[ascIndex], std::move(dirs));
+                return ctx.ChangeChildren(*node, std::move(children));
+            }
         }
     }
 
-    if (IsTop) {
+    if constexpr (IsTop) {
         if (node->Child(1)->IsCallable("Uint64")) {
             const ui64 count = FromString<ui64>(node->Child(1)->Head().Content());
             if (0 == count) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with zero count";
                 auto res = ctx.NewCallable(node->Pos(), GetEmptyCollectionName(node->Head().GetTypeAnn()), {ExpandType(node->Pos(), *node->Head().GetTypeAnn(), ctx)});
-                if (IsSort) {
+                if constexpr (IsSort) {
                     res = ctx.Builder(node->Pos())
                         .Callable("AssumeSorted")
                             .Add(0, std::move(res))

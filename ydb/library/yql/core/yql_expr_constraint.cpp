@@ -386,7 +386,7 @@ private:
             return status;
         }
 
-        if (UseSort) {
+        if constexpr (UseSort) {
             if (auto sorted = DeduceSortConstraint(*input->Child(0), *input->Child(2), *input->Child(3), ctx)) {
                 input->AddConstraint(sorted);
             }
@@ -2490,22 +2490,12 @@ private:
     }
 
     static const TSortedConstraintNode* DeduceSortConstraint(const TExprNode& list, const TExprNode& directions, const TExprNode& keyExtractor, TExprContext& ctx) {
-        // Ignore Sort with empty key tuple
-        if (directions.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple &&
-            directions.GetTypeAnn()->Cast<TTupleExprType>()->GetSize() == 0) {
-
-            return nullptr;
-        }
-
         if (GetSeqItemType(list.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
-            TVector<bool> dirs;
-            TVector<TStringBuf> keys;
-            ExtractSimpleSortTraits(directions, keyExtractor, dirs, keys);
-            YQL_ENSURE(dirs.size() == keys.size());
-            TSortedConstraintNode::TContainerType content;
-            for (auto i = 0U; i < keys.size(); ++i)
-                content.emplace_back(TSortedConstraintNode::TContainerType::value_type::first_type{keys[i]}, dirs[i]);
-            if (!content.empty()) {
+            if (const auto& columns = ExtractSimpleSortTraits(directions, keyExtractor); !columns.empty()) {
+                TSortedConstraintNode::TContainerType content(columns.size());
+                std::transform(columns.cbegin(), columns.cend(), content.begin(), [](const std::pair<std::string_view, bool>& item) {
+                   return TSortedConstraintNode::TContainerType::value_type({item.first}, item.second);
+                });
                 return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
             }
         }

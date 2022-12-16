@@ -74,7 +74,7 @@ void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySel
 inline void ExtractSimpleKeys(const TExprNode& keySelectorLambda, TVector<TStringBuf>& columns) {
     ExtractSimpleKeys(keySelectorLambda.Child(1), keySelectorLambda.Child(0)->Child(0), columns);
 }
-void ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda, TVector<bool>& dirs, TVector<TStringBuf>& columns);
+std::vector<std::pair<std::string_view, bool>> ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda);
 
 TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);

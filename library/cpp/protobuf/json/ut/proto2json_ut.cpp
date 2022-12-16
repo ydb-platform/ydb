@@ -74,6 +74,22 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
 #undef DEFINE_FIELD
     }
 
+    Y_UNIT_TEST(TestOneOfDefault) {
+        using namespace ::google::protobuf;
+        TFlatOneOfDefault proto;
+        NJson::TJsonValue json;
+        TProto2JsonConfig cfg;
+        cfg.SetMissingSingleKeyMode(TProto2JsonConfig::MissingKeyDefault);
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, cfg));
+
+        UNIT_ASSERT(!json.Has("ChoiceOne"));
+        UNIT_ASSERT(!json.Has("ChoiceTwo"));
+
+        proto.SetChoiceOne("one");
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, cfg));
+        UNIT_ASSERT_EQUAL("one", json["ChoiceOne"].GetStringRobust());
+    }
+
     Y_UNIT_TEST(TestNameGenerator) {
         TNameGeneratorType proto;
         proto.SetField(42);

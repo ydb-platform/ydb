@@ -122,6 +122,13 @@ message TFlatDefault {
     optional string UserID = 20 [default = "some_id"];
 };
 
+message TFlatOneOfDefault {
+    oneof Choice {
+        string ChoiceOne = 1 [default = "one"];
+        string ChoiceTwo = 2 [default = "two"];
+    }
+}
+
 message TCompositeOptional {
     optional TFlatOptional Part = 1;
 };
@@ -206,7 +213,7 @@ message TSingleTimestamp {
 }
 
 message TExtensionField {
-	extensions 100 to 199;
+    extensions 100 to 199;
 }
 
 extend TExtensionField {

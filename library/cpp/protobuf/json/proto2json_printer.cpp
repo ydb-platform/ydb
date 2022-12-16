@@ -234,7 +234,8 @@ namespace NProtobufJson {
                                     << field.full_name() << ".";
             }
         }
-        shouldPrintField = shouldPrintField || GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyDefault;
+        shouldPrintField = shouldPrintField ||
+            (GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyDefault && !field.containing_oneof());
 
         if (shouldPrintField) {
             switch (field.cpp_type()) {

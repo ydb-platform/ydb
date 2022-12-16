@@ -64,9 +64,7 @@ public:
             Name: "%s"
             ColumnShardCount: %d
             TtlSettings: {
-                Tiering: {
-                    UseTiering: "tiering1"
-                }
+                UseTiering: "tiering1"
             }
             Sharding {
                 HashSharding {

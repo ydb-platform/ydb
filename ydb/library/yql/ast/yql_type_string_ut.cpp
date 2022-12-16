@@ -571,6 +571,10 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestFormat("((Block (Data String)))", "Block<String>");
     }
 
+    Y_UNIT_TEST(FormatChunkedBlock) {
+        TestFormat("((ChunkedBlock (Data String)))", "ChunkedBlock<String>");
+    }
+
     Y_UNIT_TEST(FormatScalar) {
         TestFormat("((Scalar (Data String)))", "Scalar<String>");
     }

@@ -82,6 +82,7 @@ enum EToken
     TOKEN_DYNUMBER = -49,
     TOKEN_SCALAR = -50,
     TOKEN_BLOCK = -51,
+    TOKEN_CHUNKED_BLOCK = -52,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -145,6 +146,7 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("JsonDocument"), TOKEN_JSON_DOCUMENT },
         { TStringBuf("DyNumber"), TOKEN_DYNUMBER },
         { TStringBuf("Block"), TOKEN_BLOCK},
+        { TStringBuf("ChunkedBlock"), TOKEN_CHUNKED_BLOCK},
         { TStringBuf("Scalar"), TOKEN_SCALAR},
     };
 
@@ -309,6 +311,10 @@ private:
 
         case TOKEN_BLOCK:
             type = ParseBlockType();
+            break;
+
+        case TOKEN_CHUNKED_BLOCK:
+            type = ParseChunkedBlockType();
             break;
 
         case TOKEN_SCALAR:
@@ -668,6 +674,17 @@ private:
         return MakeBlockType(itemType);
     }
 
+    TAstNode* ParseChunkedBlockType() {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+
+        auto itemType = ParseType();
+        if (!itemType) return nullptr;
+
+        EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        return MakeChunkedBlockType(itemType);
+    }
+
     TAstNode* ParseScalarType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -927,6 +944,14 @@ private:
     TAstNode* MakeBlockType(TAstNode* itemType) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("BlockType")),
+            itemType,
+        };
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
+    TAstNode* MakeChunkedBlockType(TAstNode* itemType) {
+        TAstNode* items[] = {
+            MakeLiteralAtom(TStringBuf("ChunkedBlockType")),
             itemType,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -1264,6 +1289,13 @@ private:
     void Visit(const TBlockExprType& type) final {
         TopLevel = false;
         Out_ << TStringBuf("Block<");
+        type.GetItemType()->Accept(*this);
+        Out_ << '>';
+    }
+
+    void Visit(const TChunkedBlockExprType& type) final {
+        TopLevel = false;
+        Out_ << TStringBuf("ChunkedBlock<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }

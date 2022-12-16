@@ -11476,6 +11476,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
         Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
         Functions["BlockType"] = &TypeWrapper<ETypeAnnotationKind::Block>;
+        Functions["ChunkedBlockType"] = &TypeWrapper<ETypeAnnotationKind::ChunkedBlock>;
         Functions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;

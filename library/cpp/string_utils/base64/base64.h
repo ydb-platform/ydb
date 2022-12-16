@@ -148,3 +148,9 @@ inline TString Base64EncodeUrl(const TStringBuf s) {
     Base64EncodeUrl(s, ret);
     return ret;
 }
+
+inline TString Base64EncodeUrlNoPadding(const TStringBuf s) {
+    TString ret;
+    Base64EncodeUrlNoPadding(s, ret);
+    return ret;
+}

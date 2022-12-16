@@ -9,6 +9,39 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+NKikimrSchemeOp::TAlterColumnTable ConvertAlter(const NKikimrSchemeOp::TTableDescription& alterTable,
+                                                TString& /*errStr*/) {
+    NKikimrSchemeOp::TAlterColumnTable alter;
+    alter.SetName(alterTable.GetName());
+
+    // TODO: optional TAlterColumnTableSchema AlterSchema
+
+    if (alterTable.HasTTLSettings()) {
+        auto& tableTtl = alterTable.GetTTLSettings();
+        NKikimrSchemeOp::TColumnDataLifeCycle* alterTtl = alter.MutableAlterTtlSettings();
+        if (tableTtl.HasEnabled()) {
+            auto& enabled = tableTtl.GetEnabled();
+            auto* alterEnabled = alterTtl->MutableEnabled();
+            if (enabled.HasColumnName()) {
+                alterEnabled->SetColumnName(enabled.GetColumnName());
+            }
+            if (enabled.HasExpireAfterSeconds()) {
+                alterEnabled->SetExpireAfterSeconds(enabled.GetExpireAfterSeconds());
+            }
+            if (enabled.HasColumnUnit()) {
+                alterEnabled->SetColumnUnit(enabled.GetColumnUnit());
+            }
+        } else if (tableTtl.HasDisabled()) {
+            alterTtl->MutableDisabled();
+        }
+        if (tableTtl.HasUseTiering()) {
+            alterTtl->SetUseTiering(tableTtl.GetUseTiering());
+        }
+    }
+
+    return alter;
+}
+
 TColumnTableInfo::TPtr ParseParams(
         const TPath& path, TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
         const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain,
@@ -378,7 +411,19 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& alter = Transaction.GetAlterColumnTable();
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+
+        TString errStr;
+        NKikimrSchemeOp::TAlterColumnTable alter;
+        if (Transaction.HasAlterColumnTable()) {
+            alter = Transaction.GetAlterColumnTable();
+        } else if (Transaction.HasAlterTable()) {
+            alter = ConvertAlter(Transaction.GetAlterTable(), errStr); // from DDL (not known table type)
+            if (!errStr.empty()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
+        }
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();
@@ -388,8 +433,6 @@ public:
                          << ", path: " << parentPathStr << "/" << name
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
-
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!alter.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "No table name in Alter");
@@ -442,7 +485,6 @@ public:
         Y_VERIFY(context.SS->OlapStores.contains(storePathId));
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
 
-        TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;

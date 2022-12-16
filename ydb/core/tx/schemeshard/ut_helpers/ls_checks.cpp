@@ -962,8 +962,7 @@ TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT(ttl.HasTiering());
-        UNIT_ASSERT_EQUAL(ttl.GetTiering().GetUseTiering(), tieringName);
+        UNIT_ASSERT_EQUAL(ttl.GetUseTiering(), tieringName);
     };
 }
 

@@ -642,6 +642,9 @@ TVector<ISubOperationBase::TPtr> CreateConsistentAlterTable(TOperationId id, con
     }
 
     if (!path->IsTable()) {
+        if (path->IsColumnTable()) {
+            return {CreateAlterColumnTable(id, tx)};
+        }
         return {CreateAlterTable(id, tx)};
     }
 

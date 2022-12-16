@@ -3272,7 +3272,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
     }
-#if 0
+
     Y_UNIT_TEST(AlterColumnTableTtl) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -3299,7 +3299,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET(TTL Interval("P1D") ON Key);)";
+            ALTER TABLE `)" << tableName << R"(` SET(TTL = Interval("P1D") ON Key);)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -3315,7 +3315,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
-#endif
 
     Y_UNIT_TEST(Int8Int16) {
         TKikimrRunner kikimr;

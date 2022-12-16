@@ -3,14 +3,14 @@
 namespace NKikimr::NSchemeShard {
 
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetTiering().GetUseTiering();
+    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
     if (!!tieringId) {
         PathesByTieringId[tieringId].emplace(pathId);
     }
 }
 
 void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetTiering().GetUseTiering();
+    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
     if (!tieringId) {
         return;
     }

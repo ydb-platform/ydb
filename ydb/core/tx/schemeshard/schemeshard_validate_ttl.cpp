@@ -163,15 +163,11 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
 
     switch (ttl.GetStatusCase()) {
-        case TTtlProto::kTiering:
-            break;
         case TTtlProto::kEnabled:
             return ValidateColumnTableTtl(ttl.GetEnabled(), {}, columns, columnsByName, errStr);
         case TTtlProto::kDisabled:
-            break;
         default:
-            errStr = "TTL status must be specified";
-            return false;
+            break;
     }
 
     return true;

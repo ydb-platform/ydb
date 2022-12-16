@@ -215,9 +215,9 @@ struct TTestSchema {
     static bool InitTiersAndTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
         ttlSettings->SetVersion(1);
         if (specials.HasTiers()) {
-            ttlSettings->MutableTiering()->SetUseTiering("Tiering1");
+            ttlSettings->SetUseTiering("Tiering1");
             if (specials.HasTtl()) {
-                InitTtl(specials, ttlSettings->MutableTiering()->MutableTtl());
+                InitTtl(specials, ttlSettings->MutableEnabled());
             }
             return true;
         } else if (specials.HasTtl()) {

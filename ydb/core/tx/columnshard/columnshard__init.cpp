@@ -237,8 +237,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
                 auto& ttlSettings = info.GetTtlSettings();
                 if (ttlSettings.HasEnabled()) {
                     ttls[pathId].emplace(version, TTtl::TDescription(ttlSettings.GetEnabled()));
-                } else if (ttlSettings.HasTiering() && ttlSettings.GetTiering().HasTtl()) {
-                    ttls[pathId].emplace(version, TTtl::TDescription(ttlSettings.GetTiering().GetTtl()));
                 }
             }
 

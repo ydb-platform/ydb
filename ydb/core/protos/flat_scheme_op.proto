@@ -321,6 +321,8 @@ message TTTLSettings {
         TEnabled Enabled = 1;
         TDisabled Disabled = 2;
     }
+
+    optional string UseTiering = 3;
 }
 
 message TTableDescription {
@@ -470,25 +472,18 @@ message TColumnDataLifeCycle {
         optional TTTLSettings.EUnit ColumnUnit = 3;
     }
 
-    message TStorageTiering {
-        optional string UseTiering = 1;
-        // If set remote data by TTL in addition to the last tier's border
-        optional TTtl Ttl = 2;
-        // If set keep data in default storage (out of tiers) till this border
-        //optional TTtl KeepTime = 3; TODO
-    }
-
     message TDisabled {
     }
 
     oneof Status {
         TTtl Enabled = 1;
         TDisabled Disabled = 2;
-        TStorageTiering Tiering = 4;
     }
 
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
+
+    optional string UseTiering = 5;
 }
 
 message TColumnTableTtlSettingsPreset {

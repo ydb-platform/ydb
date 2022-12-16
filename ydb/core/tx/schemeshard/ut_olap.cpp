@@ -497,9 +497,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TString tableSchema3 = R"(
             Name: "Table3"
             TtlSettings {
-                Tiering {
-                    UseTiering : "Tiering1"
-                }
+                UseTiering : "Tiering1"
             }
         )";
 
@@ -515,9 +513,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TString tableSchema4 = R"(
             Name: "Table4"
             TtlSettings {
-                Tiering {
-                    UseTiering : "Tiering1"
-                }
+                UseTiering : "Tiering1"
             }
         )";
 
@@ -646,9 +642,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {
-                Tiering {
-                    UseTiering : "Tiering1"
-                }
+                UseTiering : "Tiering1"
             }
         )", {NKikimrScheme::StatusInvalidParameter});
     }

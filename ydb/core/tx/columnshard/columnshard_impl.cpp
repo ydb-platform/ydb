@@ -510,14 +510,10 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
             if (ttlInfo.HasEnabled()) {
                 Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlInfo.GetEnabled()));
                 SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
-            } else if (ttlInfo.HasTiering()) {
-                auto& tiering = ttlInfo.GetTiering();
-                table.TieringUsage = tiering.GetUseTiering();
+            }
+            if (ttlInfo.HasUseTiering()) {
+                table.TieringUsage = ttlInfo.GetUseTiering();
                 ActivateTiering(pathId, table.TieringUsage);
-                if (tiering.HasTtl()) {
-                    Ttl.SetPathTtl(pathId, TTtl::TDescription(tiering.GetTtl()));
-                    SetCounter(COUNTER_TABLE_TTLS, Ttl.PathsCount());
-                }
             }
         }
 
@@ -563,14 +559,12 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         info.SetSchemaPresetId(EnsureSchemaPreset(db, alterProto.GetSchemaPreset(), version));
     }
 
-    const TString& tieringUsage = ttlSettings.GetTiering().GetUseTiering();
+    const TString& tieringUsage = ttlSettings.GetUseTiering();
     ActivateTiering(pathId, tieringUsage);
     if (alterProto.HasTtlSettings()) {
         *info.MutableTtlSettings() = ttlSettings;
         if (ttlSettings.HasEnabled()) {
             Ttl.SetPathTtl(pathId, TTtl::TDescription(ttlSettings.GetEnabled()));
-        } else if (ttlSettings.HasTiering() && ttlSettings.GetTiering().HasTtl()) {
-            Ttl.SetPathTtl(pathId, TTtl::TDescription( ttlSettings.GetTiering().GetTtl()));
         } else {
             Ttl.DropPathTtl(pathId);
         }

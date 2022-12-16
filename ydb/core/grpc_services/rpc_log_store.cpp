@@ -440,7 +440,7 @@ private:
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         } else if (req->has_tiering_settings()) {
-            create->MutableTtlSettings()->MutableTiering()->SetUseTiering(req->tiering_settings().tiering_id());
+            create->MutableTtlSettings()->SetUseTiering(req->tiering_settings().tiering_id());
         }
 
         create->SetColumnShardCount(req->shards_count());

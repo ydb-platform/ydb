@@ -42,3 +42,8 @@ The table below lists the limits that apply to query execution. The _Call_ colum
 | Maximum query text length | 10 KB | ExecuteDataQuery | Limit on the length of YQL query text. | BAD_REQUEST |
 | Maximum size of parameter values | 50 MB | ExecuteDataQuery | Limit on the total size of the parameters passed when executing a previously prepared query. | BAD_REQUEST |
 
+## Topics limits
+
+| Parameter | Value | 
+| :--- | :--- | 
+| Maximum size of the transmitted message | 12 MB | 

@@ -299,7 +299,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_delete_and_create_queue(self, is_fifo):
-        self._init_with_params(is_fifo)
+        self._init_with_params(is_fifo, tables_format=0)
 
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
         self.seq_no += 1

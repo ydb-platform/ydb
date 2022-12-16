@@ -59,7 +59,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
     def test_has_messages_counters(self, is_fifo, stop_node):
-        self._init_with_params(is_fifo)
+        self._init_with_params(is_fifo, tables_format=0)
         self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         node_index = self._get_queue_master_node_index()
         logging.debug('Master node for queue "{}" is {}'.format(self.queue_name, node_index))
@@ -144,6 +144,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
     def test_reassign_master(self, stop_node):
+        self._init_with_params(tables_format=0)
         self._create_queue_and_assert(self.queue_name)
         node_index = self._get_queue_master_node_index()
         proxy_node_index = self._other_node(node_index)
@@ -192,6 +193,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
         self.receive_message_finished = True
 
     def test_ends_request_after_kill(self):
+        self._init_with_params(tables_format=0)
         self._create_queue_and_assert(self.queue_name)
         node_index = self._get_queue_master_node_index()
         self.receive_message_finished = False

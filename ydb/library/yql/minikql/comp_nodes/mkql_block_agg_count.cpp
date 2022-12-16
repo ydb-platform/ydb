@@ -7,40 +7,52 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TCountAllBlockAggregator : public TBlockAggregatorBase {
+namespace {
+
+struct TState {
+    ui64 Count_ = 0;
+};
+
+class TColumnBuilder : public IAggColumnBuilder {
 public:
-    struct TState {
-        ui64 Count_ = 0;
-    };
-
-    class TColumnBuilder : public IAggColumnBuilder {
-    public:
-        TColumnBuilder(ui64 size, TComputationContext& ctx)
-            : Builder_(arrow::uint64(), &ctx.ArrowMemoryPool)
-            , Ctx_(ctx)
-        {
-            ARROW_OK(Builder_.Reserve(size));
-        }
-
-        void Add(const void* state) final {
-            auto typedState = static_cast<const TState*>(state);
-            Builder_.UnsafeAppend(typedState->Count_);
-        }
-
-        NUdf::TUnboxedValue Build() final {
-            std::shared_ptr<arrow::ArrayData> result;
-            ARROW_OK(Builder_.FinishInternal(&result));
-            return Ctx_.HolderFactory.CreateArrowBlock(result);
-        }
-
-    private:
-        arrow::UInt64Builder Builder_;
-        TComputationContext& Ctx_;
-    };
-
-    TCountAllBlockAggregator(std::optional<ui32> filterColumn, TComputationContext& ctx)
-        : TBlockAggregatorBase(sizeof(TState), filterColumn, ctx)
+    TColumnBuilder(ui64 size, TComputationContext& ctx)
+        : Builder_(arrow::uint64(), &ctx.ArrowMemoryPool)
+        , Ctx_(ctx)
     {
+        ARROW_OK(Builder_.Reserve(size));
+    }
+
+    void Add(const void* state) final {
+        auto typedState = static_cast<const TState*>(state);
+        Builder_.UnsafeAppend(typedState->Count_);
+    }
+
+    NUdf::TUnboxedValue Build() final {
+        std::shared_ptr<arrow::ArrayData> result;
+        ARROW_OK(Builder_.FinishInternal(&result));
+        return Ctx_.HolderFactory.CreateArrowBlock(result);
+    }
+
+private:
+    arrow::UInt64Builder Builder_;
+    TComputationContext& Ctx_;
+};
+
+template <typename TTag>
+class TCountAllAggregator;
+
+template <typename TTag>
+class TCountAggregator;
+
+template <>
+class TCountAllAggregator<TCombineAllTag> : public TCombineAllTag::TBase {
+public:
+    using TBase = TCombineAllTag::TBase;
+
+    TCountAllAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBase(sizeof(TState), filterColumn, ctx)
+    {
+        Y_UNUSED(argColumn);
     }
 
     void InitState(void* state) final {
@@ -51,15 +63,28 @@ public:
         auto typedState = static_cast<TState*>(state);
         Y_UNUSED(columns);
         if (filtered) {
-           typedState->Count_ += *filtered;
-        } else {
-           typedState->Count_ += batchLength;
+            typedState->Count_ += *filtered;
+        }
+        else {
+            typedState->Count_ += batchLength;
         }
     }
 
     NUdf::TUnboxedValue FinishOne(const void* state) final {
         auto typedState = static_cast<const TState*>(state);
         return NUdf::TUnboxedValuePod(typedState->Count_);
+    }
+};
+
+template <>
+class TCountAllAggregator<TCombineKeysTag> : public TCombineKeysTag::TBase {
+public:
+    using TBase = TCombineKeysTag::TBase;
+
+    TCountAllAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBase(sizeof(TState), filterColumn, ctx)
+    {
+        Y_UNUSED(argColumn);
     }
 
     void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
@@ -74,44 +99,56 @@ public:
         typedState->Count_ += 1;
     }
 
-    std::unique_ptr<IAggColumnBuilder> MakeBuilder(ui64 size) final {
+    std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
         return std::make_unique<TColumnBuilder>(size, Ctx_);
     }
 };
 
-class TCountBlockAggregator : public TBlockAggregatorBase {
+template <>
+class TCountAllAggregator<TFinalizeKeysTag> : public TFinalizeKeysTag::TBase {
 public:
-    struct TState {
-        ui64 Count_ = 0;
-    };
+    using TBase = TFinalizeKeysTag::TBase;
 
-    class TColumnBuilder : public IAggColumnBuilder {
-    public:
-        TColumnBuilder(ui64 size, TComputationContext& ctx)
-            : Builder_(arrow::uint64(), &ctx.ArrowMemoryPool)
-            , Ctx_(ctx)
-        {
-            ARROW_OK(Builder_.Reserve(size));
+    TCountAllAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBase(sizeof(TState), filterColumn, ctx)
+        , ArgColumn_(argColumn)
+    {
+    }
+
+    void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        new(state) TState();
+        UpdateState(state, columns, row);
+    }
+
+    void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        auto typedState = static_cast<TState*>(state);
+        const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
+        if (datum.is_scalar()) {
+            MKQL_ENSURE(datum.scalar()->is_valid, "Expected not null");
+            typedState->Count_ += datum.scalar_as<arrow::UInt64Scalar>().value;
+        } else {
+            const auto& array = datum.array();
+            auto ptr = array->GetValues<ui64>(1);
+            MKQL_ENSURE(array->GetNullCount() == 0, "Expected not null");
+            typedState->Count_ += ptr[row];
         }
+    }
 
-        void Add(const void* state) final {
-            auto typedState = static_cast<const TState*>(state);
-            Builder_.UnsafeAppend(typedState->Count_);
-        }
+    std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
+        return std::make_unique<TColumnBuilder>(size, Ctx_);
+    }
 
-        NUdf::TUnboxedValue Build() final {
-            std::shared_ptr<arrow::ArrayData> result;
-            ARROW_OK(Builder_.FinishInternal(&result));
-            return Ctx_.HolderFactory.CreateArrowBlock(result);
-        }
+private:
+    const ui32 ArgColumn_;
+};
 
-    private:
-        arrow::UInt64Builder Builder_;
-        TComputationContext& Ctx_;
-    };
+template <>
+class TCountAggregator<TCombineAllTag> : public TCombineAllTag::TBase {
+public:
+    using TBase = TCombineAllTag::TBase;
 
-    TCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
-        : TBlockAggregatorBase(sizeof(TState), filterColumn, ctx)
+    TCountAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBase(sizeof(TState), filterColumn, ctx)
         , ArgColumn_(argColumn)
     {
     }
@@ -162,6 +199,21 @@ public:
         return NUdf::TUnboxedValuePod(typedState->Count_);
     }
 
+private:
+    const ui32 ArgColumn_;
+};
+
+template <>
+class TCountAggregator<TCombineKeysTag> : public TCombineKeysTag::TBase {
+public:
+    using TBase = TCombineKeysTag::TBase;
+
+    TCountAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBase(sizeof(TState), filterColumn, ctx)
+        , ArgColumn_(argColumn)
+    {
+    }
+
     void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TState();
         UpdateKey(state, columns, row);
@@ -187,7 +239,7 @@ public:
         }
     }
 
-    std::unique_ptr<IAggColumnBuilder> MakeBuilder(ui64 size) final {
+    std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
         return std::make_unique<TColumnBuilder>(size, Ctx_);
     }
 
@@ -195,43 +247,27 @@ private:
     const ui32 ArgColumn_;
 };
 
-class TPreparedCountAllBlockAggregator : public IPreparedBlockAggregator {
+template <>
+class TCountAggregator<TFinalizeKeysTag> : public TCountAllAggregator<TFinalizeKeysTag>
+{
 public:
-    TPreparedCountAllBlockAggregator(std::optional<ui32> filterColumn)
-        : FilterColumn_(filterColumn)
+    using TBase = TCountAllAggregator<TFinalizeKeysTag>;
+
+    TCountAggregator(std::optional<ui32> filterColumn, ui32 argColumn, TComputationContext& ctx)
+        : TBase(filterColumn, argColumn, ctx)
     {}
-
-    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
-        return std::make_unique<TCountAllBlockAggregator>(FilterColumn_, ctx);
-    }
-
-private:
-    const std::optional<ui32> FilterColumn_;
 };
 
-class TBlockCountAllFactory : public IBlockAggregatorFactory {
+template <typename TTag>
+class TPreparedCountAll : public TTag::TPreparedAggregator {
 public:
-   std::unique_ptr<IPreparedBlockAggregator> Prepare(
-       TTupleType* tupleType,
-       std::optional<ui32> filterColumn,
-       const std::vector<ui32>& argsColumns,
-       const TTypeEnvironment& env) const final {
-       Y_UNUSED(tupleType);
-       Y_UNUSED(argsColumns);
-       Y_UNUSED(env);
-       return std::make_unique<TPreparedCountAllBlockAggregator>(filterColumn);
-   }
-};
-
-class TPreparedCountBlockAggregator : public IPreparedBlockAggregator {
-public:
-    TPreparedCountBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn)
+    TPreparedCountAll(std::optional<ui32> filterColumn, ui32 argColumn)
         : FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
     {}
 
-    std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const final {
-        return std::make_unique<TCountBlockAggregator>(FilterColumn_, ArgColumn_, ctx);
+    std::unique_ptr<typename TTag::TAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TCountAllAggregator<TTag>>(FilterColumn_, ArgColumn_, ctx);
     }
 
 private:
@@ -239,18 +275,103 @@ private:
     const ui32 ArgColumn_;
 };
 
+template <typename TTag>
+class TPreparedCount : public TTag::TPreparedAggregator {
+public:
+    TPreparedCount(std::optional<ui32> filterColumn, ui32 argColumn)
+        : FilterColumn_(filterColumn)
+        , ArgColumn_(argColumn)
+    {}
+
+    std::unique_ptr<typename TTag::TAggregator> Make(TComputationContext& ctx) const final {
+        return std::make_unique<TCountAggregator<TTag>>(FilterColumn_, ArgColumn_, ctx);
+    }
+
+private:
+    const std::optional<ui32> FilterColumn_;
+    const ui32 ArgColumn_;
+};
+
+template <typename TTag>
+std::unique_ptr<typename TTag::TPreparedAggregator> PrepareCountAll(std::optional<ui32> filterColumn, ui32 argColumn) {
+    return std::make_unique<TPreparedCountAll<TTag>>(filterColumn, argColumn);
+}
+
+template <typename TTag>
+std::unique_ptr<typename TTag::TPreparedAggregator> PrepareCount(std::optional<ui32> filterColumn, ui32 argColumn) {
+    return std::make_unique<TPreparedCount<TTag>>(filterColumn, argColumn);
+}
+
+class TBlockCountAllFactory : public IBlockAggregatorFactory {
+public:
+    std::unique_ptr<TCombineAllTag::TPreparedAggregator> PrepareCombineAll(
+        TTupleType* tupleType,
+        std::optional<ui32> filterColumn,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env) const final {
+        Y_UNUSED(tupleType);
+        Y_UNUSED(argsColumns);
+        Y_UNUSED(env);
+        return PrepareCountAll<TCombineAllTag>(filterColumn, 0);
+    }
+
+    std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
+        TTupleType* tupleType,
+        std::optional<ui32> filterColumn,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env) const final {
+        Y_UNUSED(tupleType);
+        Y_UNUSED(argsColumns);
+        Y_UNUSED(env);
+        return PrepareCountAll<TCombineKeysTag>(filterColumn, 0);
+    }
+
+    std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
+        TTupleType* tupleType,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env) const final {
+        Y_UNUSED(tupleType);
+        Y_UNUSED(argsColumns);
+        Y_UNUSED(env);
+        return PrepareCountAll<TFinalizeKeysTag>(std::optional<ui32>(), argsColumns[0]);
+    }
+};
+
 class TBlockCountFactory : public IBlockAggregatorFactory {
 public:
-   std::unique_ptr<IPreparedBlockAggregator> Prepare(
-       TTupleType* tupleType,
-       std::optional<ui32> filterColumn,
-       const std::vector<ui32>& argsColumns,
-       const TTypeEnvironment& env) const final {
-       Y_UNUSED(tupleType);
-       Y_UNUSED(env);
-       return std::make_unique<TPreparedCountBlockAggregator>(filterColumn, argsColumns[0]);
-   }
+    std::unique_ptr<TCombineAllTag::TPreparedAggregator> PrepareCombineAll(
+        TTupleType* tupleType,
+        std::optional<ui32> filterColumn,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env) const final {
+        Y_UNUSED(tupleType);
+        Y_UNUSED(env);
+        return PrepareCount<TCombineAllTag>(filterColumn, argsColumns[0]);
+    }
+
+    std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
+        TTupleType* tupleType,
+        std::optional<ui32> filterColumn,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env) const final {
+        Y_UNUSED(tupleType);
+        Y_UNUSED(argsColumns);
+        Y_UNUSED(env);
+        return PrepareCount<TCombineKeysTag>(filterColumn, argsColumns[0]);
+    }
+
+    std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
+        TTupleType* tupleType,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env) const final {
+        Y_UNUSED(tupleType);
+        Y_UNUSED(argsColumns);
+        Y_UNUSED(env);
+        return PrepareCount<TFinalizeKeysTag>(std::optional<ui32>(), argsColumns[0]);
+    }
 };
+
+}
 
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockCountAllFactory() {
     return std::make_unique<TBlockCountAllFactory>();

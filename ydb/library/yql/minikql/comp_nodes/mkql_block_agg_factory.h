@@ -15,33 +15,62 @@ public:
     virtual NUdf::TUnboxedValue Build() = 0;
 };
 
-class IBlockAggregator {
+class IBlockAggregatorBase {
 public:
-    virtual ~IBlockAggregator() = default;
+    virtual ~IBlockAggregatorBase() = default;
 
+    const ui32 StateSize;
+
+    explicit IBlockAggregatorBase(ui32 stateSize)
+        : StateSize(stateSize)
+    {}
+};
+
+
+class IBlockAggregatorCombineAll : public IBlockAggregatorBase {
+public:
     virtual void InitState(void* state) = 0;
 
     virtual void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) = 0;
 
     virtual NUdf::TUnboxedValue FinishOne(const void* state) = 0;
 
+    explicit IBlockAggregatorCombineAll(ui32 stateSize)
+        : IBlockAggregatorBase(stateSize)
+    {}
+};
+
+class IBlockAggregatorCombineKeys : public IBlockAggregatorBase {
+public:
     virtual void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
     virtual void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
-    virtual std::unique_ptr<IAggColumnBuilder> MakeBuilder(ui64 size) = 0;
+    virtual std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) = 0;
 
-    const ui32 StateSize;
-
-    explicit IBlockAggregator(ui32 stateSize)
-        : StateSize(stateSize)
+    explicit IBlockAggregatorCombineKeys(ui32 stateSize)
+        : IBlockAggregatorBase(stateSize)
     {}
 };
 
-class TBlockAggregatorBase : public IBlockAggregator {
+class IBlockAggregatorFinalizeKeys : public IBlockAggregatorBase {
+public:
+    virtual void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
+
+    virtual void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
+
+    virtual std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) = 0;
+
+    explicit IBlockAggregatorFinalizeKeys(ui32 stateSize)
+        : IBlockAggregatorBase(stateSize)
+    {}
+};
+
+template <typename TBase>
+class TBlockAggregatorBase : public TBase {
 public:
     TBlockAggregatorBase(ui32 stateSize, std::optional<ui32> filterColumn, TComputationContext& ctx)
-        : IBlockAggregator(stateSize)
+        : TBase(stateSize)
         , FilterColumn_(filterColumn)
         , Ctx_(ctx)
     {
@@ -52,29 +81,54 @@ protected:
     TComputationContext& Ctx_;
 };
 
+template <typename T>
 class IPreparedBlockAggregator {
 public:
     virtual ~IPreparedBlockAggregator() = default;
 
-    virtual std::unique_ptr<IBlockAggregator> Make(TComputationContext& ctx) const = 0;
+    virtual std::unique_ptr<T> Make(TComputationContext& ctx) const = 0;
 };
-
-std::unique_ptr<IPreparedBlockAggregator> PrepareBlockAggregator(
-    TStringBuf name,
-    TTupleType* tupleType,
-    std::optional<ui32> filterColumn,
-    const std::vector<ui32>& argsColumns,
-    const TTypeEnvironment& env);
 
 class IBlockAggregatorFactory {
 public:
    virtual ~IBlockAggregatorFactory() = default;
 
-   virtual std::unique_ptr<IPreparedBlockAggregator> Prepare(
+   virtual std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineAll>> PrepareCombineAll(
        TTupleType* tupleType,
        std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
        const TTypeEnvironment& env) const = 0;
+
+   virtual std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareCombineKeys(
+       TTupleType* tupleType,
+       std::optional<ui32> filterColumn,
+       const std::vector<ui32>& argsColumns,
+       const TTypeEnvironment& env) const = 0;
+
+   virtual std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareFinalizeKeys(
+       TTupleType* tupleType,
+       const std::vector<ui32>& argsColumns,
+       const TTypeEnvironment& env) const = 0;
+};
+
+const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name);
+
+struct TCombineAllTag {
+    using TAggregator = IBlockAggregatorCombineAll;
+    using TPreparedAggregator = IPreparedBlockAggregator<TAggregator>;
+    using TBase = TBlockAggregatorBase<TAggregator>;
+};
+
+struct TCombineKeysTag {
+    using TAggregator = IBlockAggregatorCombineKeys;
+    using TPreparedAggregator = IPreparedBlockAggregator<TAggregator>;
+    using TBase = TBlockAggregatorBase<TAggregator>;
+};
+
+struct TFinalizeKeysTag {
+    using TAggregator = IBlockAggregatorFinalizeKeys;
+    using TPreparedAggregator = IPreparedBlockAggregator<TAggregator>;
+    using TBase = TBlockAggregatorBase<TAggregator>;
 };
 
 }

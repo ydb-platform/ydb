@@ -261,6 +261,8 @@ public:
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+        const TArrayRef<const TAggInfo>& aggs, TType* returnType);
 
     // udfs
     TRuntimeNode Udf(

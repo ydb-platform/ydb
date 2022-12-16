@@ -5372,6 +5372,36 @@ TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optiona
     return TRuntimeNode(builder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+    const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
+    if constexpr (RuntimeVersion < 31U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(flow);
+
+    TVector<TRuntimeNode> keyNodes;
+    for (const auto& key : keys) {
+        keyNodes.push_back(NewDataLiteral<ui32>(key));
+    }
+
+    builder.Add(NewTuple(keyNodes));
+    TVector<TRuntimeNode> aggsNodes;
+    for (const auto& agg : aggs) {
+        TVector<TRuntimeNode> params;
+        params.push_back(NewDataLiteral<NUdf::EDataSlot::String>(agg.Name));
+        for (const auto& col : agg.ArgsColumns) {
+            params.push_back(NewDataLiteral<ui32>(col));
+        }
+
+        aggsNodes.push_back(NewTuple(params));
+    }
+
+    builder.Add(NewTuple(aggsNodes));
+    return TRuntimeNode(builder.Build(), false);
+}
+
 bool CanExportType(TType* type, const TTypeEnvironment& env) {
     if (type->GetKind() == TType::EKind::Type) {
         return false; // Type of Type

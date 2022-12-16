@@ -223,7 +223,7 @@ enum EPartitionLabeledCounters {
     METRIC_TOTAL_QUOTA_SPEED_3 = 28                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerHour" AggrFunc : EAF_SUM SVName: ""}];
     METRIC_MAX_QUOTA_SPEED_3 = 29                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerHour" AggrFunc : EAF_MAX SVName: "topic.partition.write.bytes_per_hour_max"}];
     METRIC_TOTAL_QUOTA_SPEED_4 = 30                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerDay" AggrFunc : EAF_SUM SVName: ""}];
-    METRIC_MAX_QUOTA_SPEED_4 = 31                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerDay" AggrFunc : EAF_MAX SVName: "topic.partition.write_bytes_per_day_max"}];
+    METRIC_MAX_QUOTA_SPEED_4 = 31                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerDay" AggrFunc : EAF_MAX SVName: "topic.partition.write.bytes_per_day_max"}];
     METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.write.throttled_nanoseconds_max"}];
     METRIC_MIN_SID_LIFETIME = 33                                  [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN SVName: ""}];
 

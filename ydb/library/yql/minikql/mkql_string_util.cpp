@@ -3,6 +3,16 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+namespace {
+
+ui32 CheckedSum(ui32 one, ui32 two) {
+    if (ui64(one) + ui64(two) > ui64(std::numeric_limits<ui32>::max()))
+        ythrow yexception() << "Impossible to concat too large strings " << one << " and " << two << " bytes!";
+    return one + two;
+}
+
+}
+
 NUdf::TUnboxedValuePod AppendString(const NUdf::TUnboxedValuePod value, const NUdf::TStringRef ref)
 {
     if (!ref.Size())
@@ -12,7 +22,7 @@ NUdf::TUnboxedValuePod AppendString(const NUdf::TUnboxedValuePod value, const NU
     if (!valueRef.Size())
         return MakeString(ref);
 
-    const auto newSize = valueRef.Size() + ref.Size();
+    const auto newSize = CheckedSum(valueRef.Size(), ref.Size());
     if (newSize <= NUdf::TUnboxedValuePod::InternalBufferSize) {
         auto result = NUdf::TUnboxedValuePod::Embedded(newSize);
         const auto buf = result.AsStringRef().Data();
@@ -49,7 +59,7 @@ NUdf::TUnboxedValuePod PrependString(const NUdf::TStringRef ref, const NUdf::TUn
     if (!valueRef.Size())
         return MakeString(ref);
 
-    const auto newSize = valueRef.Size() + ref.Size();
+    const auto newSize = CheckedSum(valueRef.Size(), ref.Size());
     if (newSize <= NUdf::TUnboxedValuePod::InternalBufferSize) {
         auto result = NUdf::TUnboxedValuePod::Embedded(newSize);
         const auto buf = result.AsStringRef().Data();
@@ -77,7 +87,7 @@ NUdf::TUnboxedValuePod ConcatStrings(const NUdf::TUnboxedValuePod first, const N
     if (!rightRef.Size())
         return first;
 
-    const auto newSize = leftRef.Size() + rightRef.Size();
+    const auto newSize = CheckedSum(leftRef.Size(), rightRef.Size());
     if (newSize <= NUdf::TUnboxedValuePod::InternalBufferSize) {
         auto result = NUdf::TUnboxedValuePod::Embedded(newSize);
         const auto buf = result.AsStringRef().Data();

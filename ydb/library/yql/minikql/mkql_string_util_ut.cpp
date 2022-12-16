@@ -65,5 +65,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
             UNIT_ASSERT_VALUES_EQUAL(value.Capacity(), 0xFFFFFFF0ULL);
         }
     }
+
+    Y_UNIT_TEST(ConcatLargeString) {
+        TScopedAlloc alloc(__LOCATION__);
+
+        const NUdf::TUnboxedValue buf = MakeStringNotFilled(0x80000000U);
+        try {
+            ConcatStrings(buf, buf);
+            UNIT_FAIL("No exception!");
+        } catch (const yexception&) {}
+
+        try {
+            PrependString(buf.AsStringRef(), buf);
+            UNIT_FAIL("No exception!");
+        } catch (const yexception&) {}
+
+        try {
+            AppendString(buf, buf.AsStringRef());
+            UNIT_FAIL("No exception!");
+        } catch (const yexception&) {}
+    }
 }
 

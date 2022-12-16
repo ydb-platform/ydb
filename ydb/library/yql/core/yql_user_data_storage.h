@@ -23,8 +23,8 @@ public:
 
     bool ContainsUserDataBlock(const TStringBuf& name) const;
     bool ContainsUserDataBlock(const TUserDataKey& key) const;
-    const TUserDataBlock& GetUserDataBlock(const TUserDataKey& key) const;
-    const TUserDataBlock* FindUserDataBlock(const TStringBuf& name) const;
+    TUserDataBlock& GetUserDataBlock(const TUserDataKey& key);
+    TUserDataBlock* FindUserDataBlock(const TStringBuf& name);
     const TUserDataBlock* FindUserDataBlock(const TUserDataKey& key) const;
     TUserDataBlock* FindUserDataBlock(const TUserDataKey& key);
 
@@ -52,11 +52,11 @@ public:
     // there is a guarantee we return the same TFileLinkPtr for provided key if this method get called multiple times from different threads
     // program should work with single version of downloaded url when block type is URL
     // method should support parallel file downloading for different keys
-    const TUserDataBlock& Freeze(const TUserDataKey& key);
-    const TUserDataBlock* FreezeNoThrow(const TUserDataKey& key, TString& errorMessage);
+    TUserDataBlock& Freeze(const TUserDataKey& key);
+    TUserDataBlock* FreezeNoThrow(const TUserDataKey& key, TString& errorMessage);
 
     // as above + udf will be scanned and meta info put into UdfIndex
-    const TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage);
+    TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage, const TString& customUdfPrefix = {});
 
     // returns function which will register value in cache after invocation
     NThreading::TFuture<std::function<TUserDataBlock()>> FreezeAsync(const TUserDataKey& key);

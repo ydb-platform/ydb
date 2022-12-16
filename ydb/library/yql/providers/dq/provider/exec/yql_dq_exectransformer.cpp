@@ -470,12 +470,11 @@ private:
                     } else if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) {
                         const TString udfName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                         const auto moduleName = ModuleName(udfName);
-                        // udfs with custom prefix doesn't work with dq
+                        TString customUdfPrefix;
                         const auto& udfModules = State->TypeCtx->UdfModules;
                         auto it = udfModules.find(moduleName);
-                        if (it != udfModules.end() && !it->second.Prefix.empty()) {
-                            fallbackFlag = true;
-                            break;
+                        if (it != udfModules.end()) {
+                            customUdfPrefix = it->second.Prefix;
                         }
 
                         YQL_CLOG(DEBUG, ProviderDq) << "Try to resolve " << moduleName;
@@ -494,6 +493,7 @@ private:
                             f.SetObjectId(objectId);
                             f.SetObjectType(IDqGateway::TFileResource::EUDF_FILE);
                             f.SetSize(TFile(filePath, OpenExisting | RdOnly).GetLength());
+                            f.SetCustomUdfPrefix(customUdfPrefix);
                             uploadList->emplace(f);
                         }
 

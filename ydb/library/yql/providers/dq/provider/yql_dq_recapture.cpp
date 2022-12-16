@@ -251,13 +251,6 @@ private:
                     Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
                 }
             }
-        } else if (TCoUdf::Match(&node)) {
-            const auto& udfModules = State_->TypeCtx->UdfModules;
-            auto it = udfModules.find(ModuleName(node.Head().Content()));
-            if (it != udfModules.end() && !it->second.Prefix.empty()) {
-                AddInfo(ctx, TStringBuilder() << "udf with custom prefix");
-                good = false;
-            }
         }
         else {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {

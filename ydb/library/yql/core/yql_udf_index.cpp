@@ -194,15 +194,19 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString
 }
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry) {
+    TVector<TUserDataBlock> blocksResolve;
+    blocksResolve.reserve(blocks.size());
     // we can work with file path only
     TMap<TString, TString> pathsWithMd5;
     for (auto& b : blocks) {
+        TString path;
         switch (b.Type) {
         case EUserDataType::URL:
             if (!b.FrozenFile) {
                 ythrow yexception() << "DataBlock for " << b.Data << " is not frozen";
             }
-            pathsWithMd5.emplace(b.FrozenFile->GetPath().GetPath(), b.FrozenFile->GetMd5());
+            path = b.FrozenFile->GetPath().GetPath();
+            pathsWithMd5.emplace(path, b.FrozenFile->GetMd5());
             break;
         case EUserDataType::PATH:
         {
@@ -210,14 +214,23 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUse
             if (b.FrozenFile) {
                 md5 = b.FrozenFile->GetMd5();
             }
+            path = b.Data;
             pathsWithMd5.emplace(b.Data, md5);
             break;
         }
         default:
             ythrow yexception() << "Unsupport data block type for " << b.Data;
         }
+
+        TUserDataBlock br;
+        br.Type = EUserDataType::PATH;
+        br.Data = path;
+        br.Usage.Set(EUserDataBlockUsage::Udf);
+        br.CustomUdfPrefix = b.CustomUdfPrefix;
+        blocksResolve.emplace_back(br);
     }
-    LoadRichMetadataToUdfIndex(resolver, pathsWithMd5, isTrusted, mode, registry);
+    const TResolveResult resolveResult = LoadRichMetadata(resolver, blocksResolve);
+    AddResolveResultToRegistry(resolveResult, pathsWithMd5, isTrusted, mode, registry);
 }
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry) {

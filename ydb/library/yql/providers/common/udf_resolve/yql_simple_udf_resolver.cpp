@@ -75,7 +75,7 @@ public:
                 } else {
                     import->Modules.ConstructInPlace();
                 }
-                const TString& customUdfPrefix = import->CustomUdfPrefix;
+                const TString& customUdfPrefix = import->Block->CustomUdfPrefix;
                 try {
                     if (FileStorage_) {
                         auto link = holdingFileStorage.FreezeFile(*import->Block);

@@ -35,6 +35,8 @@ struct TUserDataBlock {
     TUserDataBlockUsage Usage;
 
     TFileLinkPtr FrozenFile;
+    // Prefix added to all UDF module names
+    TString CustomUdfPrefix = {};
 };
 
 class TUserDataKey {

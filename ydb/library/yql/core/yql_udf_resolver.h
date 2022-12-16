@@ -52,8 +52,6 @@ public:
         TPosition Pos;
         TString FileAlias;
         const TUserDataBlock* Block = nullptr;
-        // Prefix added to all UDF module names
-        TString CustomUdfPrefix = {};
 
         // output
         TMaybe<TVector<TString>> Modules;

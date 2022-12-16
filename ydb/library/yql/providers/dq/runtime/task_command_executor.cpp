@@ -733,7 +733,7 @@ public:
                     case Yql::DqsProto::TFile::EUSER_FILE:
                         break;
                     case Yql::DqsProto::TFile::EUDF_FILE:
-                        FunctionRegistry->LoadUdfs(path, EmptyRemappings, 0);
+                        FunctionRegistry->LoadUdfs(path, EmptyRemappings, 0, file.GetCustomUdfPrefix());
                         modulesMapping.emplace(TFsPath(path).RealPath(), file.GetObjectId());
                         break;
                     default:

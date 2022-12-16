@@ -38,6 +38,7 @@ message TFile {
     string Name = 3;
     EFileType ObjectType = 4;
     int64 Size = 5;
+    string CustomUdfPrefix = 6;
 }
 
 message TWorkerInfo {

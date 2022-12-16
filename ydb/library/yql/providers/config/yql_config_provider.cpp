@@ -796,9 +796,12 @@ namespace {
 
             // file alias
             const auto& fileAlias = args[0];
+            TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
             const auto key = TUserDataStorage::ComposeUserDataKey(fileAlias);
             TString errorMessage;
-            const TUserDataBlock* udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key, errorMessage);
+            const TUserDataBlock* udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key,
+                                                                                      errorMessage,
+                                                                                      customUdfPrefix);
             if (!udfSource) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                 return false;
@@ -808,9 +811,6 @@ namespace {
             import.Pos = pos;
             import.FileAlias = fileAlias;
             import.Block = udfSource;
-            if (args.size() == 2) {
-                import.CustomUdfPrefix = TString(args[1]);
-            }
             Types.UdfImports.insert({ TString(fileAlias), import });
             return true;
         }

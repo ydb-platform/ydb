@@ -65,7 +65,7 @@ bool TUserDataStorage::ContainsUserDataBlock(const TUserDataKey& key) const {
     return UserData_.contains(key);
 }
 
-const TUserDataBlock& TUserDataStorage::GetUserDataBlock(const TUserDataKey& key) const {
+TUserDataBlock& TUserDataStorage::GetUserDataBlock(const TUserDataKey& key) {
     auto block = FindUserDataBlock(key);
     if (!block) {
         ythrow yexception() << "Failed to find user data block by key " << key;
@@ -74,8 +74,8 @@ const TUserDataBlock& TUserDataStorage::GetUserDataBlock(const TUserDataKey& key
     return *block;
 }
 
-const TUserDataBlock* TUserDataStorage::FindUserDataBlock(const TStringBuf& name) const {
-    const auto key = ComposeUserDataKey(name);
+TUserDataBlock* TUserDataStorage::FindUserDataBlock(const TStringBuf& name) {
+    auto key = ComposeUserDataKey(name);
     return FindUserDataBlock(key);
 }
 
@@ -168,8 +168,8 @@ std::map<TString, const TUserDataBlock*> TUserDataStorage::GetDirectoryContent(c
     return result;
 }
 
-const TUserDataBlock& TUserDataStorage::Freeze(const TUserDataKey& key) {
-    const TUserDataBlock& block = GetUserDataBlock(key);
+TUserDataBlock& TUserDataStorage::Freeze(const TUserDataKey& key) {
+    TUserDataBlock& block = GetUserDataBlock(key);
     if (block.FrozenFile) {
         return block;
     }
@@ -179,7 +179,7 @@ const TUserDataBlock& TUserDataStorage::Freeze(const TUserDataKey& key) {
     return RegisterLink(key, link);
 }
 
-const TUserDataBlock* TUserDataStorage::FreezeNoThrow(const TUserDataKey& key, TString& errorMessage) {
+TUserDataBlock* TUserDataStorage::FreezeNoThrow(const TUserDataKey& key, TString& errorMessage) {
     try {
         return &Freeze(key);
     } catch (const std::exception& e) {
@@ -188,11 +188,13 @@ const TUserDataBlock* TUserDataStorage::FreezeNoThrow(const TUserDataKey& key, T
     }
 }
 
-const TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage) {
-    const TUserDataBlock* block = FreezeNoThrow(key, errorMessage);
+TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key,
+                                                    TString& errorMessage,const TString& customUdfPrefix) {
+    TUserDataBlock* block = FreezeNoThrow(key, errorMessage);
     if (!block) {
         return nullptr;
     }
+    block->CustomUdfPrefix = customUdfPrefix;
 
     if (!ScannedUdfs.insert(key).second) {
         // already scanned

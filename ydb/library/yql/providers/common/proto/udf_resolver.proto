@@ -42,6 +42,7 @@ message TImportResult {
     optional string Error = 3;
     optional uint64 FileSize = 4;
     optional string Md5 = 5;
+    optional string CustomUdfPrefix = 6;
 };
 
 message TResolve {

@@ -212,6 +212,7 @@ message TEvLoadTestRequest {
         optional uint32 WindowDuration = 3;
         optional string WorkingDir = 4;
         optional uint32 NumOfSessions = 5;
+        optional bool IncreaseSessions = 11;
         optional bool DeleteTableOnFinish = 6;
         optional uint32 UniformPartitionsCount = 7;
         optional uint32 WorkloadType = 8;

@@ -6,7 +6,7 @@
 # original buildsystem will not be accepted.
 
 
-find_package(Python2 REQUIRED)
+find_package(Python3 REQUIRED)
 
 add_library(library-cpp-tld)
 target_link_libraries(library-cpp-tld PUBLIC
@@ -25,7 +25,7 @@ add_custom_command(
   ${CMAKE_SOURCE_DIR}/library/cpp/tld/tlds-alpha-by-domain.txt
   ${CMAKE_SOURCE_DIR}/library/cpp/tld/gen_tld.py
   COMMAND
-  Python2::Interpreter
+  Python3::Interpreter
   ${CMAKE_SOURCE_DIR}/library/cpp/tld/gen_tld.py
   ${CMAKE_SOURCE_DIR}/library/cpp/tld/tlds-alpha-by-domain.txt
   >

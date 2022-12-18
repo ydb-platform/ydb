@@ -33,6 +33,8 @@ namespace NKikimr {
 struct TModuleFactories {
     // A way to parameterize log backend
     std::shared_ptr<ILogBackendFactory> LogBackendFactory;
+    //
+    std::shared_ptr<ILogBackendFactory> AuditLogBackendFactory;
     // A backend factory for Query Replay
     std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     //

@@ -1467,7 +1467,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableAuditWriter) {
-        sil->AddServiceInitializer(new TAuditWriterInitializer(runConfig));
+        sil->AddServiceInitializer(new TAuditWriterInitializer(runConfig, ModuleFactories));
     }
 
     if (serviceMask.EnableLongTxService) {

@@ -485,9 +485,12 @@ public:
 
 class TAuditWriterInitializer : public IKikimrServicesInitializer {
 public:
-    TAuditWriterInitializer(const TKikimrRunConfig& runConfig);
+    TAuditWriterInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+private:
+    std::shared_ptr<TModuleFactories> Factories;
+    const TKikimrRunConfig& KikimrRunConfig;
 };
 
 class TSchemeBoardMonitoringInitializer : public IKikimrServicesInitializer {

@@ -2,6 +2,7 @@
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 #include "version.h"
+#include <kikimr/yndx/log_backend/log_backend_build.h>
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>
@@ -2332,28 +2333,23 @@ void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup* setup, co
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
 }
 
-TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConfig)
+TAuditWriterInitializer::TAuditWriterInitializer(const TKikimrRunConfig &runConfig, std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
+    , Factories(factories)
+    , KikimrRunConfig(runConfig)
 {
 }
 
 void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
 {
-    if (!Config.HasAuditConfig() || !Config.GetAuditConfig().HasAuditFilePath() || !Config.GetAuditConfig().HasFormat()) {
+    TAutoPtr<TLogBackend> fileBackend;
+    if (Factories && Factories->AuditLogBackendFactory) {
+        Factories->AuditLogBackendFactory->CreateLogBackend(KikimrRunConfig, appData->Counters);
+    }
+    if (!fileBackend)
         return;
-    }
 
-    const auto& filePath = Config.GetAuditConfig().GetAuditFilePath();
     const auto format = Config.GetAuditConfig().GetFormat();
-
-    THolder<TFileLogBackend> fileBackend;
-    try {
-        fileBackend = MakeHolder<TFileLogBackend>(filePath);
-    } catch (const TFileError& ex) {
-        Cerr << "TAuditWriterInitializer: failed to open file '" << filePath << "': " << ex.what() << Endl;
-        exit(1);
-    }
-
     auto actor = NAudit::CreateAuditWriter(std::move(fileBackend), format);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(

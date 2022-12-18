@@ -5,8 +5,6 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <util/string/builder.h>
-
 namespace NKikimr::NAudit {
 
 std::atomic<bool> AUDIT_LOG_ENABLED = false;

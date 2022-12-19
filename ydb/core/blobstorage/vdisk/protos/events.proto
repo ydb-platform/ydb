@@ -7,23 +7,34 @@ option java_outer_classname = "VDiskProtos";
 option java_multiple_files = true;
 
 
+message StorageRatio {
+    uint64 index_items_keep = 1;
+    uint64 index_items_total = 2;
+    uint64 index_bytes_keep = 3;
+    uint64 index_bytes_total = 4;
+    uint64 inplace_bytes_keep = 5;
+    uint64 inplace_bytes_total = 6;
+    uint64 huge_bytes_keep = 7;
+    uint64 huge_bytes_total = 8;
+}
+
 message LevelStat {
     uint32 level = 1;
-    uint32 first_lsn = 2;
-    uint32 last_lsn = 3;
-    uint32 idx_total_size = 4;
-    uint32 inplace_data_total_size = 5;
-    uint32 huge_data_total_size = 6;
-    uint32 chunks = 7;
-    uint32 total_chunks = 8;
-    uint32 items = 9;
-    uint32 items_with_inplaced_data = 10;
-    uint32 items_with_huge_data = 11;
+    uint64 first_lsn = 2;
+    uint64 last_lsn = 3;
+    uint64 idx_total_size = 4;
+    uint64 inplace_data_total_size = 5;
+    uint64 huge_data_total_size = 6;
+    uint64 chunks = 7;
+    uint64 total_chunks = 8;
+    uint64 items = 9;
+    uint64 items_with_inplaced_data = 10;
+    uint64 items_with_huge_data = 11;
     bytes first_key = 12;
     bytes last_key = 13;
-    uint32 storage_ratio_summary = 14;
+    StorageRatio storage_ratio = 14;
     bool is_created_by_repl = 15;
-    uint64 time = 16;
+    string time = 16;
 
 };
 
@@ -102,10 +113,36 @@ message GetLogoBlobRequest {
 message GetLogoBlobResponse {
     message LogoBlob {
         string status = 1;
-        optional uint64 ingress = 2;
+        optional string ingress = 2;
         string id = 3;
     };
 
     repeated LogoBlob logoblobs = 1;
     string error_msg = 2;
 };
+
+message GetLogoBlobIndexStatRequest {
+
+}
+
+message ChannelInfo {
+    uint64 count = 1;
+    uint64 data_size = 2;
+    string min_id = 3;
+    string max_id = 4;
+}
+
+message TabletInfo {
+    uint64 tablet_id = 1;
+    repeated ChannelInfo channels = 2;
+}
+
+message LogoBlobIndexStat {
+    repeated TabletInfo tablets = 1;
+    repeated ChannelInfo channels = 2;
+}
+
+message GetLogoBlobIndexStatResponse {
+    string status = 1;
+    LogoBlobIndexStat stat = 2;
+}

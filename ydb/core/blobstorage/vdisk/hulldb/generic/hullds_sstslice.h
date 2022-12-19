@@ -92,6 +92,10 @@ namespace NKikimr {
             Segs->OutputHtml(index, str, sum);
         }
 
+        void OutputProto(google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+            Segs->OutputProto(rows);
+        }
+
         typename TUnorderedLevelSegments::TSstIterator GetSstIterator(ui32 numLimit) const {
             return typename TUnorderedLevelSegments::TSstIterator(Segs.Get(), numLimit);
         }

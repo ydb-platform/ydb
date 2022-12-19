@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -68,6 +69,19 @@ namespace NKikimr {
                     << "}";
             }
 
+            void OutputProto(NKikimrVDisk::StorageRatio* proto) const {
+                if (proto) {
+                    proto->set_index_items_keep(IndexItemsKeep);
+                    proto->set_index_items_total(IndexItemsTotal);
+                    proto->set_index_bytes_keep(IndexBytesKeep);
+                    proto->set_index_bytes_total(IndexBytesTotal);
+                    proto->set_inplace_bytes_keep(InplacedDataKeep);
+                    proto->set_inplace_bytes_total(InplacedDataTotal);
+                    proto->set_huge_bytes_keep(HugeDataKeep);
+                    proto->set_huge_bytes_total(HugeDataTotal);
+                }
+            }
+
             TString ToString() const {
                 TStringStream str;
                 Output(str);
@@ -121,6 +135,13 @@ namespace NKikimr {
             TSstRatioPtr Get() const {
                 TGuard<TSpinLock> g(Lock);
                 return Ratio;
+            }
+
+            void OutputProto(NKikimrVDisk::StorageRatio* proto) const {
+                TSstRatioPtr ratio = Get();
+                if (ratio) {
+                    ratio->OutputProto(proto);
+                }
             }
 
             TString MonSummary() const {

@@ -1235,6 +1235,21 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvGetLogoBlobIndexStatRequest::TPtr &ev, const TActorContext &ctx) {
+            LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvGetLogoBlobIndexStatRequest"
+                    << " Marker# BSVS42");
+
+            auto result = std::make_unique<TEvGetLogoBlobIndexStatResponse>(NKikimrProto::OK, SelfVDiskId, ctx.Now(),
+                nullptr, nullptr);
+            THullDsSnap fullSnap = Hull->GetIndexSnapshot();
+            IActor *actor = CreateDbStatActor(HullCtx, HugeBlobCtx, ctx, std::move(fullSnap),
+                    ctx.SelfID, ev, std::move(result));
+            if (actor) {
+                auto aid = ctx.Register(actor);
+                ActiveActors.Insert(aid);
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////
         // STREAM QUERIES
         ////////////////////////////////////////////////////////////////////////
@@ -2551,6 +2566,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVStatus, Handle)
             HFunc(TEvBlobStorage::TEvVAssimilate, Handle)
             HFunc(TEvBlobStorage::TEvVDbStat, Handle)
+            HFunc(TEvGetLogoBlobIndexStatRequest, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamActorDeathNote, Handle)
             HFunc(TEvBlobStorage::TEvVCompact, Handle)

@@ -62,6 +62,13 @@ namespace NKikimr {
                     TABLED() {SMALL() {str << MaxId.ToString();}}
                 }
             }
+
+            void Finish(NKikimrVDisk::ChannelInfo *channelInfo) {
+                channelInfo->set_count(Num);
+                channelInfo->set_data_size(DataSize);
+                channelInfo->set_min_id(MinId.ToString());
+                channelInfo->set_max_id(MaxId.ToString());
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////
@@ -98,6 +105,12 @@ namespace NKikimr {
             void Finish(IOutputStream &str, bool pretty) {
                 auto nothing = [] (IOutputStream &) {};
                 Finish(str, nothing, pretty);
+            }
+
+            void Finish(::google::protobuf::RepeatedPtrField<NKikimrVDisk::ChannelInfo> *channelsOutput) {
+                for (auto &c : Channels) {
+                    c.Finish(channelsOutput->Add());
+                }
             }
 
         private:
@@ -138,6 +151,11 @@ namespace NKikimr {
 
             void Finish(IOutputStream &str, bool pretty) {
                 AllChannels.Finish(str, TabletID, pretty);
+            }
+
+            void Finish(NKikimrVDisk::TabletInfo *result) {
+                AllChannels.Finish(result->mutable_channels());
+                result->set_tablet_id(TabletID);
             }
 
         private:
@@ -219,6 +237,15 @@ namespace NKikimr {
                     }
                 }
             }
+
+            void Finish(::google::protobuf::RepeatedPtrField<NKikimrVDisk::TabletInfo> *tabletsOutput,
+                    ::google::protobuf::RepeatedPtrField<NKikimrVDisk::ChannelInfo> *channelsOutput)
+            {
+                for (const auto &x : Hash) {
+                    x.second->Finish(tabletsOutput->Add());
+                }
+                AllChannels.Finish(channelsOutput);
+            }
         };
     }
 
@@ -260,6 +287,47 @@ namespace NKikimr {
 
         // run aggregation
         TAggr aggr(str, pretty);
+        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+    }
+
+    template <>
+    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob,
+            TEvGetLogoBlobIndexStatRequest, TEvGetLogoBlobIndexStatResponse
+    >::CalculateStat(std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &result) {
+        // aggregation class
+        struct TAggr {
+            using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
+            using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
+
+            TAggr(std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &result)
+                : Result(result)
+            {}
+
+            void UpdateFresh(const char *segName,
+                             const TKeyLogoBlob &key,
+                             const TMemRecLogoBlob &memRec) {
+                Y_UNUSED(segName);
+                Tablets.Update(key.LogoBlobID(), memRec);
+            }
+
+            void UpdateLevel(const TLevelSstPtr &sstPtr,
+                             const TKeyLogoBlob &key,
+                             const TMemRecLogoBlob &memRec) {
+                Y_UNUSED(sstPtr);
+                Tablets.Update(key.LogoBlobID(), memRec);
+            }
+
+            void Finish() {
+                auto stat = Result->Record.mutable_stat();
+                Tablets.Finish(stat->mutable_tablets(), stat->mutable_channels());
+            }
+
+            TAllTablets Tablets;
+            std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &Result;
+        };
+
+        // run aggregation
+        TAggr aggr(result);
         TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
     }
 

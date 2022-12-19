@@ -58,6 +58,10 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TLevelSlice<TKey, TMemRec>::OutputProto(google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+
+        if (!Level0.Empty()) {
+            Level0.OutputProto(rows);
+        }
         ui32 level = 1;
         for (const auto &x : SortedLevels) {
             if (!x.Empty()) {

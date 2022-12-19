@@ -262,6 +262,14 @@ namespace NKikimr {
             }
         }
 
+        void OutputProto(google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+            for (const auto &x : Segments) {
+                if (x) {
+                    x->OutputProto(0, rows);
+                }
+            }
+        }
+
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (const TLevelSegmentPtr& seg : Segments) {
                 seg->GetOwnedChunks(chunks);

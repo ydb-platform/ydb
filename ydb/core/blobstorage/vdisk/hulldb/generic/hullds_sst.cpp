@@ -39,6 +39,16 @@ namespace NKikimr {
             row->set_idx_total_size(Info.IdxTotalSize);
             row->set_inplace_data_total_size(Info.InplaceDataTotalSize);
             row->set_huge_data_total_size(Info.HugeDataTotalSize);
+            row->set_chunks(Info.Chunks);
+            row->set_total_chunks(Info.IndexParts);
+            row->set_items(Info.Items);
+            row->set_items_with_inplaced_data(Info.ItemsWithInplacedData);
+            row->set_items_with_huge_data(Info.ItemsWithHugeData);
+            row->set_first_key(FirstKey().ToString());
+            row->set_last_key(LastKey().ToString());
+            StorageRatio.OutputProto(row->mutable_storage_ratio());
+            row->set_is_created_by_repl(Info.IsCreatedByRepl());
+            row->set_time(ToStringLocalTimeUpToSeconds(Info.CTime));
         }
     }
 

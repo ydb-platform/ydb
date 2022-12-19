@@ -85,6 +85,15 @@ namespace NKikimr {
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result);
 
+    IActor *CreateDbStatActor(
+            const TIntrusivePtr<THullCtx> &hullCtx,
+            const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
+            const TActorContext &ctx,
+            THullDsSnap &&fullSnap,
+            const TActorId &parentId,
+            TEvGetLogoBlobIndexStatRequest::TPtr &ev,
+            std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result);
+
     IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev);
 
 } // NKikimr

@@ -187,6 +187,19 @@ namespace NKikimr {
         }
     }
 
+    template <class TKey, class TMemRec>
+    static inline IActor *RunDbStatAction(
+            const TIntrusivePtr<THullCtx> &hullCtx,
+            const TActorContext &,
+            TLevelIndexSnapshot<TKey, TMemRec> &&levelSnap,
+            const TActorId &parentId,
+            TEvGetLogoBlobIndexStatRequest::TPtr &ev,
+            std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result)
+    {
+        using TStatActorEx = TLevelIndexStatActor<TKey, TMemRec,
+                TEvGetLogoBlobIndexStatRequest, TEvGetLogoBlobIndexStatResponse>;
+        return new TStatActorEx(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // CreateDbStatActor
@@ -221,6 +234,18 @@ namespace NKikimr {
                 DbStatError(hullCtx->VCtx, ctx, ev, std::move(result));
                 return nullptr;
         }
+    }
+
+    IActor *CreateDbStatActor(
+            const TIntrusivePtr<THullCtx> &hullCtx,
+            const std::shared_ptr<THugeBlobCtx> &,
+            const TActorContext &ctx,
+            THullDsSnap &&fullSnap,
+            const TActorId &parentId,
+            TEvGetLogoBlobIndexStatRequest::TPtr &ev,
+            std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result)
+    {
+        return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.LogoBlobsSnap), parentId, ev, std::move(result));
     }
 
     IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev) {

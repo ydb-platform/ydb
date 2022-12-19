@@ -2982,4 +2982,31 @@ namespace NKikimr {
         TEvGetLogoBlobResponse() = default;
     };
 
+    struct TEvGetLogoBlobIndexStatRequest
+        : public TEventPB<TEvGetLogoBlobIndexStatRequest,
+                    NKikimrVDisk::GetLogoBlobIndexStatRequest,
+                    TEvBlobStorage::EvGetLogoBlobIndexStatRequest>
+    {
+        TEvGetLogoBlobIndexStatRequest() = default;
+    };
+
+    struct TEvGetLogoBlobIndexStatResponse
+        : public TEvVResultBasePB<TEvGetLogoBlobIndexStatResponse,
+                    NKikimrVDisk::GetLogoBlobIndexStatResponse,
+                    TEvBlobStorage::EvGetLogoBlobIndexStatResponse>
+    {
+        TEvGetLogoBlobIndexStatResponse() = default;
+
+        TEvGetLogoBlobIndexStatResponse(NKikimrProto::EReplyStatus status, const TVDiskID &, const TInstant &now,
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG)
+        {
+            Record.set_status(NKikimrProto::EReplyStatus_Name(status));
+        }
+
+        void SetError() {
+            Record.set_status(NKikimrProto::EReplyStatus_Name(NKikimrProto::ERROR));
+        }
+    };
+
 } // NKikimr

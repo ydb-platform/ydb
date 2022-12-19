@@ -10,9 +10,9 @@ namespace NKikimr {
     // TLevelIndexStatActor
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec, class TRequest = TEvBlobStorage::TEvVDbStat, class TResponse = TEvBlobStorage::TEvVDbStatResult>
-    class TLevelIndexStatActor : public TActorBootstrapped<TLevelIndexStatActor<TKey, TMemRec>> {
+    class TLevelIndexStatActor : public TActorBootstrapped<TLevelIndexStatActor<TKey, TMemRec, TRequest, TResponse>> {
 
-        using TThis = ::NKikimr::TLevelIndexStatActor<TKey, TMemRec>;
+        using TThis = ::NKikimr::TLevelIndexStatActor<TKey, TMemRec, TRequest, TResponse>;
         using TLevelIndex = ::NKikimr::TLevelIndex<TKey, TMemRec>;
         using TLevelIndexSnapshot = ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
         using TLevelSliceSnapshot = ::NKikimr::TLevelSliceSnapshot<TKey, TMemRec>;
@@ -25,8 +25,8 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             TStringStream str;
-            const bool prettyPrint = Ev->Get()->Record.GetPrettyPrint();
-            if constexpr (std::is_same_v<TResponse, TEvBlobStorage::TEvVDbStatResult>) {
+            if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVDbStat>) {
+                const bool prettyPrint = Ev->Get()->Record.GetPrettyPrint();
                 CalculateStat(str, prettyPrint);
                 Result->SetResult(str.Str());
                 SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);

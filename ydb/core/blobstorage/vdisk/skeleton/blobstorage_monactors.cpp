@@ -486,7 +486,8 @@ namespace NKikimr {
             blob->set_id(id.ToString());
             blob->set_status(NKikimrProto::EReplyStatus_Name(q.GetStatus()));
             if (ShowInternals) {
-                blob->set_ingress(q.GetIngress());
+                TIngress ingress(q.GetIngress());
+                blob->set_ingress(ingress.ToString(Top.get(), TVDiskIdShort(SelfVDiskId), id));
             }
         }
 

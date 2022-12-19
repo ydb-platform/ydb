@@ -696,6 +696,7 @@ struct TEvBlobStorage {
         EvChunkForget,
         EvFormatReencryptionFinish,
         EvDetectedPhantomBlobCommitted,
+        EvGetLogoBlobIndexStatRequest,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -743,6 +744,7 @@ struct TEvBlobStorage {
         EvVDiskStatResponse,
         EvGetLogoBlobResponse,
         EvChunkForgetResult,
+        EvGetLogoBlobIndexStatResponse,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184

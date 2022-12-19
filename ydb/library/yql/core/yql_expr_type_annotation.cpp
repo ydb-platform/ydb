@@ -5405,10 +5405,10 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
     }
 }
 
-bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
     bool isOptional;
     const TDataExprType* lambdaType;
-    if(IsDataOrOptionalOfData(&itemType, isOptional, lambdaType)) {
+    if(IsDataOrOptionalOfData(&inputType, isOptional, lambdaType)) {
         auto lambdaTypeSlot = lambdaType->GetSlot();
         const TTypeAnnotationNode *sumResultType = nullptr;
         if (IsDataTypeSigned(lambdaTypeSlot)) {
@@ -5432,28 +5432,28 @@ bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& ite
 
         retType = sumResultType;
         return true;
-    } else if (IsNull(itemType)) {
+    } else if (IsNull(inputType)) {
         retType = ctx.MakeType<TNullExprType>();
         return true;
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Unsupported type: " << FormatType(&itemType) << ". Expected Data or Optional of Data."));
+            TStringBuilder() << "Unsupported type: " << FormatType(&inputType) << ". Expected Data or Optional of Data."));
         return false;
     }
 }
 
-bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
     bool isOptional;
     const TDataExprType* lambdaType;
-    if(IsDataOrOptionalOfData(&itemType, isOptional, lambdaType)) {
+    if(IsDataOrOptionalOfData(&inputType, isOptional, lambdaType)) {
         auto lambdaTypeSlot = lambdaType->GetSlot();
         const TTypeAnnotationNode *avgResultType = nullptr;
         if (IsDataTypeNumeric(lambdaTypeSlot)) {
             avgResultType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
         } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
-            avgResultType = &itemType;
+            avgResultType = &inputType;
         } else if (IsDataTypeInterval(lambdaTypeSlot)) {
-            avgResultType = &itemType;
+            avgResultType = &inputType;
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
@@ -5466,23 +5466,65 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& ite
 
         retType = avgResultType;
         return true;
-    } else if (IsNull(itemType)) {
+    } else if (IsNull(inputType)) {
         retType = ctx.MakeType<TNullExprType>();
         return true;
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Unsupported type: " << FormatType(&itemType) << ". Expected Data or Optional of Data."));
+            TStringBuilder() << "Unsupported type: " << FormatType(&inputType) << ". Expected Data or Optional of Data."));
         return false;
     }
 }
 
-bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& itemType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
-    if (!itemType.IsComparable()) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected comparable type, but got: " << itemType));
+bool GetAvgResultTypeOverState(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+    if (IsNull(inputType)) {
+        retType = &inputType;
+    } else {
+        auto itemType = &inputType;
+        bool isOptional = false;
+        if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            isOptional = true;
+            itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (!EnsureTupleTypeSize(pos, itemType, 2, ctx)) {
+            return false;
+        }
+
+        auto tupleType = itemType->Cast<TTupleExprType>();
+        auto sumType = tupleType->GetItems()[0];
+        const TTypeAnnotationNode* sumTypeOut;
+        if (!GetSumResultType(pos, *sumType, sumTypeOut, ctx)) {
+            return false;
+        }
+
+        if (!IsSameAnnotation(*sumType, *sumTypeOut)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Mismatch sum type, expected: " << *sumType << ", but got: " << *sumTypeOut));
+            return false;
+        }
+
+        auto countType = tupleType->GetItems()[1];
+        if (!EnsureSpecificDataType(pos, *countType, EDataSlot::Uint64, ctx)) {
+            return false;
+        }
+
+        retType = sumType;
+        if (isOptional) {
+            retType = ctx.MakeType<TOptionalExprType>(retType);
+        }
+    }
+
+    return true;
+}
+
+bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx) {
+    if (!inputType.IsComparable()) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected comparable type, but got: " << inputType));
         return false;
     }
 
-    retType = &itemType;
+    retType = &inputType;
     return true;
 }
 

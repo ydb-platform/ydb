@@ -68,13 +68,23 @@ TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnn
 }
 
 bool IsArgumentsOnlyLambda(const TExprNode& lambda, TVector<ui32>& argIndices) {
+    TNodeMap<ui32> args;
+    for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
+        args.insert(std::make_pair(lambda.Head().Child(i), i));
+    }
+
     for (ui32 i = 1; i < lambda.ChildrenSize(); ++i) {
         auto root = lambda.Child(i);
-        if (!root->IsArgument() || root->GetLambdaLevel() > 0) {
+        if (!root->IsArgument()) {
             return false;
         }
 
-        argIndices.push_back(root->GetArgIndex());
+        auto it = args.find(root);
+        if (it == args.end()) {
+            return false;
+        }
+
+        argIndices.push_back(it->second);
     }
 
     return true;
@@ -2456,7 +2466,7 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr ExpandLMap(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable("Collect")
@@ -6678,8 +6688,9 @@ struct TPeepHoleRules {
         {"OrderedFilter", &ExpandFilter},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
-        {"LMap", &ExpandLMap},
-        {"OrderedLMap", &ExpandLMap},
+        {"LMap", &ExpandLMapOrShuffleByKeys},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"ExpandMap", &OptimizeExpandMap},
         {"MultiMap", &OptimizeMultiMap<false>},
         {"OrderedMultiMap", &OptimizeMultiMap<true>},

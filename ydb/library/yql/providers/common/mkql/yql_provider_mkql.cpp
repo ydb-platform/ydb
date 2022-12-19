@@ -2453,6 +2453,28 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockCombineHashed(arg, filterColumn, keys, aggs, returnType);
     });
 
+    AddCallable("BlockMergeFinalizeHashed", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto arg = MkqlBuildExpr(*node.Child(0), ctx);
+        TVector<ui32> keys;
+        for (const auto& key : node.Child(1)->Children()) {
+            keys.push_back(FromString<ui32>(key->Content()));
+        }
+
+        TVector<TAggInfo> aggs;
+        for (const auto& agg : node.Child(2)->Children()) {
+            TAggInfo info;
+            info.Name = TString(agg->Head().Head().Content());
+            for (ui32 i = 1; i < agg->ChildrenSize(); ++i) {
+                info.ArgsColumns.push_back(FromString<ui32>(agg->Child(i)->Content()));
+            }
+
+            aggs.push_back(info);
+        }
+
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockMergeFinalizeHashed(arg, keys, aggs, returnType);
+    });
+
     AddCallable("BlockCompress", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto flow = MkqlBuildExpr(node.Head(), ctx);
         const auto index = FromString<ui32>(node.Child(1)->Content());

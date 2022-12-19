@@ -8,12 +8,13 @@ namespace NYql {
 
 class TAggregateExpander {
 public:
-    TAggregateExpander(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
+    TAggregateExpander(bool allowPickle, bool usePartitionsByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
         bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false)
         : Node(node)
         , Ctx(ctx)
         , TypesCtx(typesCtx)
         , AllowPickle(allowPickle)
+        , UsePartitionsByKeys(usePartitionsByKeys)
         , ForceCompact(forceCompact)
         , CompactForDistinct(compactForDistinct)
         , UsePhases(usePhases)
@@ -76,7 +77,11 @@ private:
     void GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField);
     TExprNode::TPtr GenerateJustOverStates(const TExprNode::TPtr& input, const TIdxSet& indicies);
     TExprNode::TPtr TryGenerateBlockCombineAllOrHashed();
+    TExprNode::TPtr TryGenerateBlockMergeFinalizeHashed();
     TExprNode::TPtr TryGenerateBlockCombine();
+    TExprNode::TPtr TryGenerateBlockMergeFinalize();
+    TExprNode::TPtr MakeInputBlocks(const TExprNode::TPtr& streamArg, TExprNode::TListType& keyIdxs,
+        TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState);
 
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";
@@ -85,6 +90,7 @@ private:
     TExprContext& Ctx;
     TTypeAnnotationContext& TypesCtx;
     bool AllowPickle;
+    bool UsePartitionsByKeys;
     bool ForceCompact;
     bool CompactForDistinct;
     bool UsePhases;
@@ -121,7 +127,7 @@ private:
 };
 
 inline TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-    TAggregateExpander aggExpander(false, node, ctx, typesCtx, true);
+    TAggregateExpander aggExpander(false, true, node, ctx, typesCtx, true);
     return aggExpander.ExpandAggregate();
 }
 

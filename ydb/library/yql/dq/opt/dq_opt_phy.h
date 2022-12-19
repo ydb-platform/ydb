@@ -46,6 +46,8 @@ NNodes::TExprBase DqBuildPartitionsStage(NNodes::TExprBase node, TExprContext& c
 
 NNodes::TExprBase DqBuildPartitionStage(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap);
 
+NNodes::TExprBase DqBuildShuffleStage(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap);
+
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
     IOptimizationContext& optCtx);
 

@@ -4,6 +4,8 @@
 #include <util/generic/yexception.h>
 #include <vector>
 
+#include <util/digest/city.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -17,6 +19,7 @@ protected:
 
     explicit TRobinHoodHashBase(ui64 initialCapacity = 1u << 8)
         : Capacity(initialCapacity)
+        , SelfHash(GetSelfHash(this))
     {
         Y_ENSURE((Capacity & (Capacity - 1)) == 0);
     }
@@ -91,7 +94,7 @@ public:
 private:
     Y_FORCE_INLINE char* InsertImpl(TKey key, bool& isNew, ui64 capacity, TVec& data) {
         isNew = false;
-        ui64 bucket = THash()(key) & (capacity - 1);
+        ui64 bucket = (SelfHash ^ THash()(key)) & (capacity - 1);
         char* ptr = data.data() + AsDeriv().GetCellSize() * bucket;
         TPSLStorage distance = 0;
         char* returnPtr;
@@ -168,6 +171,12 @@ private:
         ptr = (ptr == data.data() + data.size()) ? data.data() : ptr;
     }
 
+    static ui64 GetSelfHash(void* self) {
+        char buf[sizeof(void*)];
+        *(void**)buf = self;
+        return CityHash64(buf, sizeof(buf));
+    }
+
 protected:
     void Init() {
         Allocate(Capacity, Data);
@@ -195,6 +204,7 @@ private:
     ui64 Size = 0;
     ui64 Capacity;
     TVec Data;
+    const ui64 SelfHash;
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>

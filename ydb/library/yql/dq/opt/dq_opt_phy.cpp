@@ -926,6 +926,100 @@ TExprBase DqBuildPartitionStage(TExprBase node, TExprContext& ctx, const TParent
     return DqBuildPartitionsStageStub<TCoPartitionByKey>(std::move(node), ctx, parentsMap);
 }
 
+TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap) {
+    auto shuffleInput = node.Maybe<TCoShuffleByKeys>().Input();
+    if (!shuffleInput.Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto shuffle = node.Cast<TCoShuffleByKeys>();
+    if (!IsDqPureExpr(shuffle.KeySelectorLambda()) ||
+        !IsDqPureExpr(shuffle.ListHandlerLambda()))
+    {
+        return node;
+    }
+
+    auto dqUnion = shuffle.Input().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap)) {
+        return node;
+    }
+
+    auto keyLambda = shuffle.KeySelectorLambda();
+    TVector<TExprBase> keyElements;
+    if (auto maybeTuple = keyLambda.Body().Maybe<TExprList>()) {
+        auto tuple = maybeTuple.Cast();
+        for (const auto& element : tuple) {
+            keyElements.push_back(element);
+        }
+    } else {
+        keyElements.push_back(keyLambda.Body());
+    }
+
+    TVector<TCoAtom> keyColumns;
+    keyColumns.reserve(keyElements.size());
+    for (auto& element : keyElements) {
+        if (!element.Maybe<TCoMember>()) {
+            return node;
+        }
+
+        auto member = element.Cast<TCoMember>();
+        if (member.Struct().Raw() != keyLambda.Args().Arg(0).Raw()) {
+            return node;
+        }
+
+        keyColumns.push_back(member.Name());
+    }
+
+    if (keyColumns.empty()) {
+        return node;
+    }
+
+    auto connection = Build<TDqCnHashShuffle>(ctx, node.Pos())
+        .Output()
+            .Stage(dqUnion.Output().Stage())
+            .Index(dqUnion.Output().Index())
+            .Build()
+        .KeyColumns()
+            .Add(keyColumns)
+            .Build()
+        .Done();
+
+    TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
+        .Name("arg")
+        .Done();
+
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+
+    inputConns.push_back(connection);
+    inputArgs.push_back(programArg);
+
+    auto handler = shuffle.ListHandlerLambda();
+
+    auto shuffleStage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(inputConns)
+            .Build()
+        .Program()
+            .Args(inputArgs)
+            .Body<TCoToStream>()
+                .Input<TExprApplier>()
+                    .Apply(handler)
+                    .With(handler.Args().Arg(0), programArg)
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(shuffleStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
 
 /*
  * Optimizer rule which handles a switch to scalar expression context for aggregation results.

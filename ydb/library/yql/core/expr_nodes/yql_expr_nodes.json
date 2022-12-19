@@ -2260,6 +2260,15 @@
                 {"Index": 2, "Name": "Keys", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "Aggregations", "Type": "TExprList"}
             ]
+        },
+        {
+            "Name": "TCoShuffleByKeys",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ShuffleByKeys"},
+            "Children": [
+                {"Index": 1, "Name": "KeySelectorLambda", "Type": "TCoLambda"},
+                {"Index": 2, "Name": "ListHandlerLambda", "Type": "TCoLambda"}
+            ]
         }
     ]
 }

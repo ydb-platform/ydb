@@ -18,7 +18,7 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationC
         return node;
     }
 
-    TAggregateExpander aggExpander(true, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
+    TAggregateExpander aggExpander(true, false, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
     auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 

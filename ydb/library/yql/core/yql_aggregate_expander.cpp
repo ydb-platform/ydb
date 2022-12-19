@@ -63,6 +63,13 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
                 return ret;
             }
         }
+
+        if (Suffix == "MergeFinalize") {
+            auto ret = TryGenerateBlockMergeFinalize();
+            if (ret) {
+                return ret;
+            }
+        }
     }
 
     if (!allTraitsCollected) {
@@ -492,14 +499,8 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
         .Build();
 }
 
-TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
-    if (!TypesCtx.ArrowResolver) {
-        return nullptr;
-    }
-
-    const bool hashed = (KeyColumns->ChildrenSize() > 0);
-
-    auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
+TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& streamArg, TExprNode::TListType& keyIdxs,
+    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState) {
     auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { streamArg });
     TVector<TString> inputColumns;
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
@@ -514,9 +515,6 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     }
 
     TExprNode::TListType extractorRoots;
-    TExprNode::TListType aggs;
-    TVector<TString> outputColumns;
-    TExprNode::TListType keyIdxs;
     TVector<const TTypeAnnotationNode*> allKeyTypes;
     for (ui32 index = 0; index < KeyColumns->ChildrenSize(); ++index) {
         auto keyName = KeyColumns->Child(index)->Content();
@@ -538,7 +536,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
     for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
-        if (trait->Child(0)->Content() == "count_all") {
+        if (!overState && trait->Child(0)->Content() == "count_all") {
             // 0 columns
             aggs.push_back(Ctx.Builder(Node->Pos())
                 .List()
@@ -547,7 +545,8 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
                     .Seal()
                 .Seal()
                 .Build());
-        } else {
+        }
+        else {
             // 1 column
             auto root = trait->Child(2)->TailPtr();
             auto rowArg = &trait->Child(2)->Head().Head();
@@ -575,7 +574,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
             aggs.push_back(Ctx.Builder(Node->Pos())
                 .List()
-                    .Callable(0, "AggBlockApply")
+                    .Callable(0, TString("AggBlockApply") + (overState ? "State" : ""))
                         .Atom(0, trait->Child(0)->Content())
                         .Add(1, ExpandType(Node->Pos(), *trait->Child(2)->GetTypeAnn(), Ctx))
                     .Seal()
@@ -592,6 +591,25 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
     auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
+    return blocks;
+}
+
+TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
+    if (!TypesCtx.ArrowResolver) {
+        return nullptr;
+    }
+
+    const bool hashed = (KeyColumns->ChildrenSize() > 0);
+
+    auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
+    TExprNode::TListType keyIdxs;
+    TVector<TString> outputColumns;
+    TExprNode::TListType aggs;
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, false);
+    if (!blocks) {
+        return nullptr;
+    }
+
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
         aggWideFlow = Ctx.Builder(Node->Pos())
@@ -2232,6 +2250,67 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
     }
 
     return TryGenerateBlockCombineAllOrHashed();
+}
+
+TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
+    if (UsePartitionsByKeys) {
+        return nullptr;
+    }
+
+    if (HaveSessionSetting || HaveDistinct) {
+        return nullptr;
+    }
+
+    for (const auto& x : AggregatedColumns->Children()) {
+        auto trait = x->ChildPtr(1);
+        if (!trait->IsCallable("AggApplyState")) {
+            return nullptr;
+        }
+    }
+
+    return TryGenerateBlockMergeFinalizeHashed();
+}
+
+TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
+    if (!TypesCtx.ArrowResolver) {
+        return nullptr;
+    }
+
+    if (KeyColumns->ChildrenSize() == 0) {
+        return nullptr;
+    }
+
+    auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
+    TExprNode::TListType keyIdxs;
+    TVector<TString> outputColumns;
+    TExprNode::TListType aggs;
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true);
+    if (!blocks) {
+        return nullptr;
+    }
+
+    auto aggWideFlow = Ctx.Builder(Node->Pos())
+            .Callable("WideFromBlocks")
+                .Callable(0, "BlockMergeFinalizeHashed")
+                    .Add(0, blocks)
+                    .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                .Seal()
+            .Seal()
+            .Build();
+
+    auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);
+    auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
+    auto lambdaStream = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), { streamArg }), std::move(root));
+
+    auto keySelector = BuildKeySelector(Node->Pos(), *OriginalRowType, KeyColumns, Ctx);
+    return Ctx.Builder(Node->Pos())
+        .Callable("ShuffleByKeys")
+            .Add(0, AggList)
+            .Add(1, keySelector)
+            .Add(2, lambdaStream)
+        .Seal()
+        .Build();
 }
 
 } // namespace NYql

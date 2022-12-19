@@ -11364,6 +11364,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Chain1Map"] = &Chain1MapWrapper;
         Functions["LMap"] = &LMapWrapper;
         Functions["OrderedLMap"] = &LMapWrapper;
+        Functions["ShuffleByKeys"] = &ShuffleByKeysWrapper;
         Functions["Struct"] = &StructWrapper;
         Functions["AddMember"] = &AddMemberWrapper;
         Functions["RemoveMember"] = &RemoveMemberWrapper<false>;
@@ -11584,6 +11585,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AggApply"] = &AggApplyWrapper;
         Functions["AggApplyState"] = &AggApplyWrapper;
         Functions["AggBlockApply"] = &AggBlockApplyWrapper;
+        Functions["AggBlockApplyState"] = &AggBlockApplyWrapper;
         Functions["WinOnRows"] = &WinOnWrapper;
         Functions["WinOnGroups"] = &WinOnWrapper;
         Functions["WinOnRange"] = &WinOnWrapper;
@@ -11792,6 +11794,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
+        ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

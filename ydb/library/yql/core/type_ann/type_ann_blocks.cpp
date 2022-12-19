@@ -251,8 +251,31 @@ IGraphTransformer::TStatus BlockBitCastWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
-bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType inputItems, const TExprNode& aggs,
-    TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx) {
+bool ValidateBlockKeys(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems,
+    const TExprNode& keys, TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx) {
+    if (!EnsureTupleMinSize(keys, 1, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (auto child : keys.Children()) {
+        if (!EnsureAtom(*child, ctx)) {
+            return false;
+        }
+
+        ui32 keyColumnIndex;
+        if (!TryFromString(child->Content(), keyColumnIndex) || keyColumnIndex >= inputItems.size()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Bad key column index"));
+            return false;
+        }
+
+        retMultiType.push_back(inputItems[keyColumnIndex]);
+    }
+
+    return true;
+}
+
+bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems, const TExprNode& aggs,
+    TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx, bool overState) {
     if (!EnsureTuple(aggs, ctx)) {
         return false;
     }
@@ -262,8 +285,9 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             return false;
         }
 
-        if (!agg->Head().IsCallable("AggBlockApply")) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "Expected AggBlockApply"));
+        auto expectedCallable = overState ? "AggBlockApplyState" : "AggBlockApply";
+        if (!agg->Head().IsCallable(expectedCallable)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected: " << expectedCallable));
             return false;
         }
 
@@ -287,7 +311,8 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             }
         }
 
-        retMultiType.push_back(AggApplySerializedStateType(agg->HeadPtr(), ctx));
+        auto retAggType = overState ? agg->HeadPtr()->GetTypeAnn() : AggApplySerializedStateType(agg->HeadPtr(), ctx);
+        retMultiType.push_back(retAggType);
     }
 
     return true;
@@ -321,7 +346,7 @@ IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, 
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, false)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -362,21 +387,41 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    for (auto child : input->Child(2)->Children()) {
-        if (!EnsureAtom(*child, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        ui32 keyColumnIndex;
-        if (!TryFromString(child->Content(), keyColumnIndex) || keyColumnIndex >= blockItemTypes.size()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Bad key column index"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        retMultiType.push_back(blockItemTypes[keyColumnIndex]);
+    if (!ValidateBlockKeys(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr, false)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (auto& t : retMultiType) {
+        t = ctx.Expr.MakeType<TBlockExprType>(t);
+    }
+
+    retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
+    auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType blockItemTypes;
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType retMultiType;
+    if (!ValidateBlockKeys(input->Pos(), blockItemTypes, *input->Child(1), retMultiType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, true)) {
         return IGraphTransformer::TStatus::Error;
     }
 

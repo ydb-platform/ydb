@@ -533,7 +533,7 @@ public:
     THashSet<TPathId> ListSubTree(TPathId subdomain_root, const TActorContext& ctx);
     THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& pathes, const TActorContext &ctx);
 
-    void MarkAsDroping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
+    void MarkAsDropping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
     void MarkAsDropping(const THashSet<TPathId>& pathes, TTxId txId, const TActorContext& ctx);
 
     void UncountNode(TPathElement::TPtr node);
@@ -960,7 +960,7 @@ public:
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
 
-    
+
     void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);

@@ -782,9 +782,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         checks
             .NotDeleted();
 
-        if (checks && !path.Base()->IsTable() && !path.Base()->IsTableIndex() && !path.Base()->IsDirectory()) {
+        if (checks && !path.Base()->IsTable() && !path.Base()->IsTableIndex() && !path.Base()->IsDirectory() && !path.Base()->IsDomainRoot()) {
             // KIKIMR-13173
-            // PQ BSV drop their shard before PlatStep
+            // PQ BSV drop their shard before PlanStep
             // If they are being deleted consider them as deleted
             checks.NotUnderDeleting(NKikimrScheme::StatusPathDoesNotExist);
         }

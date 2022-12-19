@@ -286,26 +286,40 @@ class KiKiMRClusterInterface(object):
     ):
         logger.debug(database_name)
 
-        req = RemoveTenantRequest(database_name)
+        operation_id = self._remove_database_send_op(database_name)
+        self._remove_database_wait_op(database_name, operation_id, timeout_seconds=timeout_seconds)
+        self._remove_database_wait_tenant_gone(database_name, timeout_seconds=timeout_seconds)
 
+        return database_name
+
+    def _remove_database_send_op(self, database_name):
+        logger.debug('%s: send console operation', database_name)
+
+        req = RemoveTenantRequest(database_name)
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.RemoveTenantResponse.Response.operation
-        logger.debug('response from console: %s', response)
+        logger.debug('%s: response from console: %s', database_name, response)
+
         if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
             raise RuntimeError('remove_database failed: %s: %s' % (response.Status.Code, response.Status.Reason))
-        if not operation.ready:
-            logger.debug('waiting for operation done')
-            operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
-            logger.debug('operation done')
+
+        return operation.id
+
+    def _remove_database_wait_op(self, database_name, operation_id, timeout_seconds=20):
+        logger.debug('%s: wait console operation done', database_name)
+        operation = self.__wait_console_op(operation_id, timeout_seconds=timeout_seconds)
+        logger.debug('%s: console operation done', database_name)
+
         if operation.status not in (StatusIds.SUCCESS, StatusIds.NOT_FOUND):
             raise RuntimeError('remove_database failed: %s' % (operation.status,))
+
+    def _remove_database_wait_tenant_gone(self, database_name, timeout_seconds=20):
+        logger.debug('%s: wait tenant gone', database_name)
 
         def predicate():
             response = self.client.send_request(
                 GetTenantStatusRequest(database_name).protobuf, method='ConsoleRequest').GetTenantStatusResponse
             return response.Response.operation.status == StatusIds.NOT_FOUND
-
-        logger.debug('waiting tenant gone')
 
         tenant_not_found = wait_for(
             predicate=predicate,
@@ -314,7 +328,7 @@ class KiKiMRClusterInterface(object):
         )
         assert tenant_not_found
 
-        logger.debug('tenant gone')
+        logger.debug('%s: tenant gone', database_name)
 
         return database_name
 

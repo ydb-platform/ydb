@@ -66,9 +66,23 @@ public:
         IgnoreMessages(DebugHint(), toIgnore);
     }
 
+    void FinishState(TTxState* txState, TOperationContext& context) {
+        auto targetPath = context.SS->PathsById.at(txState->TargetPathId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        // We are done with the extsubdomain's tablets, now its a good time
+        // to make extsubdomain root unresolvable to any external observer
+        context.SS->DropNode(targetPath, txState->PlanStep, OperationId.GetTxId(), db, context.Ctx);
+
+        context.OnComplete.PublishToSchemeBoard(OperationId, targetPath->PathId);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
+    }
+
     bool HandleReply(TEvHive::TEvDeleteOwnerTabletsReply::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        NKikimrHive::TEvDeleteOwnerTabletsReply record =  ev->Get()->Record;
+        NKikimrHive::TEvDeleteOwnerTabletsReply record = ev->Get()->Record;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TDeleteExternalShards"
@@ -95,8 +109,7 @@ public:
         TTabletId hive = TTabletId(record.GetOrigin());
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, TPipeMessageId(0, 0));
 
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
+        FinishState(txState, context);
 
         return true;
     }
@@ -118,9 +131,10 @@ public:
 
         TTabletId tenantSchemeshard = domainInfo->GetTenantSchemeShardID();
 
-        if (!tenantSchemeshard) { // ext_subdomain was't altered at all, and there has't been added tenantSchemeshard
-            NIceDb::TNiceDb db(context.GetDB());
-            context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
+        if (!tenantSchemeshard) {
+            // extsubdomain was't altered at all, there are no tenantSchemeshard,
+            // nothing to do
+            FinishState(txState, context);
             return true;
         }
 
@@ -169,7 +183,19 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
+        txState->PlanStep = step;
+        context.SS->PersistTxPlanStep(db, OperationId, step);
+
+        //NOTE: drop entire extsubdomain path tree except the extsubdomain root itself,
+        // root should stay alive (but marked for deletion) until operation is done.
+        // Or at least until we are done with deleting tablets via extsubdomain's hive.
+        // In a configuration with dedicated nodes extsubdomain's hive runs on
+        // extsubdomain's nodes and nodes can't reconnect to the extsubdomain
+        // if its root is not resolvable. And nodes could go away right in the middle of anything --
+        // -- being able to reconnect node any time until extsubdomain is actually gone
+        // is a good thing.
         auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
+        pathes.erase(pathId);
         context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -197,12 +223,15 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
-        auto pathes = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
+        auto targetPath = context.SS->PathsById.at(txState->TargetPathId);
+
+        auto pathes = context.SS->ListSubTree(targetPath->PathId, context.Ctx);
         NForceDrop::ValidateNoTransactionOnPathes(OperationId, pathes, context);
-        context.SS->MarkAsDropping({txState->TargetPathId}, OperationId.GetTxId(), context.Ctx);
         NForceDrop::CollectShards(pathes, OperationId, txState, context);
 
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        context.SS->MarkAsDropping(targetPath, OperationId.GetTxId(), context.Ctx);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, targetPath->PathId, TStepId(0));
         return false;
     }
 };
@@ -328,7 +357,7 @@ public:
             }
         }
 
-        context.SS->MarkAsDropping({path.Base()->PathId}, OperationId.GetTxId(), context.Ctx);
+        context.SS->MarkAsDropping(path.Base(), OperationId.GetTxId(), context.Ctx);
 
         txState.State = TTxState::Propose;
         context.OnComplete.ActivateTx(OperationId);

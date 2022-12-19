@@ -674,6 +674,19 @@ TCheckFunc ChildrenCount(ui32 count) {
     };
 }
 
+TCheckFunc ChildrenCount(ui32 count, NKikimrSchemeOp::EPathState pathState) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto actual = std::count_if(
+            record.GetPathDescription().GetChildren().begin(),
+            record.GetPathDescription().GetChildren().end(),
+            [pathState] (auto item) {
+                return item.GetPathState() == pathState;
+            }
+        );
+        UNIT_ASSERT_VALUES_EQUAL(actual, count);
+    };
+}
+
 TCheckFunc IndexesCount(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().TableIndexesSize(), count);

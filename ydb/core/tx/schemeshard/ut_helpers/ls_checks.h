@@ -74,6 +74,7 @@ namespace NLs {
     TCheckFunc PathStringEqual(const TString& path);
     void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc ChildrenCount(ui32 count);
+    TCheckFunc ChildrenCount(ui32 count, NKikimrSchemeOp::EPathState pathState);
     void PathNotExist(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void PathExist(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void PathRedirected(const NKikimrScheme::TEvDescribeSchemeResult& record);

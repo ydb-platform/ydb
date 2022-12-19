@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(1)});
+                                   {NLs::ChildrenCount(1, NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(1)});
+                                   {NLs::ChildrenCount(1, NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
                 t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5, 6});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));

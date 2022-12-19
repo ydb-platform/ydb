@@ -4187,7 +4187,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvSyncTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
-        
+
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
 
         HFuncTraced(TSchemeBoardEvents::TEvUpdateAck, Handle);
@@ -4473,16 +4473,6 @@ THashSet<TShardIdx> TSchemeShard::CollectAllShards(const THashSet<TPathId> &path
     return shards;
 }
 
-void TSchemeShard::MarkAsDroping(TPathElement::TPtr node, TTxId txId, const TActorContext &ctx) {
-    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Mark as Dropping path id " << node->PathId <<
-                " by tx: " << txId);
-    if (!node->Dropped()) {
-        node->PathState = TPathElement::EPathState::EPathStateDrop;
-        node->DropTxId = txId;
-    }
-}
-
 void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     const auto isBackupTable = IsBackupTable(node->PathId);
 
@@ -4550,12 +4540,6 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     }
 }
 
-void TSchemeShard::MarkAsDropping(const THashSet<TPathId> &pathes, TTxId txId, const TActorContext &ctx) {
-    for (auto id: pathes) {
-        MarkAsDroping(PathsById.at(id), txId, ctx);
-    }
-}
-
 void TSchemeShard::MarkAsMigrated(TPathElement::TPtr node, const TActorContext &ctx) {
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Mark as Migrated path id " << node->PathId);
@@ -4576,6 +4560,21 @@ void TSchemeShard::MarkAsMigrated(TPathElement::TPtr node, const TActorContext &
     UncountNode(node);
 }
 
+void TSchemeShard::MarkAsDropping(TPathElement::TPtr node, TTxId txId, const TActorContext &ctx) {
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Mark as Dropping path id " << node->PathId <<
+                " by tx: " << txId);
+    if (!node->Dropped()) {
+        node->PathState = TPathElement::EPathState::EPathStateDrop;
+        node->DropTxId = txId;
+    }
+}
+
+void TSchemeShard::MarkAsDropping(const THashSet<TPathId> &pathes, TTxId txId, const TActorContext &ctx) {
+    for (auto id: pathes) {
+        MarkAsDropping(PathsById.at(id), txId, ctx);
+    }
+}
 
 void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, NIceDb::TNiceDb &db, const TActorContext &ctx) {
     Y_VERIFY_S(node->PathState == TPathElement::EPathState::EPathStateDrop

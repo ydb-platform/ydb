@@ -615,15 +615,15 @@ void NForceDrop::CollectShards(const THashSet<TPathId>& pathes, TOperationId ope
 }
 
 void NForceDrop::ValidateNoTransactionOnPathes(TOperationId operationId, const THashSet<TPathId>& pathes, TOperationContext &context) {
-    // it is not supposed that someone transaction is able to materialise in dropping subdomain
-    // all transaction should check parent dir status
-    // however, it is better to check that all locks are ours
+    // No transaction should materialize in a subdomain that is being deleted --
+    // -- all operations should be checking parent dir status at Propose stage.
+    // However, it is better to verify that, just in case.
     auto transactions = context.SS->GetRelatedTransactions(pathes, context.Ctx);
     for (auto otherTxId: transactions) {
         if (otherTxId == operationId.GetTxId()) {
             continue;
         }
-        Y_VERIFY_S(false, "transaction: " << otherTxId << " found on deleted subdomain");
+        Y_VERIFY_S(false, "unexpected transaction: " << otherTxId << " found on the subdomain being deleted by transaction " << operationId.GetTxId());
     }
 }
 

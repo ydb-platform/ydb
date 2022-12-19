@@ -1,5 +1,6 @@
 # Set of common macros
 
+find_package(Python2 REQUIRED)
 find_package(Python3 REQUIRED)
 
 add_compile_definitions(CATBOOST_OPENSOURCE=yes)
@@ -38,7 +39,7 @@ function(target_joined_source TgtName Out)
   endforeach()
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${Out}
-    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/gen_join_srcs.py ${CMAKE_CURRENT_BINARY_DIR}/${Out} ${IncludesList}
+    COMMAND Python2::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/gen_join_srcs.py ${CMAKE_CURRENT_BINARY_DIR}/${Out} ${IncludesList}
     DEPENDS ${CMAKE_SOURCE_DIR}/build/scripts/gen_join_srcs.py ${ARGN}
   )
   target_sources(${TgtName} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/${Out})
@@ -136,7 +137,7 @@ endfunction()
 function(vcs_info Tgt)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/__vcs_version__.c
-    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/vcs_info.py no-vcs dummy.json ${CMAKE_CURRENT_BINARY_DIR}/__vcs_version__.c ${CMAKE_SOURCE_DIR}/build/scripts/c_templates/svn_interface.c
+    COMMAND Python2::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/vcs_info.py no-vcs dummy.json ${CMAKE_CURRENT_BINARY_DIR}/__vcs_version__.c ${CMAKE_SOURCE_DIR}/build/scripts/c_templates/svn_interface.c
     DEPENDS ${CMAKE_SOURCE_DIR}/build/scripts/vcs_info.py ${CMAKE_SOURCE_DIR}/build/scripts/c_templates/svn_interface.c
   )
   target_sources(${Tgt} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/__vcs_version__.c)

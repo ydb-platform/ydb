@@ -2,7 +2,6 @@
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 #include "version.h"
-#include <kikimr/yndx/log_backend/log_backend_build.h>
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>

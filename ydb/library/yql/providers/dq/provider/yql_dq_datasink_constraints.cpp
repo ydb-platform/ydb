@@ -11,11 +11,27 @@ using namespace NNodes;
 
 namespace {
 
+template <class... Other>
+struct TCopyConstraint;
+
+template <>
+struct TCopyConstraint<> {
+    static void Do(const TExprNode&, const TExprNode::TPtr&) {}
+};
+
+template <class TConstraint, class... Other>
+struct TCopyConstraint<TConstraint, Other...> {
+    static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
+        if (const auto c = from.GetConstraint<TConstraint>())
+            to->AddConstraint(c);
+        TCopyConstraint<Other...>::Do(from, to);
+    }
+};
+
 class TDqDataSinkConstraintTransformer : public TVisitorTransformerBase {
 public:
-    TDqDataSinkConstraintTransformer(TDqState::TPtr state)
+    TDqDataSinkConstraintTransformer()
         : TVisitorTransformerBase(true)
-        , State_(std::move(state))
     {
         AddHandler({TDqStage::CallableName(), TDqPhyStage::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleStage));
         AddHandler({TDqOutput::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleOutput));
@@ -24,10 +40,10 @@ public:
             TDqCnBroadcast::CallableName(),
             TDqCnMap::CallableName(),
             TDqCnHashShuffle::CallableName(),
-            TDqCnMerge::CallableName(),
             TDqCnResult::CallableName(),
             TDqCnValue::CallableName()
             }, Hndl(&TDqDataSinkConstraintTransformer::HandleConnection));
+        AddHandler({TDqCnMerge::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleMerge));
         AddHandler({TDqReplicate::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleReplicate));
         AddHandler({
             TDqJoin::CallableName(),
@@ -61,16 +77,25 @@ public:
             if (const auto set = multi->GetItem(FromString<ui32>(output.Index().Value())))
                 input.Ptr()->SetConstraints(*set);
         } else
-            input.Ptr()->CopyConstraints(output.Stage().Program().Body().Ref()); // TODO: Copy onli limited set of constraints.
+            input.Ptr()->CopyConstraints(output.Stage().Program().Body().Ref());
         return TStatus::Ok;
     }
 
     TStatus HandleConnection(TExprBase input, TExprContext&) {
         const auto output = input.Cast<TDqConnection>().Output();
-        if (const auto u = output.Ref().GetConstraint<TUniqueConstraintNode>())
-            input.Ptr()->AddConstraint(u);
-        if (const auto e = output.Ref().GetConstraint<TEmptyConstraintNode>())
-            input.Ptr()->AddConstraint(e);
+        TCopyConstraint<TUniqueConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input.Ptr());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleMerge(TExprBase input, TExprContext& ctx) {
+        const auto output = input.Cast<TDqCnMerge>().Output();
+        if (const auto outSorted = output.Ref().GetConstraint<TSortedConstraintNode>())
+            input.Ptr()->AddConstraint(outSorted);
+        else {
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), "Expected sorted constraint on stage output."));
+            return TStatus::Error;
+        }
+        TCopyConstraint<TUniqueConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input.Ptr());
         return TStatus::Ok;
     }
 
@@ -97,14 +122,12 @@ public:
 
         return TStatus::Ok;
     }
-private:
-    const TDqState::TPtr State_;
 };
 
 }
 
-THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer(TDqState::TPtr state) {
-    return THolder<IGraphTransformer>(new TDqDataSinkConstraintTransformer(std::move(state)));
+THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer() {
+    return THolder<IGraphTransformer>(new TDqDataSinkConstraintTransformer());
 }
 
 }

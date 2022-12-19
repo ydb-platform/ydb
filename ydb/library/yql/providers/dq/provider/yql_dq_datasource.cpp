@@ -35,16 +35,18 @@ using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 using namespace NDq;
 
+namespace {
+
 class TDqDataProviderSource: public TDataProviderBase {
 public:
-    TDqDataProviderSource(const TDqStatePtr& state, TExecTransformerFactory execTransformerFactory)
+    TDqDataProviderSource(const TDqState::TPtr& state, TExecTransformerFactory execTransformerFactory)
         : State(state)
         , ConfigurationTransformer([this]() {
             return MakeHolder<NCommon::TProviderConfigurationTransformer>(State->Settings, *State->TypeCtx, TString{DqProviderName});
         })
         , ExecTransformer([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State)); })
         , TypeAnnotationTransformer([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
-        , ConstraintsTransformer([state] () { return CreateDqDataSourceConstraintTransformer(state); })
+        , ConstraintsTransformer([] () { return CreateDqDataSourceConstraintTransformer(); })
     { }
 
     TStringBuf GetName() const override {
@@ -233,18 +235,21 @@ public:
         if (ExecTransformer) {
             ExecTransformer->Rewind();
             TypeAnnotationTransformer->Rewind();
+            ConstraintsTransformer->Rewind();
         }
     }
 
 private:
-    TDqStatePtr State;
+    const TDqState::TPtr State;
     TLazyInitHolder<IGraphTransformer> ConfigurationTransformer;
     TLazyInitHolder<IGraphTransformer> ExecTransformer;
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer;
     TLazyInitHolder<IGraphTransformer> ConstraintsTransformer;
 };
 
-TIntrusivePtr<IDataProvider> CreateDqDataSource(const TDqStatePtr& state, TExecTransformerFactory execTransformerFactory) {
+}
+
+TIntrusivePtr<IDataProvider> CreateDqDataSource(const TDqState::TPtr& state, TExecTransformerFactory execTransformerFactory) {
     return new TDqDataProviderSource(state, execTransformerFactory);
 }
 

@@ -13,9 +13,8 @@ namespace {
 
 class TDqDataSourceConstraintTransformer : public TVisitorTransformerBase {
 public:
-    TDqDataSourceConstraintTransformer(TDqState::TPtr state)
+    TDqDataSourceConstraintTransformer()
         : TVisitorTransformerBase(true)
-        , State_(std::move(state))
     {
         AddHandler({
             TCoConfigure::CallableName(),
@@ -31,14 +30,12 @@ public:
     TStatus HandleDefault(TExprBase, TExprContext&) {
         return TStatus::Ok;
     }
-private:
-    const TDqState::TPtr State_;
 };
 
 }
 
-THolder<IGraphTransformer> CreateDqDataSourceConstraintTransformer(TDqState::TPtr state) {
-    return THolder<IGraphTransformer>(new TDqDataSourceConstraintTransformer(std::move(state)));
+THolder<IGraphTransformer> CreateDqDataSourceConstraintTransformer() {
+    return THolder<IGraphTransformer>(new TDqDataSourceConstraintTransformer());
 }
 
 }

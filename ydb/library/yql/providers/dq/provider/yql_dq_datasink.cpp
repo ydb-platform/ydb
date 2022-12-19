@@ -24,9 +24,11 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
 class TDqDataProviderSink: public TDataProviderBase {
 public:
-    TDqDataProviderSink(const TDqStatePtr& state)
+    TDqDataProviderSink(const TDqState::TPtr& state)
         : State(state)
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(state->TypeCtx, state->Settings); })
         , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO*/nullptr, state->Settings, state->TypeCtx->UseBlocks ); })
@@ -35,7 +37,7 @@ public:
             return CreateDqsDataSinkTypeAnnotationTransformer(
                 state->TypeCtx, state->Settings->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate));
         })
-        , ConstraintsTransformer([state] () { return CreateDqDataSinkConstraintTransformer(state); })
+        , ConstraintsTransformer([] () { return CreateDqDataSinkConstraintTransformer(); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
 
@@ -275,7 +277,7 @@ public:
         }
     }
 
-    TDqStatePtr State;
+    const TDqState::TPtr State;
 
     TLazyInitHolder<IGraphTransformer> LogOptTransformer;
     TLazyInitHolder<IGraphTransformer> PhyOptTransformer;
@@ -285,7 +287,9 @@ public:
     TLazyInitHolder<IGraphTransformer> RecaptureTransformer;
 };
 
-TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqStatePtr& state) {
+}
+
+TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqState::TPtr& state) {
     return new TDqDataProviderSink(state);
 }
 

@@ -32,6 +32,8 @@ namespace NMonitoring {
     }
 
     TMetricRegistry::TMetricRegistry() = default;
+    TMetricRegistry::TMetricRegistry(TMetricRegistry&& other) = default;
+
     TMetricRegistry::~TMetricRegistry() = default;
 
     TMetricRegistry::TMetricRegistry(const TLabels& commonLabels)

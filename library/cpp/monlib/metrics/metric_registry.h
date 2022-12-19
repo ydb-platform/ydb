@@ -61,6 +61,8 @@ namespace NMonitoring {
     class TMetricRegistry: public IMetricRegistry {
     public:
         TMetricRegistry();
+        TMetricRegistry(TMetricRegistry&& other);
+
         ~TMetricRegistry();
 
         explicit TMetricRegistry(const TLabels& commonLabels);

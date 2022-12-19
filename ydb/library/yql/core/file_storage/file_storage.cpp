@@ -29,6 +29,7 @@
 #include <util/stream/str.h>
 #include <util/stream/file.h>
 #include <util/stream/null.h>
+#include <util/system/env.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
 #include <util/system/guard.h>
@@ -45,6 +46,7 @@ public:
     explicit TFileStorageImpl(const TFileStorageConfig& params, const std::vector<NFS::IDownloaderPtr>& downloaders)
         : Storage(params.GetMaxFiles(), ui64(params.GetMaxSizeMb()) << 20ull, params.GetPath())
         , Config(params)
+        , UseFakeChecksums(GetEnv("YQL_LOCAL") == "1")
     {
         Downloaders.push_back(MakeHttpDownloader(params));
         Downloaders.insert(Downloaders.begin(), downloaders.begin(), downloaders.end());
@@ -55,7 +57,7 @@ public:
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) final {
         YQL_LOG(INFO) << "PutFile to cache: " << file;
-        const auto md5 = MD5::File(file);
+        const auto md5 = FileChecksum(file);
         const TString storageFileName = md5 + ".file";
         auto lock = MultiResourceLock.Acquire(storageFileName);
         return Storage.Put(storageFileName, outFileName, md5, [&file, &md5](const TFsPath& dstFile) {
@@ -251,6 +253,16 @@ private:
         return result;
     }
 
+    TString FileChecksum(const TString& file) const {
+        if (UseFakeChecksums) {
+            // Avoid heavy binaries recalculation in local mode (YQL-15353):
+            // calculate MD5 sum of file name instead of file contents
+            return MD5::Calc(file);
+        } else {
+            return MD5::File(file);
+        }
+    }
+
     static TString BuildUrlMetaFileName(const THttpURL& url, const TString& token) {
         return MD5::Calc(TStringBuilder() << token << url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url_meta";
     }
@@ -265,6 +277,7 @@ private:
     const TFileStorageConfig Config;
     std::vector<NFS::IDownloaderPtr> Downloaders;
     TMultiResourceLock MultiResourceLock;
+    const bool UseFakeChecksums;   // YQL-15353
 };
 
 class TFileStorageWithAsync: public TFileStorageDecorator {

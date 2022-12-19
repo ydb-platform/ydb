@@ -722,6 +722,7 @@ public:
 
         QueryStat.Measure<void>("LoadUdfs", [&]()
         {
+            THashSet<TString> initializedUdfs;
             for (const auto& file : taskMeta.GetFiles()) {
                 auto name = file.GetName();
                 auto path = file.GetLocalPath();
@@ -733,8 +734,10 @@ public:
                     case Yql::DqsProto::TFile::EUSER_FILE:
                         break;
                     case Yql::DqsProto::TFile::EUDF_FILE:
-                        FunctionRegistry->LoadUdfs(path, EmptyRemappings, 0, file.GetCustomUdfPrefix());
-                        modulesMapping.emplace(TFsPath(path).RealPath(), file.GetObjectId());
+                        if (initializedUdfs.insert(file.GetObjectId()).second) {
+                            FunctionRegistry->LoadUdfs(path, EmptyRemappings, 0, file.GetCustomUdfPrefix());
+                            modulesMapping.emplace(TFsPath(path).RealPath(), file.GetObjectId());
+                        }
                         break;
                     default:
                         Y_VERIFY(false);

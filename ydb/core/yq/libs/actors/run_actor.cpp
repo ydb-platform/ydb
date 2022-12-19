@@ -1036,14 +1036,14 @@ private:
         auto it = EvalInfos.find(ev->Sender);
         auto eval = it != EvalInfos.end();
         if (eval) {
-            IDqGateway::TResult QueryResult;
+            IDqGateway::TResult queryResult;
 
             auto& result = ev->Get()->Record;
 
-            LOG_D("Query evaluation response. Issues count: " << result.IssuesSize()
+            LOG_D("Query evaluation " << DqEvalIndex << " response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount());
 
-            QueryResult.Data = result.yson();
+            queryResult.Data = result.yson();
 
             TIssues issues;
             IssuesFromMessage(result.GetIssues(), issues);
@@ -1055,15 +1055,15 @@ private:
             }
 
             if (!error) {
-                QueryResult.SetSuccess();
+                queryResult.SetSuccess();
             }
 
-            SaveStatistics("Precompute=", result);
+            SaveStatistics("Precompute=" + ToString(DqEvalIndex++), result);
 
-            QueryResult.AddIssues(issues);
-            QueryResult.Truncated = result.GetTruncated();
-            QueryResult.RowsCount = result.GetRowsCount();
-            it->second.Result.SetValue(QueryResult);
+            queryResult.AddIssues(issues);
+            queryResult.Truncated = result.GetTruncated();
+            queryResult.RowsCount = result.GetRowsCount();
+            it->second.Result.SetValue(queryResult);
             EvalInfos.erase(it);
         }
         return eval;
@@ -1912,6 +1912,7 @@ private:
     std::vector<NYq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
     i32 DqGraphIndex = 0;
+    ui32 DqEvalIndex = 0;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
     NActors::TActorId CheckpointCoordinatorId;

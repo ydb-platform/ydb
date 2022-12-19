@@ -33,9 +33,6 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Initiate() override {
-                BDEV_QUERY(BDEV09, "TEvPut_new", (U.BlobId, Request.Id), (U.BufferSize, Request.Buffer.size()),
-                    (U.HandleClass, Request.HandleClass));
-
                 if (Request.Buffer.size() > MaxBlobSize) {
                     return EndWithError(NKikimrProto::ERROR, "blob is way too big");
                 } else if (Request.Buffer.size() != Request.Id.BlobSize()) {
@@ -96,6 +93,9 @@ namespace NKikimr::NBlobDepot {
                     kind.WritesInFlight.insert(BlobSeqId);
                     IsInFlight = true;
                 }
+
+                BDEV_QUERY(BDEV09, "TEvPut_new", (U.BlobId, Request.Id), (U.BufferSize, Request.Buffer.size()),
+                    (U.HandleClass, Request.HandleClass));
 
                 Y_VERIFY(CommitBlobSeq.ItemsSize() == 0);
                 auto *commitItem = CommitBlobSeq.AddItems();
@@ -187,12 +187,8 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration);
             }
 
-            void OnUpdateBlock(bool success) override {
-                if (success) {
-                    CheckBlocks(); // just restart request
-                } else {
-                    EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
-                }
+            void OnUpdateBlock() override {
+                CheckBlocks(); // just restart request
             }
 
             void OnIdAllocated() override {
@@ -261,12 +257,16 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                BDEV_QUERY(BDEV12, "TEvPut_end", (Status, status), (ErrorReason, errorReason));
+                if (BlobSeqId) {
+                    BDEV_QUERY(BDEV12, "TEvPut_end", (Status, status), (ErrorReason, errorReason));
+                }
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess() {
-                BDEV_QUERY(BDEV13, "TEvPut_end", (Status, NKikimrProto::OK));
+                if (BlobSeqId) {
+                    BDEV_QUERY(BDEV13, "TEvPut_end", (Status, NKikimrProto::OK));
+                }
 
                 if (IssueUncertainWrites) { // send a notification
                     auto *item = CommitBlobSeq.MutableItems(0);

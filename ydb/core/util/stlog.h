@@ -321,12 +321,14 @@ namespace NKikimr::NStLog {
 
             ~TJsonWriter() {
                 Json.OpenMap();
-                Json.WriteKey("Marker");
-                Json.Write(Self->Marker);
-                Json.WriteKey("File");
-                Json.Write(Self->GetFileName());
-                Json.WriteKey("Line");
-                Json.Write(Self->Line);
+                if (Self->Header()) {
+                    Json.WriteKey("Marker");
+                    Json.Write(Self->Marker);
+                    Json.WriteKey("File");
+                    Json.Write(Self->GetFileName());
+                    Json.WriteKey("Line");
+                    Json.Write(Self->Line);
+                }
                 Json.WriteKey("Text");
                 Json.Write(Stream.Str());
                 Self->WriteParamsToJson(Json);
@@ -339,6 +341,10 @@ namespace NKikimr::NStLog {
         }
 
     private:
+        bool Header() const {
+            return *File;
+        }
+
         const char *GetFileName() const {
             const char *p = strrchr(File, '/');
             return p ? p + 1 : File;

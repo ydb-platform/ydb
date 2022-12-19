@@ -39,7 +39,7 @@ namespace NKikimr::NBlobDepot {
         NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, ui32 generation, TQuery *query, ui32 *blockedGeneration);
         void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override;
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg);
-        void IssueOnUpdateBlock(TBlock& block, bool success);
+        void IssueOnUpdateBlock(TBlock& block);
         std::tuple<ui32, ui64> GetBlockForTablet(ui64 tabletId);
         void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic timestamp, TDuration timeToLive);
         void OnBlockedTablets(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TEvPushNotify::TBlockedTablet>& tablets);

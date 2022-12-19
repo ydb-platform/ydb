@@ -130,22 +130,27 @@ namespace NKikimr::NBlobDepot {
             const ui64 id = ++LastCollectCmdId;
             CollectCmdToGroup.emplace(id, record.GroupId);
 
-            if (ev->Keep) {
-                for (const TLogoBlobID& blobId : *ev->Keep) {
-                    BDEV(BDEV00, "TrashManager_issueKeep", (BDT, Self->TabletID()), (GroupId, record.GroupId),
-                        (BlobId, blobId), (Cookie, id));
+            if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                if (ev->Keep) {
+                    for (const TLogoBlobID& blobId : *ev->Keep) {
+                        Y_VERIFY(blobId.Channel() == record.Channel);
+                        BDEV(BDEV00, "TrashManager_issueKeep", (BDT, Self->TabletID()), (GroupId, record.GroupId),
+                            (Channel, int(record.Channel)), (BlobId, blobId), (Cookie, id));
+                    }
                 }
-            }
-            if (ev->DoNotKeep) {
-                for (const TLogoBlobID& blobId : *ev->DoNotKeep) {
-                    BDEV(BDEV01, "TrashManager_issueDoNotKeep", (BDT, Self->TabletID()), (GroupId, record.GroupId),
-                        (BlobId, blobId), (Cookie, id));
+                if (ev->DoNotKeep) {
+                    for (const TLogoBlobID& blobId : *ev->DoNotKeep) {
+                        Y_VERIFY(blobId.Channel() == record.Channel);
+                        BDEV(BDEV01, "TrashManager_issueDoNotKeep", (BDT, Self->TabletID()), (GroupId, record.GroupId),
+                            (Channel, int(record.Channel)), (BlobId, blobId), (Cookie, id));
+                    }
                 }
-            }
-            if (collect) {
-                BDEV(BDEV02, "TrashManager_issueCollect", (BDT, Self->TabletID()), (GroupId, record.GroupId),
-                    (Channel, int(ev->Channel)), (RecordGeneration, ev->RecordGeneration), (Hard, ev->Hard),
-                    (CollectGeneration, ev->CollectGeneration), (CollectStep, ev->CollectStep), (Cookie, id));
+                if (collect) {
+                    BDEV(BDEV02, "TrashManager_issueCollect", (BDT, Self->TabletID()), (GroupId, record.GroupId),
+                        (Channel, int(ev->Channel)), (RecordGeneration, ev->RecordGeneration),
+                        (PerGenerationCounter, ev->PerGenerationCounter), (Hard, ev->Hard),
+                        (CollectGeneration, ev->CollectGeneration), (CollectStep, ev->CollectStep), (Cookie, id));
+                }
             }
 
             if (collect) {
@@ -170,15 +175,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (Id, Self->GetLogId()),
-            (Channel, ev->Get()->Channel), (GroupId, ev->Cookie), (Msg, ev->Get()->ToString()));
-
-        BDEV(BDEV03, "TrashManager_collectResult", (BDT, Self->TabletID()), (Cookie, ev->Cookie),
-            (Status, ev->Get()->Status), (ErrorReason, ev->Get()->ErrorReason));
-
         auto cmd = CollectCmdToGroup.extract(ev->Cookie);
         Y_VERIFY(cmd);
         const ui32 groupId = cmd.mapped();
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (Id, Self->GetLogId()),
+            (Channel, ev->Get()->Channel), (GroupId, groupId), (Msg, ev->Get()->ToString()));
+
+        BDEV(BDEV03, "TrashManager_collectResult", (BDT, Self->TabletID()), (GroupId, groupId), (Channel, ev->Get()->Channel),
+            (Cookie, ev->Cookie), (Status, ev->Get()->Status), (ErrorReason, ev->Get()->ErrorReason));
 
         const auto& key = std::make_tuple(ev->Get()->Channel, groupId);
         const auto it = RecordsPerChannelGroup.find(key);

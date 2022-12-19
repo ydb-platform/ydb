@@ -7,10 +7,6 @@ namespace NKikimr::NBlobDepot {
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvDiscover>(std::unique_ptr<IEventHandle> ev) {
         class TDiscoverQuery : public TBlobStorageQuery<TEvBlobStorage::TEvDiscover> {
-            ui64 TabletId = 0;
-            bool ReadBody;
-            ui32 MinGeneration = 0;
-
             ui32 GetBlockedGenerationRetriesRemain = 10;
 
             bool DoneWithBlockedGeneration = false;
@@ -24,14 +20,13 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                TabletId = Request.TabletId;
-                ReadBody = Request.ReadBody;
-                MinGeneration = Request.MinGeneration;
+                BDEV_QUERY(BDEV16, "TEvDiscover_begin", (U.TabletId, Request.TabletId), (U.ReadBody, Request.ReadBody),
+                    (U.MinGeneration, Request.MinGeneration));
 
                 IssueResolve();
 
                 if (Request.DiscoverBlockedGeneration) {
-                    const auto status = Agent.BlocksManager.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
+                    const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
                     if (status == NKikimrProto::OK) {
                         DoneWithBlockedGeneration = true;
                     } else if (status != NKikimrProto::UNKNOWN) {
@@ -44,8 +39,8 @@ namespace NKikimr::NBlobDepot {
 
             void IssueResolve() {
                 const ui8 channel = 0;
-                const TLogoBlobID from(TabletId, MinGeneration, 0, channel, 0, 0);
-                const TLogoBlobID to(TabletId, Max<ui32>(), Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+                const TLogoBlobID from(Request.TabletId, Request.MinGeneration, 0, channel, 0, 0);
+                const TLogoBlobID to(Request.TabletId, Max<ui32>(), Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
 
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
@@ -56,7 +51,7 @@ namespace NKikimr::NBlobDepot {
                 range->SetIncludeEnding(true);
                 range->SetMaxKeys(1);
                 range->SetReverse(true);
-                item->SetTabletId(TabletId);
+                item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(true);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
@@ -74,15 +69,11 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            void OnUpdateBlock(bool success) override {
+            void OnUpdateBlock() override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
-                    (QueryId, GetQueryId()), (Success, success));
+                    (QueryId, GetQueryId()));
 
-                if (!success) {
-                    return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
-                }
-
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
+                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
                 if (status == NKikimrProto::OK) {
                     DoneWithBlockedGeneration = true;
                     CheckIfDone();
@@ -112,7 +103,7 @@ namespace NKikimr::NBlobDepot {
                                 << ": " << item.GetErrorReason());
                         }
                         Y_VERIFY(item.ValueChainSize() == 1);
-                        if (ReadBody) {
+                        if (Request.ReadBody) {
                             TReadArg arg{
                                 item.GetValueChain(),
                                 NKikimrBlobStorage::Discover,
@@ -130,7 +121,7 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
 
-                    if (!ReadBody || !Id) {
+                    if (!Request.ReadBody || !Id) {
                         DoneWithData = true;
                         return CheckIfDone();
                     }
@@ -162,13 +153,20 @@ namespace NKikimr::NBlobDepot {
 
             void CheckIfDone() {
                 if (DoneWithBlockedGeneration && DoneWithData) {
-                    Y_VERIFY_S(!Id || !ReadBody || Buffer.size() == Id.BlobSize(), "Id# " << Id << " Buffer.size# " << Buffer.size());
+                    Y_VERIFY_S(!Id || !Request.ReadBody || Buffer.size() == Id.BlobSize(), "Id# " << Id << " Buffer.size# " << Buffer.size());
+                    BDEV_QUERY(BDEV17, "TEvDiscover_end", (Status, NKikimrProto::OK), (ErrorReason, ""), (Id, Id),
+                        (Buffer.size, Buffer.size()), (BlockedGeneration, BlockedGeneration));
                     EndWithSuccess(Id
-                        ? std::make_unique<TEvBlobStorage::TEvDiscoverResult>(Id, MinGeneration, Buffer, BlockedGeneration)
-                        : std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, MinGeneration, BlockedGeneration));
+                        ? std::make_unique<TEvBlobStorage::TEvDiscoverResult>(Id, Request.MinGeneration, Buffer, BlockedGeneration)
+                        : std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, Request.MinGeneration, BlockedGeneration));
                 }
             }
 
+            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
+                BDEV_QUERY(BDEV18, "TEvDiscover_end", (Status, status), (ErrorReason, errorReason));
+                TBlobStorageQuery::EndWithError(status, errorReason);
+            }
+            
             ui64 GetTabletId() const override {
                 return Request.TabletId;
             }

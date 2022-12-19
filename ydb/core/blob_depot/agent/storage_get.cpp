@@ -31,6 +31,14 @@ namespace NKikimr::NBlobDepot {
                     return;
                 }
 
+                if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                    for (ui32 i = 0; i < Request.QuerySize; ++i) {
+                        const auto& q = Request.Queries[i];
+                        BDEV_QUERY(BDEV00, "TEvGet_new", (U.BlobId, q.Id), (U.Shift, q.Shift), (U.Size, q.Size),
+                            (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IsIndexOnly, Request.IsIndexOnly));
+                    }
+                }
+
                 Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, Request.QuerySize,
                     Agent.VirtualGroupId);
                 AnswersRemain = Request.QuerySize;
@@ -125,7 +133,28 @@ namespace NKikimr::NBlobDepot {
                             }
                         }
                     }
-                    EndWithSuccess(std::move(Response));
+                    EndWithSuccess();
+                }
+            }
+
+            void EndWithSuccess() {
+                TraceResponse(std::nullopt);
+                TBlobStorageQuery::EndWithSuccess(std::move(Response));
+            }
+
+            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
+                TraceResponse(status);
+                TBlobStorageQuery::EndWithError(status, errorReason);
+            }
+
+            void TraceResponse(std::optional<NKikimrProto::EReplyStatus> status) {
+                if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                    for (ui32 i = 0; i < Response->ResponseSz; ++i) {
+                        const auto& r = Response->Responses[i];
+                        BDEV_QUERY(BDEV01, "TEvGet_end", (BlobId, r.Id), (Shift, r.Shift),
+                            (RequestedSize, r.RequestedSize), (Status, status.value_or(r.Status)),
+                            (Buffer.size, r.Buffer.size()));
+                    }
                 }
             }
 

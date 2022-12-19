@@ -35,10 +35,7 @@ namespace NKikimr::NBlobDepot {
         if (auto *p = std::get_if<TEvBlobDepot::TEvQueryBlocksResult*>(&response)) {
             Handle(std::move(context), (*p)->Record);
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-            auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-            if (const auto it = Blocks.find(queryBlockContext.TabletId); it != Blocks.end()) {
-                IssueOnUpdateBlock(it->second, false);
-            }
+            // do nothing, query executors will receive this notification as well
         } else {
             Y_FAIL("unexpected response type");
         }
@@ -56,15 +53,13 @@ namespace NKikimr::NBlobDepot {
         block.TimeToLive = TDuration::MilliSeconds(msg.GetTimeToLiveMs());
         block.ExpirationTimestamp = queryBlockContext.Timestamp + block.TimeToLive;
         block.RefreshInFlight = false;
-        IssueOnUpdateBlock(block, true);
+        IssueOnUpdateBlock(block);
     }
 
-    void TBlobDepotAgent::TBlocksManager::IssueOnUpdateBlock(TBlock& block, bool success) {
+    void TBlobDepotAgent::TBlocksManager::IssueOnUpdateBlock(TBlock& block) {
         TIntrusiveList<TQuery, TPendingBlockChecks> pendingBlockChecks;
         pendingBlockChecks.Append(block.PendingBlockChecks);
-        pendingBlockChecks.ForEach([success](TQuery *query) {
-            query->OnUpdateBlock(success);
-        });
+        pendingBlockChecks.ForEach([](TQuery *query) { query->OnUpdateBlock(); });
     }
 
     std::tuple<ui32, ui64> TBlobDepotAgent::TBlocksManager::GetBlockForTablet(ui64 tabletId) {
@@ -91,7 +86,7 @@ namespace NKikimr::NBlobDepot {
                 block.BlockedGeneration = tablet.GetBlockedGeneration();
                 block.IssuerGuid = tablet.GetIssuerGuid();
                 block.ExpirationTimestamp = TMonotonic::Zero();
-                IssueOnUpdateBlock(block, true);
+                IssueOnUpdateBlock(block);
             }
         }
     }

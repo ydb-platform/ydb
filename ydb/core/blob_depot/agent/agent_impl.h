@@ -260,7 +260,7 @@ namespace NKikimr::NBlobDepot {
             virtual ui64 GetTabletId() const { return 0; }
             virtual void Initiate() = 0;
 
-            virtual void OnUpdateBlock(bool /*success*/) {}
+            virtual void OnUpdateBlock() {}
             virtual void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus /*status*/, TString /*dataOrErrorReason*/) {}
             virtual void OnIdAllocated() {}
             virtual void OnDestroy(bool /*success*/) {}

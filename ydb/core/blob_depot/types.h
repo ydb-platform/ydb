@@ -207,6 +207,20 @@ namespace NKikimr::NBlobDepot {
         friend bool operator >=(const TGenStep& x, const TGenStep& y) { return x.Value >= y.Value; }
     };
 
-#define BDEV(...) STLOGJ(PRI_TRACE, BLOB_DEPOT_EVENTS, __VA_ARGS__)
+#define BDEV(MARKER, TEXT, ...) \
+    do { \
+        auto& ctx = *TlsActivationContext; \
+        const auto priority = NLog::PRI_TRACE; \
+        const auto component = NKikimrServices::BLOB_DEPOT_EVENTS; \
+        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, component)) { \
+            struct MARKER {}; \
+            TStringStream __stream; \
+            { \
+                NJson::TJsonWriter __json(&__stream, false); \
+                ::NKikimr::NStLog::TMessage<MARKER>("", 0, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
+            } \
+            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
+        }; \
+    } while (false)
 
 } // NKikimr::NBlobDepot

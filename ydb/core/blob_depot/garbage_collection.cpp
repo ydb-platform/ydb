@@ -34,6 +34,9 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             Y_VERIFY(Self->Data->IsLoaded());
 
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT75, "TTxAdvanceBarrier::Execute", (Id, Self->GetLogId()), (TabletId, TabletId),
+                (Channel, int(Channel)), (Hard, Hard), (GenCtr, GenCtr), (CollectGenStep, CollectGenStep));
+
             const auto key = std::make_tuple(TabletId, Channel);
             auto& barriers = Self->BarrierServer->Barriers;
             const auto [it, inserted] = barriers.try_emplace(key);
@@ -94,6 +97,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT76, "TTxAdvanceBarrier::Complete", (Id, Self->GetLogId()), (TabletId, TabletId),
+                (Channel, int(Channel)), (MoreData, MoreData), (Success, Success));
+
             Self->Data->CommitTrash(this);
 
             if (MoreData) {
@@ -132,6 +138,8 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT77, "TTxCollectGarbage::Execute", (Id, Self->GetLogId()),
+                (TabletId, TabletId), (Channel, int(Channel)));
             auto& record = Request->Get()->Record;
             MoreData = !ProcessFlags(txc, KeepIndex, record.GetKeep(), NKikimrBlobDepot::EKeepState::Keep)
                 || !ProcessFlags(txc, DoNotKeepIndex, record.GetDoNotKeep(), NKikimrBlobDepot::EKeepState::DoNotKeep);
@@ -139,6 +147,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT78, "TTxCollectGarbage::Complete", (Id, Self->GetLogId()),
+                (TabletId, TabletId), (Channel, int(Channel)), (MoreData, MoreData));
+
+            Self->Data->CommitTrash(this);
+
             if (MoreData) {
                 Self->Execute(std::make_unique<TTxCollectGarbage>(Self, TabletId, Channel, KeepIndex, DoNotKeepIndex));
             } else if (auto& record = Request->Get()->Record; record.HasCollectGeneration() && record.HasCollectStep()) {
@@ -230,6 +243,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()), (Msg, record));
         const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
         auto& barrier = Barriers[key];
         barrier.ProcessingQ.emplace_back(ev.Release());

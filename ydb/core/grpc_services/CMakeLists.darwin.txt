@@ -7,6 +7,7 @@
 
 
 add_subdirectory(base)
+add_subdirectory(cancelation)
 add_subdirectory(counters)
 add_subdirectory(local_rpc)
 add_subdirectory(ut)
@@ -28,6 +29,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-formats
   core-grpc_services-counters
   core-grpc_services-local_rpc
+  core-grpc_services-cancelation
   ydb-core-health_check
   ydb-core-io_formats
   core-kesus-tablet

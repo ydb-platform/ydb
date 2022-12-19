@@ -386,6 +386,8 @@ public:
     virtual ~IRequestCtxMtSafe() = default;
     virtual const google::protobuf::Message* GetRequest() const = 0;
     virtual const TMaybe<TString> GetRequestType() const = 0;
+    // Implementation must be thread safe
+    virtual void SetClientLostAction(std::function<void()>&& cb) = 0;
 };
 
 // Request context
@@ -397,7 +399,6 @@ class IRequestCtx
     friend class TProtoResponseHelper;
 
 public:
-    virtual void SetClientLostAction(std::function<void()>&& cb) = 0;
     virtual google::protobuf::Message* GetRequestMut() = 0;
     virtual google::protobuf::Arena* GetArena() = 0;
 

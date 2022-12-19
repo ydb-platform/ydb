@@ -7,6 +7,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/cancelation/cancelation.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -254,10 +255,13 @@ struct TEvKqp {
     struct TEvQueryRequest : public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
     public:
         using TSerializerCb = void (*)(std::shared_ptr<NGRpcService::IRequestCtxMtSafe>&, NKikimrKqp::TEvQueryRequest*) noexcept;
-        TEvQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx, TSerializerCb cb)
+        TEvQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx, TSerializerCb cb, TActorId actorId)
             : RequestCtx(ctx)
             , SerializerCb(cb)
-        { }
+        {
+            ActorIdToProto(actorId, Record.MutableCancelationActor());
+        }
+
 
         TEvQueryRequest() = default;
 
@@ -285,6 +289,17 @@ struct TEvKqp {
             auto req = new TEvQueryRequest();
             req->Record.Swap(&pbEv->Record);
             return req;
+        }
+
+        void SetClientLostAction(TActorId actorId, ui64 wakeupTag, NActors::TActorSystem* as) {
+            if (RequestCtx) {
+                RequestCtx->SetClientLostAction([actorId, wakeupTag, as]() {
+                    as->Send(actorId, new TEvents::TEvWakeup(wakeupTag));
+                });
+            } else if (Record.HasCancelationActor()) {
+                auto cancelationActor = ActorIdFromProto(Record.GetCancelationActor());
+                NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, wakeupTag, as);
+            }
         }
 
         void PrepareRemote() const {

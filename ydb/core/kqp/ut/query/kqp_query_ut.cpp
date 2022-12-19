@@ -240,9 +240,18 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         NDataShard::gSkipRepliesFailPoint.Disable();
 
-        // Check session is ready or busy
-        result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
+        const TInstant start = TInstant::Now();
+        // Check session is ready or busy, but eventualy must be ready
+        while (true) {
+            result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() - start < TDuration::Seconds(30), "Unable to cancel processing after timeout status");
+            // Do not fire too much CPU
+            Sleep(TDuration::MilliSeconds(10));
+        }
     }
 
     Y_UNIT_TEST(QueryTimeoutImmediate) {
@@ -307,6 +316,19 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
 
             NDataShard::gSkipRepliesFailPoint.Disable();
+
+            const TInstant start = TInstant::Now();
+            while (true) {
+                result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
+                if (result.GetStatus() == EStatus::SUCCESS) {
+                    break;
+                }
+
+                UNIT_ASSERT_C(TInstant::Now() - start < TDuration::Seconds(30), "Unable to cancel processing after client lost");
+                // Do not fire too much CPU
+                Sleep(TDuration::MilliSeconds(10));
+            }
         }
 
         TString line;

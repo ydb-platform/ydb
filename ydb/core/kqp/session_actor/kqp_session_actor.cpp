@@ -207,6 +207,10 @@ private:
     TKqpSessionActor* This;
 };
 
+enum EWakeupTag {
+    ClientLost,
+};
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
@@ -385,6 +389,16 @@ public:
         }
     }
 
+    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
+        switch ((EWakeupTag) ev->Get()->Tag) {
+            case EWakeupTag::ClientLost:
+                Cleanup();
+                break;
+            default:
+                YQL_ENSURE(false, "Unexpected Wakeup tag for HandleWakeup: " << (ui64) ev->Get()->Tag);
+        }
+    }
+
     void HandleReady(TEvKqp::TEvQueryRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         ui64 proxyRequestId = ev->Cookie;
         auto& event = ev->Get()->Record;
@@ -466,6 +480,10 @@ public:
         QueryState->ParametersSize = queryRequest.GetParameters().ByteSize();
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
         QueryState->KeepSession = Settings.LongSession || queryRequest.GetKeepSession();
+
+        auto selfId = SelfId();
+        auto as = TActivationContext::ActorSystem();
+        ev->Get()->SetClientLostAction(selfId, EWakeupTag::ClientLost, as);
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
@@ -2073,6 +2091,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
+                hFunc(TEvents::TEvWakeup, HandleWakeup);
             default:
                 UnexpectedEvent("CompileState", ev);
             }
@@ -2101,6 +2120,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
+                hFunc(TEvents::TEvWakeup, HandleWakeup);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
@@ -2128,6 +2148,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
+                hFunc(TEvents::TEvWakeup, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);

@@ -158,6 +158,7 @@ message TEvQueryRequest {
 
     repeated Ydb.Issue.IssueMessage QueryIssues = 7;
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
+    optional NActorsProto.TActorId CancelationActor = 9;
 }
 
 message TMkqlProfile {

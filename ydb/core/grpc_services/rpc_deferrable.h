@@ -2,6 +2,8 @@
 
 #include "defs.h"
 #include "grpc_request_proxy.h"
+#include "cancelation/cancelation.h"
+#include "cancelation/cancelation_event.h"
 #include "rpc_common.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -166,6 +168,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             HFunc(TRpcServices::TEvForgetOperation, HandleForget);
+            hFunc(TEvSubscribeGrpcCancel, HandleSubscribeiGrpcCancel);
             default: {
                 NYql::TIssues issues;
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
@@ -258,6 +261,11 @@ protected:
     void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
         static_cast<TDerived*>(this)->OnForgetOperation(ctx);
+    }
+private:
+    void HandleSubscribeiGrpcCancel(TEvSubscribeGrpcCancel::TPtr& ev) {
+        auto as = TActivationContext::ActorSystem();
+        PassSubscription(ev->Get(), Request_.get(), as);
     }
 };
 

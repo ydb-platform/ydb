@@ -145,13 +145,27 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
         return false;
     }
 
-    // TODO: Support TTL for types other than Timestamp
-    if (alterColumns.FindPtr(colId)->Type.GetTypeId() != NScheme::NTypeIds::Timestamp) {
-        errStr = "Currently TTL is only supported on columns of Timestamp type";
+    if (ttl.HasExpireAfterBytes()) {
+        errStr = "TTL with eviction by size is not supported yet";
         return false;
     }
 
-    const auto unit = ttl.GetColumnUnit();
+    if (!ttl.HasExpireAfterSeconds()) {
+        errStr = "TTL without eviction time";
+        return false;
+    }
+
+    auto unit = ttl.GetColumnUnit();
+
+    switch (GetType(*column)) {
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::DyNumber:
+            errStr = "Unsupported column type for TTL in column tables"; // TODO
+            return false;
+        default:
+            break;
+    }
+
     return ValidateUnit(*column, unit, errStr);
 }
 
@@ -178,22 +192,17 @@ bool ValidateTtlSettingsChange(
     const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
     TString& errStr)
 {
-    if (ttl.GetStatusCase() != oldTtl.GetStatusCase()) {
-        errStr = "Changing TTL logic (Enable/Disable/Tiering) is not supported yet";
-        return false;
-    }
+    if (oldTtl.HasEnabled() && ttl.HasEnabled()) {
+        TString newTtlColName;
+        TString oldTtlColName;
 
-    TString newTtlColName;
-    TString oldTtlColName;
-
-    if (ttl.GetStatusCase() == NKikimrSchemeOp::TColumnDataLifeCycle::kEnabled) {
         newTtlColName = ttl.GetEnabled().GetColumnName();
         oldTtlColName = oldTtl.GetEnabled().GetColumnName();
-    }
 
-    if (newTtlColName != oldTtlColName) {
-        errStr = "Changing of TTL/Tiering column is not supported yet";
-        return false;
+        if (newTtlColName != oldTtlColName) {
+            errStr = "Changing of TTL column is not supported for column tables";
+            return false;
+        }
     }
 
     return true;

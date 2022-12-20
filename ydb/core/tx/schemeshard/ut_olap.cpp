@@ -23,7 +23,6 @@ static const TString defaultStoreSchema = R"(
             Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
             Columns { Name: "data" Type: "Utf8" }
             KeyColumnNames: "timestamp"
-            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
         }
     }
 )";
@@ -35,7 +34,6 @@ static const TString defaultTableSchema = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "data" Type: "Utf8" }
         KeyColumnNames: "timestamp"
-        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     }
 )";
 
@@ -541,7 +539,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )";
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX,
-                            {NKikimrScheme::StatusInvalidParameter});
+                            {NKikimrScheme::StatusSchemeError});
 
         TString tableSchema = R"(
             Name: "ColumnTable"
@@ -636,15 +634,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
             AlterTtlSettings {
                 Disabled {}
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-        // TODO: support TTL <-> Tiering changes
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {
                 UseTiering : "Tiering1"
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
     // TODO: AlterTiers

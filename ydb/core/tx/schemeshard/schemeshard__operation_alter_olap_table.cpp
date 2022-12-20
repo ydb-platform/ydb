@@ -44,21 +44,16 @@ NKikimrSchemeOp::TAlterColumnTable ConvertAlter(const NKikimrSchemeOp::TTableDes
 
 TColumnTableInfo::TPtr ParseParams(
         const TPath& path, TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
-        const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain,
-        NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
+        const NKikimrSchemeOp::TAlterColumnTable& alter, TString& errStr)
 {
     Y_UNUSED(path);
-    Y_UNUSED(context);
-    Y_UNUSED(subDomain);
 
     if (alter.HasAlterSchema() || alter.HasAlterSchemaPresetName()) {
-        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "Changing table schema is not supported";
         return nullptr;
     }
 
     if (alter.HasRESERVED_AlterTtlSettingsPresetName()) {
-        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "TTL presets are not supported";
         return nullptr;
     }
@@ -72,44 +67,54 @@ TColumnTableInfo::TPtr ParseParams(
         currentTtlVersion = alterData->Description.GetTtlSettings().GetVersion();
     }
 
+    const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr;
+    if (storeInfo) {
+        if (!storeInfo->SchemaPresets.count(tableInfo->Description.GetSchemaPresetId())) {
+            errStr = "No preset for in-store column table";
+            return nullptr;
+        }
+
+        auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
+        auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
+        if (!presetProto.HasSchema()) {
+            errStr = "No schema in preset for in-store column table";
+            return nullptr;
+        }
+
+        tableSchema = &presetProto.GetSchema();
+    } else {
+        if (!tableInfo->Description.HasSchema()) {
+            errStr = "No schema for standalone column table";
+            return nullptr;
+        }
+
+        tableSchema = &tableInfo->Description.GetSchema();
+    }
+
+    THashMap<ui32, TOlapSchema::TColumn> columns;
+    THashMap<TString, ui32> columnsByName;
+    for (const auto& col : tableSchema->GetColumns()) {
+        ui32 id = col.GetId();
+        TString name = col.GetName();
+        auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        columns[id] = TOlapSchema::TColumn{id, name, typeInfo, Max<ui32>()};
+        columnsByName[name] = id;
+
+        // TODO: add checks for compatibility with new schema after we allow such changes
+    }
+
     if (alter.HasAlterTtlSettings()) {
-        const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr;
-        if (tableInfo->Description.HasSchema()) {
-            tableSchema = &tableInfo->Description.GetSchema();
-        } else {
-            auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
-            auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
-            tableSchema = &presetProto.GetSchema();
-        }
-
-        THashMap<ui32, TOlapSchema::TColumn> columns;
-        THashMap<TString, ui32> columnsByName;
-        for (const auto& col : tableSchema->GetColumns()) {
-            ui32 id = col.GetId();
-            TString name = col.GetName();
-            auto typeInfo = NScheme::TypeInfoFromProtoColumnType(col.GetTypeId(),
-                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-            columns[id] = TOlapSchema::TColumn{id, name, typeInfo, Max<ui32>()};
-            columnsByName[name] = id;
-        }
-
         if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
         if (!ValidateTtlSettingsChange(tableInfo->Description.GetTtlSettings(), alter.GetAlterTtlSettings(), errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
         *alterData->Description.MutableTtlSettings() = alter.GetAlterTtlSettings();
         alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
-    }
-    if (alter.HasRESERVED_AlterTtlSettingsPresetName()) {
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
-        return nullptr;
     }
 
     tableInfo->AlterData = alterData;
@@ -155,9 +160,10 @@ public:
         TColumnTableInfo::TPtr alterInfo = tableInfo->AlterData;
         Y_VERIFY(alterInfo);
 
-        auto olapStorePath = path.FindOlapStore();
-        Y_VERIFY(olapStorePath, "Unexpected failure to find an olap store");
-        auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
+        TOlapStoreInfo::TPtr storeInfo;
+        if (auto olapStorePath = path.FindOlapStore()) {
+            storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
+        }
 
         txState->ClearShardsInProgress();
 
@@ -173,10 +179,12 @@ public:
             alter->SetPathId(pathId.LocalPathId);
             *alter->MutableAlterBody() = *alterInfo->AlterBody;
             if (alterInfo->Description.HasSchema()) {
+                Y_VERIFY(!storeInfo, "Unexpected olap store with schema specified");
                 *alter->MutableSchema() = alterInfo->Description.GetSchema();
             }
             if (alterInfo->Description.HasSchemaPresetId()) {
                 const ui32 presetId = alterInfo->Description.GetSchemaPresetId();
+                Y_VERIFY(storeInfo, "Unexpected schema preset without olap store");
                 Y_VERIFY(storeInfo->SchemaPresets.contains(presetId),
                     "Failed to find schema preset %" PRIu32 " in an olap store", presetId);
                 auto& preset = storeInfo->SchemaPresets.at(presetId);
@@ -439,6 +447,11 @@ public:
             return result;
         }
 
+        if (alter.HasAlterSchema()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Alter schema is not supported for column tables");
+            return result;
+        }
+
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
@@ -459,37 +472,6 @@ public:
 
         auto tableInfo = context.SS->ColumnTables.TakeVerified(path.Base()->PathId);
 
-        if (!tableInfo->OlapStorePathId) {
-            result->SetError(NKikimrScheme::StatusSchemeError,
-                             "Alter for standalone column table is not supported yet");
-            return result;
-        }
-
-        auto& storePathId = *tableInfo->OlapStorePathId;
-
-        TPath storePath = TPath::Init(storePathId, context.SS);
-        {
-            TPath::TChecker checks = storePath.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .IsOlapStore()
-                .NotUnderOperation();
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
-        Y_VERIFY(context.SS->OlapStores.contains(storePathId));
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
-
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-
         if (tableInfo->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
             return result;
@@ -499,15 +481,38 @@ public:
             return result;
         }
 
-        NKikimrScheme::EStatus status;
-        TColumnTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, *path.DomainInfo(), status, errStr, context);
+        TOlapStoreInfo::TPtr storeInfo;
+        if (tableInfo->OlapStorePathId) {
+            auto& storePathId = *tableInfo->OlapStorePathId;
+            TPath storePath = TPath::Init(storePathId, context.SS);
+            {
+                TPath::TChecker checks = storePath.Check();
+                checks
+                    .NotEmpty()
+                    .IsResolved()
+                    .IsOlapStore()
+                    .NotUnderOperation();
+
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+            }
+
+            Y_VERIFY(context.SS->OlapStores.contains(storePathId));
+            storeInfo = context.SS->OlapStores.at(storePathId);
+        }
+
+        TColumnTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, errStr);
         if (!alterData) {
-            result->SetError(status, errStr);
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
 
-        Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
-        storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -530,12 +535,20 @@ public:
         path->PathState = TPathElement::EPathState::EPathStateAlter;
         context.SS->PersistLastTxId(db, path.Base());
 
-        // Sequentially chain operations in the same olap store
-        if (context.SS->Operations.contains(storePath.Base()->LastTxId)) {
-            context.OnComplete.Dependence(storePath.Base()->LastTxId, OperationId.GetTxId());
+        if (storeInfo) {
+            auto& storePathId = *tableInfo->OlapStorePathId;
+            TPath storePath = TPath::Init(storePathId, context.SS);
+
+            Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
+            storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
+
+            // Sequentially chain operations in the same olap store
+            if (context.SS->Operations.contains(storePath.Base()->LastTxId)) {
+                context.OnComplete.Dependence(storePath.Base()->LastTxId, OperationId.GetTxId());
+            }
+            storePath.Base()->LastTxId = OperationId.GetTxId();
+            context.SS->PersistLastTxId(db, storePath.Base());
         }
-        storePath.Base()->LastTxId = OperationId.GetTxId();
-        context.SS->PersistLastTxId(db, storePath.Base());
 
         context.SS->PersistColumnTableAlter(db, path->PathId, *alterData);
         context.SS->PersistTxState(db, OperationId);

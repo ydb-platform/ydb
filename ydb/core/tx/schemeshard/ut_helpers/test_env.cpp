@@ -18,7 +18,7 @@ static const bool ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
-static const bool ENABLE_OLAP_LOG = false;
+static const bool ENABLE_COLUMNSHARD_LOG = false;
 static const bool ENABLE_EXPORT_LOG = false;
 
 using namespace NKikimr;
@@ -620,10 +620,8 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
         runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NActors::NLog::PRI_DEBUG);
     }
 
-    runtime.SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_NOTICE);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_NOTICE);
-    if (ENABLE_OLAP_LOG) {
-        runtime.SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
+    if (ENABLE_COLUMNSHARD_LOG) {
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
     }
 }

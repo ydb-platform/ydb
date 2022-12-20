@@ -549,10 +549,10 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     auto& ttlSettings = alterProto.GetTtlSettings();
 
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
+        << " schema: " << alterProto.GetSchema()
         << " ttl settings: " << ttlSettings
         << " at tablet " << TabletID());
 
-    Y_VERIFY(!alterProto.HasSchema(), "Tables with explicit schema are not supported");
     auto& info = table.Versions[version];
 
     if (alterProto.HasSchemaPreset()) {

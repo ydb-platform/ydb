@@ -7,7 +7,9 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-static void CheckTTLSettings(TTestActorRuntime& runtime, const char* tableName = "TTLEnabledTable") {
+namespace {
+
+void CheckTTLSettings(TTestActorRuntime& runtime, const char* tableName = "TTLEnabledTable") {
     TestDescribeResult(
         DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)), {
             NLs::PathExist,
@@ -22,6 +24,25 @@ static void CheckTTLSettings(TTestActorRuntime& runtime, const char* tableName =
             }
         }
     );
+}
+
+void CheckColumnTableTTLSettings(TTestActorRuntime& runtime, const char* tableName = "ColumnTableTTL") {
+    TestDescribeResult(
+        DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)), {
+            NLs::PathExist,
+            NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetColumnTableDescription();
+                UNIT_ASSERT(table.HasTtlSettings());
+
+                const auto& ttl = table.GetTtlSettings();
+                UNIT_ASSERT(ttl.HasEnabled());
+                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "modified_at");
+                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600);
+            }
+        }
+    );
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
@@ -1019,6 +1040,143 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         runtime.AdvanceCurrentTime(TDuration::Minutes(10));
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
+    static void CreateColumnTableShouldSucceed(const char* name, const char* ttlColumnType, const char* unit = "UNIT_AUTO") {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "%s"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "modified_at" Type: "%s" }
+                KeyColumnNames: ["key"]
+            }
+            TtlSettings {
+                Enabled {
+                    ColumnName: "modified_at"
+                    ExpireAfterSeconds: 3600
+                    ColumnUnit: %s
+                }
+            }
+        )", name, ttlColumnType, unit));
+        env.TestWaitNotification(runtime, txId);
+        CheckColumnTableTTLSettings(runtime, name);
+    }
+
+    Y_UNIT_TEST(CreateColumnTable) {
+        for (auto ct : {/*"Date",*/ "Datetime", "Timestamp"}) {
+            CreateColumnTableShouldSucceed("ColumnTableTTL", ct);
+        }
+
+        for (auto ct : {"Uint32", "Uint64"/*, "DyNumber"*/}) {
+            for (auto unit : {"UNIT_SECONDS"/*, "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"*/}) {
+                CreateColumnTableShouldSucceed("ColumnTableTTL", ct, unit);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CreateColumnTableNegative_ColumnType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        for (auto ct : {"Date", "DyNumber"}) {
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "ColumnTableTTL"
+                Schema {
+                    Columns { Name: "key" Type: "Uint64" NotNull: true }
+                    Columns { Name: "modified_at" Type: "%s" }
+                    KeyColumnNames: ["key"]
+                }
+                TtlSettings {
+                    Enabled {
+                        ColumnName: "modified_at"
+                        ExpireAfterSeconds: 3600
+                    }
+                }
+            )", ct), {NKikimrScheme::StatusSchemeError});
+        }
+    }
+
+    Y_UNIT_TEST(CreateColumnTableNegative_UnknownColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableTTL"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "modified_at" Type: "Timestamp" }
+                KeyColumnNames: ["key"]
+            }
+            TtlSettings {
+              Enabled {
+                ColumnName: "created_at"
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(AlterColumnTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableTTL"
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "modified_at" Type: "Timestamp" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/ColumnTableTTL"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& table = record.GetPathDescription().GetColumnTableDescription();
+                    UNIT_ASSERT(!table.HasTtlSettings());
+                }
+            }
+        );
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableTTL"
+            AlterTtlSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        CheckColumnTableTTLSettings(runtime);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableTTL"
+            AlterTtlSettings {
+              Disabled {
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/ColumnTableTTL"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& table = record.GetPathDescription().GetColumnTableDescription();
+                    UNIT_ASSERT(table.HasTtlSettings());
+                    UNIT_ASSERT(table.GetTtlSettings().HasDisabled());
+                }
+            }
+        );
     }
 }
 

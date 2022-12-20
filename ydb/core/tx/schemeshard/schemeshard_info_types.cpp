@@ -1993,6 +1993,10 @@ NKikimr::NSchemeShard::TBillingStats::operator bool() const {
 bool TOlapSchema::UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr) {
     ui32 nextColumnId = proto.GetNextColumnId();
 
+    if (proto.ColumnsSize() && !proto.HasEngine()) {
+        proto.SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    }
+
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
     for (auto& colProto : *proto.MutableColumns()) {

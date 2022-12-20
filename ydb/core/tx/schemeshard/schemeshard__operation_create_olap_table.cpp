@@ -161,7 +161,7 @@ TColumnTableInfo::TPtr CreateColumnTableInStore(
     // Validate ttl settings and schema compatibility
     if (op.HasTtlSettings()) {
         if (!ValidateTtlSettings(op.GetTtlSettings(), pSchema->Columns, pSchema->ColumnsByName, errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter;
+            status = NKikimrScheme::StatusSchemeError;
             return nullptr;
         }
     }
@@ -242,7 +242,7 @@ TColumnTableInfo::TPtr CreateColumnTable(
         op.MutableTtlSettings()->SetVersion(1);
 
         if (!ValidateTtlSettings(op.GetTtlSettings(), schema.Columns, schema.ColumnsByName, errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter;
+            status = NKikimrScheme::StatusSchemeError;
             return nullptr;
         }
     }

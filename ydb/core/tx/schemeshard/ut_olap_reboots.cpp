@@ -397,15 +397,14 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                         Disabled {}
                     }
                 )"),
-                {NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
 
                 TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-                    NLs::HasColumnTableTtlSettingsVersion(2),
-                    NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+                    NLs::HasColumnTableTtlSettingsVersion(3)));
             }
         });
     }

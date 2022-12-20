@@ -1350,6 +1350,12 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     case NUdf::EDataSlot::Double:
         type = arrow::float64();
         return true;
+    case NUdf::EDataSlot::String:
+        type = arrow::binary();
+        return true;
+    case NUdf::EDataSlot::Utf8:
+        type = arrow::utf8();
+        return true;
     default:
         return false;
     }

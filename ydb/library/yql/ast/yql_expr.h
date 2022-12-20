@@ -132,7 +132,8 @@ enum ETypeAnnotationFlags : ui32 {
     TypeHasManyValues = 0x200,
     TypeHasBareYson = 0x400,
     TypeHasNestedOptional = 0x800,
-    TypeNonPresortable = 0x1000
+    TypeNonPresortable = 0x1000,
+    TypeHasDynamicSize = 0x2000,
 };
 
 const ui64 TypeHashMagic = 0x10000;
@@ -233,6 +234,15 @@ public:
     bool IsOptionalOrNull() const {
         auto kind = GetKind();
         return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null || kind == ETypeAnnotationKind::Pg;
+    }
+
+    bool IsAnyBlockOrScalar() const {
+        auto kind = GetKind();
+        return kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::ChunkedBlock || kind == ETypeAnnotationKind::Scalar;
+    }
+
+    bool HasFixedSizeRepr() const {
+        return (GetFlags() & (TypeHasDynamicSize | TypeNonPersistable | TypeNonComputable)) == 0;
     }
 
     bool IsSingleton() const {
@@ -551,7 +561,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::List;
 
     TListExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags(), hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeHasDynamicSize, hash)
         , ItemType(itemType)
     {
     }
@@ -737,6 +747,10 @@ public:
             ret |= TypeHasBareYson;
         }
 
+        if (props & NUdf::StringType) {
+            ret |= TypeHasDynamicSize;
+        }
+
         return ret;
     }
 
@@ -801,6 +815,7 @@ class TPgExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Pg;
 
+    // TODO: TypeHasDynamicSize for Pg types
     TPgExprType(ui64 hash, ui32 typeId)
         : TTypeAnnotationNode(KindValue, GetFlags(typeId), hash)
         , TypeId(typeId)
@@ -953,7 +968,8 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Dict;
 
     TDictExprType(ui64 hash, const TTypeAnnotationNode* keyType, const TTypeAnnotationNode* payloadType)
-        : TTypeAnnotationNode(KindValue, TypeNonComparable | keyType->GetFlags() | payloadType->GetFlags(), hash)
+        : TTypeAnnotationNode(KindValue, TypeNonComparable | TypeHasDynamicSize |
+                              keyType->GetFlags() | payloadType->GetFlags(), hash)
         , KeyType(keyType)
         , PayloadType(payloadType)
     {

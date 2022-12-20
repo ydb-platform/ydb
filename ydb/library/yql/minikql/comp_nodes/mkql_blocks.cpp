@@ -1,4 +1,6 @@
 #include "mkql_blocks.h"
+#include "mkql_block_builder.h"
+#include "mkql_block_reader.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -6,218 +8,12 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
-#include <arrow/array/builder_primitive.h>
-#include <arrow/util/bitmap.h>
-#include <arrow/util/bit_util.h>
-
-#include <util/generic/size_literals.h>
+#include <arrow/scalar.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
-
-constexpr size_t MaxBlockSizeInBytes = 1_MB;
-
-class TBlockBuilderBase {
-public:
-    TBlockBuilderBase(TComputationContext& ctx, const std::shared_ptr<arrow::DataType>& itemType, size_t maxLength)
-        : Ctx_(ctx)
-        , ItemType_(itemType)
-        , MaxLength_(maxLength)
-    {}
-
-    virtual ~TBlockBuilderBase() = default;
-
-    inline size_t MaxLength() const noexcept {
-        return MaxLength_;
-    }
-
-    virtual void Add(const NUdf::TUnboxedValue& value) = 0;
-    virtual NUdf::TUnboxedValuePod Build(bool finish) = 0;
-
-protected:
-    TComputationContext& Ctx_;
-    const std::shared_ptr<arrow::DataType> ItemType_;
-    const size_t MaxLength_;
-};
-
-template <typename T, typename TBuilder>
-class TFixedSizeBlockBuilder : public TBlockBuilderBase {
-public:
-    TFixedSizeBlockBuilder(TComputationContext& ctx, const std::shared_ptr<arrow::DataType>& itemType)
-        : TBlockBuilderBase(ctx, itemType, MaxBlockSizeInBytes / TypeSize(*itemType))
-        , Builder_(std::make_unique<TBuilder>(&Ctx_.ArrowMemoryPool))
-    {
-        this->Reserve();
-    }
-
-    void Add(const NUdf::TUnboxedValue& value) override {
-        Y_VERIFY_DEBUG(Builder_->length() < MaxLength_);
-        if (value) {
-            this->Builder_->UnsafeAppend(value.Get<T>());
-        } else {
-            this->Builder_->UnsafeAppendNull();
-        }
-    }
-
-    NUdf::TUnboxedValuePod Build(bool finish) override {
-        std::shared_ptr<arrow::ArrayData> result;
-        ARROW_OK(this->Builder_->FinishInternal(&result));
-        Builder_.reset();
-        if (!finish) {
-            Builder_ = std::make_unique<TBuilder>(&Ctx_.ArrowMemoryPool);
-            Reserve();
-        }
-
-        return this->Ctx_.HolderFactory.CreateArrowBlock(std::move(result));
-    }
-
-private:
-    void Reserve() {
-        ARROW_OK(this->Builder_->Reserve(MaxLength_));
-    }
-
-    static int64_t TypeSize(arrow::DataType& itemType) {
-        const auto bits = static_cast<const arrow::FixedWidthType&>(itemType).bit_width();
-        return arrow::BitUtil::BytesForBits(bits);
-    }
-
-private:
-    std::unique_ptr<TBuilder> Builder_;
-};
-
-class TTupleBlockBuilder : public TBlockBuilderBase {
-public:
-    TTupleBlockBuilder(TComputationContext & ctx, const std::shared_ptr<arrow::DataType>& itemType, size_t maxLength,
-        TTupleType* tupleType, TVector<std::unique_ptr<TBlockBuilderBase>>&& children)
-        : TBlockBuilderBase(ctx, itemType, maxLength)
-        , TupleType_(tupleType)
-        , Children_(std::move(children))
-    {
-        bool isOptional;
-        MKQL_ENSURE(ConvertArrowType(TupleType_, isOptional, ArrowType_), "Unsupported type");
-        Reserve();
-    }
-
-    void Add(const NUdf::TUnboxedValue& value) final {
-        if (!value) {
-            NullBitmapBuilder_->UnsafeAppend(false);
-            for (ui32 i = 0; i < TupleType_->GetElementsCount(); ++i) {
-                Children_[i]->Add({});
-            }
-
-            return;
-        }
-
-        NullBitmapBuilder_->UnsafeAppend(true);
-        auto elements = value.GetElements();
-        if (elements) {
-            for (ui32 i = 0; i < TupleType_->GetElementsCount(); ++i) {
-                Children_[i]->Add(elements[i]);
-            }
-        } else {
-            for (ui32 i = 0; i < TupleType_->GetElementsCount(); ++i) {
-                Children_[i]->Add(value.GetElement(i));
-            }
-        }
-    }
-
-    NUdf::TUnboxedValuePod Build(bool finish) final {
-        std::vector<arrow::Datum> childrenValues;
-        childrenValues.reserve(TupleType_->GetElementsCount());
-        for (ui32 i = 0; i < TupleType_->GetElementsCount(); ++i) {
-            childrenValues.emplace_back(TArrowBlock::From(Children_[i]->Build(finish)).GetDatum());
-        }
-
-        std::shared_ptr<arrow::Buffer> nullBitmap;
-        auto length = NullBitmapBuilder_->length();
-        auto nullCount = NullBitmapBuilder_->false_count();
-        ARROW_OK(NullBitmapBuilder_->Finish(&nullBitmap));
-        auto arrayData = arrow::ArrayData::Make(ArrowType_, length, { nullBitmap }, nullCount, 0);
-        for (ui32 i = 0; i < TupleType_->GetElementsCount(); ++i) {
-            arrayData->child_data.push_back(childrenValues[i].array());
-        }
-
-        arrow::Datum result(arrayData);
-
-        NullBitmapBuilder_ = nullptr;
-        if (!finish) {
-            Reserve();
-        }
-
-        return this->Ctx_.HolderFactory.CreateArrowBlock(std::move(result));
-    }
-
-private:
-    void Reserve() {
-        NullBitmapBuilder_ = std::make_unique<arrow::TypedBufferBuilder<bool>>(&Ctx_.ArrowMemoryPool);
-        ARROW_OK(NullBitmapBuilder_->Reserve(MaxLength_));
-    }
-
-private:
-    TTupleType* TupleType_;
-    std::shared_ptr<arrow::DataType> ArrowType_;
-    TVector<std::unique_ptr<TBlockBuilderBase>> Children_;
-    std::unique_ptr<arrow::TypedBufferBuilder<bool>> NullBitmapBuilder_;
-};
-
-std::unique_ptr<TBlockBuilderBase> MakeBlockBuilder(TComputationContext& ctx, TType* type) {
-    if (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
-    }
-
-    if (type->IsTuple()) {
-        bool isOptional;
-        std::shared_ptr<arrow::DataType> arrowType;
-        MKQL_ENSURE(ConvertArrowType(type, isOptional, arrowType), "Unsupported type");
-
-        auto tupleType = AS_TYPE(TTupleType, type);
-        TVector<std::unique_ptr<TBlockBuilderBase>> children;
-        size_t maxLength = MaxBlockSizeInBytes;
-        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            children.emplace_back(MakeBlockBuilder(ctx, tupleType->GetElementType(i)));
-            maxLength = Min(maxLength, children.back()->MaxLength());
-        }
-
-        return std::make_unique<TTupleBlockBuilder>(ctx, arrowType, maxLength, tupleType, std::move(children));
-    }
-
-    if (type->IsData()) {
-        auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
-        switch (slot) {
-        case NUdf::EDataSlot::Int8:
-            return std::make_unique<TFixedSizeBlockBuilder<i8, arrow::Int8Builder>>(ctx, arrow::int8());
-        case NUdf::EDataSlot::Uint8:
-        case NUdf::EDataSlot::Bool:
-            return std::make_unique<TFixedSizeBlockBuilder<ui8, arrow::UInt8Builder>>(ctx, arrow::uint8());
-        case NUdf::EDataSlot::Int16:
-            return std::make_unique<TFixedSizeBlockBuilder<i16, arrow::Int16Builder>>(ctx, arrow::int16());
-        case NUdf::EDataSlot::Uint16:
-        case NUdf::EDataSlot::Date:
-            return std::make_unique<TFixedSizeBlockBuilder<ui16, arrow::UInt16Builder>>(ctx, arrow::uint16());
-        case NUdf::EDataSlot::Int32:
-            return std::make_unique<TFixedSizeBlockBuilder<i32, arrow::Int32Builder>>(ctx, arrow::int32());
-        case NUdf::EDataSlot::Uint32:
-        case NUdf::EDataSlot::Datetime:
-            return std::make_unique<TFixedSizeBlockBuilder<ui32, arrow::UInt32Builder>>(ctx, arrow::uint32());
-        case NUdf::EDataSlot::Int64:
-        case NUdf::EDataSlot::Interval:
-            return std::make_unique<TFixedSizeBlockBuilder<i64, arrow::Int64Builder>>(ctx, arrow::int64());
-        case NUdf::EDataSlot::Uint64:
-        case NUdf::EDataSlot::Timestamp:
-            return std::make_unique<TFixedSizeBlockBuilder<ui64, arrow::UInt64Builder>>(ctx, arrow::uint64());
-        case NUdf::EDataSlot::Float:
-            return std::make_unique<TFixedSizeBlockBuilder<float, arrow::FloatBuilder>>(ctx, arrow::float32());
-        case NUdf::EDataSlot::Double:
-            return std::make_unique<TFixedSizeBlockBuilder<double, arrow::DoubleBuilder>>(ctx, arrow::float64());
-        default:
-            MKQL_ENSURE(false, "Unsupported data slot");
-        }
-    }
-
-    MKQL_ENSURE(false, "Unsupported type");
-}
 
 class TToBlocksWrapper : public TStatelessFlowComputationNode<TToBlocksWrapper> {
 public:
@@ -229,7 +25,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto builder = MakeBlockBuilder(ctx, ItemType_);
+        auto builder = MakeBlockBuilder(ItemType_, ctx.ArrowMemoryPool);
 
         for (size_t i = 0; i < builder->MaxLength(); ++i) {
             auto result = Flow_->GetValue(ctx);
@@ -242,7 +38,7 @@ public:
             builder->Add(result);
         }
 
-        return builder->Build(true);
+        return builder->Build(ctx, true);
     }
 
 private:
@@ -297,7 +93,7 @@ public:
 
         for (size_t i = 0; i < Width_; ++i) {
             if (auto* out = output[i]; out != nullptr) {
-                *out = s.Builders_[i]->Build(s.IsFinished_);
+                *out = s.Builders_[i]->Build(ctx, s.IsFinished_);
             }
         }
 
@@ -313,7 +109,7 @@ private:
     struct TState : public TComputationValue<TState> {
         std::vector<NUdf::TUnboxedValue> Values_;
         std::vector<NUdf::TUnboxedValue*> ValuePointers_;
-        std::vector<std::unique_ptr<TBlockBuilderBase>> Builders_;
+        std::vector<std::unique_ptr<IBlockBuilder>> Builders_;
         size_t MaxLength_;
         size_t Rows_ = 0;
         bool IsFinished_ = false;
@@ -325,7 +121,7 @@ private:
         {
             for (size_t i = 0; i < types.size(); ++i) {
                 ValuePointers_[i] = &Values_[i];
-                Builders_.push_back(MakeBlockBuilder(ctx, types[i]));
+                Builders_.push_back(MakeBlockBuilder(types[i], ctx.ArrowMemoryPool));
             }
 
             MaxLength_ = MaxBlockSizeInBytes;
@@ -353,129 +149,6 @@ private:
     const size_t Width_;
 };
 
-class TBlockReaderBase {
-public:
-    virtual ~TBlockReaderBase() = default;
-
-    virtual NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) = 0;
-
-    virtual NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) = 0;
-};
-
-template <typename T>
-class TFixedSizeBlockReader : public TBlockReaderBase {
-public:
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
-        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
-            return {};
-        }
-    
-        return NUdf::TUnboxedValuePod(data.GetValues<T>(1)[index]);
-    }
-
-    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
-        if (!scalar.is_valid) {
-            return {};
-        }
-
-        return NUdf::TUnboxedValuePod(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
-    }
-};
-
-class TTupleBlockReader : public TBlockReaderBase {
-public:
-    TTupleBlockReader(TVector<std::unique_ptr<TBlockReaderBase>>&& children, const THolderFactory& holderFactory)
-        : Children_(std::move(children))
-        , HolderFactory_(holderFactory)
-    {}
-
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
-        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
-            return {};
-        }
-
-        NUdf::TUnboxedValue* items;
-        auto result = Cache_.NewArray(HolderFactory_, Children_.size(), items);
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            items[i] = Children_[i]->Get(*data.child_data[i], index);
-        }
-
-        return result;
-    }
-
-    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
-        if (!scalar.is_valid) {
-            return {};
-        }
-
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-
-        NUdf::TUnboxedValue* items;
-        auto result = Cache_.NewArray(HolderFactory_, Children_.size(), items);
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            items[i] = Children_[i]->GetScalar(*structScalar.value[i]);
-        }
-
-        return result;
-    }
-
-private:
-    TVector<std::unique_ptr<TBlockReaderBase>> Children_;
-    const THolderFactory& HolderFactory_;
-    TPlainContainerCache Cache_;
-};
-
-std::unique_ptr<TBlockReaderBase> MakeBlockReader(TType* type, const THolderFactory& holderFactory) {
-    if (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
-    }
-
-    if (type->IsTuple()) {
-        auto tupleType = AS_TYPE(TTupleType, type);
-        TVector<std::unique_ptr<TBlockReaderBase>> children;
-        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            children.emplace_back(MakeBlockReader(tupleType->GetElementType(i), holderFactory));
-        }
-
-        return std::make_unique<TTupleBlockReader>(std::move(children), holderFactory);
-    }
-
-    if (type->IsData()) {
-        auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
-        switch (slot) {
-        case NUdf::EDataSlot::Int8:
-            return std::make_unique<TFixedSizeBlockReader<i8>>();
-        case NUdf::EDataSlot::Bool:
-        case NUdf::EDataSlot::Uint8:
-            return std::make_unique<TFixedSizeBlockReader<ui8>>();
-        case NUdf::EDataSlot::Int16:
-            return std::make_unique<TFixedSizeBlockReader<i16>>();
-        case NUdf::EDataSlot::Uint16:
-        case NUdf::EDataSlot::Date:
-            return std::make_unique<TFixedSizeBlockReader<ui16>>();
-        case NUdf::EDataSlot::Int32:
-            return std::make_unique<TFixedSizeBlockReader<i32>>();
-        case NUdf::EDataSlot::Uint32:
-        case NUdf::EDataSlot::Datetime:
-            return std::make_unique<TFixedSizeBlockReader<ui32>>();
-        case NUdf::EDataSlot::Int64:
-        case NUdf::EDataSlot::Interval:
-            return std::make_unique<TFixedSizeBlockReader<i64>>();
-        case NUdf::EDataSlot::Uint64:
-        case NUdf::EDataSlot::Timestamp:
-            return std::make_unique<TFixedSizeBlockReader<ui64>>();
-        case NUdf::EDataSlot::Float:
-            return std::make_unique<TFixedSizeBlockReader<float>>();
-        case NUdf::EDataSlot::Double:
-            return std::make_unique<TFixedSizeBlockReader<double>>();
-        default:
-            MKQL_ENSURE(false, "Unsupported data slot");
-        }
-    }
-
-    MKQL_ENSURE(false, "Unsupported type");
-}
-
 class TFromBlocksWrapper : public TMutableComputationNode<TFromBlocksWrapper> {
 public:
     TFromBlocksWrapper(TComputationMutables& mutables, IComputationNode* flow, TType* itemType)
@@ -489,21 +162,22 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto& state = GetState(ctx);
 
-        if (state.Array_ == nullptr || state.Index_ == state.Array_->length) {
-            auto result = Flow_->GetValue(ctx);
-            if (result.IsFinish()) {
+        for (;;) {
+            auto item = state.GetValue();
+            if (item) {
+                return *item;
+            }
+
+            auto input = Flow_->GetValue(ctx);
+            if (input.IsFinish()) {
                 return NUdf::TUnboxedValue::MakeFinish();
             }
-            if (result.IsYield()) {
+            if (input.IsYield()) {
                 return NUdf::TUnboxedValue::MakeYield();
             }
-            state.Array_ = TArrowBlock::From(result).GetDatum().array();
-            state.Index_ = 0;
-        }
 
-        const auto result = state.GetValue();
-        ++state.Index_;
-        return result;
+            state.Reset(TArrowBlock::From(input).GetDatum());
+        }
     }
 
 private:
@@ -512,31 +186,21 @@ private:
 
         TState(TMemoryUsageInfo* memInfo, TType* itemType, TComputationContext& ctx)
             : TComputationValue(memInfo)
+            , Reader_(MakeBlockReader(itemType, ctx.HolderFactory))
         {
-            Reader_ = MakeBlockReader(itemType, ctx.HolderFactory);
         }
 
-        NUdf::TUnboxedValuePod GetValue() const {
-            const auto nullCount = Array_->GetNullCount();
+        TMaybe<NUdf::TUnboxedValuePod> GetValue() const {
+            return Reader_->GetNextValue();
+        }
 
-            return nullCount == Array_->length || (nullCount > 0 && !HasValue())
-                ? NUdf::TUnboxedValuePod()
-                : DoGetValue();
+        void Reset(const arrow::Datum& datum) const {
+            MKQL_ENSURE(datum.is_arraylike(), "Expecting array as FromBlocks argument");
+            Reader_->Reset(datum);
         }
 
     private:
-        NUdf::TUnboxedValuePod DoGetValue() const {
-            return Reader_->Get(*Array_, Index_);
-        }
-
-        bool HasValue() const {
-            return arrow::BitUtil::GetBit(Array_->GetValues<uint8_t>(0, 0), Index_ + Array_->offset);
-        }
-
-        std::unique_ptr<TBlockReaderBase> Reader_;
-    public:
-        std::shared_ptr<arrow::ArrayData> Array_{ nullptr };
-        size_t Index_{ 0 };
+        const std::unique_ptr<IBlockReader> Reader_;
     };
 
 private:
@@ -575,12 +239,7 @@ public:
         NUdf::TUnboxedValue*const* output) const
     {
         auto& s = GetState(state, ctx);
-        while (s.Index_ == s.Count_) {
-            for (size_t i = 0; i < Width_; ++i) {
-                s.Arrays_[i] = nullptr;
-                s.Scalars_[i] = nullptr;
-            }
-
+        if (s.Index_ == s.Count_) {
             auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
             if (result != EFetchResult::One) {
                 return result;
@@ -589,11 +248,7 @@ public:
             s.Index_ = 0;
             for (size_t i = 0; i < Width_; ++i) {
                 const auto& datum = TArrowBlock::From(s.Values_[i]).GetDatum();
-                if (datum.is_scalar()) {
-                    s.Scalars_[i] = datum.scalar();
-                } else {
-                    s.Arrays_[i] = datum.array();
-                }
+                s.Readers_[i]->Reset(datum);
             }
 
             s.Count_ = TArrowBlock::From(s.Values_[Width_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
@@ -604,22 +259,9 @@ public:
                 continue;
             }
 
-            const auto& array = s.Arrays_[i];
-            if (array) {
-                const auto nullCount = array->GetNullCount();
-                if (nullCount == array->length || (nullCount > 0 && !arrow::BitUtil::GetBit(array->GetValues<uint8_t>(0, 0), s.Index_ + array->offset))) {
-                    *(output[i]) = NUdf::TUnboxedValue();
-                } else {
-                    *(output[i]) = s.Readers_[i]->Get(*array, s.Index_);
-                }
-            } else {
-                const auto& scalar = s.Scalars_[i];
-                if (!scalar->is_valid) {
-                    *(output[i]) = NUdf::TUnboxedValue();
-                } else {
-                    *(output[i]) = s.Readers_[i]->GetScalar(*scalar);
-                }
-            }
+            auto result = s.Readers_[i]->GetNextValue();
+            Y_VERIFY(result);
+            *(output[i]) = *result;
         }
 
         ++s.Index_;
@@ -630,9 +272,7 @@ private:
     struct TState : public TComputationValue<TState> {
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
-        TVector<std::shared_ptr<arrow::ArrayData>> Arrays_;
-        TVector<std::shared_ptr<arrow::Scalar>> Scalars_;
-        TVector<std::unique_ptr<TBlockReaderBase>> Readers_;
+        TVector<std::unique_ptr<IBlockReader>> Readers_;
         size_t Count_ = 0;
         size_t Index_ = 0;
 
@@ -640,8 +280,6 @@ private:
             : TComputationValue(memInfo)
             , Values_(types.size() + 1)
             , ValuePointers_(types.size() + 1)
-            , Arrays_(types.size())
-            , Scalars_(types.size())
         {
             for (size_t i = 0; i < types.size() + 1; ++i) {
                 ValuePointers_[i] = &Values_[i];
@@ -685,7 +323,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto value = Arg_->GetValue(ctx);
-        arrow::Datum result = ConvertScalar(Type_, value);
+        arrow::Datum result = ConvertScalar(Type_, value, ctx);
         return ctx.HolderFactory.CreateArrowBlock(std::move(result));
     }
 
@@ -694,7 +332,7 @@ private:
         DependsOn(Arg_);
     }
 
-    arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value) const {
+    arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, TComputationContext& ctx) const {
         if (!value) {
             bool isOptional;
             std::shared_ptr<arrow::DataType> arrowType;
@@ -714,7 +352,7 @@ private:
 
             std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                arrowValue.emplace_back(ConvertScalar(tupleType->GetElementType(i), value.GetElement(i)).scalar());
+                arrowValue.emplace_back(ConvertScalar(tupleType->GetElementType(i), value.GetElement(i), ctx).scalar());
             }
 
             return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
@@ -748,6 +386,15 @@ private:
                 return arrow::Datum(static_cast<float>(value.Get<float>()));
             case NUdf::EDataSlot::Double:
                 return arrow::Datum(static_cast<double>(value.Get<double>()));
+            case NUdf::EDataSlot::String:
+            case NUdf::EDataSlot::Utf8: {
+                const auto& str = value.AsStringRef();
+                std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &ctx.ArrowMemoryPool)));
+                std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
+                auto type = (slot == NUdf::EDataSlot::String) ? arrow::binary() : arrow::utf8();
+                std::shared_ptr<arrow::Scalar> scalar = std::make_shared<arrow::BinaryScalar>(buffer, type);
+                return arrow::Datum(scalar);
+            }
             default:
                 MKQL_ENSURE(false, "Unsupported data slot");
             }
@@ -761,7 +408,7 @@ private:
     TType* Type_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapToBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());

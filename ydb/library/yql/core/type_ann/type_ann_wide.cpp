@@ -638,12 +638,21 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
     TTypeAnnotationNode::TListType retMultiType;
     for (const auto& type : multiType->GetItems()) {
-        if (type->GetKind() == ETypeAnnotationKind::Block || type->GetKind() == ETypeAnnotationKind::Scalar) {
+        if (type->IsAnyBlockOrScalar()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Input type should not be a block or scalar"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        retMultiType.push_back(ctx.Expr.MakeType<TBlockExprType>(type));
+        if (!EnsurePersistableType(input->Pos(), *type, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (type->HasFixedSizeRepr()) {
+            retMultiType.push_back(ctx.Expr.MakeType<TBlockExprType>(type));
+        } else {
+            retMultiType.push_back(ctx.Expr.MakeType<TChunkedBlockExprType>(type));
+        }
+
     }
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
@@ -659,7 +668,8 @@ IGraphTransformer::TStatus WideFromBlocksWrapper(const TExprNode::TPtr& input, T
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    if (!EnsureWideFlowBlockType(input->Head(), retMultiType, ctx.Expr)) {
+    const bool allowChunked = true;
+    if (!EnsureWideFlowBlockType(input->Head(), retMultiType, ctx.Expr, allowChunked)) {
         return IGraphTransformer::TStatus::Error;
     }
 

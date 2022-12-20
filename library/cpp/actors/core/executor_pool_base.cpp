@@ -72,12 +72,15 @@ namespace NActors {
         }
     }
 
+    Y_FORCE_INLINE bool IsSendingWithContinuousExecution(IExecutorPool *self) {
+        return TlsThreadContext && TlsThreadContext->Pool == self && TlsThreadContext->IsSendingWithContinuousExecution;
+    }
+
     void TExecutorPoolBase::ScheduleActivation(ui32 activation) {
-        if (TlsThreadContext && TlsThreadContext->Pool == static_cast<IExecutorPool*>(this) && TlsThreadContext->IsSendingWithContinuousExecution
-                && !TlsThreadContext->WaitedActivation)
-        {
-            TlsThreadContext->WaitedActivation = activation;
-        } else {
+        if (IsSendingWithContinuousExecution(this)) {
+            std::swap(TlsThreadContext->WaitedActivation, activation);
+        }
+        if (activation) {
             ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }

@@ -287,6 +287,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 void TTableInfo::ResetDescriptionCache() {
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();
+    TableDescription.ClearPath();
     TableDescription.ClearName();
     TableDescription.ClearColumns();
     TableDescription.ClearKeyColumnIds();

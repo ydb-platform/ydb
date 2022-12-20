@@ -402,32 +402,24 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 
     if (predicate.Maybe<TCoCmpEqual>()) {
         compareOperator = "eq";
+    } else if (predicate.Maybe<TCoCmpNotEqual>()) {
+        compareOperator = "neq";
     } else if (predicate.Maybe<TCoCmpLess>() || (predicate.Maybe<TCoCmpLessOrEqual>() && forceStrictComparison)) {
         compareOperator = "lt";
     } else if (predicate.Maybe<TCoCmpLessOrEqual>() && !forceStrictComparison) {
         compareOperator = "lte";
     } else if (predicate.Maybe<TCoCmpGreater>() || (predicate.Maybe<TCoCmpGreaterOrEqual>() && forceStrictComparison)) {
         compareOperator = "gt";
-    } if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
+    } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
     }
 
-    if (!compareOperator.empty()) {
-        return Build<TKqpOlapFilterCompare>(ctx, pos)
-            .Operator(ctx.NewAtom(pos, compareOperator))
-            .Left(parameter.first)
-            .Right(parameter.second)
-            .Done();
-    }
+    YQL_ENSURE(!compareOperator.empty(), "Unsupported comparison node: " << predicate.Ptr()->Content());
 
-    YQL_ENSURE(predicate.Maybe<TCoCmpNotEqual>(), "Unsupported comparison node: " << predicate.Ptr()->Content());
-
-    return Build<TKqpOlapNot>(ctx, pos)
-        .Value<TKqpOlapFilterCompare>()
-            .Operator(ctx.NewAtom(pos, "eq"))
-            .Left(parameter.first)
-            .Right(parameter.second)
-            .Build()
+    return Build<TKqpOlapFilterCompare>(ctx, pos)
+        .Operator(ctx.NewAtom(pos, compareOperator))
+        .Left(parameter.first)
+        .Right(parameter.second)
         .Done();
 }
 

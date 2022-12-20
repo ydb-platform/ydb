@@ -280,6 +280,8 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
 
     if (comparison.Operator() == "eq") {
         function = TProgram::TAssignment::FUNC_CMP_EQUAL;
+    } else if (comparison.Operator() == "neq") {
+        function = TProgram::TAssignment::FUNC_CMP_NOT_EQUAL;
     } else if (comparison.Operator() == "lt") {
         function = TProgram::TAssignment::FUNC_CMP_LESS;
     } else if (comparison.Operator() == "lte") {

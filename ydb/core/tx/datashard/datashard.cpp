@@ -3068,24 +3068,34 @@ void TDataShard::ResolveTablePath(const TActorContext &ctx)
     if (State != TShardState::Ready)
         return;
 
-    for (auto &pr : TableInfos) {
-        ui64 pathId = pr.first;
-        const TUserTable &info = *pr.second;
+    for (auto& [pathId, info] : TableInfos) {
+        TString reason = "empty path";
 
-        if (!info.Path) {
-            if (!TableResolvePipe) {
-                NTabletPipe::TClientConfig clientConfig;
-                clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
-                TableResolvePipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+        if (info->Path) {
+            NKikimrSchemeOp::TTableDescription desc;
+            info->GetSchema(desc);
+
+            if (desc.GetName() == ExtractBase(desc.GetPath())) {
+                continue;
             }
 
-            auto *event = new TEvSchemeShard::TEvDescribeScheme(PathOwnerId,
-                                                                    pathId);
-            event->Record.MutableOptions()->SetReturnPartitioningInfo(false);
-            event->Record.MutableOptions()->SetReturnPartitionConfig(false);
-            event->Record.MutableOptions()->SetReturnChildren(false);
-            NTabletPipe::SendData(ctx, TableResolvePipe, event);
+            reason = "buggy path";
         }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Resolve path at " << TabletID()
+            << ": reason# " << reason);
+
+        if (!TableResolvePipe) {
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
+            TableResolvePipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+        }
+
+        auto event = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(PathOwnerId, pathId);
+        event->Record.MutableOptions()->SetReturnPartitioningInfo(false);
+        event->Record.MutableOptions()->SetReturnPartitionConfig(false);
+        event->Record.MutableOptions()->SetReturnChildren(false);
+        NTabletPipe::SendData(ctx, TableResolvePipe, event.Release());
     }
 }
 
@@ -3129,9 +3139,7 @@ void TDataShard::SerializeKeySample(const TUserTable &tinfo,
 }
 
 
-void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev,
-                               const TActorContext &ctx)
-{
+void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx) {
     const auto &rec = ev->Get()->GetRecord();
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,

@@ -122,6 +122,7 @@
 #include <library/cpp/actors/prof/tag.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
+#include <util/charset/wide.h>
 #include <util/folder/dirut.h>
 #include <util/system/file.h>
 #include <util/system/getpid.h>
@@ -203,8 +204,12 @@ public:
             TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
             appData->DefaultUserSIDs = std::move(defaultUserSIDs);
         }
-        const auto& allAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers();
-        appData->AllAuthenticatedUsers = !allAuthenticatedUsers.Empty() ? allAuthenticatedUsers : "all-users@well-known";
+        if (securityConfig.HasAllAuthenticatedUsers()) {
+            const TString& allUsersGroup = Strip(securityConfig.GetAllAuthenticatedUsers());
+            if (allUsersGroup) {
+                appData->AllAuthenticatedUsers = allUsersGroup;
+            }
+        }
 
         appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();

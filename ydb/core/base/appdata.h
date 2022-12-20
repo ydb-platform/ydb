@@ -149,7 +149,7 @@ struct TAppData {
     bool UsePartitionStatsCollectorForTests = false;
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
-    TString AllAuthenticatedUsers;
+    TString AllAuthenticatedUsers = "all-users@well-known";
     TString TenantName;
 
     TResourceProfilesPtr ResourceProfiles;

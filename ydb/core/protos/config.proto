@@ -223,7 +223,7 @@ message TDomainsConfig {
         repeated string MonitoringAllowedSIDs = 2;
         repeated string AdministrationAllowedSIDs = 3;
         repeated string DefaultUserSIDs = 4;
-        optional string AllAuthenticatedUsers = 5 [default = "all-users@well-known"];
+        optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
 
         message TUser {

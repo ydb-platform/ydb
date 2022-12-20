@@ -4388,8 +4388,8 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     if (pgType->GetName() == "interval" || pgType->GetName() == "_interval") {
-        if (mods.size() != 1) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Exactly one modidifer is expected for pginterval"));
+        if (mods.size() < 1) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "At least one modifier is expected for pginterval"));
             return IGraphTransformer::TStatus::Error;
         }
 

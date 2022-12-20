@@ -219,6 +219,20 @@ std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeId) {
     return std::make_shared<arrow::NullType>();
 }
 
+std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId) {
+    std::shared_ptr<arrow::DataType> result;
+    switch (typeId.GetTypeId()) {
+        case NScheme::NTypeIds::Datetime:
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Timestamp:
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+        case NScheme::NTypeIds::Date:
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        default:
+            return GetArrowType(typeId);
+    }
+}
+
 std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());

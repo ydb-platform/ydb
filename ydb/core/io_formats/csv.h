@@ -57,11 +57,7 @@ public:
         ParseOptions.escape_char = escapeChar;
     }
 
-    void SetNullValue(const TString& null = "") {
-        ConvertOptions.null_values = { std::string(null.data(), null.size()) };
-        ConvertOptions.strings_can_be_null = true;
-        ConvertOptions.quoted_strings_can_be_null = false;
-    }
+    void SetNullValue(const TString& null = "");
 
 private:
     arrow::csv::ReadOptions ReadOptions;
@@ -69,6 +65,9 @@ private:
     arrow::csv::ConvertOptions ConvertOptions;
     std::shared_ptr<arrow::csv::StreamingReader> Reader;
     std::vector<TString> ResultColumns;
+    std::unordered_map<std::string, std::shared_ptr<arrow::DataType>> OriginalColumnTypes;
+
+    std::shared_ptr<arrow::RecordBatch> ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const;
 
     static TString ErrorPrefix() {
         return "Cannot read CSV: ";

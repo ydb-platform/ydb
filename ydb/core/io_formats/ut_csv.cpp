@@ -77,6 +77,60 @@ TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colum
 }
 
 Y_UNIT_TEST_SUITE(FormatCSV) {
+    Y_UNIT_TEST(Instants) {
+        const TString dateTimeString = "2005-08-09T18:31:42";
+        const TString data = "11,12,2013-07-15," + dateTimeString + "," + dateTimeString;
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
+
+        {
+            columns = {
+                {"datetime_int", NScheme::TTypeInfo(NScheme::NTypeIds::Datetime)},
+                {"timestamp_int", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
+                {"date", NScheme::TTypeInfo(NScheme::NTypeIds::Date) },
+                {"datetime", NScheme::TTypeInfo(NScheme::NTypeIds::Datetime)},
+                {"timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)}
+            };
+            TInstant dtInstant;
+            Y_VERIFY(TInstant::TryParseIso8601(dateTimeString, dtInstant));
+            TArrowCSV reader(columns, false);
+
+            TString errorMessage;
+            auto batch = reader.ReadNext(data, errorMessage);
+            Cerr << errorMessage << "\n";
+            UNIT_ASSERT(!!batch);
+            UNIT_ASSERT(errorMessage.empty());
+
+            auto cDatetimeInt = batch->GetColumnByName("datetime_int");
+            auto cTimestampInt = batch->GetColumnByName("timestamp_int");
+            auto cDate = batch->GetColumnByName("date");
+            auto cDatetime = batch->GetColumnByName("datetime");
+            auto cTimestamp = batch->GetColumnByName("timestamp");
+
+            Y_VERIFY(cDate->type()->id() == arrow::UInt16Type::type_id);
+            Y_VERIFY(cDatetime->type()->id() == arrow::UInt32Type::type_id);
+            Y_VERIFY(cTimestamp->type()->id() == arrow::TimestampType::type_id);
+            Y_VERIFY(cDatetimeInt->type()->id() == arrow::UInt32Type::type_id);
+            Y_VERIFY(cTimestampInt->type()->id() == arrow::TimestampType::type_id);
+            Y_VERIFY(batch->num_rows() == 1);
+
+            {
+                auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetimeInt);
+                Y_VERIFY(ui32Column.Value(0) == 11, "%d", ui32Column.Value(0));
+            }
+            {
+                auto& tsColumn = static_cast<arrow::TimestampArray&>(*cTimestampInt);
+                Cerr << tsColumn.Value(0) << Endl;
+                Y_VERIFY(tsColumn.Value(0) == 12 * 1000000);
+            }
+            auto& ui16Column = static_cast<arrow::UInt16Array&>(*cDate);
+            Y_VERIFY(ui16Column.Value(0) == 15901, "%d", ui16Column.Value(0));
+            auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetime);
+            Y_VERIFY(ui32Column.Value(0) == dtInstant.Seconds(), "%d", ui32Column.Value(0));
+            auto& tsColumn = static_cast<arrow::TimestampArray&>(*cTimestamp);
+            Y_VERIFY(tsColumn.Value(0) == (i64)dtInstant.MicroSeconds());
+        }
+    }
+
     Y_UNIT_TEST(EmptyData) {
         TString data = "";
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns;

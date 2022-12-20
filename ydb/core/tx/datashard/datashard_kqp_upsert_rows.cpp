@@ -80,15 +80,17 @@ public:
 
                 commands.emplace_back(std::move(command));
             }
+            Y_VERIFY(dsApplyCtx.ShardTableStats);
+            Y_VERIFY(dsApplyCtx.TaskTableStats);
 
-            ui64 nUpdateRow = Owner.ShardTableStats.NUpdateRow;
-            ui64 updateRowBytes = Owner.ShardTableStats.UpdateRowBytes;
+            ui64 nUpdateRow = dsApplyCtx.ShardTableStats->NUpdateRow;
+            ui64 updateRowBytes = dsApplyCtx.ShardTableStats->UpdateRowBytes;
 
             dsApplyCtx.Host->UpdateRow(Owner.TableId, keyTuple, commands);
 
-            if (i64 delta = Owner.ShardTableStats.NUpdateRow - nUpdateRow; delta > 0) {
-                Owner.TaskTableStats.NUpdateRow += delta;
-                Owner.TaskTableStats.UpdateRowBytes += Owner.ShardTableStats.UpdateRowBytes - updateRowBytes;
+            if (i64 delta = dsApplyCtx.ShardTableStats->NUpdateRow - nUpdateRow; delta > 0) {
+                dsApplyCtx.TaskTableStats->NUpdateRow += delta;
+                dsApplyCtx.TaskTableStats->UpdateRowBytes += dsApplyCtx.ShardTableStats->UpdateRowBytes - updateRowBytes;
             }
         };
 
@@ -128,9 +130,9 @@ public:
     }
 
 public:
-    TKqpUpsertRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTableId& tableId, IComputationNode* rowsNode, TVector<NScheme::TTypeInfo>&& rowTypes,
-        TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns, const TTypeEnvironment& env)
+    TKqpUpsertRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
+            TVector<NScheme::TTypeInfo>&& rowTypes, TVector<ui32>&& keyIndices,
+            TVector<TUpsertColumn>&& upsertColumns, const TTypeEnvironment& env)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
@@ -138,8 +140,7 @@ public:
         , KeyIndices(std::move(keyIndices))
         , UpsertColumns(std::move(upsertColumns))
         , Env(env)
-        , ShardTableStats(computeCtx.GetDatashardCounters())
-        , TaskTableStats(computeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {}
+    {}
 
 private:
     void RegisterDependencies() const final {
@@ -153,8 +154,6 @@ private:
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
     const TTypeEnvironment& Env;
-    TKqpTableStats& ShardTableStats;
-    TKqpTableStats& TaskTableStats;
 };
 
 } // namespace
@@ -226,7 +225,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
             "upsert column type missmatch, column: " << tableColumn->Name);
     }
 
-    return new TKqpUpsertRowsWrapper(ctx.Mutables, computeCtx, tableId,
+    return new TKqpUpsertRowsWrapper(ctx.Mutables, tableId,
         LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices),
         std::move(upsertColumns), ctx.Env);
 }

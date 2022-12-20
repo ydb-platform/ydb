@@ -47,13 +47,15 @@ public:
             if (!engineCtx.Host->IsMyKey(Owner.TableId, keyTuple)) {
                 return;
             }
+            Y_VERIFY(engineCtx.ShardTableStats);
+            Y_VERIFY(engineCtx.TaskTableStats);
 
-            ui64 nEraseRow = Owner.ShardTableStats.NEraseRow;
+            ui64 nEraseRow = engineCtx.ShardTableStats->NEraseRow;
 
             engineCtx.Host->EraseRow(Owner.TableId, keyTuple);
 
-            if (i64 delta = Owner.ShardTableStats.NEraseRow - nEraseRow; delta > 0) {
-                Owner.TaskTableStats.NEraseRow += delta;
+            if (i64 delta = engineCtx.ShardTableStats->NEraseRow - nEraseRow; delta > 0) {
+                engineCtx.TaskTableStats->NEraseRow += delta;
             }
         };
 
@@ -93,16 +95,15 @@ public:
     }
 
 public:
-    TKqpDeleteRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTableId& tableId, IComputationNode* rowsNode, TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
+    TKqpDeleteRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
+            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
         , KeyIndices(std::move(keyIndices))
         , Env(env)
-        , ShardTableStats(computeCtx.GetDatashardCounters())
-        , TaskTableStats(computeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {}
+    {}
 
 private:
     void RegisterDependencies() const final {
@@ -115,8 +116,6 @@ private:
     const TVector<NScheme::TTypeInfo> RowTypes;
     const TVector<ui32> KeyIndices;
     const TTypeEnvironment& Env;
-    TKqpTableStats& ShardTableStats;
-    TKqpTableStats& TaskTableStats;
 };
 
 } // namespace
@@ -167,7 +166,7 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
         keyIndices[i] = it->second;
     }
 
-    return new TKqpDeleteRowsWrapper(ctx.Mutables, computeCtx, tableId,
+    return new TKqpDeleteRowsWrapper(ctx.Mutables, tableId,
         LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices), ctx.Env);
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_compute.h"
+#include "ydb/core/tx/datashard/datashard_kqp_compute.h"
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
 namespace NKikimr {
@@ -58,6 +59,7 @@ private:
     NYql::NDq::TLogFunc LogFunc;
     NMiniKQL::TScopedAlloc* Alloc;
     NMiniKQL::TKqpComputeContextBase* ComputeCtx;
+    NMiniKQL::TKqpDatashardApplyContext* ApplyCtx;
 
     enum EState {
         Initial = 0,

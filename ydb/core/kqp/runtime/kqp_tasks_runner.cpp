@@ -81,6 +81,8 @@ TKqpTasksRunner::TKqpTasksRunner(const google::protobuf::RepeatedPtrField<NDqPro
     YQL_ENSURE(execCtx.Alloc);
     YQL_ENSURE(execCtx.TypeEnv);
 
+    ApplyCtx = dynamic_cast<NMiniKQL::TKqpDatashardApplyContext *>(execCtx.ApplyCtx);
+    YQL_ENSURE(ApplyCtx);
     ComputeCtx = dynamic_cast<NMiniKQL::TKqpComputeContextBase*>(execCtx.ComputeCtx);
     YQL_ENSURE(ComputeCtx);
 
@@ -132,6 +134,8 @@ ERunStatus TKqpTasksRunner::Run(bool applyEffects) {
     bool hasPendingInputTasks = false;
     bool hasPendingOutputTasks = false;
 
+    // for per-task statistics in KqpUpsertRows and KqpDeleteRows computation nodes
+    auto dsCtx = dynamic_cast<TKqpDatashardComputeContext*>(ComputeCtx);
     for (auto& [taskId, task] : TaskRunners) {
         if (Y_UNLIKELY(LogFunc)) {
             LogFunc(TStringBuilder() << "running task: " << taskId);
@@ -142,6 +146,9 @@ ERunStatus TKqpTasksRunner::Run(bool applyEffects) {
             continue;
         }
 
+        if (dsCtx) {
+            ApplyCtx->TaskTableStats = &dsCtx->GetTaskCounters(taskId);
+        }
         auto status = task->Run();
 
         switch (status) {

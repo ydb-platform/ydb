@@ -858,6 +858,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
 
     auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
     kqpApplyCtx->Host = EngineHost.Get();
+    kqpApplyCtx->ShardTableStats = &ComputeCtx->GetDatashardCounters();
 
     KqpApplyCtx.Reset(kqpApplyCtx.Release());
 

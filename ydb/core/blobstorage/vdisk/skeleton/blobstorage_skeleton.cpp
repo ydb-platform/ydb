@@ -326,6 +326,7 @@ namespace NKikimr {
             bool IsHugeBlob = false;
             NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
             NWilson::TTraceId TraceId;
+            bool WrittenBeyondBarrier = false;
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer,
                     NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
@@ -407,7 +408,8 @@ namespace NKikimr {
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
                 TLogoBlobID id, ui64 bufSize, bool ignoreBlock,
-                const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks)
+                const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
+                bool *writtenBeyondBarrier)
         {
             ui64 blobPartSize = 0;
             try {
@@ -436,7 +438,7 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "buffer is too large"};
             }
 
-            auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, extraBlockChecks);
+            auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, extraBlockChecks, writtenBeyondBarrier);
             if (status.Status != NKikimrProto::OK) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": failed to pass the Hull check;"
                         << " id# " << id
@@ -515,7 +517,7 @@ namespace NKikimr {
 
                 if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
                     info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer.GetSize(), ignoreBlock,
-                        info.ExtraBlockChecks);
+                        info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::OK) {
@@ -586,7 +588,8 @@ namespace NKikimr {
                 const TString& errorReason = info.HullStatus.ErrorReason;
 
                 if (info.HullStatus.Postponed) {
-                    auto result = std::make_unique<TEvVMultiPutItemResult>(info.BlobId, itemIdx, status, errorReason);
+                    auto result = std::make_unique<TEvVMultiPutItemResult>(info.BlobId, itemIdx, status, errorReason,
+                        info.WrittenBeyondBarrier);
                     Hull->PostponeReplyUntilCommitted(result.release(), vMultiPutActorId, itemIdx, std::move(info.TraceId),
                         info.HullStatus.Lsn);
                     continue;
@@ -622,8 +625,8 @@ namespace NKikimr {
 
                     info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
                     lsnBatch.First++;
-                    std::unique_ptr<TEvVMultiPutItemResult> evItemResult(
-                            new TEvVMultiPutItemResult(info.BlobId, itemIdx, status, errorReason));
+                    auto evItemResult = std::make_unique<TEvVMultiPutItemResult>(info.BlobId, itemIdx, status, errorReason,
+                        info.WrittenBeyondBarrier);
                     auto logMsg = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie, std::move(orbit),
                         info, std::move(evItemResult));
                     evLogs->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()));
@@ -702,7 +705,7 @@ namespace NKikimr {
                 return;
             }
 
-            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, bufSize, ignoreBlock, info.ExtraBlockChecks);
+            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, bufSize, ignoreBlock, info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
             if (info.HullStatus.Status != NKikimrProto::OK) {
                 ReplyError(info.HullStatus, ev, ctx, now);
                 return;
@@ -732,6 +735,9 @@ namespace NKikimr {
             // no more errors (at least for for log writes)
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result = CreateResult(VCtx, NKikimrProto::OK, TString(), ev, now,
                     SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            if (info.WrittenBeyondBarrier) {
+                result->Record.SetWrittenBeyondBarrier(true);
+            }
 
             // Manage PDisk scheduler weights
             OverloadHandler->ActualizeWeights(ctx, Mask(EHullDbType::LogoBlobs));
@@ -757,7 +763,8 @@ namespace NKikimr {
 
             // update hull write duration
             msg->Result->MarkHugeWriteTime();
-            auto status = Hull->CheckLogoBlob(ctx, msg->LogoBlobID, msg->IgnoreBlock, msg->ExtraBlockChecks);
+            bool writtenBeyondBarrier = false;
+            auto status = Hull->CheckLogoBlob(ctx, msg->LogoBlobID, msg->IgnoreBlock, msg->ExtraBlockChecks, &writtenBeyondBarrier);
             if (status.Status != NKikimrProto::OK) {
                 msg->Result->UpdateStatus(status.Status); // modify status in result
                 LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
@@ -774,6 +781,8 @@ namespace NKikimr {
                 }
 
                 return;
+            } else if (writtenBeyondBarrier) {
+                msg->Result->Record.SetWrittenBeyondBarrier(true);
             }
 
 #ifdef OPTIMIZE_SYNC

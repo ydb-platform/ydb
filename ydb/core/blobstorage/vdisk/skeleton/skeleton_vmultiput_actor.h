@@ -13,13 +13,16 @@ struct TEvVMultiPutItemResult : TEventLocal<TEvVMultiPutItemResult, TEvBlobStora
     ui64 ItemIdx;
     NKikimrProto::EReplyStatus Status;
     TString ErrorReason;
+    bool WrittenBeyondBarrier;
 
-    TEvVMultiPutItemResult(TLogoBlobID id, ui64 itemIdx, NKikimrProto::EReplyStatus status, TString errorReason)
+    TEvVMultiPutItemResult(TLogoBlobID id, ui64 itemIdx, NKikimrProto::EReplyStatus status, TString errorReason,
+            bool writtenBeyondBarrier)
         : TEventLocal()
         , BlobId(id)
         , ItemIdx(itemIdx)
         , Status(status)
         , ErrorReason(std::move(errorReason))
+        , WrittenBeyondBarrier(writtenBeyondBarrier)
     {}
 };
 

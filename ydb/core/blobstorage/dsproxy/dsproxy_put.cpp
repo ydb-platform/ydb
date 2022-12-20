@@ -352,6 +352,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         RootCauseTrack.RenderTrack(PutImpl.Blobs[blobIdx].Orbit);
         LWTRACK(DSProxyPutReply, PutImpl.Blobs[blobIdx].Orbit);
         putResult->Orbit = std::move(PutImpl.Blobs[blobIdx].Orbit);
+        putResult->WrittenBeyondBarrier = PutImpl.WrittenBeyondBarrier[blobIdx];
         if (!IsManyPuts) {
             SendResponse(std::move(putResult), TimeStatsEnabled ? &TimeStats : nullptr);
         } else {

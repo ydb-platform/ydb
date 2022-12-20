@@ -17,6 +17,7 @@ namespace NKikimr {
                 ui32 StatusFlags = 0;
                 bool Received = false;
                 bool HasCookie = false;
+                bool WrittenBeyondBarrier;
 
                 TString ToString() const {
                     return TStringBuilder()
@@ -28,6 +29,7 @@ namespace NKikimr {
                         << " Cookie# " << Cookie
                         << " StatusFlags# " << NPDisk::StatusFlagsToString(StatusFlags)
                         << " Received# " << Received
+                        << " WrittenBeyondBarrier# " << WrittenBeyondBarrier
                         << " }";
                 }
             };
@@ -85,7 +87,7 @@ namespace NKikimr {
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     TItem &result = Items[idx];
                     vMultiPutResult->AddVPutResult(result.Status, result.ErrorReason, result.BlobId,
-                        result.HasCookie ? &result.Cookie : nullptr, result.StatusFlags);
+                        result.HasCookie ? &result.Cookie : nullptr, result.StatusFlags, result.WrittenBeyondBarrier);
                 }
 
                 vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags);
@@ -105,6 +107,7 @@ namespace NKikimr {
                 item.Received = true;
                 item.Status = ev->Get()->Status;
                 item.ErrorReason = ev->Get()->ErrorReason;
+                item.WrittenBeyondBarrier = ev->Get()->WrittenBeyondBarrier;
 
                 ReceivedResults++;
 
@@ -128,6 +131,7 @@ namespace NKikimr {
                 Y_VERIFY(record.HasStatus());
                 item.Status = record.GetStatus();
                 item.ErrorReason = record.GetErrorReason();
+                item.WrittenBeyondBarrier = record.GetWrittenBeyondBarrier();
 
                 ReceivedResults++;
 

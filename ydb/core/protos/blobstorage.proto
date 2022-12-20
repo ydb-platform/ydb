@@ -392,6 +392,7 @@ message TEvVPutResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 200; // textual description of error
     optional NKikimrProto.TLogoBlobID BlobID = 2;
+    optional bool WrittenBeyondBarrier = 6;
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
     optional uint64 Cookie = 4;
@@ -434,6 +435,7 @@ message TVMultiPutResultItem {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 200;
     optional NKikimrProto.TLogoBlobID BlobID = 2;
+    optional bool WrittenBeyondBarrier = 5;
 
     optional uint64 Cookie = 3;
     optional uint32 StatusFlags = 4 [default = 0];

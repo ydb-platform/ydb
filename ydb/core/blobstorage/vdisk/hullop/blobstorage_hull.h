@@ -41,7 +41,7 @@ namespace NKikimr {
         struct TFields;
         std::unique_ptr<TFields> Fields;
 
-        void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id);
+        void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool *writtenBeyondBarrier);
 
         // validate GC barrier command against existing barriers metabase (ensure that keys are
         // coming in ascending order, CollectGen/CollectStep pairs do not decrease and that keys
@@ -95,7 +95,8 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 const TLogoBlobID &id,
                 bool ignoreBlock,
-                const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks);
+                const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
+                bool *writtenBeyondBarrier);
 
         void AddLogoBlob(
                 const TActorContext &ctx,

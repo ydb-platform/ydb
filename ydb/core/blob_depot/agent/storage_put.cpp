@@ -14,6 +14,7 @@ namespace NKikimr::NBlobDepot {
             bool PutsIssued = false;
             bool WaitingForCommitBlobSeq = false;
             bool IsInFlight = false;
+            bool WrittenBeyondBarrier = false;
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
 
@@ -214,6 +215,10 @@ namespace NKikimr::NBlobDepot {
                 BDEV_QUERY(BDEV11, "TEvPut_resultFromProxy", (BlobId, msg.Id), (Status, msg.Status),
                     (ErrorReason, msg.ErrorReason));
 
+                if (msg.Status == NKikimrProto::OK && msg.WrittenBeyondBarrier) {
+                    WrittenBeyondBarrier = true;
+                }
+
                 --PutsInFlight;
                 if (msg.Status != NKikimrProto::OK) {
                     EndWithError(msg.Status, std::move(msg.ErrorReason));
@@ -273,6 +278,9 @@ namespace NKikimr::NBlobDepot {
                     item->SetCommitNotify(true);
                     IssueCommitBlobSeq(false);
                 }
+
+                // ensure that blob was written not beyond the barrier, or it will be lost otherwise
+                Y_VERIFY(!WrittenBeyondBarrier);
 
                 TBlobStorageQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::OK, Request.Id,
                     Agent.GetStorageStatusFlags(), Agent.VirtualGroupId, Agent.GetApproximateFreeSpaceShare()));

@@ -938,7 +938,7 @@ namespace NKikimr {
         }
 
         void AddVPutResult(NKikimrProto::EReplyStatus status, const TString& errorReason, const TLogoBlobID &logoBlobId,
-                ui64 *cookie, ui32 statusFlags = 0)
+                ui64 *cookie, ui32 statusFlags = 0, bool writtenBeyondBarrier = false)
         {
             NKikimrBlobStorage::TVMultiPutResultItem *item = Record.AddItems();
             item->SetStatus(status);
@@ -950,6 +950,9 @@ namespace NKikimr {
                 item->SetCookie(*cookie);
             }
             item->SetStatusFlags(statusFlags);
+            if (writtenBeyondBarrier) {
+                item->SetWrittenBeyondBarrier(true);
+            }
         }
 
         void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,

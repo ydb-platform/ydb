@@ -91,7 +91,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
-    void THull::ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id) {
+    void THull::ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool *writtenBeyondBarrier) {
         if (Fields->BarrierValidation) {
             // ensure that the new blob would not fall under GC
             TString explanation;
@@ -100,6 +100,7 @@ namespace NKikimr {
                         VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s",
                             id.ToString().data(), explanation.data()));
+                *writtenBeyondBarrier = true;
             }
         }
     }
@@ -163,7 +164,8 @@ namespace NKikimr {
             const TActorContext &ctx,
             const TLogoBlobID &id,
             bool ignoreBlock,
-            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks)
+            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
+            bool *writtenBeyondBarrier)
     {
         // check blocked
         if (!ignoreBlock) {
@@ -190,7 +192,7 @@ namespace NKikimr {
             }
         }
 
-        ValidateWriteQuery(ctx, id);
+        ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
         return {NKikimrProto::OK, 0, false};
     }
 

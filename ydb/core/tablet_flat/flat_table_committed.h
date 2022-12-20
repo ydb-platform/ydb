@@ -138,6 +138,51 @@ namespace NTable {
     };
 
     /**
+     * A special implementation of a dynamic transaction map with a possible base
+     */
+    class TDynamicTransactionMap final : public ITransactionMap {
+    public:
+        TDynamicTransactionMap() = default;
+
+        explicit TDynamicTransactionMap(ITransactionMapPtr base)
+            : Base(std::move(base))
+        { }
+
+    public:
+        const TRowVersion* Find(ui64 txId) const override {
+            auto it = Values.find(txId);
+            if (it != Values.end()) {
+                return &it->second;
+            }
+            return Base.Find(txId);
+        }
+
+        void SetBase(ITransactionMapPtr base) {
+            Base = std::move(base);
+        }
+
+        void Add(ui64 txId, TRowVersion version) {
+            Values[txId] = version;
+        }
+
+        void Remove(ui64 txId) {
+            Values.erase(txId);
+        }
+
+        void Clear() {
+            Values.clear();
+        }
+
+        bool Empty() const {
+            return Values.empty() && !Base;
+        }
+
+    private:
+        ITransactionMapPtr Base;
+        absl::flat_hash_map<ui64, TRowVersion> Values;
+    };
+
+    /**
      * A simple copy-on-write data structure for a TxId -> RowVersion map
      *
      * Pretends to be an instance of ITransactionMapPtr

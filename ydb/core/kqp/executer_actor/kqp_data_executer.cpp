@@ -28,6 +28,8 @@
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -1358,7 +1360,8 @@ private:
                 SelfId(),
                 TxId,
                 dataTransaction.SerializeAsString(),
-                ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
+                (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0) |
+                (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0));
         }
 
         auto traceId = ExecuterSpan.GetTraceId();
@@ -1645,6 +1648,11 @@ private:
         // Single-shard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize()) <= 1;
 
+        if (ImmediateTx) {
+            // Transaction cannot be both immediate and volatile
+            YQL_ENSURE(!VolatileTx);
+        }
+
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
             case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
@@ -1652,6 +1660,7 @@ private:
             // (legacy behaviour, for compatibility with current execution engine)
             case NKikimrKqp::ISOLATION_LEVEL_READ_STALE:
                 YQL_ENSURE(ReadOnlyTx);
+                YQL_ENSURE(!VolatileTx);
                 ImmediateTx = true;
                 break;
 
@@ -1661,6 +1670,7 @@ private:
 
         if ((ReadOnlyTx || AppData()->FeatureFlags.GetEnableKqpImmediateEffects()) && Request.Snapshot.IsValid()) {
             // Snapshot reads are always immediate
+            YQL_ENSURE(!VolatileTx);
             Snapshot = Request.Snapshot;
             ImmediateTx = true;
         }
@@ -1707,6 +1717,7 @@ private:
                 AppData()->FeatureFlags.GetEnableMvccSnapshotReads());
 
         if (forceSnapshot) {
+            YQL_ENSURE(!VolatileTx);
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
 
@@ -1810,52 +1821,111 @@ private:
 
         Request.TopicOperations.BuildTopicTxs(topicTxs);
 
-        const bool useGenericReadSets = AppData()->FeatureFlags.GetEnableDataShardGenericReadSets() || !topicTxs.empty();
+        const bool needRollback = Request.EraseLocks && !Request.ValidateLocks;
 
-        if (auto locksMap = ExtractLocks(Request.Locks); !locksMap.empty() || Request.TopicOperations.HasReadOperations()) {
-            YQL_ENSURE(Request.ValidateLocks || Request.EraseLocks);
+        const bool uncommittedWrites = AppData()->FeatureFlags.GetEnableKqpImmediateEffects() && Request.Snapshot.IsValid();
 
-            auto locksOp = Request.ValidateLocks && Request.EraseLocks
+        VolatileTx = (
+            // We want to use volatile transactions only when the feature is enabled
+            AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions() &&
+            // We don't want volatile tx when acquiring locks
+            !Request.AcquireLocksTxId &&
+            // We don't want readonly volatile transactions
+            !ReadOnlyTx &&
+            // We only want to use volatile transactions with side-effects
+            !ShardsWithEffects.empty() &&
+            // We don't want to use volatile transactions when doing a rollback
+            !needRollback &&
+            // We cannot use volatile transaction for uncommitted writes
+            !uncommittedWrites &&
+            // We cannot use volatile transactions with topics
+            // TODO: add support in the future
+            topicTxs.empty() &&
+            // We only want to use volatile transactions for multiple shards
+            (datashardTasks.size() + topicTxs.size()) > 1 &&
+            // We cannot use volatile transactions with persistent channels
+            // Note: currently persistent channels are never used
+            !HasPersistentChannels);
+
+        const bool useGenericReadSets = (
+            // Use generic readsets when feature is explicitly enabled
+            AppData()->FeatureFlags.GetEnableDataShardGenericReadSets() ||
+            // Volatile transactions must always use generic readsets
+            VolatileTx ||
+            // Transactions with topics must always use generic readsets
+            !topicTxs.empty());
+
+        if (auto locksMap = ExtractLocks(Request.Locks);
+            !locksMap.empty() ||
+            VolatileTx ||
+            Request.TopicOperations.HasReadOperations())
+        {
+            YQL_ENSURE(Request.ValidateLocks || Request.EraseLocks || VolatileTx);
+
+            bool needCommit = (
+                (Request.ValidateLocks && Request.EraseLocks) ||
+                VolatileTx);
+
+            auto locksOp = needCommit
                 ? NKikimrTxDataShard::TKqpLocks::Commit
                 : (Request.ValidateLocks
                         ? NKikimrTxDataShard::TKqpLocks::Validate
                         : NKikimrTxDataShard::TKqpLocks::Rollback);
 
-            TSet<ui64> taskShardIds;
-            if (Request.ValidateLocks) {
+            absl::flat_hash_set<ui64> sendingShardsSet;
+            absl::flat_hash_set<ui64> receivingShardsSet;
+
+            // Gather shards that need to send/receive readsets (shards with effects)
+            if (needCommit) {
                 for (auto& [shardId, _] : datashardTasks) {
                     if (ShardsWithEffects.contains(shardId)) {
-                        taskShardIds.insert(shardId);
+                        // Volatile transactions may abort effects, so they send readsets
+                        if (VolatileTx) {
+                            sendingShardsSet.insert(shardId);
+                        }
+                        receivingShardsSet.insert(shardId);
                     }
                 }
 
-                taskShardIds.merge(Request.TopicOperations.GetReceivingTabletIds());
+                if (auto tabletIds = Request.TopicOperations.GetSendingTabletIds()) {
+                    sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
+                }
+
+                if (auto tabletIds = Request.TopicOperations.GetReceivingTabletIds()) {
+                    receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
+                }
             }
 
-            TSet<ui64> locksSendingShards;
+            // Gather locks that need to be committed or erased
             for (auto& [shardId, locksList] : locksMap) {
                 auto& tx = datashardTxs[shardId];
                 tx.MutableLocks()->SetOp(locksOp);
 
-                for (auto& lock : locksList) {
-                    tx.MutableLocks()->MutableLocks()->Add()->Swap(&lock);
-                }
+                if (!locksList.empty()) {
+                    auto* protoLocks = tx.MutableLocks()->MutableLocks();
+                    protoLocks->Reserve(locksList.size());
+                    for (auto& lock : locksList) {
+                        protoLocks->Add()->Swap(&lock);
+                    }
 
-                if (!locksList.empty() && Request.ValidateLocks) {
-                    locksSendingShards.insert(shardId);
+                    if (needCommit) {
+                        // We also send the result on commit
+                        sendingShardsSet.insert(shardId);
+                    }
                 }
             }
 
-            locksSendingShards.merge(Request.TopicOperations.GetSendingTabletIds());
+            if (Request.ValidateLocks || needCommit) {
+                NProtoBuf::RepeatedField<ui64> sendingShards(sendingShardsSet.begin(), sendingShardsSet.end());
+                NProtoBuf::RepeatedField<ui64> receivingShards(receivingShardsSet.begin(), receivingShardsSet.end());
 
-            if (Request.ValidateLocks) {
-                NProtoBuf::RepeatedField<ui64> sendingShards(locksSendingShards.begin(), locksSendingShards.end());
-                NProtoBuf::RepeatedField<ui64> receivingShards(taskShardIds.begin(), taskShardIds.end());
+                std::sort(sendingShards.begin(), sendingShards.end());
+                std::sort(receivingShards.begin(), receivingShards.end());
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx.MutableLocks()->SetOp(locksOp);
-                    shardTx.MutableLocks()->MutableSendingShards()->CopyFrom(sendingShards);
-                    shardTx.MutableLocks()->MutableReceivingShards()->CopyFrom(receivingShards);
+                    *shardTx.MutableLocks()->MutableSendingShards() = sendingShards;
+                    *shardTx.MutableLocks()->MutableReceivingShards() = receivingShards;
                 }
 
                 for (auto& [_, tx] : topicTxs) {
@@ -1869,12 +1939,12 @@ private:
                     case NKikimrTxDataShard::TKqpLocks::Rollback:
                         tx.SetOp(NKikimrPQ::TKqpTransaction::Rollback);
                         break;
-                    default:
+                    case NKikimrTxDataShard::TKqpLocks::Unspecified:
                         break;
                     }
 
-                    tx.MutableSendingShards()->CopyFrom(sendingShards);
-                    tx.MutableReceivingShards()->CopyFrom(receivingShards);
+                    *tx.MutableSendingShards() = sendingShards;
+                    *tx.MutableReceivingShards() = receivingShards;
                 }
             }
         }
@@ -2009,6 +2079,7 @@ private:
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << DatashardTxs.size()
             << ", topicTxs: " << Request.TopicOperations.GetSize()
+            << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
             << ", remote tasks" << remoteComputeTasksCnt
             << ", useFollowers: " << UseFollowers);
@@ -2028,6 +2099,7 @@ private:
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
+            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
         }
 
         for (auto& tx : topicTxs) {
@@ -2190,6 +2262,7 @@ private:
     TVector<NKikimrTxDataShard::TLock> Locks;
     TVector<TKqpExecuterTxResult> Results;
     bool ReadOnlyTx = true;
+    bool VolatileTx = false;
     bool ImmediateTx = false;
     bool UseFollowers = false;
     bool TxPlanned = false;

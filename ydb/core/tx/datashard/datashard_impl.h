@@ -18,6 +18,7 @@
 #include "change_record.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
+#include "volatile_tx.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -258,6 +259,7 @@ class TDataShard
     friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
     friend class TSchemaSnapshotManager;
+    friend class TVolatileTxManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
@@ -870,13 +872,44 @@ class TDataShard
             >;
         };
 
+        // Describes a volatile transaction that executed and possibly made
+        // some changes, but is not fully committed, waiting for decision from
+        // other participants. Transaction would be committed at Step:TxId on
+        // success, and usually has 1-2 uncommitted TxIds that need to be
+        // committed.
+        struct TxVolatileDetails : Table<32> {
+            // Volatile TxId of the transaction
+            struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
+            // State of transaction, initially undecided, but becomes committed or aborted until it is removed
+            struct State : Column<2, NScheme::NTypeIds::Uint32> { using Type = EVolatileTxState; };
+            // Transaction details encoded in a protobuf message
+            struct Details : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrTxDataShard::TTxVolatileDetails; };
+
+            using TKey = TableKey<TxId>;
+            using TColumns = TableColumns<TxId, State, Details>;
+        };
+
+        // Associated participants for a volatile transaction that need to
+        // decide a transaction and from which a readset is expected. Usually a
+        // COMMIT decision from a participant causes removal of a corresponding
+        // row, and ABORT decision causes full transaction abort, with removal
+        // of all corresponding rows.
+        struct TxVolatileParticipants : Table<33> {
+            struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct ShardId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<TxId, ShardId>;
+            using TColumns = TableColumns<TxId, ShardId>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
             SrcChangeSenderActivations, DstChangeSenderActivations,
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
-            LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits>;
+            LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
+            TxVolatileDetails, TxVolatileParticipants>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1614,6 +1647,10 @@ public:
     void AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersion, ui64 step, ui64 txId,
         TTransactionContext& txc, const TActorContext& ctx);
 
+    TVolatileTxManager& GetVolatileTxManager() { return VolatileTxManager; }
+    const TVolatileTxManager& GetVolatileTxManager() const { return VolatileTxManager; }
+
+
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
@@ -2235,6 +2272,7 @@ private:
 
     TSnapshotManager SnapshotManager;
     TSchemaSnapshotManager SchemaSnapshotManager;
+    TVolatileTxManager VolatileTxManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 

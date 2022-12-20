@@ -179,6 +179,7 @@ public:
 
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
+    void SetVolatileTxId(ui64 txId) { EngineBay.SetVolatileTxId(txId); }
 
     void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion, TTransactionContext& txc) {
         EngineBay.CommitChanges(tableId, lockId, writeVersion, txc);
@@ -186,6 +187,9 @@ public:
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
     void ResetCollectedChanges() { EngineBay.ResetCollectedChanges(); }
+
+    TVector<ui64> GetVolatileCommitTxIds() const { return EngineBay.GetVolatileCommitTxIds(); }
+    TVector<ui64> GetVolatileDependencies() const { return EngineBay.GetVolatileDependencies(); }
 
     TActorId Source() const { return Source_; }
     void SetSource(const TActorId& actorId) { Source_ = actorId; }

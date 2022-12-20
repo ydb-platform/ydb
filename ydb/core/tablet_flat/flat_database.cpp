@@ -620,6 +620,13 @@ bool TDatabase::ValidateCommit(TString &err)
     return true;
 }
 
+bool TDatabase::HasChanges() const
+{
+    Y_VERIFY(Redo, "Transaction is not in progress");
+
+    return *Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions;
+}
+
 TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator)
 {
     TempIterators.clear();
@@ -636,7 +643,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         IteratedTables.clear();
     }
 
-    if (commit && (*Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions)) {
+    if (commit && HasChanges()) {
         Y_VERIFY(stamp >= Change->Stamp);
         Y_VERIFY(DatabaseImpl->Serial() == Change->Serial);
 

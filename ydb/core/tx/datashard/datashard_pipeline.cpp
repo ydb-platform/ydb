@@ -1188,7 +1188,18 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
+    auto badRequest = [&](const TString& error) {
+        tx->SetAbortedFlag();
+        tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(
+            rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
+        tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
+
+        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
+    };
+
     if (tx->IsSchemeTx()) {
+        Y_VERIFY(!tx->HasVolatilePrepareFlag(), "Volatile scheme transactions not supported");
+
         Y_VERIFY(rec.HasSchemeShardId());
         Y_VERIFY(rec.HasProcessingParams());
 
@@ -1216,6 +1227,11 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             return tx;
         }
 
+        if (tx->HasVolatilePrepareFlag()) {
+            badRequest("Unsupported volatile snapshot tx");
+            return tx;
+        }
+
         if (tx->GetSnapshotTx().HasCreateVolatileSnapshot()) {
             tx->SetReadOnlyFlag();
             tx->SetGlobalReaderFlag();
@@ -1231,6 +1247,11 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             return tx;
         }
 
+        if (tx->HasVolatilePrepareFlag()) {
+            badRequest("Unsupported volatile distributed erase");
+            return tx;
+        }
+
         tx->SetGlobalWriterFlag();
         if (tx->GetDistributedEraseTx()->HasDependents()) {
             tx->SetGlobalReaderFlag();
@@ -1238,6 +1259,11 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     } else if (tx->IsCommitWritesTx()) {
         if (!tx->BuildCommitWritesTx()) {
             malformed(TStringBuf("commit writes"), tx->GetCommitWritesTx()->GetBody().ShortDebugString());
+            return tx;
+        }
+
+        if (tx->HasVolatilePrepareFlag()) {
+            badRequest("Unsupported volatile commit writes");
             return tx;
         }
 
@@ -1277,6 +1303,35 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetGlobalReaderFlag();
         }
 
+        // Additional checks for volatile transactions
+        if (tx->HasVolatilePrepareFlag()) {
+            if (tx->HasImmediateFlag()) {
+                badRequest(TStringBuilder()
+                    << "Volatile distributed tx " << tx->GetTxId()
+                    << " at tablet " << Self->TabletID()
+                    << " cannot be immediate");
+                return tx;
+            }
+
+            if (!dataTx->IsKqpDataTx()) {
+                badRequest(TStringBuilder()
+                    << "Volatile distributed tx " << tx->GetTxId()
+                    << " at tablet " << Self->TabletID()
+                    << " must be a kqp data tx");
+                return tx;
+            }
+
+            if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
+                badRequest(TStringBuilder()
+                    << "Volatile distributed tx " << tx->GetTxId()
+                    << " at tablet " << Self->TabletID()
+                    << " cannot have persistent channels");
+                return tx;
+            }
+
+            Y_VERIFY(!tx->IsImmediate(), "Sanity check failed: volatile tx cannot be immediate");
+        }
+
         // Make config checks for immediate tx.
         if (tx->IsImmediate()) {
             if (Config.NoImmediate() || (Config.ForceOnlineRW() && !dataTx->ReadOnly())) {
@@ -1310,26 +1365,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         if (!tx->IsMvccSnapshotRead()) {
             // No op
         } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
-            tx->SetAbortedFlag();
-            TString err = "Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction";
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
-                                                                         Self->TabletID(),
-                                                                         tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
-            tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
-
+            badRequest("Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction");
             return tx;
         } else if (tx->IsKqpScanTransaction() && dataTx->GetKqpTransaction().HasSnapshot()) {
-            tx->SetAbortedFlag();
-            TString err = "Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction";
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
-                                                                         Self->TabletID(),
-                                                                         tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
-            tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT,err);
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
-
+            badRequest("Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction");
             return tx;
         }
 
@@ -1350,15 +1389,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         };
 
         if(tx->IsMvccSnapshotRead() && !allowSnapshot()) {
-            tx->SetAbortedFlag();
-            TString err = "Snapshot read must be an immediate read only or locked write transaction";
-            tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
-                                                                         Self->TabletID(),
-                                                                         tx->GetTxId(),
-                                                                         NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
-            tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT,err);
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
-
+            badRequest("Snapshot read must be an immediate read-only or locked-write transaction");
             return tx;
         }
 

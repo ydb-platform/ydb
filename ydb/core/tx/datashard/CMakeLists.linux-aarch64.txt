@@ -49,6 +49,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   library-cpp-resource
   contrib-libs-zstd
   cpp-actors-core
+  cpp-containers-absl_flat_hash
   cpp-containers-flat_hash
   cpp-digest-md5
   cpp-html-pcdata
@@ -235,6 +236,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_distributed_erase_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_scheme_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/store_snapshot_tx_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
@@ -302,6 +304,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   library-cpp-resource
   contrib-libs-zstd
   cpp-actors-core
+  cpp-containers-absl_flat_hash
   cpp-containers-flat_hash
   cpp-digest-md5
   cpp-html-pcdata

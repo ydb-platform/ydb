@@ -1798,3 +1798,18 @@ message TEvReplicationSourceOffsetsCancel {
     // Cancels a previously started read for (Sender, ReadId)
     optional uint64 ReadId = 1;
 }
+
+message TTxVolatileDetails {
+    optional uint64 TxId = 1;
+
+    // Step and TxId that should be used for the eventual commit
+    optional uint64 VersionStep = 2;
+    optional uint64 VersionTxId = 3;
+
+    // A list of local db transactions that need to be committed on success or rolled back on failure
+    repeated uint64 CommitTxIds = 4 [packed = true];
+
+    // A list of volatile transaction ids that need to be committed or rolled back before this transaction commits.
+    // This is because local db changes must be committed in the same order they performed writes.
+    repeated uint64 Dependencies = 5 [packed = true];
+}

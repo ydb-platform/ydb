@@ -196,6 +196,11 @@ public:
 
     TKeyRangeCache* DebugGetTableErasedKeysCache(ui32 table) const;
 
+    /**
+     * Returns true when current transaction has changes to commit
+     */
+    bool HasChanges() const;
+
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);

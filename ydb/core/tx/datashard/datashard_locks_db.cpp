@@ -110,11 +110,14 @@ void TDataShardLocksDb::PersistLockCounter(ui64 lockId, ui64 counter) {
 }
 
 void TDataShardLocksDb::PersistRemoveLock(ui64 lockId) {
-    for (auto& pr : Self.GetUserTables()) {
-        auto tid = pr.second->LocalTid;
-        // Removing the lock also removes any uncommitted data
-        if (DB.HasOpenTx(tid, lockId)) {
-            DB.RemoveTx(tid, lockId);
+    // We remove lock changes unless it's managed by volatile tx manager
+    if (!Self.GetVolatileTxManager().FindByCommitTxId(lockId)) {
+        for (auto& pr : Self.GetUserTables()) {
+            auto tid = pr.second->LocalTid;
+            // Removing the lock also removes any uncommitted data
+            if (DB.HasOpenTx(tid, lockId)) {
+                DB.RemoveTx(tid, lockId);
+            }
         }
     }
 

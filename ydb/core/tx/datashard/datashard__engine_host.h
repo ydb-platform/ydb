@@ -99,6 +99,7 @@ public:
 
     void SetWriteVersion(TRowVersion writeVersion);
     void SetReadVersion(TRowVersion readVersion);
+    void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
     void SetIsRepeatableSnapshot();
 
@@ -106,6 +107,9 @@ public:
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
+
+    TVector<ui64> GetVolatileCommitTxIds() const;
+    TVector<ui64> GetVolatileDependencies() const;
 
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }

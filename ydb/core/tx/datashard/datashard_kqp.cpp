@@ -660,7 +660,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
 bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
 
-    if (kqpTx.HasLocks() && !NeedValidateLocks(kqpTx.GetLocks().GetOp())) {
+    if (!kqpTx.HasLocks() || !NeedValidateLocks(kqpTx.GetLocks().GetOp())) {
         return true;
     }
 
@@ -724,6 +724,132 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
                     }
                 }
             }
+        }
+    }
+
+    return true;
+}
+
+bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
+    auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
+
+    if (!kqpTx.HasLocks() || !NeedValidateLocks(kqpTx.GetLocks().GetOp())) {
+        return true;
+    }
+
+    // Volatile transactions cannot work with non-generic readsets
+    YQL_ENSURE(kqpTx.GetUseGenericReadSets());
+
+    // We may have some stale data since before the restart
+    tx->OutReadSets().clear();
+    tx->AwaitingDecisions().clear();
+
+    // Note: usually all shards send locks, since they either have side effects or need to validate locks
+    // However it is technically possible to have pure-read shards, that don't contribute to the final decision
+    bool sendLocks = SendLocks(kqpTx.GetLocks(), origin);
+    if (sendLocks) {
+        // Note: it is possible to have no locks
+        auto brokenLocks = ValidateLocks(kqpTx.GetLocks(), sysLocks, origin);
+
+        if (!brokenLocks.empty()) {
+            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+                NKikimrTxDataShard::TX_KIND_DATA,
+                origin,
+                tx->GetTxId(),
+                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+
+            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
+            for (auto& brokenLock : brokenLocks) {
+                protoLocks->Add()->Swap(&brokenLock);
+            }
+
+            return false;
+        }
+
+        // We need to form decision readsets for all other participants
+        for (ui64 dstTabletId : kqpTx.GetLocks().GetReceivingShards()) {
+            if (dstTabletId == origin) {
+                // Don't send readsets to ourselves
+                continue;
+            }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from "
+                << origin << " to " << dstTabletId);
+
+            auto key = std::make_pair(origin, dstTabletId);
+            NKikimrTx::TReadSetData data;
+            data.SetDecision(NKikimrTx::TReadSetData::DECISION_COMMIT);
+
+            TString bodyStr;
+            bool ok = data.SerializeToString(&bodyStr);
+            Y_VERIFY(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
+
+            tx->OutReadSets()[key] = std::move(bodyStr);
+        }
+    }
+
+    bool receiveLocks = ReceiveLocks(kqpTx.GetLocks(), origin);
+    if (receiveLocks) {
+        // Note: usually only shards with side-effects receive locks, since they
+        //       need the final outcome to decide whether to commit or abort.
+        for (ui64 srcTabletId : kqpTx.GetLocks().GetSendingShards()) {
+            if (srcTabletId == origin) {
+                // Don't await decision from ourselves
+                continue;
+            }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Will wait for volatile decision from "
+                << srcTabletId << " to " << origin);
+
+            tx->AwaitingDecisions().insert(srcTabletId);
+        }
+
+        bool aborted = false;
+
+        for (auto& record : tx->DelayedInReadSets()) {
+            ui64 srcTabletId = record.GetTabletSource();
+            ui64 dstTabletId = record.GetTabletDest();
+            if (!tx->AwaitingDecisions().contains(srcTabletId) || dstTabletId != origin) {
+                // Don't process unexpected readsets
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from "
+                    << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId() << " at tablet " << origin);
+                continue;
+            }
+
+            if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
+                // No readset data: participant aborted the transaction
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed no data readset from"
+                    << srcTabletId << " to " << dstTabletId << " will abort txId# " << tx->GetTxId());
+                aborted = true;
+                break;
+            }
+
+            NKikimrTx::TReadSetData data;
+            bool ok = data.ParseFromString(record.GetReadSet());
+            Y_VERIFY(ok, "Failed to parse readset from %" PRIu64 " to %" PRIu64, srcTabletId, dstTabletId);
+
+            if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
+                // Explicit decision that is not a commit, need to abort
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed decision "
+                    << ui32(data.GetDecision()) << " from " << srcTabletId << " to " << dstTabletId
+                    << " for txId# " << tx->GetTxId());
+                aborted = true;
+                break;
+            }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed commit decision from "
+                << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId());
+            tx->AwaitingDecisions().erase(srcTabletId);
+        }
+
+        if (aborted) {
+            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+                NKikimrTxDataShard::TX_KIND_DATA,
+                origin,
+                tx->GetTxId(),
+                NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED);
+
+            return false;
         }
     }
 

@@ -44,6 +44,7 @@ public:
     FEATURE_FLAG_SETTER(EnableKqpImmediateEffects)
     FEATURE_FLAG_SETTER(EnableDataShardGenericReadSets)
     FEATURE_FLAG_SETTER(EnableAlterDatabaseCreateHiveFirst)
+    FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

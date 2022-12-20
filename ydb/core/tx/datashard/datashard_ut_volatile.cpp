@@ -33,23 +33,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
 
-        auto forceVolatile = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();
-                    auto flags = msg->Record.GetFlags();
-                    if (!(flags & TTxFlags::Immediate)) {
-                        Cerr << "... forcing propose to use volatile prepare" << Endl;
-                        flags |= TTxFlags::VolatilePrepare;
-                        msg->Record.SetFlags(flags);
-                    }
-                    break;
-                }
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(forceVolatile);
-
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
         Cerr << "!!! distributed write start" << Endl;
@@ -59,8 +43,24 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         )");
         Cerr << "!!! distributed write end" << Endl;
 
-        runtime.SetObserverFunc(prevObserverFunc);
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
 
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+        RebootTablet(runtime, shards1.at(0), sender);
+
+        // We should see same results after restart
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/table-1`

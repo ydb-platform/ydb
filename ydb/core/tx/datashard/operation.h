@@ -14,6 +14,7 @@
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/tx/tx_processing.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/flat_hash/flat_hash.h>
 
 #include <util/generic/hash.h>
@@ -419,6 +420,7 @@ struct TInputOpData {
     using TSnapshots = TVector<TIntrusivePtr<TTableSnapshotContext>>;
     using TInReadSets = TMap<std::pair<ui64, ui64>, TVector<TRSData>>;
     using TCoverageBuilders = TMap<std::pair<ui64, ui64>, std::shared_ptr<TBalanceCoverageBuilder>>;
+    using TAwaitingDecisions = absl::flat_hash_set<ui64>;
 
     TInputOpData()
         : RemainReadSets(0)
@@ -435,6 +437,7 @@ struct TInputOpData {
     ui32 RemainReadSets;
     TAutoPtr<IDestructable> ScanResult;
     TAutoPtr<IDestructable> AsyncJobResult;
+    TAwaitingDecisions AwaitingDecisions;
 };
 
 struct TOutputOpData {
@@ -589,6 +592,8 @@ public:
     TAutoPtr<IDestructable> &AsyncJobResult() { return InputDataRef().AsyncJobResult; }
     void SetAsyncJobResult(TAutoPtr<IDestructable> prod) { InputDataRef().AsyncJobResult = prod; }
     bool HasAsyncJobResult() const { return InputData ? (bool)InputData->AsyncJobResult : false; }
+
+    TInputOpData::TAwaitingDecisions &AwaitingDecisions() { return InputDataRef().AwaitingDecisions; }
 
     ////////////////////////////////////////
     //            OUTPUT DATA             //

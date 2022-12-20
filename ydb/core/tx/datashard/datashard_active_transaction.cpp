@@ -761,6 +761,25 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             }
             plan.push_back(EExecutionUnitKind::FinishPropose);
             plan.push_back(EExecutionUnitKind::CompletedOperations);
+        } else if (HasVolatilePrepareFlag()) {
+            Y_VERIFY(!loaded);
+            plan.push_back(EExecutionUnitKind::CheckDataTx);
+            plan.push_back(EExecutionUnitKind::StoreDataTx); // note: stores in memory
+            plan.push_back(EExecutionUnitKind::FinishPropose);
+            Y_VERIFY(!GetStep());
+            plan.push_back(EExecutionUnitKind::WaitForPlan);
+            plan.push_back(EExecutionUnitKind::PlanQueue);
+            plan.push_back(EExecutionUnitKind::LoadTxDetails); // note: reloads from memory
+            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+            Y_VERIFY(IsKqpDataTransaction());
+            // Note: execute will also prepare and send readsets
+            plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
+            // Note: it is important that plan here is the same as regular
+            // distributed tx, since normal tx may decide to commit in a
+            // volatile manner with dependencies, to avoid waiting for
+            // locked keys to resolve.
+            plan.push_back(EExecutionUnitKind::CompleteOperation);
+            plan.push_back(EExecutionUnitKind::CompletedOperations);
         } else {
             if (!loaded) {
                 plan.push_back(EExecutionUnitKind::CheckDataTx);

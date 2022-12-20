@@ -759,6 +759,7 @@ message TFeatureFlags {
     optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
+    optional bool EnableDataShardVolatileTransactions = 85 [default = false];
 }
 
 

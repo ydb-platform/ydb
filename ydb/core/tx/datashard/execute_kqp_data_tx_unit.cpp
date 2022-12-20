@@ -166,7 +166,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
         }
 
-        if (!KqpValidateLocks(tabletId, tx, DataShard.SysLocksTable())) {
+        const bool validated = op->HasVolatilePrepareFlag()
+            ? KqpValidateVolatileTx(tabletId, tx, DataShard.SysLocksTable())
+            : KqpValidateLocks(tabletId, tx, DataShard.SysLocksTable());
+
+        if (!validated) {
             KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
             DataShard.SysLocksTable().ApplyLocks();
             DataShard.SubscribeNewLocks(ctx);
@@ -198,6 +202,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
         dataTx->SetReadVersion(readVersion);
         dataTx->SetWriteVersion(writeVersion);
+
+        if (op->HasVolatilePrepareFlag()) {
+            dataTx->SetVolatileTxId(tx->GetTxId());
+        }
 
         KqpCommitLocks(tabletId, tx, writeVersion, DataShard, txc);
 
@@ -272,15 +280,33 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             DataShard.SysLocksTable().BreakSetLocks();
         }
 
+        // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
+        // Such transactions would have no participants and become immediately committed
+        auto commitTxIds = dataTx->GetVolatileCommitTxIds();
+        if (commitTxIds) {
+            TVector<ui64> participants(tx->AwaitingDecisions().begin(), tx->AwaitingDecisions().end());
+            DataShard.GetVolatileTxManager().PersistAddVolatileTx(
+                tx->GetTxId(),
+                writeVersion,
+                commitTxIds,
+                dataTx->GetVolatileDependencies(),
+                participants,
+                txc);
+        }
+
+        if (op->HasVolatilePrepareFlag() && !op->OutReadSets().empty()) {
+            DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+        }
+
+        // Note: may erase persistent locks, must be after we persist volatile tx
         AddLocksToResult(op, ctx);
 
-        auto changes = std::move(dataTx->GetCollectedChanges());
-        if (guardLocks.LockTxId) {
-            if (changes) {
-                DataShard.AddLockChangeRecords(guardLocks.LockTxId, std::move(changes));
+        if (auto changes = std::move(dataTx->GetCollectedChanges())) {
+            if (commitTxIds || guardLocks.LockTxId) {
+                DataShard.AddLockChangeRecords(commitTxIds ? tx->GetTxId() : guardLocks.LockTxId, std::move(changes));
+            } else {
+                op->ChangeRecords() = std::move(changes);
             }
-        } else {
-            op->ChangeRecords() = std::move(changes);
         }
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());
@@ -351,12 +377,14 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     DataShard.IncCounter(COUNTER_WAIT_TOTAL_LATENCY_MS, waitTotalLatency.MilliSeconds());
     op->ResetCurrentTimer();
 
-    if (op->IsReadOnly() && !locksDb.HasChanges()) {
+    if (txc.DB.HasChanges()) {
+        op->SetWaitCompletionFlag(true);
+    } else if (op->IsReadOnly()) {
         return EExecutionStatus::Executed;
     }
 
-    if (locksDb.HasChanges()) {
-        op->SetWaitCompletionFlag(true);
+    if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+        return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
     return EExecutionStatus::ExecutedNoMoreRestarts;
@@ -395,7 +423,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
     return EExecutionStatus::Restart;
 }
 
-void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}
+void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
+    if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+        DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
+    }
+}
 
 THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TExecuteKqpDataTxUnit(dataShard, pipeline));

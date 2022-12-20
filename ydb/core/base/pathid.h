@@ -26,6 +26,11 @@ struct TPathId {
     {
     }
 
+    template<typename H>
+    friend H AbslHashValue(H h, const TPathId& pathId) {
+        return H::combine(std::move(h), pathId.OwnerId, pathId.LocalPathId);
+    }
+
     ui64 Hash() const;
     TString ToString() const;
     void Out(IOutputStream& o) const;

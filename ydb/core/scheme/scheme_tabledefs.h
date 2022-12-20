@@ -89,6 +89,11 @@ struct TTableId {
         return !operator==(x);
     }
 
+    template<typename H>
+    friend H AbslHashValue(H h, const TTableId& tableId) {
+        return H::combine(std::move(h), tableId.PathId, tableId.SysViewInfo, tableId.SchemaVersion);
+    }
+
     ui64 Hash() const noexcept {
         auto hash = PathId.Hash();
         if (SysViewInfo) {

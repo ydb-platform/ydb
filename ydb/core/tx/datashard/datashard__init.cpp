@@ -171,6 +171,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::Locks);
         PRECHARGE_SYS_TABLE(Schema::LockRanges);
         PRECHARGE_SYS_TABLE(Schema::LockConflicts);
+        PRECHARGE_SYS_TABLE(Schema::TxVolatileDetails);
+        PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
 
         if (!ready)
             return false;
@@ -510,6 +512,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
         TDataShardLocksDb locksDb(*Self, txc);
         if (!Self->SysLocks.Load(locksDb)) {
+            return false;
+        }
+    }
+
+    if (Self->State != TShardState::Offline) {
+        if (!Self->VolatileTxManager.Load(db)) {
             return false;
         }
     }

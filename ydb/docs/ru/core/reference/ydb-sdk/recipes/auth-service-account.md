@@ -94,4 +94,17 @@
   }
   ```
 
+- Node.js
+  
+  ### Загрузка данных сервисного аккаунта из файла
+
+  {% include [service-account-file](../../../../_includes/nodejs/recipes/auth/service-account-file.md) %}
+
+  ### Загрузка данных сервисного аккаунта из стороннего источника
+
+  В случае, когда необходимо подгрузить данные сервисного аккаунта извне, например, из хранилища секретов, подходит данный способ:
+
+  {% include [service-account-data](../../../../_includes/nodejs/recipes/auth/service-account-data.md) %}
+
+
 {% endlist %}

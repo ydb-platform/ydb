@@ -255,13 +255,13 @@ std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, T
         auto rightLabel = keyTuple.RightLabel().Value();
 
         auto leftKey = Build<TCoAtom>(ctx, join.Pos())
-            .Value(join.LeftLabel().Maybe<TCoAtom>()
+            .Value(join.LeftLabel().Maybe<TCoAtom>() || keyTuple.LeftColumn().Value().starts_with("_yql_dq_key_left_")
                 ? keyTuple.LeftColumn().StringValue()
                 : FullColumnName(leftLabel, keyTuple.LeftColumn().Value()))
             .Done();
 
         auto rightKey = Build<TCoAtom>(ctx, join.Pos())
-            .Value(join.RightLabel().Maybe<TCoAtom>()
+            .Value(join.RightLabel().Maybe<TCoAtom>() || keyTuple.RightColumn().Value().starts_with("_yql_dq_key_right_")
                 ? keyTuple.RightColumn().StringValue()
                 : FullColumnName(rightLabel, keyTuple.RightColumn().Value()))
             .Done();
@@ -1054,6 +1054,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     for (ui32 i = 0U; i < rightJoinKeys.size() && !badKey; ++i) {
         const auto keyType1 = leftStructType->FindItemType(leftJoinKeys[i]);
         const auto keyType2 = rightStructType->FindItemType(rightJoinKeys[i]);
+        YQL_ENSURE(keyType1 && keyType2, "Missed key column.");
         const TTypeAnnotationNode* commonType = nullptr;
         if (leftKind) {
             commonType = JoinDryKeyType(!filter, keyType1, keyType2, ctx);

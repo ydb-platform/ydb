@@ -89,7 +89,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (Request.IsIndexOnly) {
                     r.Status = NKikimrProto::OK;
                     --AnswersRemain;
-                } else if (value) {
+                } else {
                     TReadArg arg{
                         *value,
                         Request.GetHandleClass,
@@ -100,6 +100,24 @@ namespace NKikimr::NBlobDepot {
                         queryIdx,
                         Request.ReaderTabletData};
                     TString error;
+                    auto makeValueChain = [&] {
+                        TStringStream str;
+                        str << '[';
+                        for (int i = 0; i < value->size(); ++i) {
+                            const auto& item = value->at(i);
+                            if (i != 0) {
+                                str << ' ';
+                            }
+                            const auto blobId = LogoBlobIDFromLogoBlobID(item.GetBlobId());
+                            const ui64 subrangeBegin = item.GetSubrangeBegin();
+                            const ui64 subrangeEnd = item.HasSubrangeEnd() ? item.GetSubrangeEnd() : blobId.BlobSize();
+                            str << blobId << '@' << item.GetGroupId() << '{' << subrangeBegin << '-' << (subrangeEnd - 1) << '}';
+                        }
+                        str << ']';
+                        return str.Str();
+                    };
+                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA34, "IssueRead", (VirtualGroupId, Agent.VirtualGroupId),
+                        (Offset, arg.Offset), (Size, arg.Size), (ValueChain, makeValueChain()), (Tag, arg.Tag));
                     const bool success = Agent.IssueRead(arg, error);
                     if (!success) {
                         EndWithError(NKikimrProto::ERROR, std::move(error));
@@ -110,6 +128,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString buffer) override {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA35, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
+                    (Tag, tag), (Status, status), (Buffer.size, status == NKikimrProto::OK ? buffer.size() : 0),
+                    (ErrorReason, status != NKikimrProto::OK ? buffer : ""));
                 auto& resp = Response->Responses[tag];
                 Y_VERIFY(resp.Status == NKikimrProto::UNKNOWN);
                 resp.Status = status;

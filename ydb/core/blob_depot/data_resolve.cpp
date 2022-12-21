@@ -181,10 +181,10 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                if (end && Self->Data->LastLoadedKey && *end <= Self->Data->LastLoadedKey) {
+                if (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey) {
                     // we have everything we need contained in memory, skip this item
                     continue;
-                } else if (Self->Data->LastLoadedKey && (!begin || *begin <= Self->Data->LastLoadedKey)) {
+                } else if (Self->Data->LastLoadedKey && (!begin || *begin <= Self->Data->LastLoadedKey) && !(flags & EScanFlags::REVERSE)) {
                     // we can scan only some part from memory -- do it
                     auto callback = [&](const TKey& key, const TValue&) {
                         LastScannedKey = key;

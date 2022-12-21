@@ -2,6 +2,17 @@
 
 namespace NKikimr::NBlobDepot {
 
+    TRequestInFlight::TRequestInFlight(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,
+            TCancelCallback cancelCallback, bool toBlobDepotTablet)
+        : Id(id)
+        , Sender(sender)
+        , Context(std::move(context))
+        , CancelCallback(std::move(cancelCallback))
+        , ToBlobDepotTablet(toBlobDepotTablet)
+    {
+        Sender->RegisterRequestInFlight(this);
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TRequestSender class
 
@@ -10,37 +21,28 @@ namespace NKikimr::NBlobDepot {
     {}
 
     TRequestSender::~TRequestSender() {
-        if (this != &Agent) {
-            for (const auto& [id, context] : RequestsInFlight) {
-                const ui64 id_ = id;
-                auto tryToProcess = [&](auto& map) {
-                    if (const auto it = map.find(id_); it != map.end()) {
-                        TBlobDepotAgent::TRequestInFlight& request = it->second;
-                        if (request.CancelCallback) {
-                            request.CancelCallback();
-                        }
-                        map.erase(it);
-                        return true;
-                    } else {
-                        return false;
-                    }
-                };
-                tryToProcess(Agent.TabletRequestInFlight) || tryToProcess(Agent.OtherRequestInFlight);
+        ClearRequestsInFlight();
+    }
+
+    void TRequestSender::ClearRequestsInFlight() {
+        RequestsInFlight.ForEach([this](TRequestInFlight *requestInFlight) {
+            auto& map = requestInFlight->ToBlobDepotTablet ? Agent.TabletRequestInFlight : Agent.OtherRequestInFlight;
+            auto node = map.extract(requestInFlight->Id);
+            Y_VERIFY(node);
+
+            if (requestInFlight->CancelCallback) {
+                requestInFlight->CancelCallback();
             }
-        }
+        });
     }
 
-    void TRequestSender::RegisterRequest(ui64 id, TRequestContext::TPtr context) {
-        const auto [_, inserted] = RequestsInFlight.emplace(id, std::move(context));
-        Y_VERIFY(inserted);
+    void TRequestSender::OnRequestComplete(TRequestInFlight& requestInFlight, TResponse response) {
+        requestInFlight.Unlink();
+        ProcessResponse(requestInFlight.Id, std::move(requestInFlight.Context), std::move(response));
     }
 
-    void TRequestSender::OnRequestComplete(ui64 id, TResponse response) {
-        const auto it = RequestsInFlight.find(id);
-        Y_VERIFY(it != RequestsInFlight.end());
-        TRequestContext::TPtr context = std::move(it->second);
-        RequestsInFlight.erase(it);
-        ProcessResponse(id, std::move(context), std::move(response));
+    void TRequestSender::RegisterRequestInFlight(TRequestInFlight *requestInFlight) {
+        RequestsInFlight.PushBack(requestInFlight);
     }
 
     TString TRequestSender::ToString(const TResponse& response) {
@@ -63,9 +65,9 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,
             TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet) {
         TRequestsInFlight& map = toBlobDepotTablet ? TabletRequestInFlight : OtherRequestInFlight;
-        const auto [_, inserted] = map.emplace(id, TRequestInFlight{sender, std::move(cancelCallback)});
+        const bool inserted = map.emplace(id, sender, std::move(context), std::move(cancelCallback),
+            toBlobDepotTablet).second;
         Y_VERIFY(inserted);
-        sender->RegisterRequest(id, std::move(context));
     }
 
     template<typename TEvent>
@@ -94,10 +96,9 @@ namespace NKikimr::NBlobDepot {
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
 
     void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map) {
-        if (const auto it = map.find(id); it != map.end()) {
-            TRequestInFlight request = std::move(it->second);
-            map.erase(it);
-            request.Sender->OnRequestComplete(id, std::move(response));
+        if (auto node = map.extract(id)) {
+            auto& requestInFlight = node.value();
+            requestInFlight.Sender->OnRequestComplete(requestInFlight, std::move(response));
         }
     }
 

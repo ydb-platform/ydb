@@ -21,8 +21,9 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    TBlobDepotAgent::~TBlobDepotAgent()
-    {}
+    TBlobDepotAgent::~TBlobDepotAgent() {
+        TRequestSender::ClearRequestsInFlight();
+    }
 
     void TBlobDepotAgent::Bootstrap() {
         Become(&TThis::StateFunc);

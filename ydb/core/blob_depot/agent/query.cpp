@@ -152,6 +152,7 @@ namespace NKikimr::NBlobDepot {
         Destroyed = true;
         Agent.ExecutingQueries.Remove(this);
         Agent.DeletePendingQueries.PushBack(this);
+        TRequestSender::ClearRequestsInFlight();
     }
 
     TString TBlobDepotAgent::TQuery::GetQueryId() const {

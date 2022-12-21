@@ -38,8 +38,38 @@ namespace NKikimr::NBlobDepot {
         std::optional<TString> ErrorReason;
     };
 
+    class TRequestSender;
+
+    struct TRequestInFlight
+        : TIntrusiveListItem<TRequestInFlight>
+        , TNonCopyable
+    {
+        using TCancelCallback = std::function<void()>;
+
+        const ui64 Id;
+        TRequestSender* const Sender = {};
+        TRequestContext::TPtr Context;
+        TCancelCallback CancelCallback;
+        const bool ToBlobDepotTablet = {};
+
+        TRequestInFlight(ui64 id)
+            : Id(id)
+        {}
+
+        TRequestInFlight(ui64 id, TRequestSender *sender, TRequestContext::TPtr context, TCancelCallback cancelCallback,
+                bool toBlobDepotTablet);
+
+        struct THash {
+            size_t operator ()(const TRequestInFlight& x) const { return std::hash<ui64>()(x.Id); }
+        };
+
+        friend bool operator ==(const TRequestInFlight& x, const TRequestInFlight& y) {
+            return x.Id == y.Id;
+        }
+    };
+
     class TRequestSender {
-        THashMap<ui64, TRequestContext::TPtr> RequestsInFlight;
+        TIntrusiveList<TRequestInFlight> RequestsInFlight;
 
     protected:
         TBlobDepotAgent& Agent;
@@ -69,11 +99,15 @@ namespace NKikimr::NBlobDepot {
     public:
         TRequestSender(TBlobDepotAgent& agent);
         virtual ~TRequestSender();
-        void RegisterRequest(ui64 id, TRequestContext::TPtr context);
-        void OnRequestComplete(ui64 id, TResponse response);
+        void ClearRequestsInFlight();
+        void OnRequestComplete(TRequestInFlight& requestInFlight, TResponse response);
 
     protected:
         virtual void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) = 0;
+
+    private:
+        friend struct TRequestInFlight;
+        void RegisterRequestInFlight(TRequestInFlight *requestInFlight);
     };
 
     class TBlobDepotAgent
@@ -167,14 +201,7 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Request/response delivery logic
 
-        struct TRequestInFlight {
-            using TCancelCallback = std::function<void()>;
-
-            TRequestSender *Sender;
-            TCancelCallback CancelCallback;
-        };
-
-        using TRequestsInFlight = THashMap<ui64, TRequestInFlight>;
+        using TRequestsInFlight = std::unordered_set<TRequestInFlight, TRequestInFlight::THash>;
 
         ui64 NextTabletRequestId = 1;
         TRequestsInFlight TabletRequestInFlight;

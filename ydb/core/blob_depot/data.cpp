@@ -265,6 +265,12 @@ namespace NKikimr::NBlobDepot {
         return it->second;
     }
 
+    TData::TRecordsPerChannelGroup& TData::GetRecordsPerChannelGroup(ui8 channel, ui32 groupId) {
+        const auto it = RecordsPerChannelGroup.find(std::make_tuple(channel, groupId));
+        Y_VERIFY(it != RecordsPerChannelGroup.end());
+        return it->second;
+    }
+
     void TData::AddDataOnLoad(TKey key, TString value, bool uncertainWrite) {
         NKikimrBlobDepot::TValue proto;
         const bool success = proto.ParseFromString(value);

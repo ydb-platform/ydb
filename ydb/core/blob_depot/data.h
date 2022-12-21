@@ -382,8 +382,12 @@ namespace NKikimr::NBlobDepot {
         std::deque<TKey> KeysMadeCertain; // but not yet committed
         bool CommitCertainKeysScheduled = false;
 
+        struct TCollectCmd {
+            ui64 QueryId;
+            ui32 GroupId;
+        };
         ui64 LastCollectCmdId = 0;
-        std::unordered_map<ui64, ui32> CollectCmdToGroup;
+        std::unordered_map<ui64, TCollectCmd> CollectCmds;
 
     public:
         TData(TBlobDepot *self);
@@ -443,6 +447,7 @@ namespace NKikimr::NBlobDepot {
         void HandleCommitCertainKeys();
 
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
+        TRecordsPerChannelGroup& GetRecordsPerChannelGroup(ui8 channel, ui32 groupId);
 
         void AddDataOnLoad(TKey key, TString value, bool uncertainWrite);
         void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,

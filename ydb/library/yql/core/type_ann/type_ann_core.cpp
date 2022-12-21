@@ -7701,7 +7701,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 4, ctx.Expr)) {
+        if (!EnsureMinMaxArgsCount(*input, 2, 5, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7746,9 +7746,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TExprNode::TPtr typeConfig;
-        if (input->ChildrenSize() == 4) {
-            typeConfig = input->TailPtr();
+        if (input->ChildrenSize() > 3) {
+            typeConfig = input->Child(3);
             if (!EnsureAtom(*typeConfig, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        
+        TExprNode::TPtr runConfig;
+        if (input->ChildrenSize() > 4) {
+            runConfig = input->Child(4);
+            if (!EnsureComputable(*runConfig, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -7756,7 +7764,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TPtr udf = ctx.Expr.Builder(input->Pos())
             .Callable("Udf")
                 .Add(0, udfName)
-                .Callable(1, "Void").Seal()
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    if (runConfig) {
+                        parent
+                            .Add(1, runConfig)
+                            .Seal();
+                    } else {
+                        parent
+                            .Callable(1, "Void")
+                            .Seal();
+                    }
+                    return parent;
+                })
                 .Callable(2, "TupleType")
                     .Callable(0, "TupleType")
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {

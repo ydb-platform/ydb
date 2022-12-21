@@ -33,7 +33,7 @@ extern const char SubqueryUnionMergeFor[] = "SubqueryUnionMergeFor";
 extern const char SubqueryOrderBy[] = "SubqueryOrderBy";
 extern const char SubqueryAssumeOrderBy[] = "SubqueryAssumeOrderBy";
 
-TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfArgs) {
+TNodePtr MakeTypeConfig(const TPosition& pos, const TString& ns, const TVector<TNodePtr>& udfArgs) {
     if (ns == "clickhouse") {
         auto settings = NYT::TNode::CreateMap();
         auto args = NYT::TNode::CreateMap();
@@ -46,10 +46,10 @@ TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfAr
         }
 
         settings["args"] = args;
-        return NYT::NodeToYsonString(settings);
+        return (TDeferredAtom(pos, NYT::NodeToYsonString(settings))).Build();
     }
 
-    return Nothing();
+    return nullptr;
 }
 
 void AdjustCheckedAggFuncName(TString& aggNormalizedName, TContext& ctx) {
@@ -2192,7 +2192,7 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
 }
 
 TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TMaybe<TString> typeConfig) {
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TNodePtr typeConfig) {
     if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
@@ -2206,14 +2206,14 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     }
 
     if (typeConfig) {
-        udfArgs.push_back(BuildQuotedAtom(pos, *typeConfig));
+        udfArgs.push_back(typeConfig);
     }
 
     return udfArgs;
 }
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TMaybe<TString> typeConfig)
+    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig)
 {
     const TString fullName = module + "." + name;
     TNodePtr callable;
@@ -2245,12 +2245,18 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     // optional arguments
     if (customUserType) {
         sqlCallArgs.push_back(customUserType);
-    } else if (typeConfig) {
+    } else if (!typeConfig.Empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
 
-    if (typeConfig) {
-        sqlCallArgs.push_back(BuildQuotedAtom(pos, *typeConfig));
+    if (!typeConfig.Empty()) {
+        sqlCallArgs.push_back(typeConfig.Build());
+    } else if (runConfig) {
+        sqlCallArgs.push_back(BuildQuotedAtom(pos, ""));
+    }
+
+    if (runConfig) {
+        sqlCallArgs.push_back(runConfig);
     }
 
     return new TCallNodeImpl(pos, "SqlCall", sqlCallArgs);
@@ -2312,13 +2318,13 @@ public:
             if ("Datetime" == Module || ("Yson" == Module && ctx.PragmaYsonFast))
                 Module.append('2');
 
-            TMaybe<TString> typeConfig = MakeTypeConfig(to_lower(Module), Args);
+            TNodePtr typeConfig = MakeTypeConfig(Pos, to_lower(Module), Args);
             if (ForReduce) {
                 TVector<TNodePtr> udfArgs;
                 udfArgs.push_back(BuildQuotedAtom(Pos, TString(Module) + "." + Name));
                 udfArgs.push_back(customUserType ? customUserType : new TCallNodeImpl(Pos, "TupleType", {}));
                 if (typeConfig) {
-                    udfArgs.push_back(BuildQuotedAtom(Pos, *typeConfig));
+                    udfArgs.push_back(typeConfig);
                 }
                 Node = new TCallNodeImpl(Pos, "SqlReduceUdf", udfArgs);
             } else {
@@ -3514,6 +3520,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
             return (*builtinCallback).second(pos, args);
+        } else if (normalizedName == "udf") {
+            if (mustUseNamed && *mustUseNamed) {
+                *mustUseNamed = false;
+            }
+            return new TUdfNode(pos, args);
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
                 return new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args);
@@ -3648,8 +3659,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         };
     }
 
-    TMaybe<TString> typeConfig = MakeTypeConfig(ns, usedArgs);
-    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType, typeConfig);
+    TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
+    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType, TDeferredAtom(typeConfig, ctx), nullptr);
 }
 
 } // namespace NSQLTranslationV1

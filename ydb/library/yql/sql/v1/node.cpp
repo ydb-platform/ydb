@@ -2980,6 +2980,10 @@ public:
         return copy;
     }
 
+    const TVector<TIdPart>& GetParts() const {
+        return Ids;
+    }
+    
 protected:
     void DoUpdateState() const override {
         YQL_ENSURE(Node);
@@ -3322,6 +3326,107 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a) {
     }
     return new TCallNodeImpl(pos, "Not", {new TCallNodeImpl(pos, "Exists", {a})});
 }
+
+
+
+TUdfNode::TUdfNode(TPosition pos, const TVector<TNodePtr>& args)
+    : INode(pos)
+    , Args(args)
+{
+    if (Args.size()) {
+        // If there aren't any named args, args are passed as vector of positional args,
+        // else Args has length 2: tuple for positional args and struct for named args,
+        // so let's construct tuple of args there. Other type checks will within DoInit call.
+        if (TTupleNode* as_tuple = dynamic_cast<TTupleNode*>(Args[0].Get()); !as_tuple) {
+            Args = {BuildTuple(pos, args)};
+        }
+    }
+}
+
+bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
+    Y_UNUSED(src);
+    if (Args.size() < 1) {
+        ctx.Error(Pos) << "Udf: expected at least one argument";
+        return false;
+    }
+
+    TTupleNode* as_tuple = dynamic_cast<TTupleNode*>(Args[0].Get());
+    
+    if (!as_tuple || as_tuple->GetTupleSize() < 1) {
+        ctx.Error(Pos) << "Udf: first argument must be a callable, like Foo::Bar";
+        return false;
+    }
+
+    TNodePtr function = as_tuple->GetTupleElement(0);
+
+    if (!function || !function->FuncName()) {
+        ctx.Error(Pos) << "Udf: first argument must be a callable, like Foo::Bar";
+        return false;
+    }
+
+    FunctionName = function->FuncName();
+    ModuleName = function->ModuleName();
+    TVector<TNodePtr> external;
+    external.reserve(as_tuple->GetTupleSize() - 1);
+    
+    for (size_t i = 1; i < as_tuple->GetTupleSize(); ++i) {
+        // TODO(): support named args in GetFunctionArgColumnStatus
+        TNodePtr current = as_tuple->GetTupleElement(i);
+        if (TAccessNode* as_access = dynamic_cast<TAccessNode*>(current.Get()); as_access) {
+            external.push_back(Y("DataType", Q(as_access->GetParts()[1].Name)));
+            continue;
+        }
+        external.push_back(current);
+    }
+
+    ExternalTypesTuple = new TCallNodeImpl(Pos, "TupleType", external);
+    
+    if (Args.size() == 1) {
+        return true;
+    }
+
+    if (TStructNode* named_args = dynamic_cast<TStructNode*>(Args[1].Get()); named_args) {
+        for (const auto &arg: named_args->GetExprs()) {
+            if (arg->GetLabel() == "TypeConfig") {
+                TypeConfig = MakeAtomFromExpression(ctx, arg);
+            } else if (arg->GetLabel() == "RunConfig") {
+                RunConfig = arg;
+            }
+        }
+    }
+
+    return true;
+}
+
+const TNodePtr TUdfNode::GetExternalTypes() const {
+    return ExternalTypesTuple;
+}
+
+const TString& TUdfNode::GetFunction() const {
+    return *FunctionName;
+}
+
+const TString& TUdfNode::GetModule() const {
+    return *ModuleName;
+}
+
+TNodePtr TUdfNode::GetRunConfig() const {
+    return RunConfig;
+}
+
+const TDeferredAtom& TUdfNode::GetTypeConfig() const {
+    return TypeConfig;
+}
+
+TAstNode* TUdfNode::Translate(TContext& ctx) const {
+    ctx.Error(Pos) << "Abstract Udf Node can't be used as a part of expression.";
+    return nullptr;
+}
+
+TNodePtr TUdfNode::DoClone() const {
+    return new TUdfNode(Pos, CloneContainer(Args));
+}
+
 
 class TBinaryOpNode final: public TCallNode {
 public:

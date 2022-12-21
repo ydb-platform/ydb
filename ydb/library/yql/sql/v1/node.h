@@ -750,6 +750,27 @@ namespace NSQLTranslationV1 {
         const bool Ordered;
     };
 
+    
+    class TUdfNode: public INode {
+    public:
+        TUdfNode(TPosition pos, const TVector<TNodePtr>& args);
+        bool DoInit(TContext& ctx, ISource* src) override final;
+        TNodePtr DoClone() const override final;
+        TAstNode* Translate(TContext& ctx) const override;
+        const TNodePtr GetExternalTypes() const;
+        const TString& GetFunction() const;
+        const TString& GetModule() const;
+        TNodePtr GetRunConfig() const;
+        const TDeferredAtom& GetTypeConfig() const;
+    private:
+        TVector<TNodePtr> Args;
+        const TString* FunctionName;
+        const TString* ModuleName;
+        TNodePtr ExternalTypesTuple = nullptr;
+        TNodePtr RunConfig;
+        TDeferredAtom TypeConfig;
+    };
+
     class IAggregation: public INode {
     public:
         bool IsDistinct() const;

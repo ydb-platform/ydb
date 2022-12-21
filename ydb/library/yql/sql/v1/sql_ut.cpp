@@ -1533,6 +1533,69 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(programm.find(expected) != TString::npos);
     }
 
+    Y_UNIT_TEST(UdfSyntaxSugarOnlyCallable) {
+        auto req = "SELECT Udf(DateTime::FromString)('2022-01-01');";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType)))";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarTypeNoRun) {
+        auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, 'foo' as TypeConfig)('2022-01-01');";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"foo\")";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarRunNoType) {
+        auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, Void() as RunConfig)('2022-01-01');";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"\" (Void))";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+    
+    Y_UNIT_TEST(UdfSyntaxSugarFullTest) {
+        auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, 'foo' as TypeConfig, Void() As RunConfig)('2022-01-01');";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"foo\" (Void))";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs) {
+        auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, 'foo' as TypeConfig, '55' As RunConfig)('2022-01-01');";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"foo\" (String '\"55\"))";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs2) {
+        auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, 'foo' as TypeConfig, AsTuple(32, 'no', AsStruct(1e-9 As SomeFloat)) As RunConfig)('2022-01-01');";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarOptional) {
+        auto req = "SELECT Udf(DateTime::FromString, String?, Int32??, Tuple<Int32, Float>, \"foo\" as TypeConfig, Void() As RunConfig)(\"2022-01-01\");";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        const auto programm = GetPrettyPrint(res);
+        auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"foo\" (Void))";
+        UNIT_ASSERT(programm.find(expected) != TString::npos);
+    }
+
     Y_UNIT_TEST(CompactionPolicyParseCorrect) {
         NYql::TAstParseResult res = SqlToYql(
             R"( USE plato;
@@ -1941,7 +2004,31 @@ Y_UNIT_TEST_SUITE(ExternalFunction) {
     }
 }
 
-Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
+Y_UNIT_TEST_SUITE(SqlToYQLErrors) {    
+    Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
+        auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
+        auto res = SqlToYql(req);
+        TString a1 = Err2Str(res);
+        TString a2("<main>:1:8: Error: Abstract Udf Node can't be used as a part of expression.\n");
+        UNIT_ASSERT_NO_DIFF(a1, a2);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarIsNotCallable) {
+        auto req = "SELECT Udf(123, \"foo\" as RunConfig);";
+        auto res = SqlToYql(req);
+        TString a1 = Err2Str(res);
+        TString a2("<main>:1:8: Error: Udf: first argument must be a callable, like Foo::Bar\n");
+        UNIT_ASSERT_NO_DIFF(a1, a2);
+    }
+
+    Y_UNIT_TEST(UdfSyntaxSugarNoArgs) {
+        auto req = "SELECT Udf()();";
+        auto res = SqlToYql(req);
+        TString a1 = Err2Str(res);
+        TString a2("<main>:1:8: Error: Udf: expected at least one argument\n");
+        UNIT_ASSERT_NO_DIFF(a1, a2);
+    }
+
     Y_UNIT_TEST(StrayUTF8) {
         /// 'c' in plato is russian here
         NYql::TAstParseResult res = SqlToYql("select * from сedar.Input");

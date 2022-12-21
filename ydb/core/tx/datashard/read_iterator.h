@@ -64,9 +64,10 @@ struct TReadIteratorState {
     };
 
 public:
-    TReadIteratorState(const TActorId& sessionId, bool isHeadRead)
+    TReadIteratorState(const TActorId& sessionId, bool isHeadRead, TMonotonic ts)
         : IsHeadRead(isHeadRead)
         , SessionId(sessionId)
+        , StartTs(ts)
     {}
 
     bool IsExhausted() const { return State == EState::Exhausted; }
@@ -189,6 +190,8 @@ public:
     TQuota AckedReads;
 
     TActorId SessionId;
+    TMonotonic StartTs;
+    bool IsFinished = false;
 
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;

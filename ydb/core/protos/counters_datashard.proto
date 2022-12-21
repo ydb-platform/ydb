@@ -22,6 +22,7 @@ enum ESimpleCounters {
     COUNTER_MVCC_ENABLED = 12                                      [(CounterOpts) = {Name: "MvccEnabled"}];
     COUNTER_CHANGE_QUEUE_SIZE  = 13                                [(CounterOpts) = {Name: "ChangeQueueSize"}];
     COUNTER_READ_ITERATORS_WAITING = 14                            [(CounterOpts) = {Name: "ReadIteratorsWaiting"}];
+    COUNTER_READ_ITERATORS_COUNT = 15                              [(CounterOpts) = {Name: "ReadIteratorsCount"}];
 }
 
 enum ECumulativeCounters {
@@ -115,6 +116,12 @@ enum ECumulativeCounters {
     COUNTER_TX_COMPACT_BORROWED = 87                      [(CounterOpts) = {Name: "TxCompactBorrowed"}];
     COUNTER_CHANGE_RECORDS_ENQUEUED = 88                  [(CounterOpts) = {Name: "ChangeRecordsEnqueued"}];
     COUNTER_CHANGE_RECORDS_REMOVED = 89                   [(CounterOpts) = {Name: "ChangeRecordsRemoved"}];
+    COUNTER_READ_ITERATOR_NO_QUOTA = 90                   [(CounterOpts) = {Name: "ReadIteratorNoQuota"}];
+    COUNTER_READ_ITERATOR_MAX_ROWS_REACHED = 91           [(CounterOpts) = {Name: "ReadIteratorMaxRowsReached"}];
+    COUNTER_READ_ITERATOR_MAX_TIME_REACHED = 92           [(CounterOpts) = {Name: "ReadIteratorMaxTimeReached"}];
+    COUNTER_READ_ITERATOR_ROWS_READ = 93                  [(CounterOpts) = {Name: "ReadIteratorRowsRead"}];
+    COUNTER_READ_ITERATOR_BYTES_READ = 94                 [(CounterOpts) = {Name: "ReadIteratorBytesRead"}];
+    COUNTER_READ_ITERATOR_CANCEL = 95                     [(CounterOpts) = {Name: "ReadIteratorCancel"}];
 }
 
 enum EPercentileCounters {
@@ -339,6 +346,30 @@ enum EPercentileCounters {
         Ranges: { Value: 10000    Name: "10000"},
         Ranges: { Value: 15000    Name: "15000"},
         Ranges: { Value: 30000    Name: "30000"}
+    }];
+
+    COUNTER_READ_ITERATOR_LIFETIME_MS = 18 [(CounterOpts) = {
+        Name: "ReadIteratorLifetimeMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+    }];
+
+    COUNTER_READ_ITERATOR_ITERATION_LATENCY_MS = 19 [(CounterOpts) = {
+        Name: "ReadIteratorIterationLatencyMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
     }];
 }
 

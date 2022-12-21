@@ -1732,7 +1732,6 @@ public:
 
     bool CheckChangesQueueOverflow() const;
 
-    void DeleteReadIterator(const TReadIteratorId& readId);
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);

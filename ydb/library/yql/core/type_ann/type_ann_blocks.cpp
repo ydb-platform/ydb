@@ -76,6 +76,36 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType blockItemTypes;
+    const bool allowChunked = true;
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr, allowChunked)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    bool hasChunked = false;
+    for (auto& flowItemType : flowItemTypes) {
+        if (flowItemType->GetKind() == ETypeAnnotationKind::ChunkedBlock) {
+            hasChunked = true;
+            flowItemType = ctx.Expr.MakeType<TBlockExprType>(flowItemType->Cast<TChunkedBlockExprType>()->GetItemType());
+        }
+    }
+
+    if (!hasChunked) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(flowItemTypes);
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;

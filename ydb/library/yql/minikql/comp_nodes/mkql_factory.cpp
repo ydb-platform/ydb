@@ -281,6 +281,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockXor", &WrapBlockXor},
         {"BlockNot", &WrapBlockNot},
         {"BlockCompress", &WrapBlockCompress},
+        {"BlockExpandChunked", &WrapBlockExpandChunked},
         {"BlockCombineAll", &WrapBlockCombineAll},
         {"BlockCombineHashed", &WrapBlockCombineHashed},
         {"BlockMergeFinalizeHashed", &WrapBlockMergeFinalizeHashed},

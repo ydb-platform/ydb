@@ -268,10 +268,14 @@ public:
         const TStringBuf str = value.AsStringRef();
 
         size_t currentLen = DataBuilder->length();
-        Y_VERIFY(currentLen <= MaxBlockSizeInBytes);
-        if (str.size() > (MaxBlockSizeInBytes - currentLen)) {
-            MKQL_ENSURE(str.size() < std::numeric_limits<typename TStringType::offset_type>::max(), "Too big string for Arrow");
-            FlushChunk(false);
+        // empty string can always be appended
+        if (!str.empty() && currentLen + str.size() > MaxBlockSizeInBytes) {
+            if (currentLen) {
+                FlushChunk(false);
+            }
+            if (str.size() > MaxBlockSizeInBytes) {
+                ARROW_OK(DataBuilder->Reserve(str.size()));
+            }
         }
 
         NullBitmapBuilder->UnsafeAppend(true);

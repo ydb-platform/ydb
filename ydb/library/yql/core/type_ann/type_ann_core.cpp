@@ -11783,8 +11783,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideFromBlocks"] = &WideFromBlocksWrapper;
         Functions["WideSkipBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["WideTakeBlocks"] = &WideSkipTakeBlocksWrapper;
-        Functions["AsScalar"] = &AsScalarWrapper;
         Functions["BlockCompress"] = &BlockCompressWrapper;
+        Functions["BlockExpandChunked"] = &BlockExpandChunkedWrapper;
+
+        Functions["AsScalar"] = &AsScalarWrapper;
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
         Functions["BlockAnd"] = &BlockLogicalWrapper;
         Functions["BlockOr"] = &BlockLogicalWrapper;
@@ -11792,6 +11794,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockNot"] = &BlockLogicalWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
+
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;

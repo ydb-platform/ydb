@@ -247,6 +247,7 @@ public:
     TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode AsScalar(TRuntimeNode value);
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
+    TRuntimeNode BlockExpandChunked(TRuntimeNode flow);
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
 
     //-- logical functions

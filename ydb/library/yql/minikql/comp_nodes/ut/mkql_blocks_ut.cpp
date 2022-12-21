@@ -86,6 +86,104 @@ Y_UNIT_TEST(TestWideToBlocks) {
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
 }
 
+namespace {
+void TestChunked(bool withBlockExpand) {
+    TSetup<false> setup;
+    auto& pb = *setup.PgmBuilder;
+
+    const auto ui64Type   = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto boolType   = pb.NewDataType(NUdf::TDataType<bool>::Id);
+    const auto stringType = pb.NewDataType(NUdf::EDataSlot::String);
+    const auto utf8Type   = pb.NewDataType(NUdf::EDataSlot::Utf8);
+
+    const auto tupleType = pb.NewTupleType({ui64Type, boolType, stringType, utf8Type});
+
+    TVector<TRuntimeNode> items;
+    const size_t bigStrSize = 1024 * 1024 + 100;
+    const size_t smallStrSize = 256 * 1024;
+    for (size_t i = 0; i < 20; ++i) {
+
+        if (i % 2 == 0) {
+            std::string big(bigStrSize, '0' + i);
+            std::string small(smallStrSize, 'A' + i);
+
+            items.push_back(pb.NewTuple(tupleType, { pb.NewDataLiteral<ui64>(i), pb.NewDataLiteral<bool>(true),
+                                                     pb.NewDataLiteral<NUdf::EDataSlot::String>(big),
+                                                     pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(small),
+                                                     }));
+        } else {
+            items.push_back(pb.NewTuple(tupleType, { pb.NewDataLiteral<ui64>(i), pb.NewDataLiteral<bool>(false),
+                                                     pb.NewDataLiteral<NUdf::EDataSlot::String>(""),
+                                                     pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(""),
+                                                     }));
+
+        }
+    }
+
+    const auto list = pb.NewList(tupleType, std::move(items));
+
+    auto node = pb.ToFlow(list);
+    node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)};
+    });
+    node = pb.WideToBlocks(node);
+    if (withBlockExpand) {
+        node = pb.BlockExpandChunked(node);
+        // WideTakeBlocks won't work on chunked blocks
+        node = pb.WideTakeBlocks(node, pb.NewDataLiteral<ui64>(19));
+        node = pb.WideFromBlocks(node);
+    } else {
+        // WideFromBlocks should support chunked blocks
+        node = pb.WideFromBlocks(node);
+        node = pb.Take(node, pb.NewDataLiteral<ui64>(19));
+    }
+    node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+        return pb.NewTuple(tupleType, {items[0], items[1], items[2], items[3]});
+    });
+
+    const auto pgmReturn = pb.ForwardList(node);
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    for (size_t i = 0; i < 19; ++i) {
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT(iterator.Next(item));
+        ui64 num = item.GetElement(0).Get<ui64>();
+        bool bl = item.GetElement(1).Get<bool>();
+        auto strVal = item.GetElement(2);
+        auto utf8Val = item.GetElement(3);
+        std::string_view str = strVal.AsStringRef();
+        std::string_view utf8 = utf8Val.AsStringRef();
+
+        UNIT_ASSERT_VALUES_EQUAL(num, i);
+        UNIT_ASSERT_VALUES_EQUAL(bl, i % 2 == 0);
+        if (i % 2 == 0) {
+            std::string big(bigStrSize, '0' + i);
+            std::string small(smallStrSize, 'A' + i);
+            UNIT_ASSERT_VALUES_EQUAL(str, big);
+            UNIT_ASSERT_VALUES_EQUAL(utf8, small);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(str.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(utf8.size(), 0);
+        }
+    }
+
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+
+}
+
+} // namespace
+
+Y_UNIT_TEST(TestBlockExpandChunked) {
+    TestChunked(true);
+}
+
+Y_UNIT_TEST(TestWideFromBlocksForChunked) {
+    TestChunked(false);
+}
+
 Y_UNIT_TEST(TestScalar) {
     const ui64 testValue = 42;
 

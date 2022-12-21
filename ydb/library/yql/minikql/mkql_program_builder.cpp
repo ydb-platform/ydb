@@ -1513,6 +1513,13 @@ TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode flow, ui32 bitmapIndex)
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode flow) {
+    ValidateBlockFlowType(flow.GetStaticType());
+    TCallableBuilder callableBuilder(Env, __func__, flow.GetStaticType());
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode second) {
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
     auto secondType = AS_TYPE(TBlockType, second.GetStaticType());

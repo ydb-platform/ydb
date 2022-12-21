@@ -91,6 +91,6 @@
 
 - Node.js
 
-  {% include [anonymous](../../../../_includes/nodejs/recipes/auth/anonymous.md) %}
+  {% include [auth-anonymous](../../../../_includes/nodejs/auth-anonymous.md) %}
 
 {% endlist %}

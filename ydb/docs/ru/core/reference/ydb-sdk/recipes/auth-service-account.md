@@ -96,15 +96,12 @@
 
 - Node.js
   
-  ### Загрузка данных сервисного аккаунта из файла
+  Загрузка данных сервисного аккаунта из файла:
 
-  {% include [service-account-file](../../../../_includes/nodejs/recipes/auth/service-account-file.md) %}
+  {% include [auth-sa-file](../../../../_includes/nodejs/auth-sa-file.md) %}
 
-  ### Загрузка данных сервисного аккаунта из стороннего источника
+  Загрузка данных сервисного аккаунта из стороннего источника (например, из хранилища секретов):
 
-  В случае, когда необходимо подгрузить данные сервисного аккаунта извне, например, из хранилища секретов, подходит данный способ:
-
-  {% include [service-account-data](../../../../_includes/nodejs/recipes/auth/service-account-data.md) %}
-
+  {% include [auth-sa-data](../../../../_includes/nodejs/auth-sa-data.md) %}
 
 {% endlist %}

@@ -63,7 +63,6 @@
 
 - Node.js
 
-  {% include [static](../../../../_includes/nodejs/recipes/auth/static.md) %}
-
+  {% include [auth-static](../../../../_includes/nodejs/auth-static.md) %}
 
 {% endlist %}

@@ -123,6 +123,6 @@ Below are examples of the code for authentication using a token in different {{ 
 
 - Node.js
 
-  {% include [access-token](../../../../_includes/nodejs/recipes/auth/access-token.md) %}
+  {% include [auth-access-token](../../../../_includes/nodejs/auth-access-token.md) %}
 
 {% endlist %}

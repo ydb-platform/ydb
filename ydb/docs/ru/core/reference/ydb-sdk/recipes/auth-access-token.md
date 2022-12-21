@@ -118,6 +118,6 @@
 
 - Node.js
 
-  {% include [access-token](../../../../_includes/nodejs/recipes/auth/access-token.md) %}
+  {% include [auth-access-token](../../../../_includes/nodejs/auth-access-token.md) %}
 
 {% endlist %}

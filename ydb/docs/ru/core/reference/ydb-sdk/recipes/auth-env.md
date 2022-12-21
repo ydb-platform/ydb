@@ -99,6 +99,6 @@
 
 - Node.js
 
-  {% include [env](../../../../_includes/nodejs/recipes/auth/env.md) %}
+  {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
 
 {% endlist %}

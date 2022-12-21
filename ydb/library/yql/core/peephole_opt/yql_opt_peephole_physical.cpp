@@ -6562,6 +6562,11 @@ TExprNode::TPtr ExpandCheckedMinus(const TExprNode::TPtr& node, TExprContext& ct
         .Build();
 }
 
+TExprNode::TPtr DropUnordered(const TExprNode::TPtr& node, TExprContext&) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content();
+    return node->HeadPtr();
+}
+
 ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ull); }
 ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
@@ -6711,6 +6716,7 @@ struct TPeepHoleRules {
         {"NarrowMultiMap", &OptimizeWideMaps},
         {"WideMap", &OptimizeWideMaps},
         {"NarrowMap", &OptimizeWideMaps},
+        {"Unordered", &DropUnordered},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {

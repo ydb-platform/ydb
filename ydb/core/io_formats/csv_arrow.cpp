@@ -119,14 +119,22 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     arrow::UInt16Builder aBuilder;
                     Y_VERIFY(aBuilder.Reserve(parsedBatch->num_rows()).ok());
                     for (long i = 0; i < parsedBatch->num_rows(); ++i) {
-                        aBuilder.UnsafeAppend(i64Arr->Value(i) / 86400ull);
+                        if (i64Arr->IsNull(i)) {
+                            Y_VERIFY(aBuilder.AppendNull().ok());
+                        } else {
+                            aBuilder.UnsafeAppend(i64Arr->Value(i) / 86400ull);
+                        }
                     }
                     arrResult = aBuilder.Finish();
                 } else if (originalType->id() == arrow::UInt32Type::type_id) {
                     arrow::UInt32Builder aBuilder;
                     Y_VERIFY(aBuilder.Reserve(parsedBatch->num_rows()).ok());
                     for (long i = 0; i < parsedBatch->num_rows(); ++i) {
-                        aBuilder.UnsafeAppend(i64Arr->Value(i));
+                        if (i64Arr->IsNull(i)) {
+                            Y_VERIFY(aBuilder.AppendNull().ok());
+                        } else {
+                            aBuilder.UnsafeAppend(i64Arr->Value(i));
+                        }
                     }
                     arrResult = aBuilder.Finish();
                 } else {

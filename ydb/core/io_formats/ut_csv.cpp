@@ -79,7 +79,7 @@ TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colum
 Y_UNIT_TEST_SUITE(FormatCSV) {
     Y_UNIT_TEST(Instants) {
         const TString dateTimeString = "2005-08-09T18:31:42";
-        const TString data = "11,12,2013-07-15," + dateTimeString + "," + dateTimeString;
+        const TString data = "11,12,2013-07-15," + dateTimeString + "," + dateTimeString + ",,,";
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
 
         {
@@ -88,7 +88,10 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
                 {"timestamp_int", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
                 {"date", NScheme::TTypeInfo(NScheme::NTypeIds::Date) },
                 {"datetime", NScheme::TTypeInfo(NScheme::NTypeIds::Datetime)},
-                {"timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)}
+                {"timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
+                {"date_null", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
+                {"datetime_null", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
+                {"timestamp_null", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)},
             };
             TInstant dtInstant;
             Y_VERIFY(TInstant::TryParseIso8601(dateTimeString, dtInstant));
@@ -99,6 +102,10 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             Cerr << errorMessage << "\n";
             UNIT_ASSERT(!!batch);
             UNIT_ASSERT(errorMessage.empty());
+
+            auto cDateNull = batch->GetColumnByName("date_null");
+            auto cDatetimeNull = batch->GetColumnByName("datetime_null");
+            auto cTimestampNull = batch->GetColumnByName("timestamp_null");
 
             auto cDatetimeInt = batch->GetColumnByName("datetime_int");
             auto cTimestampInt = batch->GetColumnByName("timestamp_int");
@@ -113,6 +120,18 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             Y_VERIFY(cTimestampInt->type()->id() == arrow::TimestampType::type_id);
             Y_VERIFY(batch->num_rows() == 1);
 
+            {
+                auto& ui16Column = static_cast<arrow::UInt32Array&>(*cDateNull);
+                Y_VERIFY(ui16Column.IsNull(0));
+            }
+            {
+                auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetimeNull);
+                Y_VERIFY(ui32Column.IsNull(0));
+            }
+            {
+                auto& tsColumn = static_cast<arrow::TimestampArray&>(*cTimestampNull);
+                Y_VERIFY(tsColumn.IsNull(0));
+            }
             {
                 auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetimeInt);
                 Y_VERIFY(ui32Column.Value(0) == 11, "%d", ui32Column.Value(0));

@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
         runtime.Register(emulator);
 
         const TInstant start = Now();
-        while (Now() - start < TDuration::Seconds(15) && !emulator->IsInitialized()) {
+        while (Now() - start < TDuration::Seconds(35) && !emulator->IsInitialized()) {
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
         UNIT_ASSERT(emulator->IsInitialized());
@@ -142,6 +142,9 @@ Y_UNIT_TEST_SUITE(Initializer) {
 
         lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/test`");
         lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/test`", false);
+        lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`");
+        lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initialization/migrations`", false);
+        lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initialization/migrations`", false);
     }
 }
 }

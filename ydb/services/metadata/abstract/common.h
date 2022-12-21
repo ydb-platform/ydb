@@ -31,6 +31,12 @@ enum EEvents {
     EvTimeout,
     EvTableDescriptionFailed,
     EvTableDescriptionSuccess,
+    EvAccessorSimpleResult,
+    EvAccessorSimpleError,
+    EvAccessorSimpleTableAbsent,
+    EvPathExistsCheckFailed,
+    EvPathExistsCheckResult,
+    EvStartMetadataService,
     EvEnd
 };
 

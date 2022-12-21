@@ -91,17 +91,12 @@ public:
 };
 
 template <class TDialogPolicy>
-class TYDBRequest: public NActors::TActorBootstrapped<TYDBRequest<TDialogPolicy>> {
+class TYDBOneRequest: public NActors::TActorBootstrapped<TYDBOneRequest<TDialogPolicy>> {
 private:
-    using TBase = NActors::TActorBootstrapped<TYDBRequest<TDialogPolicy>>;
+    using TBase = NActors::TActorBootstrapped<TYDBOneRequest<TDialogPolicy>>;
     using TRequest = typename TDialogPolicy::TRequest;
     using TResponse = typename TDialogPolicy::TResponse;
-    using TSelf = TYDBRequest<TDialogPolicy>;
     TRequest ProtoRequest;
-    const NActors::TActorId ActorFinishId;
-    const NActors::TActorId ActorRestartId;
-    const TConfig Config;
-    ui32 Retry = 0;
     const NACLib::TUserToken UserToken;
 protected:
     class TEvRequestInternalResult: public NActors::TEventLocal<TEvRequestInternalResult, TDialogPolicy::EvResultInternal> {
@@ -113,6 +108,9 @@ protected:
 
         }
     };
+
+    virtual void OnInternalResultError(const TString& errorMessage) = 0;
+    virtual void OnInternalResultSuccess(TResponse&& response) = 0;
 public:
     void Bootstrap(const TActorContext& /*ctx*/) {
         TBase::Become(&TBase::TThis::StateMain);
@@ -130,11 +128,7 @@ public:
     void Handle(typename TEvRequestInternalResult::TPtr& ev) {
         if (!ev->Get()->GetFuture().HasValue() || ev->Get()->GetFuture().HasException()) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
-            if (ActorRestartId) {
-                TBase::template Sender<TEvRequestFailed>("incorrect future result").SendTo(ActorRestartId);
-            } else {
-                TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
-            }
+            OnInternalResultError("cannot receive result from future");
             return;
         }
         auto f = ev->Get()->GetFuture();
@@ -143,16 +137,11 @@ public:
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "incorrect reply: " << response.DebugString();
             NYql::TIssues issue;
             NYql::IssuesFromMessage(response.operation().issues(), issue);
-            if (ActorRestartId) {
-                TBase::template Sender<TEvRequestFailed>(issue.ToString()).SendTo(ActorRestartId);
-            } else {
-                TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
-            }
+            OnInternalResultError(issue.ToString());
             return;
         }
-        TBase::template Sender<TEvRequestResult<TDialogPolicy>>(std::move(response)).SendTo(ActorFinishId);
-        TBase::template Sender<TEvRequestFinished>().SendTo(ActorFinishId);
-        TBase::Die(TActivationContext::AsActorContext());
+        OnInternalResultSuccess(std::move(response));
+        TBase::PassAway();
     }
 
     void Handle(typename TEvRequestStart::TPtr& /*ev*/) {
@@ -168,23 +157,71 @@ public:
         result.Subscribe(replyCallback);
     }
 
-    TYDBRequest(const TRequest& request, const NACLib::TUserToken& uToken,
-        const NActors::TActorId actorFinishId, const TConfig& config, const NActors::TActorId& actorRestartId = {})
+    TYDBOneRequest(const TRequest& request, const NACLib::TUserToken& uToken)
         : ProtoRequest(request)
-        , ActorFinishId(actorFinishId)
-        , ActorRestartId(actorRestartId)
-        , Config(config)
-        , UserToken(uToken)
-    {
+        , UserToken(uToken) {
 
     }
+};
 
-    TYDBRequest(const TRequest& request, const NACLib::TUserToken& uToken, const NActors::TActorId actorCallbackId)
-        : ProtoRequest(request)
-        , ActorFinishId(actorCallbackId)
-        , ActorRestartId(actorCallbackId)
-        , UserToken(uToken)
-    {
+template <class TDialogPolicy>
+class TYDBRequest: public TYDBOneRequest<TDialogPolicy> {
+private:
+    using TBase = TYDBOneRequest<TDialogPolicy>;
+    using TRequest = typename TDialogPolicy::TRequest;
+    using TResponse = typename TDialogPolicy::TResponse;
+    const NActors::TActorId ActorFinishId;
+    const NActors::TActorId ActorRestartId;
+    const TConfig Config;
+    ui32 Retry = 0;
+protected:
+    virtual void OnInternalResultError(const TString& errorMessage) override {
+        if (ActorRestartId) {
+            TBase::template Sender<TEvRequestFailed>(errorMessage).SendTo(ActorRestartId);
+            TBase::PassAway();
+        } else {
+            TBase::Schedule(Config.GetRetryPeriod(++Retry), new TEvRequestStart);
+        }
+    }
+    virtual void OnInternalResultSuccess(TResponse&& response) override {
+        TBase::template Sender<TEvRequestResult<TDialogPolicy>>(std::move(response)).SendTo(ActorFinishId);
+        TBase::template Sender<TEvRequestFinished>().SendTo(ActorFinishId);
+    }
+public:
+
+    TYDBRequest(const TRequest& request, const NACLib::TUserToken& uToken,
+        const NActors::TActorId actorFinishId, const TConfig& config, const NActors::TActorId& actorRestartId = {})
+        : TBase(request, uToken)
+        , ActorFinishId(actorFinishId)
+        , ActorRestartId(actorRestartId)
+        , Config(config) {
+
+    }
+};
+
+template <class TDialogPolicy>
+class TYDBCallbackRequest: public TYDBOneRequest<TDialogPolicy> {
+private:
+    using TBase = TYDBOneRequest<TDialogPolicy>;
+    using TRequest = typename TDialogPolicy::TRequest;
+    using TResponse = typename TDialogPolicy::TResponse;
+    const NActors::TActorId CallbackActorId;
+    const TConfig Config;
+    ui32 Retry = 0;
+protected:
+    virtual void OnInternalResultError(const TString& errorMessage) override {
+        TBase::template Sender<TEvRequestFailed>(errorMessage).SendTo(CallbackActorId);
+        TBase::PassAway();
+    }
+    virtual void OnInternalResultSuccess(TResponse&& response) override {
+        TBase::template Sender<TEvRequestResult<TDialogPolicy>>(std::move(response)).SendTo(CallbackActorId);
+        TBase::template Sender<TEvRequestFinished>().SendTo(CallbackActorId);
+    }
+public:
+
+    TYDBCallbackRequest(const TRequest& request, const NACLib::TUserToken& uToken, const NActors::TActorId actorCallbackId)
+        : TBase(request, uToken)
+        , CallbackActorId(actorCallbackId) {
 
     }
 };
@@ -204,7 +241,7 @@ private:
         Y_VERIFY(sessionId);
         std::optional<typename TDialogPolicy::TRequest> nextRequest = OnSessionId(sessionId);
         Y_VERIFY(nextRequest);
-        TBase::Register(new TYDBRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId(), Config, TBase::SelfId()));
+        TBase::Register(new TYDBCallbackRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId()));
     }
 protected:
     const TConfig Config;
@@ -244,7 +281,7 @@ public:
     }
 
     void Handle(typename TEvRequestStart::TPtr& /*ev*/) {
-        TBase::Register(new TYDBRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), UserToken, TBase::SelfId(), Config, TBase::SelfId()));
+        TBase::Register(new TYDBCallbackRequest<TDialogCreateSession>(TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
     }
 
     void Bootstrap() {
@@ -258,7 +295,7 @@ public:
     using TPtr = std::shared_ptr<IQueryOutput>;
     virtual ~IQueryOutput() = default;
 
-    virtual void OnReply(const TDialogYQLRequest::TResponse& response) = 0;
+    virtual void OnYQLQueryReply(const TDialogYQLRequest::TResponse& response) = 0;
 };
 
 class TYQLQuerySessionedActor: public TSessionedActorImpl<TDialogYQLRequest> {
@@ -275,7 +312,7 @@ protected:
         return request;
     }
     virtual void OnResult(const TDialogYQLRequest::TResponse& response) override {
-        Output->OnReply(response);
+        Output->OnYQLQueryReply(response);
     }
 public:
     TYQLQuerySessionedActor(const TString& query, const NACLib::TUserToken& uToken,

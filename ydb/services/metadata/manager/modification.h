@@ -49,7 +49,7 @@ protected:
 
     void Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>::TPtr& /*ev*/) {
         if (Requests.size()) {
-            TBase::Register(new NRequest::TYDBRequest<NRequest::TDialogYQLRequest>(
+            TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogYQLRequest>(
                 Requests.front(), SystemUserToken, TBase::SelfId()));
             Requests.pop_front();
         } else {
@@ -94,7 +94,7 @@ public:
         Y_VERIFY(Requests.size());
         Requests.back().mutable_tx_control()->set_commit_tx(true);
 
-        TBase::Register(new NRequest::TYDBRequest<NRequest::TDialogYQLRequest>(
+        TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogYQLRequest>(
             Requests.front(), SystemUserToken, TBase::SelfId()));
         Requests.pop_front();
     }

@@ -2,6 +2,7 @@
 #include "accessor_subscribe.h"
 #include "config.h"
 #include "scheme_describe.h"
+#include "accessor_snapshot_simple.h"
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/common.h>
@@ -14,6 +15,9 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
+
+class TEvStartMetadataService: public TEventLocal<TEvStartMetadataService, EEvents::EvStartMetadataService> {
+};
 
 class TEvTableDescriptionFailed: public TEventLocal<TEvTableDescriptionFailed, EEvents::EvTableDescriptionFailed> {
 private:
@@ -44,12 +48,14 @@ public:
     }
 };
 
-class TServiceInternalController: public NInitializer::IInitializerOutput, public ISchemeDescribeController {
+class TServiceInternalController: public NInitializer::IInitializerOutput,
+    public TDSAccessorSimple::TEvController, public ISchemeDescribeController {
 private:
     const NActors::TActorIdentity ActorId;
 public:
     TServiceInternalController(const NActors::TActorIdentity& actorId)
-        : ActorId(actorId)
+        : TDSAccessorSimple::TEvController(actorId)
+        , ActorId(actorId)
     {
 
     }
@@ -120,10 +126,6 @@ public:
     }
 };
 
-class TWaitingWatcher {
-private:
-};
-
 class TService: public NActors::TActorBootstrapped<TService> {
 private:
     using TBase = NActors::TActor<TService>;
@@ -139,46 +141,57 @@ private:
     std::shared_ptr<TServiceInternalController> InternalController;
     const TConfig Config;
 
-    void Handle(NInitializer::TEvInitializationFinished::TPtr& ev);
+    void Handle(TEvStartMetadataService::TPtr& ev);
+    void Handle(NInitializer::TEvInitializationFinished::TPtr & ev);
     void Handle(TEvRefreshSubscriberData::TPtr& ev);
+
     void Handle(TEvAskSnapshot::TPtr& ev);
     void Handle(TEvPrepareManager::TPtr& ev);
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvObjectsOperation::TPtr& ev);
+
     void Handle(TEvTableDescriptionSuccess::TPtr& ev);
     void Handle(TEvTableDescriptionFailed::TPtr& ev);
 
+    void Handle(TDSAccessorSimple::TEvController::TEvResult::TPtr& ev);
+    void Handle(TDSAccessorSimple::TEvController::TEvError::TPtr& ev);
+    void Handle(TDSAccessorSimple::TEvController::TEvTableAbsent::TPtr& ev);
+
     void PrepareManagers(std::vector<IClassBehaviour::TPtr> manager, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
     void InitializationFinished(const TString& initId);
-    void RequestTableDescription(const TString& path) const;
+    void Activate();
 
-    template <class TEventPtr, class TAction>
-    void ProcessEventWithFetcher(TEventPtr& ev, TAction action) {
+    template <class TAction>
+    void ProcessEventWithFetcher(IEventHandle& ev, NFetcher::ISnapshotsFetcher::TPtr fetcher, TAction action) {
         std::vector<IClassBehaviour::TPtr> needManagers;
-        for (auto&& i : ev->Get()->GetFetcher()->GetManagers()) {
+        for (auto&& i : fetcher->GetManagers()) {
             if (!RegisteredManagers.contains(i->GetTypeId())) {
                 needManagers.emplace_back(i);
             }
         }
         if (needManagers.empty()) {
-            auto it = Accessors.find(ev->Get()->GetFetcher()->GetComponentId());
+            auto it = Accessors.find(fetcher->GetComponentId());
             if (it == Accessors.end()) {
-                THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, ev->Get()->GetFetcher());
-                it = Accessors.emplace(ev->Get()->GetFetcher()->GetComponentId(), Register(actor.Release())).first;
+                THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, fetcher);
+                it = Accessors.emplace(fetcher->GetComponentId(), Register(actor.Release())).first;
             }
             action(it->second);
         } else {
-            PrepareManagers(needManagers, ev->ReleaseBase(), ev->Sender);
+            PrepareManagers(needManagers, ev.ReleaseBase(), ev.Sender);
         }
     }
 
 public:
 
-    void Bootstrap(const NActors::TActorContext& /*ctx*/);
+    void Bootstrap(const NActors::TActorContext& ctx);
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TDSAccessorSimple::TEvController::TEvResult, Handle);
+            hFunc(TDSAccessorSimple::TEvController::TEvError, Handle);
+            hFunc(TDSAccessorSimple::TEvController::TEvTableAbsent, Handle);
+
             hFunc(TEvObjectsOperation, Handle);
             hFunc(TEvRefreshSubscriberData, Handle);
             hFunc(TEvAskSnapshot, Handle);
@@ -188,6 +201,8 @@ public:
 
             hFunc(TEvTableDescriptionSuccess, Handle);
             hFunc(TEvTableDescriptionFailed, Handle);
+
+            hFunc(TEvStartMetadataService, Handle);
             
             hFunc(NInitializer::TEvInitializationFinished, Handle);
             default:

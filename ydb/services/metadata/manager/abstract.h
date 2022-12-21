@@ -116,9 +116,11 @@ private:
     YDB_READONLY_DEF(std::vector<Ydb::Column>, PKColumns);
     YDB_READONLY_DEF(std::vector<TString>, PKColumnIds);
 
-    TTableSchema& AddColumn(const bool primary, const Ydb::Column& info) noexcept;
 public:
+    TTableSchema() = default;
     TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& description);
+
+    TTableSchema& AddColumn(const bool primary, const Ydb::Column& info) noexcept;
 };
 
 class IOperationsManager {

@@ -23,8 +23,8 @@ class ISnapshotAcceptorController {
 public:
     using TPtr = std::shared_ptr<ISnapshotAcceptorController>;
     virtual ~ISnapshotAcceptorController() = default;
-    virtual void Enriched(std::shared_ptr<ISnapshot> enrichedSnapshot) = 0;
-    virtual void EnrichProblem(const TString& errorMessage) = 0;
+    virtual void OnSnapshotEnriched(std::shared_ptr<ISnapshot> enrichedSnapshot) = 0;
+    virtual void OnSnapshotEnrichError(const TString& errorMessage) = 0;
 };
 
 class ISnapshot {
@@ -64,7 +64,7 @@ public:
     ISnapshot::TPtr ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const;
 
     virtual void EnrichSnapshotData(ISnapshot::TPtr original, ISnapshotAcceptorController::TPtr controller) const {
-        controller->Enriched(original);
+        controller->OnSnapshotEnriched(original);
     }
 
     const std::vector<IClassBehaviour::TPtr>& GetManagers() const {

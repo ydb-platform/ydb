@@ -20,7 +20,13 @@ IInitializationBehaviour::TPtr TDBObjectBehaviour::ConstructInitializer() const 
 }
 
 std::shared_ptr<NKikimr::NMetadata::NModifications::IOperationsManager> TDBObjectBehaviour::ConstructOperationsManager() const {
-    return std::make_shared<TManager>();
+    auto result = std::make_shared<TManager>();
+    NModifications::TTableSchema schema;
+    schema.AddColumn(true, NInternal::TYDBColumn::Bytes(TDBInitialization::TDecoder::ComponentId));
+    schema.AddColumn(true, NInternal::TYDBColumn::Bytes(TDBInitialization::TDecoder::ModificationId));
+    schema.AddColumn(false, NInternal::TYDBColumn::UInt32(TDBInitialization::TDecoder::Instant));
+    result->SetActualSchema(schema);
+    return result;
 }
 
 }

@@ -71,7 +71,7 @@ public:
         request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
         request.set_session_id(SessionId);
         TBase::Become(&TRestoreObjectsActor::StateMain);
-        TBase::Register(new NRequest::TYDBRequest<NRequest::TDialogSelect>(request, UserToken, TBase::SelfId()));
+        TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogSelect>(request, UserToken, TBase::SelfId()));
     }
 };
 

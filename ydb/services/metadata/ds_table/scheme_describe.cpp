@@ -11,20 +11,22 @@ namespace NKikimr::NMetadata::NProvider {
 void TSchemeDescriptionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     auto* info = ev->Get();
     const auto& request = info->Request;
+    auto g = PassAwayGuard();
 
     if (request->ResultSet.empty()) {
         Controller->OnDescriptionFailed("navigation problems for path " + Path, RequestId);
-        PassAway();
         return;
     }
     if (request->ResultSet.size() != 1) {
         Controller->OnDescriptionFailed("cannot resolve database path " + Path, RequestId);
-        PassAway();
         return;
     }
     auto& entity = request->ResultSet.front();
-    auto g = PassAwayGuard();
-    Controller->OnDescriptionSuccess(std::move(entity.Columns), RequestId);
+    if (entity.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        Controller->OnDescriptionSuccess(std::move(entity.Columns), RequestId);
+    } else {
+        Controller->OnDescriptionFailed("incorrect path status: " + ::ToString(entity.Status), RequestId);
+    }
 }
 
 void TSchemeDescriptionActor::Bootstrap() {

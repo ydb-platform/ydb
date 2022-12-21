@@ -12,7 +12,7 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 void TSnapshotConstructor::EnrichSnapshotData(ISnapshot::TPtr original, NMetadata::NFetcher::ISnapshotAcceptorController::TPtr controller) const {
-    controller->Enriched(original);
+    controller->OnSnapshotEnriched(original);
 }
 
 TSnapshotConstructor::TSnapshotConstructor() {

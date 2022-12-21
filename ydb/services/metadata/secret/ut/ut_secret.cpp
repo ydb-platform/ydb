@@ -236,8 +236,6 @@ Y_UNIT_TEST_SUITE(Secret) {
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
 
-        TSecretUserEmulator* emulator = new TSecretUserEmulator;
-        runtime.Register(emulator);
         {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
@@ -250,9 +248,6 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@test1` (TYPE SECRET_ACCESS)", false);
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
-            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`");
-            lHelper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initialization/migrations`", false);
-            lHelper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initialization/migrations`", false);
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
         }
     }

@@ -20,45 +20,59 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
 }
 
 void THelper::StartDataRequest(const TString& request, const bool expectSuccess) const {
-    NYdb::NTable::TTableClient tClient(Server.GetDriver(), NYdb::NTable::TClientSettings().UseQueryCache(false));
-    auto expectation = expectSuccess;
-    tClient.CreateSession().Subscribe([request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
-        auto session = f.GetValueSync().GetSession();
-        session.ExecuteDataQuery(request
-            , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx())
-            .Subscribe([expectation](NYdb::NTable::TAsyncDataQueryResult f)
-                {
-                    TStringStream ss;
-                    f.GetValueSync().GetIssues().PrintTo(ss, false);
-                    Cerr << ss.Str() << Endl;
-                    Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
-                });
-        });
-}
-
-void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
     auto expectation = expectSuccess;
-
     bool resultReady = false;
     bool* rrPtr = &resultReady;
     tClient.CreateSession().Subscribe([rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
         auto session = f.GetValueSync().GetSession();
-        session.ExecuteSchemeQuery(request).Subscribe([rrPtr, expectation](NYdb::TAsyncStatus f)
+        session.ExecuteDataQuery(request
+            , NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx())
+            .Subscribe([rrPtr, expectation, request](NYdb::NTable::TAsyncDataQueryResult f)
+                {
+                    TStringStream ss;
+                    f.GetValueSync().GetIssues().PrintTo(ss, false);
+                    Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
+                    Y_VERIFY(expectation == f.GetValueSync().IsSuccess());
+                    *rrPtr = true;
+                });
+        });
+    const TInstant start = TInstant::Now();
+    while (!resultReady && start + TDuration::Seconds(200) > TInstant::Now()) {
+        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+    }
+    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
+    Y_VERIFY(resultReady);
+}
+
+void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting) const {
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
+        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+    auto expectation = expectSuccess;
+
+    std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
+    TString requestInt = request;
+    tClient.CreateSession().Subscribe([rrPtr, requestInt, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
+        auto session = f.GetValueSync().GetSession();
+        session.ExecuteSchemeQuery(requestInt).Subscribe([rrPtr, expectation, requestInt](NYdb::TAsyncStatus f)
             {
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
-                Cerr << ss.Str() << Endl;
+                Cerr << "REQUEST=" << requestInt << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
                 Y_VERIFY(expectation == f.GetValueSync().IsSuccess(), "%d", expectation ? 1 : 0);
                 *rrPtr = true;
             });
         });
-    const TInstant start = TInstant::Now();
-    while (!resultReady && start + TDuration::Seconds(20) > TInstant::Now()) {
-        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
+    if (waiting) {
+        const TInstant start = TInstant::Now();
+        while (!*rrPtr && start + TDuration::Seconds(20) > TInstant::Now()) {
+            Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+        }
+        Y_VERIFY(*rrPtr);
+        Cerr << "FINISHED_REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
     }
-    Y_VERIFY(resultReady);
 }
 
 void THelper::DropTable(const TString& tablePath) {

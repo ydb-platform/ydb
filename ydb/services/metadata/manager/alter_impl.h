@@ -126,7 +126,7 @@ public:
             return TBase::PassAway();
         }
 
-        TBase::Register(new NRequest::TYDBRequest<NRequest::TDialogCreateSession>(
+        TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogCreateSession>(
             NRequest::TDialogCreateSession::TRequest(), UserToken, TBase::SelfId()));
     }
 

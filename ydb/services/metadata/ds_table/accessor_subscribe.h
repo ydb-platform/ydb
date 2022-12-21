@@ -41,14 +41,10 @@ private:
     std::set<NActors::TActorId> Subscribed;
     std::map<TInstant, std::set<NActors::TActorId>> Asked;
 protected:
-    virtual void RegisterState() override {
-        Become(&TDSAccessorNotifier::StateMain);
-    }
+    virtual void OnBootstrap() override;
     virtual void OnSnapshotModified() override;
     virtual void OnSnapshotRefresh() override;
 public:
-    using TBase::Handle;
-
     TDSAccessorNotifier(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr sParser)
         : TBase(config, sParser) {
     }

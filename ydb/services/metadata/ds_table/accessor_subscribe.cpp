@@ -54,4 +54,9 @@ void TDSAccessorNotifier::OnSnapshotRefresh() {
     }
 }
 
+void TDSAccessorNotifier::OnBootstrap() {
+    TBase::OnBootstrap();
+    Become(&TDSAccessorNotifier::StateMain);
+}
+
 }

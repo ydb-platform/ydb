@@ -16,20 +16,21 @@ IActor* CreateService(const TConfig& config) {
 
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
     TManagersId id(managers);
-    const bool isInitialization = (managers.size() == 1) && managers.front()->GetTypeId() == NInitializer::TDBInitialization::GetTypeId();
-    if (ActiveFlag || (PreparationFlag && isInitialization)) {
-        for (auto&& manager : managers) {
-            Y_VERIFY(!RegisteredManagers.contains(manager->GetTypeId()));
-            if (!ManagersInRegistration.contains(manager->GetTypeId()) && !RegisteredManagers.contains(manager->GetTypeId())) {
-                ManagersInRegistration.emplace(manager->GetTypeId(), manager);
-                Register(new NInitializer::TDSAccessorInitialized(Config.GetRequestConfig(),
-                    manager->GetTypeId(), manager->GetInitializer(), InternalController, InitializationSnapshot));
+    if (InitializationSnapshot) {
+        const bool isInitialization = (managers.size() == 1) && managers.front()->GetTypeId() == NInitializer::TDBInitialization::GetTypeId();
+        if (ActiveFlag || (PreparationFlag && isInitialization)) {
+            for (auto&& manager : managers) {
+                Y_VERIFY(!RegisteredManagers.contains(manager->GetTypeId()));
+                if (!ManagersInRegistration.contains(manager->GetTypeId()) && !RegisteredManagers.contains(manager->GetTypeId())) {
+                    ManagersInRegistration.emplace(manager->GetTypeId(), manager);
+                    Register(new NInitializer::TDSAccessorInitialized(Config.GetRequestConfig(),
+                        manager->GetTypeId(), manager->GetInitializer(), InternalController, InitializationSnapshot));
+                }
             }
+        } else if (!PreparationFlag) {
+            PreparationFlag = true;
+            Send(SelfId(), new TEvSubscribeExternal(InitializationFetcher));
         }
-    } else if (!PreparationFlag) {
-        PreparationFlag = true;
-        InitializationFetcher = std::make_shared<NInitializer::TFetcher>();
-        Send(SelfId(), new TEvSubscribeExternal(InitializationFetcher));
     }
     EventsWaiting[id].emplace_back(ev, sender);
 }
@@ -107,26 +108,31 @@ void TService::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
 
 void TService::Handle(TEvSubscribeExternal::TPtr& ev) {
     const TActorId senderId = ev->Sender;
-    ProcessEventWithFetcher(ev, [this, senderId](const TActorId& actorId) {
+    ProcessEventWithFetcher(*ev, ev->Get()->GetFetcher(), [this, senderId](const TActorId& actorId) {
         Send<TEvSubscribe>(actorId, senderId);
         });
 }
 
 void TService::Handle(TEvAskSnapshot::TPtr& ev) {
     const TActorId senderId = ev->Sender;
-    ProcessEventWithFetcher(ev, [this, senderId](const TActorId& actorId) {
+    ProcessEventWithFetcher(*ev, ev->Get()->GetFetcher(), [this, senderId](const TActorId& actorId) {
         Send<TEvAsk>(actorId, senderId);
         });
 }
 
 void TService::Handle(TEvObjectsOperation::TPtr& ev) {
-    auto it = RegisteredManagers.find(ev->Get()->GetCommand()->GetManager()->GetTypeId());
-    if (it != RegisteredManagers.end()) {
-        ev->Get()->GetCommand()->SetManager(it->second);
+    if (ev->Get()->GetCommand()->GetManager()->GetTypeId() == NInitializer::TDBInitialization::GetTypeId()) {
+        ev->Get()->GetCommand()->SetManager(NInitializer::TDBInitialization::GetBehaviour());
         ev->Get()->GetCommand()->Execute();
     } else {
-        auto m = ev->Get()->GetCommand()->GetManager();
-        PrepareManagers({ m }, ev->ReleaseBase(), ev->Sender);
+        auto it = RegisteredManagers.find(ev->Get()->GetCommand()->GetManager()->GetTypeId());
+        if (it != RegisteredManagers.end()) {
+            ev->Get()->GetCommand()->SetManager(it->second);
+            ev->Get()->GetCommand()->Execute();
+        } else {
+            auto m = ev->Get()->GetCommand()->GetManager();
+            PrepareManagers({ m }, ev->ReleaseBase(), ev->Sender);
+        }
     }
 }
 
@@ -143,17 +149,43 @@ void TService::Handle(TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(InitializationSnapshot);
     if (!ActiveFlag) {
         ActiveFlag = true;
-        for (auto&& i : EventsWaiting) {
-            i.second.front().Resend(SelfId());
-            i.second.pop_front();
-        }
+        Activate();
     }
+}
+
+void TService::Activate() {
+    for (auto&& i : EventsWaiting) {
+        i.second.front().Resend(SelfId());
+        i.second.pop_front();
+    }
+}
+
+void TService::Handle(TDSAccessorSimple::TEvController::TEvResult::TPtr& ev) {
+    InitializationSnapshot = dynamic_pointer_cast<NInitializer::TSnapshot>(ev->Get()->GetResult());
+    Y_VERIFY(InitializationSnapshot);
+    Activate();
+}
+
+void TService::Handle(TEvStartMetadataService::TPtr& /*ev*/) {
+    Register(new TDSAccessorSimple(Config.GetRequestConfig(), InternalController, InitializationFetcher));
+}
+
+void TService::Handle(TDSAccessorSimple::TEvController::TEvError::TPtr& ev) {
+    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive initializer snapshot: " << ev->Get()->GetErrorMessage() << Endl;
+    Schedule(TDuration::Seconds(1), new TEvStartMetadataService());
+}
+
+void TService::Handle(TDSAccessorSimple::TEvController::TEvTableAbsent::TPtr& /*ev*/) {
+    InitializationSnapshot = std::make_shared<NInitializer::TSnapshot>(TInstant::Zero());
+    Activate();
 }
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service started" << Endl;
     Become(&TService::StateMain);
     InternalController = std::make_shared<TServiceInternalController>(SelfId());
+    InitializationFetcher = std::make_shared<NInitializer::TFetcher>();
+    Sender<TEvStartMetadataService>().SendTo(SelfId());
 }
 
 void TServiceInternalController::InitializationFinished(const TString& id) const {

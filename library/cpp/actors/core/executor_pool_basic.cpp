@@ -334,9 +334,13 @@ namespace NActors {
         poolStats.WrongWakenedThreadCount = RelaxedLoad(&WrongWakenedThreadCount);
         poolStats.CurrentThreadCount = RelaxedLoad(&ThreadCount);
         if (Harmonizer) {
-            TPoolStateFlags flags = Harmonizer->GetPoolFlags(PoolId);
-            poolStats.IsNeedy = flags.IsNeedy;
-            poolStats.IsStarved = flags.IsStarved;
+            TPoolHarmonizedStats stats = Harmonizer->GetPoolStats(PoolId);
+            poolStats.IsNeedy = stats.IsNeedy;
+            poolStats.IsStarved = stats.IsStarved;
+            poolStats.IsHoggish = stats.IsHoggish;
+            poolStats.IncreasingThreadsByNeedyState = stats.IncreasingThreadsByNeedyState;
+            poolStats.DecreasingThreadsByStarvedState = stats.DecreasingThreadsByStarvedState;
+            poolStats.DecreasingThreadsByHoggishState = stats.DecreasingThreadsByHoggishState;
         }
 
         statsCopy.resize(PoolThreads + 1);

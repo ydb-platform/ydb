@@ -117,7 +117,10 @@ struct TPoolInfo {
     ui32 MaxAvgPingUs = 0;
     ui64 LastUpdateTs = 0;
 
-    TAtomic LastFlags = 0; // 0 - isNeedy; 1 - isStarved
+    TAtomic LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
+    TAtomic IncreasingThreadsByNeedyState = 0;
+    TAtomic DecreasingThreadsByStarvedState = 0;
+    TAtomic DecreasingThreadsByHoggishState = 0;
 
     bool IsBeingStopped(i16 threadIdx);
     double GetBooked(i16 threadIdx);
@@ -212,7 +215,7 @@ public:
     void DeclareEmergency(ui64 ts) override;
     void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) override;
     void Enable(bool enable) override;
-    TPoolStateFlags GetPoolFlags(i16 poolId) const override;
+    TPoolHarmonizedStats GetPoolStats(i16 poolId) const override;
 };
 
 THarmonizer::THarmonizer(ui64 ts) {
@@ -263,7 +266,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             poolConsumed += Rescale(pool.GetConsumed(threadIdx));
             lastSecondPoolConsumed += Rescale(pool.GetlastSecondPoolConsumed(threadIdx));
         }
-        bool isStarved = IsStarved(consumed, booked) || IsStarved(lastSecondPoolConsumed, lastSecondPoolBooked);
+        bool isStarved = IsStarved(poolConsumed, poolBooked) || IsStarved(lastSecondPoolConsumed, lastSecondPoolBooked);
         if (isStarved) {
             isStarvedPresent = true;
         }
@@ -286,7 +289,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         }
         booked += poolBooked;
         consumed += poolConsumed;
-        AtomicSet(pool.LastFlags, (i64)isNeedy | ((i64)isStarved << 1));
+        AtomicSet(pool.LastFlags, (i64)isNeedy | ((i64)isStarved << 1) | ((i64)isHoggish << 2));
         LWPROBE(HarmonizeCheckPool, poolIdx, pool.Pool->GetName(), poolBooked, poolConsumed, lastSecondPoolBooked, lastSecondPoolConsumed, pool.GetThreadCount(), pool.MaxThreadCount, isStarved, isNeedy, isHoggish);
     }
     double budget = total - Max(booked, lastSecondBooked);
@@ -310,6 +313,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
               i64 threadCount = pool.GetThreadCount();
               if (threadCount > pool.DefaultThreadCount) {
                   pool.SetThreadCount(threadCount - 1);
+                  AtomicIncrement(pool.DecreasingThreadsByStarvedState);
                   overbooked--;
                   LWPROBE(HarmonizeOperation, poolIdx, pool.Pool->GetName(), "decrease", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);
                   if (overbooked < 1) {
@@ -324,6 +328,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             if (budget >= 1.0) {
                 i64 threadCount = pool.GetThreadCount();
                 if (threadCount + 1 <= pool.MaxThreadCount) {
+                    AtomicIncrement(pool.IncreasingThreadsByNeedyState);
                     pool.SetThreadCount(threadCount + 1);
                     budget -= 1.0;
                     LWPROBE(HarmonizeOperation, needyPoolIdx, pool.Pool->GetName(), "increase", threadCount + 1, pool.DefaultThreadCount, pool.MaxThreadCount);
@@ -335,6 +340,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         TPoolInfo &pool = Pools[hoggishPoolIdx];
         i64 threadCount = pool.GetThreadCount();
         if (threadCount > pool.MinThreadCount) {
+            AtomicIncrement(pool.DecreasingThreadsByHoggishState);
             LWPROBE(HarmonizeOperation, hoggishPoolIdx, pool.Pool->GetName(), "decrease", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);
             pool.SetThreadCount(threadCount - 1);
         }
@@ -409,11 +415,16 @@ IHarmonizer* MakeHarmonizer(ui64 ts) {
     return new THarmonizer(ts);
 }
 
-TPoolStateFlags THarmonizer::GetPoolFlags(i16 poolId) const {
-    ui64 flags = RelaxedLoad(&Pools[poolId].LastFlags);
-    return TPoolStateFlags {
+TPoolHarmonizedStats THarmonizer::GetPoolStats(i16 poolId) const {
+    const TPoolInfo &pool = Pools[poolId];
+    ui64 flags = RelaxedLoad(&pool.LastFlags);
+    return TPoolHarmonizedStats {
+        .IncreasingThreadsByNeedyState = static_cast<ui64>(RelaxedLoad(&pool.IncreasingThreadsByNeedyState)),
+        .DecreasingThreadsByStarvedState = static_cast<ui64>(RelaxedLoad(&pool.DecreasingThreadsByStarvedState)),
+        .DecreasingThreadsByHoggishState = static_cast<ui64>(RelaxedLoad(&pool.DecreasingThreadsByHoggishState)),
         .IsNeedy = static_cast<bool>(flags & 1),
-        .IsStarved = static_cast<bool>(flags & 2)
+        .IsStarved = static_cast<bool>(flags & 2),
+        .IsHoggish = static_cast<bool>(flags & 4),
     };
 }
 

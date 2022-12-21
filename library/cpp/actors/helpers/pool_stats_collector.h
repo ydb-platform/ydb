@@ -128,6 +128,10 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr CurrentThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr IsNeedy;
         NMonitoring::TDynamicCounters::TCounterPtr IsStarved;
+        NMonitoring::TDynamicCounters::TCounterPtr IsHoggish;
+        NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByNeedyState;
+        NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByStarvedState;
+        NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByHoggishState;
 
 
         THistogramCounters LegacyActivationTimeHistogram;
@@ -176,6 +180,10 @@ private:
             CurrentThreadCount = PoolGroup->GetCounter("CurrentThreadCount", false);
             IsNeedy = PoolGroup->GetCounter("IsNeedy", false);
             IsStarved = PoolGroup->GetCounter("IsStarved", false);
+            IsHoggish = PoolGroup->GetCounter("IsHoggish", false);
+            IncreasingThreadsByNeedyState = PoolGroup->GetCounter("IncreasingThreadsByNeedyState", true);
+            DecreasingThreadsByStarvedState = PoolGroup->GetCounter("DecreasingThreadsByStarvedState", true);
+            DecreasingThreadsByHoggishState = PoolGroup->GetCounter("DecreasingThreadsByHoggishState", true);
 
             LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
             ActivationTimeHistogram = PoolGroup->GetHistogram(
@@ -216,6 +224,10 @@ private:
             *CurrentThreadCount = poolStats.CurrentThreadCount;
             *IsNeedy = poolStats.IsNeedy;
             *IsStarved = poolStats.IsStarved;
+            *IsHoggish = poolStats.IsHoggish;
+            *IncreasingThreadsByNeedyState = poolStats.IncreasingThreadsByNeedyState;
+            *DecreasingThreadsByStarvedState = poolStats.DecreasingThreadsByStarvedState;
+            *DecreasingThreadsByHoggishState = poolStats.DecreasingThreadsByHoggishState;
 
             LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
             ActivationTimeHistogram->Reset();

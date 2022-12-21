@@ -60,10 +60,14 @@ namespace NActors {
 
     struct TExecutorPoolStats {
         ui64 MaxUtilizationTime = 0;
+        ui64 IncreasingThreadsByNeedyState = 0;
+        ui64 DecreasingThreadsByStarvedState = 0;
+        ui64 DecreasingThreadsByHoggishState = 0;
         i16 WrongWakenedThreadCount = 0;
         i16 CurrentThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
+        bool IsHoggish = false;
     };
 
     struct TExecutorThreadStats {

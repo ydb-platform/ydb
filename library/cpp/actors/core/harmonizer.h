@@ -6,9 +6,13 @@
 namespace NActors {
     class IExecutorPool;
 
-    struct TPoolStateFlags {
+    struct TPoolHarmonizedStats {
+        ui64 IncreasingThreadsByNeedyState = 0;
+        ui64 DecreasingThreadsByStarvedState = 0;
+        ui64 DecreasingThreadsByHoggishState = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
+        bool IsHoggish = false;
     };
 
     // Pool cpu harmonizer
@@ -19,7 +23,7 @@ namespace NActors {
         virtual void DeclareEmergency(ui64 ts) = 0;
         virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr) = 0;
         virtual void Enable(bool enable) = 0;
-        virtual TPoolStateFlags GetPoolFlags(i16 poolId) const = 0;
+        virtual TPoolHarmonizedStats GetPoolStats(i16 poolId) const = 0;
     };
 
     IHarmonizer* MakeHarmonizer(ui64 ts);

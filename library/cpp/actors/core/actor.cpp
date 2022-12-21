@@ -26,7 +26,7 @@ namespace NActors {
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner))
-            sys->Send(eh);
+            sys->SendWithContinuousExecution(eh);
     }
 
     void IActor::Describe(IOutputStream &out) const noexcept {

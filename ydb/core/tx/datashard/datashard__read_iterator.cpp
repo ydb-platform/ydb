@@ -458,13 +458,13 @@ public:
         return false;
     }
 
-    void FillResult(TEvDataShard::TEvReadResult& result, TDataShard& datashard, TReadIteratorState& state) {
+    void FillResult(TEvDataShard::TEvReadResult& result, TReadIteratorState& state) {
         auto& record = result.Record;
         record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         auto now = AppData()->MonotonicTimeProvider->Now();
         auto delta = now - StartTs;
-        datashard.IncCounter(COUNTER_READ_ITERATOR_ITERATION_LATENCY_MS, delta.MilliSeconds());
+        Self->IncCounter(COUNTER_READ_ITERATOR_ITERATION_LATENCY_MS, delta.MilliSeconds());
 
         // note that in all metrics below we treat key prefix read as key read
         // and not as range read
@@ -472,42 +472,42 @@ public:
 
         if (HasUnreadQueries()) {
             if (OutOfQuota()) {
-                datashard.IncCounter(COUNTER_READ_ITERATOR_NO_QUOTA);
+                Self->IncCounter(COUNTER_READ_ITERATOR_NO_QUOTA);
                 record.SetLimitReached(true);
             } else if (HasMaxRowsInResult()) {
-                datashard.IncCounter(COUNTER_READ_ITERATOR_MAX_ROWS_REACHED);
+                Self->IncCounter(COUNTER_READ_ITERATOR_MAX_ROWS_REACHED);
             } else {
-                datashard.IncCounter(COUNTER_READ_ITERATOR_MAX_TIME_REACHED);
+                Self->IncCounter(COUNTER_READ_ITERATOR_MAX_TIME_REACHED);
             }
         } else {
             state.IsFinished = true;
             record.SetFinished(true);
             auto fullDelta = now - State.StartTs;
-            datashard.IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, fullDelta.MilliSeconds());
+            Self->IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, fullDelta.MilliSeconds());
 
             if (isKeysRequest) {
-                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW, State.Request->Keys.size());
-                datashard.IncCounter(COUNTER_SELECT_ROWS_PER_REQUEST, State.Request->Keys.size());
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW, State.Request->Keys.size());
+                Self->IncCounter(COUNTER_SELECT_ROWS_PER_REQUEST, State.Request->Keys.size());
             } else {
-                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, State.Request->Ranges.size());
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, State.Request->Ranges.size());
             }
         }
 
         if (!isKeysRequest)
-            datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, InvisibleRowSkips);
+            Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, InvisibleRowSkips);
 
         BytesInResult = BlockBuilder.Bytes();
         if (BytesInResult) {
-            datashard.IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
-            datashard.IncCounter(COUNTER_READ_ITERATOR_BYTES_READ, BytesInResult);
+            Self->IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
+            Self->IncCounter(COUNTER_READ_ITERATOR_BYTES_READ, BytesInResult);
             if (isKeysRequest) {
                 // backward compatibility
-                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW_BYTES, BytesInResult);
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW_BYTES, BytesInResult);
             } else {
                 // backward compatibility
-                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS, RowsRead);
-                datashard.IncCounter(COUNTER_RANGE_READ_ROWS_PER_REQUEST, RowsRead);
-                datashard.IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES, BytesInResult);
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS, RowsRead);
+                Self->IncCounter(COUNTER_RANGE_READ_ROWS_PER_REQUEST, RowsRead);
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES, BytesInResult);
             }
 
             switch (State.Format) {
@@ -1222,7 +1222,7 @@ public:
             << " sends rowCount# " << Reader->GetRowsRead() << ", hasUnreadQueries# " << Reader->HasUnreadQueries()
             << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
 
-        Reader->FillResult(*Result, *Self, state);
+        Reader->FillResult(*Result, state);
         Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
     }
 
@@ -1839,7 +1839,7 @@ public:
             << " sends rowCount# " << Reader->GetRowsRead() << ", hasUnreadQueries# " << Reader->HasUnreadQueries()
             << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
 
-        Reader->FillResult(*Result, *Self, state);
+        Reader->FillResult(*Result, state);
         Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
 
         if (Reader->HasUnreadQueries()) {

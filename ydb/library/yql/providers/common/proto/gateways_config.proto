@@ -404,8 +404,6 @@ message TFileStorageAdditionalConfig {
         required string TargetUrl = 2; // replacement string for target URL
     }
 
-    repeated string AllowedUrlPatterns = 1; // Depricated
-
     repeated TUrlPattern AllowedUrls = 2; // Whitelist of url regexps; disabled if empty
     repeated TUrlPattern ExternalAllowedUrls = 3; // Whitelist of url regexps for external users; disabled if empty
     repeated TSchemeTranslate CustomSchemes = 4;

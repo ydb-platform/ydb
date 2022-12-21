@@ -1,9 +1,5 @@
 package NYql;
 
 message THttpDownloaderConfig {
-    // TODO: remove
-    repeated string AllowedUrlPatterns = 1; // Whitelist of url regexps; disabled if empty
-    // TODO: remove
-    repeated string ExternalAllowedUrlPatterns = 2; // Whitelist of url regexps for external users; disabled if empty
     optional uint32 SocketTimeoutMs = 3 [default = 300000];
 }

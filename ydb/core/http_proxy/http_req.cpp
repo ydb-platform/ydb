@@ -795,7 +795,7 @@ namespace NKikimr::NHttpProxy {
         switch (contentType) {
         case MIME_CBOR: {
             auto toCborStr = NJson::WriteJson(Body, false);
-            auto toCbor = nlohmann::json::to_cbor(nlohmann::json::parse(toCborStr));
+            auto toCbor = nlohmann::json::to_cbor(nlohmann::json::parse(toCborStr, nullptr, false));
             return {(char*)&toCbor[0], toCbor.size()};
         }
         default: {
@@ -806,8 +806,8 @@ namespace NKikimr::NHttpProxy {
     }
 
     void THttpRequestContext::RequestBodyToProto(NProtoBuf::Message* request) {
-        auto requestJsonStr = Request->Body;
-        if (requestJsonStr.empty()) {
+        TStringBuf requestStr = Request->Body;
+        if (requestStr.empty()) {
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
                 "Empty body";
         }
@@ -817,28 +817,26 @@ namespace NKikimr::NHttpProxy {
             listStreamsRequest->set_recurse(true);
         }
 
-        std::string bufferStr;
         switch (ContentType) {
         case MIME_CBOR: {
-            // CborToProto(HttpContext.Request->Body, request);
-            auto fromCbor = nlohmann::json::from_cbor(Request->Body.begin(),
-                                                      Request->Body.end(), true, false);
+            auto fromCbor = nlohmann::json::from_cbor(requestStr.begin(), requestStr.end(),
+                                                      true, false,
+                                                      nlohmann::json::cbor_tag_handler_t::ignore);
             if (fromCbor.is_discarded()) {
                 throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
                     "Can not parse request body from CBOR";
             } else {
-                bufferStr = fromCbor.dump();
-                requestJsonStr = TStringBuf(bufferStr.begin(), bufferStr.end());
+                NlohmannJsonToProto(fromCbor, request);
             }
+            break;
         }
         case MIME_JSON: {
-            NJson::TJsonValue requestBody;
-            auto fromJson = NJson::ReadJsonTree(requestJsonStr, &requestBody);
-            if (fromJson) {
-                JsonToProto(requestBody, request);
-            } else {
+            auto fromJson = nlohmann::json::parse(requestStr, nullptr, false);
+            if (fromJson.is_discarded()) {
                 throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
                     "Can not parse request body from JSON";
+            } else {
+                NlohmannJsonToProto(fromJson, request);
             }
             break;
         }

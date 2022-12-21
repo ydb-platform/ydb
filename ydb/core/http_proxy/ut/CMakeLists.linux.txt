@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-http_proxy-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-http_proxy
+  contrib-restricted-nlohmann_json
   library-cpp-resource
   cpp-client-ydb_types
 )

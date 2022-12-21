@@ -161,14 +161,14 @@ protected:
                     return Die(ctx);
                 }
             }
-            if (event->Get() == InactivityEvent) {
-                const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
-                if (passed >= InactivityTimeout) {
-                    LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
-                    return Die(ctx); // timeout
-                } else {
-                    ctx.Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-                }
+        }
+        if (event->Get() == InactivityEvent) {
+            const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
+            if (passed >= InactivityTimeout) {
+                LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
+                return Die(ctx); // timeout
+            } else {
+                ctx.Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
             }
         }
         if (event->Get()->Write) {

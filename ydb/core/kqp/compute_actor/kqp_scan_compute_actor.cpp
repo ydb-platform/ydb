@@ -6,6 +6,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/wilson.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_channel_storage.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -150,6 +151,7 @@ public:
         execCtx.ApplyCtx = nullptr;
         execCtx.Alloc = nullptr;
         execCtx.TypeEnv = nullptr;
+        execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
 
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 

@@ -450,7 +450,12 @@ private:
                 std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1));
         const auto computationNode = Factory(node, ctx);
         const auto& name = node.GetType()->GetName();
-        if (name == "Switch") { // KIKIMR-16457
+        if (name == "Switch" || // KIKIMR-16457
+            name == "KqpWideReadTable" ||
+            name == "KqpWideReadTableRanges" ||
+            name == "KqpLookupTable" ||
+            name == "KqpReadTable"
+        ) {
             PatternNodes->SuitableForCache = false;
         }
 

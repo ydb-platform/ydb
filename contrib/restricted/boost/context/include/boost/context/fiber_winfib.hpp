@@ -290,14 +290,6 @@ private:
     template< typename Ctx, typename StackAlloc, typename Fn >
     friend detail::fiber_activation_record * detail::create_fiber2( preallocated, StackAlloc &&, Fn &&);
 
-    template< typename StackAlloc, typename Fn >
-    friend fiber
-    callcc( std::allocator_arg_t, StackAlloc &&, Fn &&);
-
-    template< typename StackAlloc, typename Fn >
-    friend fiber
-    callcc( std::allocator_arg_t, preallocated, StackAlloc &&, Fn &&);
-
     detail::fiber_activation_record   *   ptr_{ nullptr };
 
     fiber( detail::fiber_activation_record * ptr) noexcept :

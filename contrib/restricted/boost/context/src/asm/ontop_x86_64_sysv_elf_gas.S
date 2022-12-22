@@ -32,6 +32,8 @@
  ****************************************************************************************/
 # if defined __CET__
 #  include <cet.h>
+#  define SHSTK_ENABLED (__CET__ & 0x2)
+#  define BOOST_CONTEXT_SHADOW_STACK (SHSTK_ENABLED && SHADOW_STACK_SYSCALL)
 # else
 #  define _CET_ENDBR
 # endif
@@ -64,11 +66,31 @@ ontop_fcontext:
     movq  %rbx, 0x30(%rsp)  /* save RBX */
     movq  %rbp, 0x38(%rsp)  /* save RBP */
 
+#if BOOST_CONTEXT_SHADOW_STACK
+    /* grow the stack to reserve space for shadow stack pointer(SSP) */
+    leaq  -0x8(%rsp), %rsp
+    /* read the current SSP and store it */
+    rdsspq  %rcx
+    movq  %rcx, (%rsp)
+#endif
+
     /* store RSP (pointing to context-data) in RAX */
     movq  %rsp, %rax
 
     /* restore RSP (pointing to context-data) from RDI */
     movq  %rdi, %rsp
+
+#if BOOST_CONTEXT_SHADOW_STACK
+    /* first 8 bytes are SSP */
+    movq  (%rsp), %rcx
+    leaq  0x8(%rsp), %rsp
+
+    /* Restore target(new) shadow stack */
+    rstorssp  -8(%rcx)
+    /* restore token for previous shadow stack is pushed */
+    /* on previous shadow stack after saveprevssp */
+    saveprevssp
+#endif
 
 #if !defined(BOOST_USE_TSX)
     ldmxcsr  (%rsp)     /* restore MMX control- and status-word */

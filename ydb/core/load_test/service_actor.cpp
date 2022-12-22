@@ -12,6 +12,10 @@
 
 namespace NKikimr {
 
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
+
 namespace NKqpConstants {
     const TString DEFAULT_PROTO = R"_(
 KqpLoad: {
@@ -31,7 +35,6 @@ KqpLoad: {
         RowsCnt: 1
     }
 })_";
-
 }
 
 using namespace NActors;
@@ -90,20 +93,19 @@ public:
         , Counters(counters)
     {}
 
-    void Bootstrap(const TActorContext& /*ctx*/) {
+    void Bootstrap(const TActorContext&) {
         Become(&TLoadActor::StateFunc);
     }
 
-    void Handle(TEvLoad::TEvLoadTestRequest::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvLoad::TEvLoadTestRequest::TPtr& ev) {
         ui32 status = NMsgBusProxy::MSTATUS_OK;
         TString error;
         ui64 tag = 0;
         const auto& record = ev->Get()->Record;
         try {
-            tag = ProcessCmd(record, ctx);
+            tag = ProcessCmd(record);
         } catch (const TLoadActorException& ex) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, "Exception while creating load actor, what# "
-                    << ex.what());
+            LOG_E("Exception while creating load actor, what# " << ex.what());
             status = NMsgBusProxy::MSTATUS_ERROR;
             error = ex.what();
         }
@@ -116,7 +118,7 @@ public:
             response->Record.SetCookie(record.GetCookie());
         }
         response->Record.SetTag(tag);
-        ctx.Send(ev->Sender, response.release());
+        Send(ev->Sender, response.release());
     }
 
     template<typename T>
@@ -128,7 +130,7 @@ public:
         }
     }
 
-    ui64 ProcessCmd(const NKikimr::TEvLoadTestRequest& record, const TActorContext& ctx) {
+    ui64 ProcessCmd(const NKikimr::TEvLoadTestRequest& record) {
         ui64 tag = 0;
         switch (record.Command_case()) {
             case NKikimr::TEvLoadTestRequest::CommandCase::kStorageLoad: {
@@ -137,8 +139,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateWriterLoadTest(cmd, ctx.SelfID,
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateWriterLoadTest(cmd, SelfId(),
                                 GetServiceCounters(Counters, "load_actor"), tag)));
                 break;
             }
@@ -146,9 +148,9 @@ public:
             case NKikimr::TEvLoadTestRequest::CommandCase::kStop: {
                 const auto& cmd = record.GetStop();
                 if (cmd.HasRemoveAllTags() && cmd.GetRemoveAllTags()) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Delete all running load actors");
+                    LOG_D("Delete all running load actors");
                     for (auto& actorPair : LoadActors) {
-                        ctx.Send(actorPair.second, new TEvents::TEvPoisonPill);
+                        Send(actorPair.second, new TEvents::TEvPoisonPill);
                     }
                 } else {
                     VERIFY_PARAM(Tag);
@@ -158,9 +160,9 @@ public:
                         ythrow TLoadActorException()
                             << Sprintf("load actor with Tag# %" PRIu64 " not found", tag);
                     }
-                    LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Delete running load actor with tag# "
+                    LOG_D("Delete running load actor with tag# "
                             << tag);
-                    ctx.Send(iter->second, new TEvents::TEvPoisonPill);
+                    Send(iter->second, new TEvents::TEvPoisonPill);
                 }
                 break;
             }
@@ -171,9 +173,9 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreatePDiskWriterLoadTest(
-                                cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskWriterLoadTest(
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
@@ -183,9 +185,9 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreatePDiskReaderLoadTest(
-                                cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskReaderLoadTest(
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
@@ -195,9 +197,9 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreatePDiskLogWriterLoadTest(
-                                cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskLogWriterLoadTest(
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
@@ -207,8 +209,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateVDiskWriterLoadTest(cmd, ctx.SelfID, tag)));
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateVDiskWriterLoadTest(cmd, SelfId(), tag)));
                 break;
             }
 
@@ -219,9 +221,9 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateKeyValueWriterLoadTest(
-                                cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateKeyValueWriterLoadTest(
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
@@ -232,9 +234,9 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new Kqp load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateKqpLoadActor(
-                            cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                LOG_D("Create new Kqp load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateKqpLoadActor(
+                            cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
@@ -245,9 +247,9 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Create new memory load actor with tag# " << tag);
-                LoadActors.emplace(tag, ctx.Register(CreateMemoryLoadTest(
-                            cmd, ctx.SelfID, GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                LOG_D("Create new memory load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateMemoryLoadTest(
+                            cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 
@@ -263,11 +265,11 @@ public:
         return tag;
     }
 
-    void Handle(TEvLoad::TEvLoadTestFinished::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvLoad::TEvLoadTestFinished::TPtr& ev) {
         const auto& msg = ev->Get();
         auto iter = LoadActors.find(msg->Tag);
         Y_VERIFY(iter != LoadActors.end());
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor with tag# " << msg->Tag << " finished");
+        LOG_D("Load actor with tag# " << msg->Tag << " finished");
         LoadActors.erase(iter);
         FinishedTests.push_back({msg->Tag, msg->ErrorReason, TAppData::TimeProvider->Now(), msg->LastHtmlPage,
             msg->JsonResult});
@@ -295,7 +297,7 @@ public:
                 const bool empty = !actorIt->second.Data;
                 info.ActorMap.erase(actorIt);
                 if (empty && !--info.HttpInfoResPending) {
-                    GenerateHttpInfoRes(ctx, "results", it->first);
+                    GenerateHttpInfoRes("results", it->first);
                 }
             }
 
@@ -303,47 +305,95 @@ public:
         }
     }
 
-    void RunRecordOnAllNodes(const auto& record, const TActorContext& ctx) {
+    void RunRecordOnAllNodes(const auto& record) {
         AllNodesLoadConfigs.push_back(record);
         const TActorId nameserviceId = GetNameserviceActorId();
-        bool sendStatus = ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "TEvListNodes have sent, status: " << sendStatus);
+        bool sendStatus = Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        LOG_D("TEvListNodes have sent, status: " << sendStatus);
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Handle HttpInfo request");
-        // calculate ID of this request
-        ui32 id = NextRequestId++;
+    static TString GetAccept(const NMonitoring::IMonHttpRequest& request) {
+        const auto& headers = request.GetHeaders();
+        if (const THttpInputHeader* header = headers.FindHeader("Accept")) {
+            return header->Value();
+        } else {
+            return "application/html";
+        }
+    }
 
-        // get reference to request information
-        THttpInfoRequest& info = InfoRequests[id];
+    static TString GetContentType(const NMonitoring::IMonHttpRequest& request) {
+        const auto& headers = request.GetHeaders();
+        if (const THttpInputHeader* header = headers.FindHeader("Content-Type")) {
+            return header->Value();
+        } else {
+            return "application/x-protobuf-text";
+        }
+    }
 
-        const auto& params = ev->Get()->Request.GetParams();
-        TString mode = params.Has("mode") ? params.Get("mode") : "start_load";
-
-        // fill in sender parameters
-        info.Origin = ev->Sender;
-        info.SubRequestId = ev->Get()->SubRequestId;
+    void HandleGet(const NMonitoring::IMonHttpRequest& request, THttpInfoRequest& info, ui32 id) {
+        const auto& params = request.GetParams();
+        TString mode = params.Has("mode") ? params.Get("mode") : "start";
         info.Mode = mode;
 
-        if (params.Has("protobuf")) {
+        if (mode == "results" && GetAccept(request) == "application/json") {
+            GenerateJsonInfoRes(id);
+            return;
+        }
+
+        // send messages to subactors
+        for (const auto& kv : LoadActors) {
+            Send(kv.second, new NMon::TEvHttpInfo(request, id));
+            info.ActorMap[kv.second].Tag = kv.first;
+        }
+
+        // record number of responses pending
+        info.HttpInfoResPending = LoadActors.size();
+        if (!info.HttpInfoResPending) {
+            GenerateHttpInfoRes(mode, id);
+        }
+    }
+
+    template<class TRecord>
+    std::optional<TRecord> ParseMessage(const NMonitoring::IMonHttpRequest& request, const TString& content) {
+        std::optional<TRecord> record = TRecord{};
+
+        bool success = false;
+        auto contentType = GetContentType(request);
+        if (contentType == "application/x-protobuf-text") {
+            success = google::protobuf::TextFormat::ParseFromString(content, &*record);
+        } else if (contentType == "application/json") {
+            auto status = google::protobuf::util::JsonStringToMessage(content, &*record);
+            success = status.ok();
+        } else {
+            Y_FAIL_S("content: " << content.Quote());
+        }
+        if (!success) {
+            record.reset();
+        }
+        return record;
+    }
+
+    void HandlePost(const NMonitoring::IMonHttpRequest& request, const THttpInfoRequest& , ui32 id) {
+        const auto& params = request.GetPostParams();
+        TString content(request.GetPostContent());
+
+        TString mode = params.Has("mode") ? params.Get("mode") : "start";
+
+        if (mode == "start") {
             TString errorMsg = "ok";
-            NKikimr::TEvLoadTestRequest record;
-            bool status = google::protobuf::TextFormat::ParseFromString(params.Get("protobuf"), &record);
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST,
-                "received protobuf: " << params.Get("protobuf") << " | "
-                "proto parse status: " << std::to_string(status)
-            );
+            auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, content);
+            LOG_D( "received config: " << params.Get("config").Quote() << "; proto parse success: " << std::to_string(bool{record}));
+
             ui64 tag = 0;
-            if (status) {
+            if (record) {
                 if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
-                    LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on all nodes");
-                    RunRecordOnAllNodes(record, ctx);
+                    LOG_N("running on all nodes");
+                    RunRecordOnAllNodes(*record);
                     tag = NextTag; // may be datarace here
                 } else {
                     try {
-                        LOG_NOTICE_S(ctx, NKikimrServices::BS_LOAD_TEST, "running on node: " << SelfId().NodeId());
-                        tag = ProcessCmd(record, ctx);
+                        LOG_N("running on node: " << SelfId().NodeId());
+                        tag = ProcessCmd(*record);
                     } catch (const TLoadActorException& ex) {
                         errorMsg = ex.what();
                     }
@@ -352,40 +402,54 @@ public:
                 errorMsg = "bad protobuf";
             }
 
-            GenerateJsonTagInfoRes(ctx, id, tag, errorMsg);
-            return;
-        } else if (params.Has("stop_request")) {
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "received stop request");
-            NKikimr::TEvLoadTestRequest record;
-            record.MutableStop()->SetRemoveAllTags(true);
-            if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on all nodes");
-                RunRecordOnAllNodes(record, ctx);
-            } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "stop load on node: " << SelfId().NodeId());
-                ProcessCmd(record, ctx);
+            GenerateJsonTagInfoRes(id, tag, errorMsg);
+        } else if (mode = "stop") {
+            LOG_D("received stop request");
+            auto record = ParseMessage<NKikimr::TEvLoadTestRequest::TStop>(request, content);
+            if (!record) {
+                record = NKikimr::TEvLoadTestRequest::TStop{};
+                record->SetRemoveAllTags(true);
             }
-            GenerateJsonTagInfoRes(ctx, id, 0, "OK");
-            return;
-        } else if (mode == "results_json") {
-            GenerateJsonInfoRes(ctx, id);
-            return;
-        }
+            NKikimr::TEvLoadTestRequest loadReq;
+            *loadReq.MutableStop() = *record;
 
-        // send messages to subactors
-        for (const auto& kv : LoadActors) {
-            ctx.Send(kv.second, new NMon::TEvHttpInfo(ev->Get()->Request, id));
-            info.ActorMap[kv.second].Tag = kv.first;
-        }
-
-        // record number of responses pending
-        info.HttpInfoResPending = LoadActors.size();
-        if (!info.HttpInfoResPending) {
-            GenerateHttpInfoRes(ctx, mode, id);
+            if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
+                LOG_D("stop load on all nodes");
+                RunRecordOnAllNodes(loadReq);
+            } else {
+                LOG_D("stop load on node: " << SelfId().NodeId());
+                ProcessCmd(loadReq);
+            }
+            GenerateJsonTagInfoRes(id, 0, "OK");
         }
     }
 
-    void Handle(const TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+        LOG_N("Handle HttpInfo request");
+        // calculate ID of this request
+        ui32 id = NextRequestId++;
+
+        // get reference to request information
+        THttpInfoRequest& info = InfoRequests[id];
+
+        // fill in sender parameters
+        info.Origin = ev->Sender;
+        info.SubRequestId = ev->Get()->SubRequestId;
+
+        auto& request = ev->Get()->Request;
+        switch (request.GetMethod()) {
+             case HTTP_METHOD_GET:
+                HandleGet(request, info, id);
+                break;
+             case HTTP_METHOD_POST:
+                HandlePost(request, info, id);
+                break;
+            default:
+                Y_FAIL();
+        }
+    }
+
+    void Handle(const TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         TAppData* appDataPtr = AppData();
 
         TVector<ui32> dyn_node_ids;
@@ -397,18 +461,18 @@ public:
 
         for (const auto& cmd : AllNodesLoadConfigs) {
             for (const auto& id : dyn_node_ids) {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "sending load request to: " << id);
+                LOG_D("sending load request to: " << id);
                 auto msg = MakeHolder<TEvLoad::TEvLoadTestRequest>();
                 msg->Record = cmd;
                 msg->Record.SetCookie(id);
-                ctx.Send(MakeLoadServiceID(id), msg.Release());
+                Send(MakeLoadServiceID(id), msg.Release());
             }
         }
 
         AllNodesLoadConfigs.clear();
     }
 
-    void Handle(NMon::TEvHttpInfoRes::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NMon::TEvHttpInfoRes::TPtr& ev) {
         const auto& msg = ev->Get();
         ui32 id = static_cast<NMon::TEvHttpInfoRes *>(msg)->SubRequestId;
 
@@ -426,11 +490,11 @@ public:
         perActorInfo.Data = stream.Str();
 
         if (!--info.HttpInfoResPending) {
-            GenerateHttpInfoRes(ctx, info.Mode, id);
+            GenerateHttpInfoRes(info.Mode, id);
         }
     }
 
-    void GenerateJsonTagInfoRes(const TActorContext& ctx, ui32 id, ui64 tag, TString errorMsg) {
+    void GenerateJsonTagInfoRes(ui32 id, ui64 tag, TString errorMsg) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
@@ -446,12 +510,12 @@ public:
 
         auto result = std::make_unique<NMon::TEvHttpInfoRes>(str.Str(), info.SubRequestId,
                 NMon::IEvHttpInfoRes::EContentType::Custom);
-        ctx.Send(info.Origin, result.release());
+        Send(info.Origin, result.release());
 
         InfoRequests.erase(it);
     }
 
-    void GenerateJsonInfoRes(const TActorContext& ctx, ui32 id) {
+    void GenerateJsonInfoRes(ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
@@ -468,12 +532,12 @@ public:
 
         auto result = std::make_unique<NMon::TEvHttpInfoRes>(str.Str(), info.SubRequestId,
                 NMon::IEvHttpInfoRes::EContentType::Custom);
-        ctx.Send(info.Origin, result.release());
+        Send(info.Origin, result.release());
 
         InfoRequests.erase(it);
     }
 
-    void GenerateHttpInfoRes(const TActorContext& ctx, const TString& mode, ui32 id) {
+    void GenerateHttpInfoRes(const TString& mode, ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
@@ -485,53 +549,50 @@ public:
                 str << "<a href='?mode=" << link << "' class='btn " << type << "'>" << name << "</a>\n";
             };
 
-            printTabs("start_load", "Start load");
-            printTabs("stop_load", "Stop load");
+            printTabs("start", "Start load");
+            printTabs("stop", "Stop load");
             printTabs("results", "Results");
             str << "<br>";
 
             str << "<div>";
-            if (mode == "start_load") {
+            if (mode == "start") {
                 str << R"___(
                     <script>
                         function sendStartRequest(button, run_all) {
                             $.ajax({
                                 url: "",
-                                data: {
-                                    protobuf: $('#protobuf').val(),
-                                    all_nodes: run_all
-                                },
-                                method: "GET",
-                                dataType: "html",
+                                data: $('#config').val(),
+                                method: "POST",
+                                contentType: "application/x-protobuf-text",
                                 success: function(result) {
                                     $(button).prop('disabled', true);
                                     $(button).text('started');
-                                    $('#protobuf').text(result);
+                                    $('#config').text('tag: ' + result.tag);
                                 }
                             });
                         }
                     </script>
                 )___";
                 str << R"_(
-                    <textarea id="protobuf" name="protobuf" rows="20" cols="50">)_" << NKqpConstants::DEFAULT_PROTO << R"_(
+                    <textarea id="config" name="config" rows="20" cols="50">)_" << NKqpConstants::DEFAULT_PROTO << R"_(
                     </textarea>
                     <br><br>
                     <button onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>Start new load on current node</button>
                     <br>
                     <button onClick='sendStartRequest(this, true)' name='startNewLoadAllNodes' class='btn btn-default'>Start new load on all tenant nodes</button>
                 )_";
-            } else if (mode == "stop_load") {
+            } else if (mode == "stop") {
                 str << R"___(
                     <script>
                         function sendStopRequest(button, stop_all) {
                             $.ajax({
                                 url: "",
                                 data: {
-                                    stop_request: true,
+                                    mode: "stop",
                                     all_nodes: stop_all
                                 },
-                                method: "GET",
-                                dataType: "html",
+                                method: "POST",
+                                contentType: "application/json",
                                 success: function(result) {
                                     $(button).prop('disabled', true);
                                     $(button).text("stopped");
@@ -575,18 +636,18 @@ public:
             str << "</div>";
         }
 
-        ctx.Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId));
-        // ctx.Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId));
+        // Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId, NMon::IEvHttpInfoRes::EContentType::Custom));
 
         InfoRequests.erase(it);
     }
 
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvLoad::TEvLoadTestRequest, Handle)
-        HFunc(TEvLoad::TEvLoadTestFinished, Handle)
-        HFunc(NMon::TEvHttpInfo, Handle)
-        HFunc(NMon::TEvHttpInfoRes, Handle)
-        HFunc(TEvInterconnect::TEvNodesInfo, Handle)
+        hFunc(TEvLoad::TEvLoadTestRequest, Handle)
+        hFunc(TEvLoad::TEvLoadTestFinished, Handle)
+        hFunc(NMon::TEvHttpInfo, Handle)
+        hFunc(NMon::TEvHttpInfoRes, Handle)
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle)
     )
 };
 

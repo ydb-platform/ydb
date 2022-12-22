@@ -76,6 +76,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_reduce.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_kyber_512_evp.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq_random.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer.c

@@ -8,6 +8,9 @@ namespace NProtobufJson {
         jsonConfig.ValidateUtf8 = false;
         jsonConfig.DontEscapeStrings = false;
         jsonConfig.WriteNanAsString = config.WriteNanAsString;
+        jsonConfig.DoubleNDigits = config.DoubleNDigits;
+        jsonConfig.FloatNDigits = config.FloatNDigits;
+        jsonConfig.FloatToStringMode = config.FloatToStringMode;
 
         for (size_t i = 0; i < config.StringTransforms.size(); ++i) {
             Y_ASSERT(config.StringTransforms[i]);

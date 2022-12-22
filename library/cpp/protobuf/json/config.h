@@ -5,12 +5,19 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
+#include <util/string/cast.h>
+
+#include <library/cpp/json/json_writer.h>
 
 #include <functional>
 
 namespace NProtobufJson {
     struct TProto2JsonConfig {
         using TSelf = TProto2JsonConfig;
+
+        ui32 DoubleNDigits = NJson::TJsonWriterConfig::DefaultDoubleNDigits;
+        ui32 FloatNDigits = NJson::TJsonWriterConfig::DefaultFloatNDigits;
+        EFloatToStringMode FloatToStringMode = NJson::TJsonWriterConfig::DefaultFloatToStringMode;
 
         bool FormatOutput = false;
 
@@ -90,6 +97,21 @@ namespace NProtobufJson {
         TEnumValueGenerator EnumValueGenerator = {};
 
         bool WriteNanAsString = false;
+
+        TSelf& SetDoubleNDigits(ui32 ndigits) {
+            DoubleNDigits = ndigits;
+            return *this;
+        }
+
+        TSelf& SetFloatNDigits(ui32 ndigits) {
+            FloatNDigits = ndigits;
+            return *this;
+        }
+
+        TSelf& SetFloatToStringMode(EFloatToStringMode mode) {
+            FloatToStringMode = mode;
+            return *this;
+        }
 
         TSelf& SetFormatOutput(bool format) {
             FormatOutput = format;

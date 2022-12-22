@@ -1053,4 +1053,30 @@ Y_UNIT_TEST(TestSimplifiedTimestamp) {
     UNIT_ASSERT_EQUAL_C(json, "{\"Timestamp\":\"1970-04-26T17:46:40.000000504Z\"}", "real value is " << json);
 } // TestSimplifiedTimestamp
 
+Y_UNIT_TEST(TestFloatToString) {
+#define TEST_SINGLE(mode, value, expectedValue)                                             \
+    do {                                                                                    \
+        TFlatOptional proto;                                                                \
+        proto.SetFloat(value);                                                              \
+                                                                                            \
+        TStringStream jsonStr;                                                              \
+        TProto2JsonConfig config;                                                           \
+        config.SetFloatNDigits(3).SetFloatToStringMode(mode);                               \
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));                       \
+        TString expectedStr = TStringBuilder() << "{\"Float\":" << expectedValue << "}";    \
+        UNIT_ASSERT_EQUAL_C(jsonStr.Str(), expectedStr, "real value is " << jsonStr.Str()); \
+    } while (false)
+
+    TEST_SINGLE(EFloatToStringMode::PREC_NDIGITS, 1234.18345, "1.23e+03");
+    TEST_SINGLE(EFloatToStringMode::PREC_NDIGITS, 12.18345, "12.2");
+    TEST_SINGLE(EFloatToStringMode::PREC_POINT_DIGITS, 12345.18355, "12345.184");
+    TEST_SINGLE(EFloatToStringMode::PREC_POINT_DIGITS, 12.18355, "12.184");
+    TEST_SINGLE(EFloatToStringMode::PREC_POINT_DIGITS, 12.18, "12.180");
+    TEST_SINGLE(EFloatToStringMode::PREC_POINT_DIGITS_STRIP_ZEROES, 12345.18355, "12345.184");
+    TEST_SINGLE(EFloatToStringMode::PREC_POINT_DIGITS_STRIP_ZEROES, 12.18355, "12.184");
+    TEST_SINGLE(EFloatToStringMode::PREC_POINT_DIGITS_STRIP_ZEROES, 12.18, "12.18");
+
+#undef TEST_SINGLE
+} // TestFloatToString
+
 } // TProto2JsonTest

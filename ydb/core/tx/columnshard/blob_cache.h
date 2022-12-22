@@ -20,6 +20,11 @@ using NOlap::TBlobRange;
 
 using TLogThis = TCtorLogger<NKikimrServices::BLOB_CACHE>;
 
+struct TReadBlobRangeOptions {
+    bool CacheAfterRead;
+    bool Fallback;
+    bool IsBackgroud;
+};
 
 struct TEvBlobCache {
     enum EEv {
@@ -36,13 +41,11 @@ struct TEvBlobCache {
 
     struct TEvReadBlobRange : public NActors::TEventLocal<TEvReadBlobRange, EvReadBlobRange> {
         TBlobRange BlobRange;
-        bool CacheAfterRead;
-        bool Fallback;
+        TReadBlobRangeOptions ReadOptions;
 
-        explicit TEvReadBlobRange(const TBlobRange& blobRange, bool cacheResult, bool fallback)
+        explicit TEvReadBlobRange(const TBlobRange& blobRange, TReadBlobRangeOptions&& opts)
             : BlobRange(blobRange)
-            , CacheAfterRead(cacheResult)
-            , Fallback(fallback)
+            , ReadOptions(std::move(opts))
         {}
     };
 
@@ -50,15 +53,13 @@ struct TEvBlobCache {
     // This is usefull to save IOPs when reading multiple columns from the same blob
     struct TEvReadBlobRangeBatch : public NActors::TEventLocal<TEvReadBlobRangeBatch, EvReadBlobRangeBatch> {
         std::vector<TBlobRange> BlobRanges;
-        bool CacheAfterRead;
-        bool Fallback;
+        TReadBlobRangeOptions ReadOptions;
 
-        explicit TEvReadBlobRangeBatch(std::vector<TBlobRange>&& blobRanges, bool cacheResult, bool fallback)
+        explicit TEvReadBlobRangeBatch(std::vector<TBlobRange>&& blobRanges, TReadBlobRangeOptions&& opts)
             : BlobRanges(std::move(blobRanges))
-            , CacheAfterRead(cacheResult)
-            , Fallback(fallback)
+            , ReadOptions(std::move(opts))
         {
-            if (fallback) {
+            if (opts.Fallback) {
                 for (const auto& blobRange : BlobRanges) {
                     Y_VERIFY(blobRange.BlobId == BlobRanges[0].BlobId);
                 }

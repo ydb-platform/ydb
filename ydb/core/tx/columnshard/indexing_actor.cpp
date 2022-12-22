@@ -108,7 +108,12 @@ private:
 
     void SendReadRequest(const NBlobCache::TBlobRange& blobRange) {
         Y_VERIFY(blobRange.Size);
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, false, false));
+        NBlobCache::TReadBlobRangeOptions readOpts {
+            .CacheAfterRead = false,
+            .Fallback = false,
+            .IsBackgroud = true
+        };
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));
     }
 
     void Index(const TActorContext& ctx) {

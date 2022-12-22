@@ -107,8 +107,13 @@ private:
     void SendReadRequest(std::vector<NBlobCache::TBlobRange>&& ranges, bool isExternal) {
         Y_VERIFY(!ranges.empty());
 
+        NBlobCache::TReadBlobRangeOptions readOpts {
+            .CacheAfterRead = false,
+            .Fallback = isExternal,
+            .IsBackgroud = true
+        };
         Send(BlobCacheActorId,
-             new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), false, isExternal));
+             new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
     }
 
     void CompactGranules(const TActorContext& ctx) {

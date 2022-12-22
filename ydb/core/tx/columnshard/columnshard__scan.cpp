@@ -108,7 +108,13 @@ private:
 
         auto& externBlobs = ReadMetadataRanges[ReadMetadataIndex]->ExternBlobs;
         bool fallback = externBlobs && externBlobs->count(blobRange.BlobId);
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, true, fallback));
+
+        NBlobCache::TReadBlobRangeOptions readOpts {
+            .CacheAfterRead = true,
+            .Fallback = fallback,
+            .IsBackgroud = false
+        };
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));
         ++InFlightReads;
         InFlightReadBytes += blobRange.Size;
         return true;

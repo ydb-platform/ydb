@@ -139,14 +139,11 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
     const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
 
-    void SetAllKeys(const TVector<TString>& columns, const TVector<int>& indexKeyPos);
-    void SetAllKeys(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, const TVector<int>& indexKeyPos) {
-        SetAllKeys(NamesOnly(columns), indexKeyPos);
-    }
+    void SetAllKeys();
 
-    void AddTtlColumn(const TString& ttlColumn) {
+    void CheckTtlColumn(const TString& ttlColumn) const {
         Y_VERIFY(!ttlColumn.empty());
-        MinMaxIdxColumnsIds.insert(GetColumnId(ttlColumn));
+        Y_VERIFY(MinMaxIdxColumnsIds.count(GetColumnId(ttlColumn)));
     }
 
     TVector<TRawTypeValue> ExtractKey(const THashMap<ui32, TCell>& fields, bool allowNulls = false) const;

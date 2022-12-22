@@ -108,7 +108,7 @@ bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
  * @return Result of execution of callback or false if the type typeId is not supported.
  */
 template <typename TFunc>
-bool SwitchYqlTypeToArrowType(NScheme::TTypeInfo typeInfo, TFunc&& callback) {
+bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return callback(TTypeWrapper<arrow::BooleanType>());
@@ -158,6 +158,29 @@ bool SwitchYqlTypeToArrowType(NScheme::TTypeInfo typeInfo, TFunc&& callback) {
 
         case NScheme::NTypeIds::Pg:
             break; // TODO: support pg types
+    }
+    return false;
+}
+
+inline bool IsPrimitiveYqlType(const NScheme::TTypeInfo& typeInfo) {
+    switch (typeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Int8:
+        case NScheme::NTypeIds::Uint8:
+        case NScheme::NTypeIds::Int16:
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Uint16:
+        case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Uint32:
+        case NScheme::NTypeIds::Int64:
+        case NScheme::NTypeIds::Uint64:
+        case NScheme::NTypeIds::Float:
+        case NScheme::NTypeIds::Double:
+        case NScheme::NTypeIds::Timestamp:
+        case NScheme::NTypeIds::Interval:
+            return true;
+        default:
+            break;
     }
     return false;
 }

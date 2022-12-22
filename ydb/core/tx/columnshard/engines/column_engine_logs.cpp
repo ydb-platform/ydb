@@ -399,7 +399,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, con
     /// @note Setting replace and sorting key to PK we are able to:
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
-    IndexInfo.SetAllKeys(IndexInfo.GetPK(), {0});
+    IndexInfo.SetAllKeys();
 
     auto& indexKey = IndexInfo.GetIndexKey();
     Y_VERIFY(indexKey->num_fields() == 1);
@@ -534,7 +534,7 @@ void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndex
     Y_UNUSED(snapshot);
     IndexInfo = std::move(info);
     // copied from constructor above
-    IndexInfo.SetAllKeys(IndexInfo.GetPK(), {0});
+    IndexInfo.SetAllKeys();
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop) {

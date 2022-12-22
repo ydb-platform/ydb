@@ -197,27 +197,30 @@ std::shared_ptr<arrow::Field> TIndexInfo::ArrowColumnField(ui32 columnId) const 
     return ArrowSchema()->GetFieldByName(columnName);
 }
 
-void TIndexInfo::SetAllKeys(const TVector<TString>& columns, const TVector<int>& indexKeyPos) {
-    AddRequiredColumns(columns);
-    MinMaxIdxColumnsIds.insert(GetPKFirstColumnId());
+void TIndexInfo::SetAllKeys() {
+    auto pk = NamesOnly(GetPK());
+    AddRequiredColumns(pk);
 
-    std::vector<std::shared_ptr<arrow::Field>> fileds;
-    if (columns.size()) {
-        SortingKey = ArrowSchema(columns);
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    if (pk.size()) {
+        SortingKey = ArrowSchema(pk);
         ReplaceKey = SortingKey;
-        fileds = ReplaceKey->fields();
+        fields = ReplaceKey->fields();
+
+        std::vector<std::shared_ptr<arrow::Field>> indexFields = { fields[0] };
+        IndexKey = std::make_shared<arrow::Schema>(indexFields);
     }
 
-    fileds.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
-    fileds.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
-    ExtendedKey = std::make_shared<arrow::Schema>(fileds);
+    fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
+    fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
+    ExtendedKey = std::make_shared<arrow::Schema>(fields);
 
-    std::vector<std::shared_ptr<arrow::Field>> indexFields;
-    indexFields.reserve(indexKeyPos.size());
-    for (int pos : indexKeyPos) {
-        indexFields.push_back(fileds[pos]);
+    for (auto& [colId, column] : Columns) {
+        if (NArrow::IsPrimitiveYqlType(column.PType)) {
+            MinMaxIdxColumnsIds.insert(colId);
+        }
     }
-    IndexKey = std::make_shared<arrow::Schema>(indexFields);
+    MinMaxIdxColumnsIds.insert(GetPKFirstColumnId());
 }
 
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {

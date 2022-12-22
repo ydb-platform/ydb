@@ -650,16 +650,16 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
 
 void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions) {
     for (auto& [snap, indexInfo] : schemaVersions) {
-        for (auto& columnName : Ttl.TtlColumns()) {
-            indexInfo.AddTtlColumn(columnName);
-        }
-
         if (!PrimaryIndex) {
             PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(std::move(indexInfo), TabletID());
             SetCounter(COUNTER_INDEXES, 1);
         } else {
             PrimaryIndex->UpdateDefaultSchema(snap, std::move(indexInfo));
         }
+    }
+
+    for (auto& columnName : Ttl.TtlColumns()) {
+        PrimaryIndex->GetIndexInfo().CheckTtlColumn(columnName);
     }
 }
 

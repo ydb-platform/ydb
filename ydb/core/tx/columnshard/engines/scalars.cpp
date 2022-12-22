@@ -45,8 +45,7 @@ void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstan
             value.SetInt64(static_cast<const arrow::Date64Scalar&>(scalar).value);
             break;
         case arrow::Type::TIMESTAMP:
-            // TODO: signed timestamps
-            value.SetUint64(static_cast<const arrow::TimestampScalar&>(scalar).value);
+            value.SetInt64(static_cast<const arrow::TimestampScalar&>(scalar).value);
             break;
         case arrow::Type::TIME32:
             value.SetInt32(static_cast<const arrow::Time32Scalar&>(scalar).value);

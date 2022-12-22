@@ -188,7 +188,7 @@ TIndexInfo TestTableInfo(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema
         indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
     }
 
-    indexInfo.AddTtlColumn("timestamp");
+    indexInfo.SetAllKeys();
     return indexInfo;
 }
 

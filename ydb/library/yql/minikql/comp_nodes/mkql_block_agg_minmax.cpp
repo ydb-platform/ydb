@@ -437,9 +437,12 @@ private:
 template <typename TTag, typename TIn, typename TInScalar, typename TBuilder, bool IsMin>
 class TPreparedMinMaxBlockAggregatorNullableOrScalar : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedMinMaxBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn,
         const std::shared_ptr<arrow::DataType>& builderDataType)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TState<TIn, IsMin>))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
         , BuilderDataType_(builderDataType)
     {}
@@ -457,9 +460,12 @@ private:
 template <typename TTag, typename TIn, typename TInScalar, typename TBuilder, bool IsMin>
 class TPreparedMinMaxBlockAggregator : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedMinMaxBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
         const std::shared_ptr<arrow::DataType>& builderDataType)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TSimpleState<TIn, IsMin>))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
         , BuilderDataType_(builderDataType)
     {}

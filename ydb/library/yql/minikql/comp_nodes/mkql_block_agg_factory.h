@@ -87,6 +87,12 @@ public:
     virtual ~IPreparedBlockAggregator() = default;
 
     virtual std::unique_ptr<T> Make(TComputationContext& ctx) const = 0;
+
+    const ui32 StateSize;
+
+    explicit IPreparedBlockAggregator(ui32 stateSize)
+        : StateSize(stateSize)
+    {}
 };
 
 class IBlockAggregatorFactory {

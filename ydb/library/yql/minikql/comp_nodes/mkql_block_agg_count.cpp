@@ -261,8 +261,11 @@ public:
 template <typename TTag>
 class TPreparedCountAll : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedCountAll(std::optional<ui32> filterColumn, ui32 argColumn)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TState))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
     {}
 
@@ -278,8 +281,11 @@ private:
 template <typename TTag>
 class TPreparedCount : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedCount(std::optional<ui32> filterColumn, ui32 argColumn)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TState))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
     {}
 

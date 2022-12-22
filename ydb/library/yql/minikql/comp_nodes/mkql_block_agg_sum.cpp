@@ -705,9 +705,12 @@ private:
 template <typename TTag, typename TIn, typename TSum, typename TBuilder, typename TInScalar>
 class TPreparedSumBlockAggregatorNullableOrScalar : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedSumBlockAggregatorNullableOrScalar(std::optional<ui32> filterColumn, ui32 argColumn,
         const std::shared_ptr<arrow::DataType>& builderDataType)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TSumState<TSum>))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
         , BuilderDataType_(builderDataType)
     {}
@@ -725,9 +728,12 @@ private:
 template <typename TTag, typename TIn, typename TSum, typename TBuilder, typename TInScalar>
 class TPreparedSumBlockAggregator : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedSumBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
         const std::shared_ptr<arrow::DataType>& builderDataType)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TSumSimpleState<TSum>))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
         , BuilderDataType_(builderDataType)
     {}
@@ -825,9 +831,12 @@ public:
 template <typename TTag, typename TIn, typename TInScalar>
 class TPreparedAvgBlockAggregator : public TTag::TPreparedAggregator {
 public:
+    using TBase = typename TTag::TPreparedAggregator;
+
     TPreparedAvgBlockAggregator(std::optional<ui32> filterColumn, ui32 argColumn,
         const std::shared_ptr<arrow::DataType>& builderDataType)
-        : FilterColumn_(filterColumn)
+        : TBase(sizeof(TAvgState))
+        , FilterColumn_(filterColumn)
         , ArgColumn_(argColumn)
         , BuilderDataType_(builderDataType)
     {}
@@ -844,8 +853,11 @@ private:
 
 class TPreparedAvgBlockAggregatorOverState : public TFinalizeKeysTag::TPreparedAggregator {
 public:
+    using TBase = TFinalizeKeysTag::TPreparedAggregator;
+
     TPreparedAvgBlockAggregatorOverState(ui32 argColumn)
-        : ArgColumn_(argColumn)
+        : TBase(sizeof(TAvgState))
+        , ArgColumn_(argColumn)
     {}
 
     std::unique_ptr<typename TFinalizeKeysTag::TAggregator> Make(TComputationContext& ctx) const final {

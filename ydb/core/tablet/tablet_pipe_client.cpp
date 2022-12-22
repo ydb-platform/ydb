@@ -295,13 +295,13 @@ namespace NTabletPipe {
 
             Become(&TThis::StateWork);
 
+            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::OK, ctx.SelfID, ServerId, Leader, false));
+
             BLOG_D("send queued");
             while (TAutoPtr<IEventHandle> x = PayloadQueue->Pop())
                 Push(ctx, x);
 
             PayloadQueue.Destroy();
-
-            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::OK, ctx.SelfID, ServerId, Leader, false));
 
             if (IsShutdown) {
                 BLOG_D("shutdown pipe due to pending shutdown request");

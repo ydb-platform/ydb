@@ -219,7 +219,8 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
     fetches.reserve(lookup.GetKeyRanges().size());
 
     for (auto& keyRange : lookup.GetKeyRanges()) {
-        bool useLookup = false;
+        bool useDataQueryLookup = false;
+        bool useScanQueryLookup = false;
         if (onlyPointRanges && !IsPointPrefix(keyRange)) {
             return node;
         }
@@ -229,11 +230,13 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
             // NOTE: Use more efficient full key lookup implementation in datashard.
             // Consider using lookup for partial keys as well once better constant folding
             // is available, currently it can introduce redundant compute stage.
-            useLookup = kqpCtx.IsDataQuery() && isFullKey;
+            useDataQueryLookup = kqpCtx.IsDataQuery() && isFullKey;
+            useScanQueryLookup = kqpCtx.IsScanQuery() && isFullKey
+                && kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup();
         }
 
         TMaybeNode<TExprBase> readInput;
-        if (useLookup) {
+        if (useDataQueryLookup) {
             auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
 
             if (indexName) {
@@ -257,6 +260,24 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                         .Columns(read.Columns())
                         .Done();
                 }
+            }
+        } else if (useScanQueryLookup) {
+            YQL_ENSURE(kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup());
+            auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
+
+            if (indexName) {
+                readInput = Build<TKqlStreamLookupIndex>(ctx, read.Pos())
+                    .Table(read.Table())
+                    .LookupKeys(lookupKeys)
+                    .Columns(read.Columns())
+                    .Index(indexName.Cast())
+                    .Done();
+            } else {
+                readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
+                    .Table(read.Table())
+                    .LookupKeys(lookupKeys)
+                    .Columns(read.Columns())
+                    .Done();
             }
         } else {
             auto keyRangeExpr = BuildKeyRangeExpr(keyRange, tableDesc, node.Pos(), ctx);

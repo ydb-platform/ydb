@@ -117,6 +117,11 @@ namespace NActors {
         }
         bool Send(TAutoPtr<IEventHandle> ev) const;
         bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
+        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        template <typename TEvent>
+        bool SendWithContinuousExecution(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return SendWithContinuousExecution(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
+        }
 
         TInstant Now() const;
         TMonotonic Monotonic() const;
@@ -178,6 +183,7 @@ namespace NActors {
         }
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
@@ -189,6 +195,7 @@ namespace NActors {
     public:
         virtual void Describe(IOutputStream&) const noexcept = 0;
         virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
+        virtual bool SendWithContinuousExecution(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -468,6 +475,17 @@ namespace NActors {
         template <class TEvent, class ... TEventArgs>
         bool Send(TActorId recipient, TEventArgs&& ... args) const {
             return Send(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
+        }
+
+        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
+        template <typename TEvent>
+        bool SendWithContinuousExecution(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
+            return SendWithContinuousExecution(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
+        }
+
+        template <class TEvent, class ... TEventArgs>
+        bool SendWithContinuousExecution(TActorId recipient, TEventArgs&& ... args) const {
+            return SendWithContinuousExecution(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
         }
 
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;

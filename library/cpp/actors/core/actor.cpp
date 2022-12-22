@@ -15,6 +15,10 @@ namespace NActors {
         return ExecutorThread.Send(ev);
     }
 
+    bool TActorContext::SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return SendWithContinuousExecution(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
+    }
+
     bool TActorContext::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const {
         if (TlsThreadContext) {
             return ExecutorThread.SendWithContinuousExecution(ev);
@@ -35,6 +39,10 @@ namespace NActors {
 
     bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
         return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
+    }
+
+    bool IActor::SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
+        return SelfActorId.SendWithContinuousExecution(recipient, ev, flags, cookie, std::move(traceId));
     }
 
     bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
@@ -59,6 +67,10 @@ namespace NActors {
 
     bool TActorIdentity::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
         return TActivationContext::Send(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
+    }
+
+    bool TActorIdentity::SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return TActivationContext::SendWithContinuousExecution(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
     void TActorIdentity::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {

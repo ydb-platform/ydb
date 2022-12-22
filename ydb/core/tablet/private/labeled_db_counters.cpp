@@ -79,7 +79,7 @@ TDbLabeledCounters::TDbLabeledCounters(::NMonitoring::TDynamicCounterPtr counter
 {}
 
 void TDbLabeledCounters::ToProto(NKikimr::NSysView::TDbServiceCounters& counters) {
-    counters.ClearLabeledCounters();
+    counters.Clear();
     for (auto& bucket : LabeledCountersByGroup.Buckets) {
         TWriteGuard guard(bucket.GetLock());
         for (auto& [group, labeledCounters] : bucket.GetMap()) {

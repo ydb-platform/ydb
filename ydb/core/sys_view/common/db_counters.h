@@ -17,6 +17,14 @@ class TDbServiceCounters {
     THashMap<TString, NKikimrSysView::TDbLabeledCounters*> ByGroupName;
 
 public:
+    void Clear()
+    {
+        ProtoCounters.Clear();
+        ByTabletType.clear();
+        ByGRpcRequest.clear();
+        ByGroupName.clear();
+    }
+
     void Swap(TDbServiceCounters& other) {
         ProtoCounters.Swap(&other.ProtoCounters);
         ByTabletType.swap(other.ByTabletType);
@@ -97,12 +105,6 @@ public:
         ByGroupName[groupName] = counters;
 
         return counters;
-    }
-
-    void ClearLabeledCounters()
-    {
-        ProtoCounters.Clear();
-        ByGroupName.clear();
     }
 };
 

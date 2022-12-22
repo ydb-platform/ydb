@@ -240,7 +240,6 @@ static void SwapStatefulCounters(NKikimr::NSysView::TDbServiceCounters* dst,
         SwapSimpleCounters(dstReq->MutableRequestCounters(), *srcReq.MutableRequestCounters());
     }
 
-    dst->ClearLabeledCounters();
     for (auto& srcReq : *src.MutableLabeledCounters()) {
         auto* dstReq = dst->FindOrAddLabeledCounters(srcReq.GetAggregatedPerTablets().GetGroup());
         SwapLabeledCounters(dstReq->MutableAggregatedPerTablets(), *srcReq.MutableAggregatedPerTablets());
@@ -415,6 +414,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         incomingServicesSet.insert(service);
 
         auto& simpleState = state.Simple[service];
+        simpleState.Clear();
         SwapStatefulCounters(&simpleState, *serviceCounters.MutableCounters());
 
         auto& aggrState = AggregatedCountersState[service];
@@ -473,6 +473,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr
         incomingServicesSet.insert(service);
 
         auto& simpleState = state.Simple[service];
+        simpleState.Clear();
         SwapStatefulCounters(&simpleState, *serviceCounters.MutableCounters());
     }
 

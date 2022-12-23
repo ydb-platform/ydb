@@ -10,6 +10,7 @@
 add_library(restricted-boost-atomic)
 target_compile_options(restricted-boost-atomic PRIVATE
   -DBOOST_ATOMIC_SOURCE
+  -DBOOST_ATOMIC_USE_SSE41
   -Wno-everything
 )
 target_include_directories(restricted-boost-atomic PUBLIC
@@ -32,6 +33,6 @@ target_link_libraries(restricted-boost-atomic PUBLIC
 )
 target_sources(restricted-boost-atomic PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse41.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse41.cpp
 )

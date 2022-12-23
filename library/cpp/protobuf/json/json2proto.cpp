@@ -152,9 +152,9 @@ JsonString2Field(const NJson::TJsonValue& json,
     }
 
     if (field.is_repeated())
-        reflection->AddString(&proto, &field, value);
+        reflection->AddString(&proto, &field, std::move(value));
     else
-        reflection->SetString(&proto, &field, value);
+        reflection->SetString(&proto, &field, std::move(value));
 }
 
 static bool

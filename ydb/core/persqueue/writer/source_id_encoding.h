@@ -2,15 +2,21 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
 namespace NPQ {
 
-TString GetSourceIdSelectQuery(const TString& root);
-TString GetUpdateIdSelectQuery(const TString& root);
+enum class ESourceIdTableGeneration {
+    SrcIdMeta2,
+    PartitionMapping
+};
 
-TString GetSourceIdSelectQueryFromPath(const TString& path);
-TString GetUpdateIdSelectQueryFromPath(const TString& path);
+TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration = ESourceIdTableGeneration::SrcIdMeta2);
+TString GetUpdateIdSelectQuery(const TString& root, ESourceIdTableGeneration = ESourceIdTableGeneration::SrcIdMeta2);
+
+TString GetSourceIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration = ESourceIdTableGeneration::SrcIdMeta2);
+TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration = ESourceIdTableGeneration::SrcIdMeta2);
 
 
 namespace NSourceIdEncoding {
@@ -24,11 +30,16 @@ bool IsValidEncoded(const TString& encodedSourceId);
 
 
 struct TEncodedSourceId {
+    TString OriginalSourceId;
     TString EscapedSourceId;
     ui32 Hash = 0;
+    ui64 KeysHash = 0;
+    ESourceIdTableGeneration Generation;
 };
 
-TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId);
+void SetHashToTxParams(NClient::TParameters& parameters, const TEncodedSourceId& encodedSrcId);
+
+TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId, ESourceIdTableGeneration generation);
 
 } // NSourceIdEncoding
 } // NPQ

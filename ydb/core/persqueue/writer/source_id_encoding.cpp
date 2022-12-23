@@ -1,50 +1,105 @@
 #include "source_id_encoding.h"
 
+#include "metadata_initializers.h"
 #include <library/cpp/string_utils/base64/base64.h>
-
 #include <util/generic/yexception.h>
 #include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
 #include <util/digest/murmur.h>
+#include <util/digest/city.h>
+#include <util/string/join.h>
+
 #include <library/cpp/digest/md5/md5.h>
 
 namespace NKikimr {
 namespace NPQ {
 
 
-TString GetSourceIdSelectQueryFromPath(const TString& path) {
+TString GetSourceIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
     TStringBuilder res;
-    res << "--!syntax_v1\n"
-           "DECLARE $Hash AS Uint32; "
-           "DECLARE $Topic AS Utf8; "
-           "DECLARE $SourceId AS Utf8; "
-           "SELECT Partition, CreateTime, AccessTime FROM `" << path << "` "
-           "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            res << "--!syntax_v1\n"
+                   "DECLARE $Hash AS Uint32; "
+                   "DECLARE $Topic AS Utf8; "
+                   "DECLARE $SourceId AS Utf8; "
+                   "SELECT Partition, CreateTime, AccessTime FROM `" << path << "` "
+                   "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
+            break;
+        case ESourceIdTableGeneration::PartitionMapping:
+            res << "--!syntax_v1\n"
+                   "DECLARE $Hash AS Uint64; "
+                   "DECLARE $Topic AS Utf8; "
+                   "DECLARE $SourceId AS Utf8; "
+                   "SELECT Partition, CreateTime, AccessTime FROM `"
+                   << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
+                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
+            break;
+        default:
+            Y_FAIL();
+    }
     return res;
 }
 
-TString GetSourceIdSelectQuery(const TString& root) {
-    return GetSourceIdSelectQueryFromPath(root + "/SourceIdMeta2");
+TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            return GetSourceIdSelectQueryFromPath(root + "/SourceIdMeta2");
+        case ESourceIdTableGeneration::PartitionMapping:
+            return GetUpdateIdSelectQueryFromPath(
+                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
+            );
+        default:
+            Y_FAIL();
+    }
 }
 
-TString GetUpdateIdSelectQueryFromPath(const TString& path) {
+TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
     TStringBuilder res;
-    res << "--!syntax_v1\n"
-           "DECLARE $SourceId AS Utf8; "
-           "DECLARE $Topic AS Utf8; "
-           "DECLARE $Hash AS Uint32; "
-           "DECLARE $Partition AS Uint32; "
-           "DECLARE $CreateTime AS Uint64; "
-           "DECLARE $AccessTime AS Uint64;\n"
-           "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
-                                       "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            res << "--!syntax_v1\n"
+                   "DECLARE $SourceId AS Utf8; "
+                   "DECLARE $Topic AS Utf8; "
+                   "DECLARE $Hash AS Uint32; "
+                   "DECLARE $Partition AS Uint32; "
+                   "DECLARE $CreateTime AS Uint64; "
+                   "DECLARE $AccessTime AS Uint64;\n"
+                   "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
+                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
+            break;
+        case ESourceIdTableGeneration::PartitionMapping:
+            res << "--!syntax_v1\n"
+                   "DECLARE $SourceId AS Utf8; "
+                   "DECLARE $Topic AS Utf8; "
+                   "DECLARE $Hash AS Uint64; "
+                   "DECLARE $Partition AS Uint32; "
+                   "DECLARE $CreateTime AS Uint64; "
+                   "DECLARE $AccessTime AS Uint64;\n"
+                   "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
+                    << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition) VALUES "
+                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
+            break;
+
+        default:
+            Y_FAIL();
+    }
 
     return res;
 }
 
-TString GetUpdateIdSelectQuery(const TString& root) {
-    return GetUpdateIdSelectQueryFromPath(root + "/SourceIdMeta2");
+TString GetUpdateIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            return GetUpdateIdSelectQueryFromPath(root + "/SourceIdMeta2");
+        case ESourceIdTableGeneration::PartitionMapping:
+            return GetUpdateIdSelectQueryFromPath(
+                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
+            );
+        default:
+            Y_FAIL();
+    }
 }
 
 
@@ -128,14 +183,41 @@ bool IsValidEncoded(const TString& sourceId) {
 }
 
 
-TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId) {
+template <class... TArgs>
+ui64 GetKeysHash(TArgs&&... args) {
+    return CityHash64(Join("#", args...));
+}
+
+TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId, ESourceIdTableGeneration generation) {
     TEncodedSourceId res;
+    res.OriginalSourceId = userSourceId;
     TString encodedSourceId = Encode(userSourceId);
     res.EscapedSourceId = HexEncode(encodedSourceId);
-
-    TString s = topic + encodedSourceId;
-    res.Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2: {
+            TString s = topic + encodedSourceId;
+            res.Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
+            break;
+        }
+        case ESourceIdTableGeneration::PartitionMapping:
+            res.KeysHash = GetKeysHash(topic, encodedSourceId);
+            break;
+    }
+    res.Generation = generation;
     return res;
+}
+
+
+void SetHashToTxParams(NClient::TParameters& parameters, const TEncodedSourceId& encodedSrcId) {
+    switch (encodedSrcId.Generation) {
+        case ESourceIdTableGeneration::PartitionMapping:
+            parameters["$Hash"] = encodedSrcId.KeysHash;
+            return;
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            parameters["$Hash"] = encodedSrcId.Hash;
+            return;
+
+    }
 }
 
 

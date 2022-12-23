@@ -29,4 +29,19 @@ bool RemoveEmptyMessages(Topic::StreamReadMessage::ReadResponse& data) {
     return !data.partition_data().empty();
 }
 
+TMaybe<ui32> GetPartitionFromConfigOptions(
+        ui32 preferred, const NPQ::NSourceIdEncoding::TEncodedSourceId& encodedSrcId,
+        ui32 partPerTablet, bool firstClass, bool useRoundRobin
+) {
+    TMaybe<ui32> ret;
+    if (preferred < Max<ui32>()) {
+        ret = preferred;
+    } else if (!useRoundRobin){
+        ret = encodedSrcId.Hash % partPerTablet;
+    } else if (firstClass) {
+        ret = NKikimr::NDataStreams::V1::CalculateShardFromSrcId(encodedSrcId.OriginalSourceId, partPerTablet);
+    }
+    return ret;
+}
+
 }

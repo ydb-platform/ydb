@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.ServerSettings.SetEnableSystemViews(false);
         server.StartServer();
 
-        server.EnableLogs({ NKikimrServices::PERSQUEUE });
+        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
 
         TPQDataWriter writer("source", server);
@@ -1052,9 +1052,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 15*5; ++i) {
             ss[writer.InitSession("sid_rand_" + ToString<ui32>(i), 0, true)]++;
         }
-        for (auto &s : ss) {
-            Cerr << s.first << " " << s.second << "\n";
+        for (auto& s : ss) {
             if (rr) {
+                Cerr << "Round robin check: " << s.first << ":" << s.second << "\n";
                 UNIT_ASSERT(s.second >= 4 && s.second <= 6);
             }
         }
@@ -5572,7 +5572,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 const TString& srcId, ui32 partId, ui64 accessTime = 0
         ) {
             TStringBuilder query;
-            auto encoded = NPQ::NSourceIdEncoding::EncodeSrcId(topicForHash, srcId);
+            auto encoded = NPQ::NSourceIdEncoding::EncodeSrcId(
+                    topicForHash, srcId,
+                    NPQ::ESourceIdTableGeneration::SrcIdMeta2
+            );
             Cerr << "===save partition with time: " << accessTime << Endl;
 
             if (accessTime == 0) {

@@ -14,6 +14,7 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/services/lib/actors/pq_rl_helpers.h>
+#include <ydb/services/metadata/service.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -122,6 +123,7 @@ private:
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
 
         default:
             break;
@@ -141,6 +143,8 @@ private:
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx);
     void TryCloseSession(const TActorContext& ctx);
 
+    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr &ev, const NActors::TActorContext& ctx);
+
     void CheckACL(const TActorContext& ctx);
     void RecheckACL(const TActorContext& ctx);
     // Requests fresh ACL from 'SchemeCache'
@@ -153,14 +157,18 @@ private:
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
     void InitAfterDiscovery(const TActorContext& ctx);
+    ui32 CalculateFirstClassPartition(const TActorContext& ctx);
+    void SendCreateManagerRequest(const TActorContext& ctx);
     void DiscoverPartition(const NActors::TActorContext& ctx);
-    void SendSelectPartitionRequest(ui32 hash, const TString& topic, const NActors::TActorContext& ctx);
+    void StartSession(const NActors::TActorContext& ctx);
+    void SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx);
 
     void UpdatePartition(const NActors::TActorContext& ctx);
     void RequestNextPartition(const NActors::TActorContext& ctx);
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(ui32 hash, const TString& topic,
+
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const TString& topic,
                                                                              const NActors::TActorContext& ctx);
     void SendUpdateSrcIdsRequests(const TActorContext& ctx);
     //void InitCheckACL(const TActorContext& ctx);

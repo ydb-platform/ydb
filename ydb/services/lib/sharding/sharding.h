@@ -18,4 +18,5 @@ namespace NKikimr::NDataStreams::V1 {
     NYql::NDecimal::TUint128 BytesToDecimal(const TString &bytes);
     bool IsValidDecimal(const TString& bytes);
     TString Uint128ToDecimalString(NYql::NDecimal::TUint128 decimal, const NYql::NDecimal::TUint128& base = 10);
+    ui32 CalculateShardFromSrcId(const TString& sourceId, ui32 partitionToTablet);
 }

@@ -21,5 +21,6 @@ target_link_libraries(core-persqueue-writer PUBLIC
 )
 target_sources(core-persqueue-writer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/writer/source_id_encoding.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/writer/metadata_initializers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/writer/writer.cpp
 )

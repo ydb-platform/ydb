@@ -2,10 +2,13 @@
 #error "Do not include this file directly"
 #endif
 
-#include <ydb/library/persqueue/topic_parser/counters.h>
-
 #include "codecs.h"
+#include "helpers.h"
 
+#include <ydb/services/metadata/manager/common.h>
+#include <ydb/core/persqueue/writer/metadata_initializers.h>
+
+#include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/protos/services.pb.h>
@@ -19,6 +22,7 @@
 #include <util/string/vector.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
+
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -204,8 +208,13 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ctx) {
 
     Y_VERIFY(Request);
-    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath());
-    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath());
+    //ToDo !! - Set proper table paths.
+    const auto& pqConfig = AppData(ctx)->PQConfig;
+    ESourceIdTableGeneration gen = pqConfig.GetTopicsAreFirstClassCitizen() ?
+            ESourceIdTableGeneration::PartitionMapping : ESourceIdTableGeneration::SrcIdMeta2;
+    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath(), gen);
+    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath(), gen);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Select srcid query: " << SelectSourceIdQuery);
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
     if (!Request->GetStreamCtx()->Read()) {
@@ -464,8 +473,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorContext& ctx) {
+    ESourceIdTableGeneration gen = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() ?
+                                   ESourceIdTableGeneration::PartitionMapping
+                                   :
+                                   ESourceIdTableGeneration::SrcIdMeta2;
     try {
-        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId);
+        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId, gen);
     } catch (yexception& e) {
         CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -622,14 +635,31 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
+ui32 TWriteSessionActor<UseMigrationProtocol>::CalculateFirstClassPartition(const TActorContext&) {
+    return NKikimr::NDataStreams::V1::ShardFromDecimal(
+            NKikimr::NDataStreams::V1::HexBytesToDecimal(MD5::Calc(SourceId)), PartitionToTablet.size()
+    );
+}
 
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration] - separate flag for having config tables
-        auto partitionId = PreferedPartition < Max<ui32>() ? PreferedPartition
-                                    : NKikimr::NDataStreams::V1::ShardFromDecimal(NKikimr::NDataStreams::V1::HexBytesToDecimal(MD5::Calc(SourceId)), PartitionToTablet.size());
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
+    const auto &pqConfig = AppData(ctx)->PQConfig;
+    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
+        if (pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
+            return SendCreateManagerRequest(ctx);
+        }
+        auto partitionId = PreferedPartition < Max<ui32>() ? PreferedPartition : CalculateFirstClassPartition(ctx);
+
         ProceedPartition(partitionId, ctx);
         return;
     }
+    else {
+        StartSession(ctx);
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::StartSession(const NActors::TActorContext& ctx) {
 
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
     ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
@@ -638,6 +668,20 @@ void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::
     State = ES_WAIT_SESSION;
 }
 
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::SendCreateManagerRequest(const TActorContext& ctx) {
+    ctx.Send(
+            NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
+            new NMetadata::NProvider::TEvPrepareManager(TSrcIdMetaInitManager::GetInstant())
+    );
+}
+
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::Handle(
+        NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx
+) {
+    StartSession(ctx);
+}
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx)
@@ -664,11 +708,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvCreateSes
 
     Y_VERIFY(!KqpSessionId.empty());
 
-    SendSelectPartitionRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
+    SendSelectPartitionRequest(FullConverter->GetClientsideName(), ctx);
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(ui32 hash, const TString& topic, const NActors::TActorContext& ctx) {
+void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx) {
     //read from DS
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -682,8 +726,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(ui32 h
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
     NClient::TParameters parameters;
+    SetHashToTxParams(parameters, EncodedSourceId);
 
-    parameters["$Hash"] = hash;
     parameters["$Topic"] = topic;
     parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
 
@@ -729,7 +773,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvGetPartit
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
     auto& record = ev->Get()->Record.GetRef();
-
+    const auto& pqConfig = AppData(ctx)->PQConfig;
     if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
             << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " discover partition race, retrying");
@@ -772,7 +816,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
             return;
         }
         if (PartitionFound && PreferedPartition < Max<ui32>() && Partition != PreferedPartition) {
-            CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId " << (Partition + 1) << ", but client provided " << (PreferedPartition + 1) << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use another MessageGroupId, specify PartitionGroupId " << (Partition + 1) << ", or do not specify PartitionGroupId at all.",
+            CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId "
+                                          << (Partition + 1) << ", but client provided " << (PreferedPartition + 1)
+                                          << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use "
+                                             "another MessageGroupId, specify PartitionGroupId " << (Partition + 1)
+                                          << ", or do not specify PartitionGroupId at all.",
                          PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
         }
@@ -784,11 +832,15 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
             << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " partition " << Partition << " partitions "
             << PartitionToTablet.size() << "(" << EncodedSourceId.Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
 
-        if (!PartitionFound && (PreferedPartition < Max<ui32>() || !AppData(ctx)->PQConfig.GetRoundRobinPartitionMapping())) {
-            Partition = PreferedPartition < Max<ui32>() ? PreferedPartition : EncodedSourceId.Hash % PartitionToTablet.size(); //choose partition default value
-            PartitionFound = true;
+        if (!PartitionFound) {
+            auto partition = GetPartitionFromConfigOptions(PreferedPartition, EncodedSourceId, PartitionToTablet.size(),
+                                                           pqConfig.GetTopicsAreFirstClassCitizen(),
+                                                           pqConfig.GetRoundRobinPartitionMapping());
+            if (partition.Defined()) {
+                PartitionFound = true;
+                Partition = *partition;
+            }
         }
-
         if (PartitionFound) {
             UpdatePartition(ctx);
         } else {
@@ -815,7 +867,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
 
 template<bool UseMigrationProtocol>
 THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor<UseMigrationProtocol>::MakeUpdateSourceIdMetadataRequest(
-        ui32 hash, const TString& topic, const NActors::TActorContext& ctx
+        const TString& topic, const NActors::TActorContext& ctx
 ) {
 
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
@@ -839,7 +891,8 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor<UseMigrationProtocol>:
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
     NClient::TParameters parameters;
-    parameters["$Hash"] = hash;
+    SetHashToTxParams(parameters, EncodedSourceId);
+    //parameters["$Hash"] = hash;
     parameters["$Topic"] = topic;
     parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
 
@@ -853,11 +906,10 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor<UseMigrationProtocol>:
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::SendUpdateSrcIdsRequests(const TActorContext& ctx) {
-    {
-        auto ev = MakeUpdateSourceIdMetadataRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
-        SourceIdUpdatesInflight++;
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
+    auto ev = MakeUpdateSourceIdMetadataRequest(FullConverter->GetClientsideName(), ctx);
+
+    SourceIdUpdatesInflight++;
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }
 
 template<bool UseMigrationProtocol>

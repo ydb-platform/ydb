@@ -4,6 +4,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
 #include <util/string/printf.h>
+#include <library/cpp/digest/md5/md5.h>
 
 namespace NKikimr::NDataStreams::V1 {
 
@@ -91,5 +92,9 @@ namespace NKikimr::NDataStreams::V1 {
                 shardNumber + 1 == shardCount ? max : NYql::NDecimal::TUint128(shardNumber + 1) * slice -
                                                       NYql::NDecimal::TUint128(1);
         return {left, right};
+    }
+
+    ui32 CalculateShardFromSrcId(const TString& sourceId, ui32 partitionToTablet) {
+        return ShardFromDecimal(HexBytesToDecimal(MD5::Calc(sourceId)), partitionToTablet);
     }
 }

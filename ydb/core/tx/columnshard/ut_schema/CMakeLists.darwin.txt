@@ -7,18 +7,17 @@
 
 
 
-add_executable(ydb-core-tx-columnshard-ut)
-target_compile_options(ydb-core-tx-columnshard-ut PRIVATE
+add_executable(ydb-core-tx-columnshard-ut_schema)
+target_compile_options(ydb-core-tx-columnshard-ut_schema PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-core-tx-columnshard-ut PRIVATE
+target_include_directories(ydb-core-tx-columnshard-ut_schema PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard
 )
-target_link_libraries(ydb-core-tx-columnshard-ut PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(ydb-core-tx-columnshard-ut_schema PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-columnshard
   library-cpp-getopt
@@ -29,30 +28,27 @@ target_link_libraries(ydb-core-tx-columnshard-ut PUBLIC
   ydb-core-tx
   public-lib-yson_value
 )
-target_link_options(ydb-core-tx-columnshard-ut PRIVATE
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
+target_link_options(ydb-core-tx-columnshard-ut_schema PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
+  -framework
+  CoreFoundation
 )
-target_sources(ydb-core-tx-columnshard-ut PRIVATE
+target_sources(ydb-core-tx-columnshard-ut_schema PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_columnshard_read_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_columnshard_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_schema/ut_columnshard_schema.cpp
 )
 add_test(
   NAME
-  ydb-core-tx-columnshard-ut
+  ydb-core-tx-columnshard-ut_schema
   COMMAND
-  ydb-core-tx-columnshard-ut
+  ydb-core-tx-columnshard-ut_schema
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
 )
-vcs_info(ydb-core-tx-columnshard-ut)
+vcs_info(ydb-core-tx-columnshard-ut_schema)

@@ -7,7 +7,8 @@
 
 
 add_subdirectory(engines)
-add_subdirectory(ut)
+add_subdirectory(ut_rw)
+add_subdirectory(ut_schema)
 
 add_library(core-tx-columnshard)
 target_compile_options(core-tx-columnshard PRIVATE

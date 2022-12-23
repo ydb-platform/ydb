@@ -302,7 +302,7 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
         if (!tRule.GetDefaultColumn()) {
             tRule.SetDefaultColumn(tier.TtlColumn);
         }
-        Y_VERIFY(tRule.GetDefaultColumn() == tier.TtlColumn);
+        UNIT_ASSERT(tRule.GetDefaultColumn() == tier.TtlColumn);
         {
             NColumnShard::NTiers::TTierConfig tConfig;
             tConfig.SetTierName(tier.Name);

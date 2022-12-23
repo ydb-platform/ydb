@@ -419,7 +419,8 @@ public:
         // clone pattern using TDqTaskRunner's alloc
         auto opts = CreatePatternOpts(Alloc(), TypeEnv());
 
-        ProgramParsed.CompGraph = ProgramParsed.GetPattern()->Clone(opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
+        ProgramParsed.CompGraph = ProgramParsed.GetPattern()->Clone(
+            opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &TypeEnv()));
 
         TBindTerminator term(ProgramParsed.CompGraph->GetTerminator());
 

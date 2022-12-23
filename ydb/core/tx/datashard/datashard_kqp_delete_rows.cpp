@@ -38,7 +38,7 @@ public:
             auto& engineCtx = *CheckedCast<TKqpDatashardApplyContext*>(&applyContext);
 
             TVector<TCell> keyTuple(Owner.KeyIndices.size());
-            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env);
+            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, *engineCtx.Env);
 
             if (engineCtx.Host->IsPathErased(Owner.TableId)) {
                 return;
@@ -96,13 +96,12 @@ public:
 
 public:
     TKqpDeleteRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
-            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
+            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
         , KeyIndices(std::move(keyIndices))
-        , Env(env)
     {}
 
 private:
@@ -115,7 +114,6 @@ private:
     IComputationNode* RowsNode;
     const TVector<NScheme::TTypeInfo> RowTypes;
     const TVector<ui32> KeyIndices;
-    const TTypeEnvironment& Env;
 };
 
 } // namespace
@@ -167,7 +165,7 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     }
 
     return new TKqpDeleteRowsWrapper(ctx.Mutables, tableId,
-        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices), ctx.Env);
+        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices));
 }
 
 } // namespace NMiniKQL

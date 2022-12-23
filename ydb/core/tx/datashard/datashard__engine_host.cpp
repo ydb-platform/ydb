@@ -5,6 +5,7 @@
 #include "sys_tables.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -856,15 +857,16 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, *EngineHost, now);
     ComputeCtx->Database = &txc.DB;
 
-    auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
-    kqpApplyCtx->Host = EngineHost.Get();
-    kqpApplyCtx->ShardTableStats = &ComputeCtx->GetDatashardCounters();
-
-    KqpApplyCtx.Reset(kqpApplyCtx.Release());
-
     KqpAlloc = MakeHolder<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
     KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
     KqpAlloc->Release();
+
+    auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
+    kqpApplyCtx->Host = EngineHost.Get();
+    kqpApplyCtx->ShardTableStats = &ComputeCtx->GetDatashardCounters();
+    kqpApplyCtx->Env = KqpTypeEnv.Get();
+
+    KqpApplyCtx.Reset(kqpApplyCtx.Release());
 
     KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
     KqpExecCtx.ComputeCtx = ComputeCtx.Get();
@@ -874,6 +876,9 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
     KqpExecCtx.Alloc = KqpAlloc.Get();
     KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
+    if (auto* rm = NKqp::TryGetKqpResourceManager()) {
+        KqpExecCtx.PatternCache = rm->GetPatternCache();
+    }
 }
 
 TEngineBay::~TEngineBay() {

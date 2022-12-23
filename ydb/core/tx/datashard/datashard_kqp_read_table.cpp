@@ -186,11 +186,10 @@ template <bool IsReverse>
 class TKqpWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>> {
 public:
     TKqpWideReadTableWrapperBase(const TTableId& tableId, TKqpDatashardComputeContext& computeCtx,
-        const TTypeEnvironment& typeEnv, const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys)
+            const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys)
         : TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>>(this)
         , TableId(tableId)
         , ComputeCtx(computeCtx)
-        , TypeEnv(typeEnv)
         , SystemColumnTags(systemColumnTags)
         , SkipNullKeys(skipNullKeys)
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
@@ -240,7 +239,6 @@ protected:
 protected:
     const TTableId TableId;
     TKqpDatashardComputeContext& ComputeCtx;
-    const TTypeEnvironment& TypeEnv;
     TSmallVec<TTag> SystemColumnTags;
     TSmallVec<bool> SkipNullKeys;
     TKqpTableStats& ShardTableStats;
@@ -253,11 +251,10 @@ protected:
 template <bool IsReverse>
 class TKqpWideReadTableWrapper : public TKqpWideReadTableWrapperBase<IsReverse> {
 public:
-    TKqpWideReadTableWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
-        const TParseReadTableResult& parseResult, IComputationNode* fromNode, IComputationNode* toNode,
-        IComputationNode* itemsLimit)
-        : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, typeEnv,
-            parseResult.SystemColumns, parseResult.SkipNullKeys)
+    TKqpWideReadTableWrapper(TKqpDatashardComputeContext& computeCtx, const TParseReadTableResult& parseResult,
+            IComputationNode* fromNode, IComputationNode* toNode, IComputationNode* itemsLimit)
+        : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, parseResult.SystemColumns,
+            parseResult.SkipNullKeys)
         , ParseResult(parseResult)
         , FromNode(fromNode)
         , ToNode(toNode)
@@ -272,10 +269,10 @@ private:
     EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
         if (!this->Iterator) {
             TVector<TCell> fromCells;
-            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, this->TypeEnv);
+            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, ctx.TypeEnv);
 
             TVector<TCell> toCells;
-            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, this->TypeEnv);
+            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, ctx.TypeEnv);
 
             auto range = TTableRange(fromCells, ParseResult.FromInclusive, toCells, ParseResult.ToInclusive);
 
@@ -317,10 +314,10 @@ private:
 template <bool IsReverse>
 class TKqpWideReadTableRangesWrapper : public TKqpWideReadTableWrapperBase<IsReverse> {
 public:
-    TKqpWideReadTableRangesWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
+    TKqpWideReadTableRangesWrapper(TKqpDatashardComputeContext& computeCtx,
         const TParseReadTableRangesResult& parseResult, IComputationNode* rangesNode, IComputationNode* itemsLimit)
-        : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, typeEnv,
-            parseResult.SystemColumns, parseResult.SkipNullKeys)
+        : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, parseResult.SystemColumns,
+            parseResult.SkipNullKeys)
         , ParseResult(parseResult)
         , RangesNode(rangesNode)
         , ItemsLimit(itemsLimit)
@@ -331,7 +328,7 @@ private:
         if (!RangeId) {
             const auto localTid = this->ComputeCtx.GetLocalTableId(ParseResult.TableId);
             const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
-            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, this->TypeEnv, ctx, tableInfo->KeyColumns.size());
+            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, ctx.TypeEnv, ctx, tableInfo->KeyColumns.size());
             RangeId = 0;
 
             if (ItemsLimit) {
@@ -408,10 +405,10 @@ IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputa
     }
 
     if (parseResult.Reverse) {
-        return new TKqpWideReadTableRangesWrapper<true>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit);
+        return new TKqpWideReadTableRangesWrapper<true>(computeCtx, parseResult, rangesNode, itemsLimit);
     }
 
-    return new TKqpWideReadTableRangesWrapper<false>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit);
+    return new TKqpWideReadTableRangesWrapper<false>(computeCtx, parseResult, rangesNode, itemsLimit);
 }
 
 IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
@@ -433,10 +430,10 @@ IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNo
     }
 
     if (parseResult.Reverse) {
-        return new TKqpWideReadTableWrapper<true>(computeCtx, ctx.Env, parseResult, fromNode, toNode, itemsLimit);
+        return new TKqpWideReadTableWrapper<true>(computeCtx, parseResult, fromNode, toNode, itemsLimit);
     }
 
-    return new TKqpWideReadTableWrapper<false>(computeCtx, ctx.Env, parseResult, fromNode, toNode, itemsLimit);
+    return new TKqpWideReadTableWrapper<false>(computeCtx, parseResult, fromNode, toNode, itemsLimit);
 }
 
 } // namespace NMiniKQL

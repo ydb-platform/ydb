@@ -89,10 +89,9 @@ class TKqpLookupRowsWrapper : public TStatelessFlowComputationNode<TKqpLookupRow
 
 public:
     TKqpLookupRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTypeEnvironment& typeEnv, const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
+        const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
         : TBase(mutables, this, EValueRepresentation::Boxed)
         , ComputeCtx(computeCtx)
-        , TypeEnv(typeEnv)
         , ParseResult(parseResult)
         , LookupKeysNode(lookupKeysNode)
         , ColumnTags(ParseResult.Columns)
@@ -116,7 +115,7 @@ public:
             switch (keysValues.Fetch(key)) {
                 case NUdf::EFetchStatus::Ok: {
                     TVector<TCell> keyCells(ParseResult.KeyIndices.size());
-                    FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, TypeEnv);
+                    FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, ctx.TypeEnv);
 
                     NUdf::TUnboxedValue result;
                     TKqpTableStats stats;
@@ -160,7 +159,6 @@ private:
 
 private:
     TKqpDatashardComputeContext& ComputeCtx;
-    const TTypeEnvironment& TypeEnv;
     TParseLookupTableResult ParseResult;
     IComputationNode* LookupKeysNode;
     TSmallVec<TTag> ColumnTags;
@@ -174,10 +172,9 @@ class TKqpLookupTableWrapper : public TStatelessFlowComputationNode<TKqpLookupTa
 
 public:
     TKqpLookupTableWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTypeEnvironment& typeEnv, const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
+        const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
         : TBase(mutables, this, EValueRepresentation::Boxed)
         , ComputeCtx(computeCtx)
-        , TypeEnv(typeEnv)
         , ParseResult(parseResult)
         , LookupKeysNode(lookupKeysNode)
         , ColumnTags(ParseResult.Columns)
@@ -200,10 +197,10 @@ public:
                         MKQL_ENSURE_S(tableInfo);
 
                         TVector<TCell> fromCells(tableInfo->KeyColumns.size());
-                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, TypeEnv);
+                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, ctx.TypeEnv);
 
                         TVector<TCell> toCells(ParseResult.KeyIndices.size());
-                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, toCells, TypeEnv);
+                        FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, toCells, ctx.TypeEnv);
 
                         auto range = TTableRange(fromCells, true, toCells, true);
 
@@ -258,7 +255,6 @@ private:
 
 private:
     TKqpDatashardComputeContext& ComputeCtx;
-    const TTypeEnvironment& TypeEnv;
     TParseLookupTableResult ParseResult;
     IComputationNode* LookupKeysNode;
     TSmallVec<TTag> ColumnTags;
@@ -282,9 +278,9 @@ IComputationNode* WrapKqpLookupTableInternal(TCallable& callable, const TComputa
     MKQL_ENSURE_S(tableInfo);
 
     if (tableInfo->KeyColumns.size() == parseResult.KeyIndices.size()) {
-        return new TKqpLookupRowsWrapper(ctx.Mutables, computeCtx, ctx.Env, parseResult, lookupKeysNode);
+        return new TKqpLookupRowsWrapper(ctx.Mutables, computeCtx, parseResult, lookupKeysNode);
     } else {
-        return new TKqpLookupTableWrapper(ctx.Mutables, computeCtx, ctx.Env, parseResult, lookupKeysNode);
+        return new TKqpLookupTableWrapper(ctx.Mutables, computeCtx, parseResult, lookupKeysNode);
     }
 }
 

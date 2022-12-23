@@ -44,7 +44,7 @@ public:
             auto& dsApplyCtx = *CheckedCast<TKqpDatashardApplyContext*>(&applyContext);
 
             TVector<TCell> keyTuple(Owner.KeyIndices.size());
-            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env);
+            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, *dsApplyCtx.Env);
 
             if (dsApplyCtx.Host->IsPathErased(Owner.TableId)) {
                 return;
@@ -76,7 +76,7 @@ public:
 
                 // NOTE: We have to copy values here as some values inlined in TUnboxedValue
                 // cannot be inlined in TCell.
-                command.Value = MakeCell(type, value, Owner.Env, true);
+                command.Value = MakeCell(type, value, *dsApplyCtx.Env, true);
 
                 commands.emplace_back(std::move(command));
             }
@@ -132,14 +132,13 @@ public:
 public:
     TKqpUpsertRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
             TVector<NScheme::TTypeInfo>&& rowTypes, TVector<ui32>&& keyIndices,
-            TVector<TUpsertColumn>&& upsertColumns, const TTypeEnvironment& env)
+            TVector<TUpsertColumn>&& upsertColumns)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
         , KeyIndices(std::move(keyIndices))
         , UpsertColumns(std::move(upsertColumns))
-        , Env(env)
     {}
 
 private:
@@ -153,7 +152,6 @@ private:
     TVector<NScheme::TTypeInfo> RowTypes;
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
-    const TTypeEnvironment& Env;
 };
 
 } // namespace
@@ -227,7 +225,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
     return new TKqpUpsertRowsWrapper(ctx.Mutables, tableId,
         LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices),
-        std::move(upsertColumns), ctx.Env);
+        std::move(upsertColumns));
 }
 
 } // namespace NMiniKQL

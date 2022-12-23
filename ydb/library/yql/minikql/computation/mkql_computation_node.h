@@ -54,7 +54,20 @@ struct TComputationOptsFull: public TComputationOpts {
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
     {}
+
+    TComputationOptsFull(IStatsRegistry* stats, TTypeEnvironment* typeEnv, IRandomProvider& randomProvider,
+            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
+        : TComputationOpts(stats)
+        , AllocState(typeEnv->GetAllocator().Ref())
+        , TypeEnv(typeEnv)
+        , RandomProvider(randomProvider)
+        , TimeProvider(timeProvider)
+        , ValidatePolicy(validatePolicy)
+        , SecureParamsProvider(secureParamsProvider)
+    {}
+
     TAllocState& AllocState;
+    TTypeEnvironment* TypeEnv = nullptr;
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     NUdf::EValidatePolicy ValidatePolicy;
@@ -106,12 +119,14 @@ struct TComputationContext : public TComputationContextLLVM {
     bool ExecuteLLVM = true;
     arrow::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
+    TTypeEnvironment& TypeEnv;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,
         TComputationOptsFull& opts,
         const TComputationMutables& mutables,
         arrow::MemoryPool& arrowMemoryPool);
+
     ~TComputationContext();
 
     // Returns true if current usage delta exceeds the memory limit
@@ -344,6 +359,10 @@ struct TComputationPatternOpts {
     /// \todo split and exclude
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
         return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
+    }
+
+    TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TTypeEnvironment* typeEnv) const {
+        return TComputationOptsFull(Stats, typeEnv, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
     }
 };
 

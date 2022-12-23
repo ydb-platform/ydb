@@ -7,18 +7,12 @@
 
 
 
-add_library(lib-ydb_cli-import)
-target_link_libraries(lib-ydb_cli-import PUBLIC
+add_library(cpp-string_utils-csv)
+target_link_libraries(cpp-string_utils-csv PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  api-protos
-  common
-  cpp-client-ydb_proto
-  public-lib-json_value
-  libs-apache-arrow
-  cpp-string_utils-csv
 )
-target_sources(lib-ydb_cli-import PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/import.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/cli_arrow_helpers.cpp
+target_sources(cpp-string_utils-csv PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/string_utils/csv/csv.cpp
 )

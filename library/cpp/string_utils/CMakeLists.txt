@@ -7,6 +7,7 @@
 
 
 add_subdirectory(base64)
+add_subdirectory(csv)
 add_subdirectory(indent_text)
 add_subdirectory(levenshtein_diff)
 add_subdirectory(parse_size)

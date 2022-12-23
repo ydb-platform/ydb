@@ -7,11 +7,8 @@
 
 #include <aws/common/cpuid.h>
 
-/*this implementation is only for 64 bit arch and (if on GCC, release mode).
- * If using clang, this will run for both debug and release.*/
-#if defined(__x86_64__) &&                                                                                             \
-    (defined(__clang__) || !((defined(__GNUC__)) && ((__GNUC__ == 4 && __GNUC_MINOR__ < 4) || defined(DEBUG_BUILD))))
-
+/* this implementation is only for the x86_64 intel architecture */
+#if defined(__x86_64__)
 #    if defined(__clang__)
 #        pragma clang diagnostic push
 #        pragma clang diagnostic ignored "-Wdollar-in-identifier-extension"
@@ -105,10 +102,9 @@ static inline uint32_t s_crc32c_sse42_clmul_256(const uint8_t *input, uint32_t c
 
         /* output registers
          [crc] is an input and and output so it is marked read/write (i.e. "+c")*/
-        : "+c"(crc)
-
+        : [ crc ] "+c"(crc)
         /* input registers */
-        : [ crc ] "c"(crc), [ in ] "d"(input)
+        : [ in ] "d"(input)
 
         /* additional clobbered registers */
         : "%r8", "%r9", "%r11", "%r10", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "cc");
@@ -191,12 +187,8 @@ static inline uint32_t s_crc32c_sse42_clmul_1024(const uint8_t *input, uint32_t 
                             [crc] is an input and and output so it is marked read/write (i.e. "+c")
                             we clobber the register for [input] (via add instruction) so we must also
                             tag it read/write (i.e. "+d") in the list of outputs to tell gcc about the clobber */
-        : "+c"(crc), "+d"(input)
-
-        /* input registers */
-        /* the numeric values match the position of the output registers */
-        : [ crc ] "c"(crc), [ in ] "d"(input)
-
+        : [ crc ] "+c"(crc), [ in ] "+d"(input)
+        :
         /* additional clobbered registers */
         /* "cc" is the flags - we add and sub, so the flags are also clobbered */
         : "%r8", "%r9", "%r11", "%r10", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "cc");
@@ -271,12 +263,8 @@ static inline uint32_t s_crc32c_sse42_clmul_3072(const uint8_t *input, uint32_t 
                             [crc] is an input and and output so it is marked read/write (i.e. "+c")
                             we clobber the register for [input] (via add instruction) so we must also
                             tag it read/write (i.e. "+d") in the list of outputs to tell gcc about the clobber*/
-        : "+c"(crc), "+d"(input)
-
-        /* input registers
-           the numeric values match the position of the output registers */
-        : [ crc ] "c"(crc), [ in ] "d"(input)
-
+        : [ crc ] "+c"(crc), [ in ] "+d"(input)
+        :
         /* additional clobbered registers
           "cc" is the flags - we add and sub, so the flags are also clobbered */
         : "%r8", "%r9", "%r11", "%r10", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "cc");
@@ -309,7 +297,7 @@ uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t prev
     /* For small input, forget about alignment checks - simply compute the CRC32c one byte at a time */
     if (AWS_UNLIKELY(length < 8)) {
         while (length-- > 0) {
-            __asm__("loop_small_%=: CRC32B (%[in]), %[crc]" : "+c"(crc) : [ crc ] "c"(crc), [ in ] "r"(input));
+            __asm__("loop_small_%=: CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
             input++;
         }
         return ~crc;
@@ -326,7 +314,7 @@ uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t prev
 
     /* spin through the leading unaligned input bytes (if any) one-by-one */
     while (leading-- > 0) {
-        __asm__("loop_leading_%=: CRC32B (%[in]), %[crc]" : "+c"(crc) : [ crc ] "c"(crc), [ in ] "r"(input));
+        __asm__("loop_leading_%=: CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
         input++;
     }
 
@@ -356,16 +344,14 @@ uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t prev
     /* Spin through remaining (aligned) 8-byte chunks using the CRC32Q quad word instruction */
     while (AWS_LIKELY(length >= 8)) {
         /* Hardcoding %rcx register (i.e. "+c") to allow use of qword instruction */
-        __asm__ __volatile__("loop_8_%=: CRC32Q (%[in]), %%rcx" : "+c"(crc) : [ crc ] "c"(crc), [ in ] "r"(input));
+        __asm__ __volatile__("loop_8_%=: CRC32Q (%[in]), %%rcx" : [ crc ] "+c"(crc) : [ in ] "r"(input));
         input += 8;
         length -= 8;
     }
 
     /* Finish up with any trailing bytes using the CRC32B single byte instruction one-by-one */
     while (length-- > 0) {
-        __asm__ __volatile__("loop_trailing_%=: CRC32B (%[in]), %[crc]"
-                             : "+c"(crc)
-                             : [ crc ] "c"(crc), [ in ] "r"(input));
+        __asm__ __volatile__("loop_trailing_%=: CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
         input++;
     }
 

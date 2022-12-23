@@ -11817,6 +11817,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
+        ExtFunctions["BlockMergeManyFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

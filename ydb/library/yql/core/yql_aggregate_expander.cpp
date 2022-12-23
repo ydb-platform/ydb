@@ -25,7 +25,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
-    EffectiveCompact = (HaveDistinct && CompactForDistinct) || ForceCompact || HasSetting(*settings, "compact");
+    EffectiveCompact = (HaveDistinct && CompactForDistinct && !TypesCtx.UseBlocks) || ForceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : Traits) {
         auto mergeLambda = trait->Child(5);
         if (mergeLambda->Tail().IsCallable("Void")) {
@@ -64,7 +64,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
             }
         }
 
-        if (Suffix == "MergeFinalize") {
+        if (Suffix == "MergeFinalize" || Suffix == "MergeManyFinalize") {
             auto ret = TryGenerateBlockMergeFinalize();
             if (ret) {
                 return ret;
@@ -500,7 +500,7 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
 }
 
 TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& streamArg, TExprNode::TListType& keyIdxs,
-    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState) {
+    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many) {
     auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { streamArg });
     TVector<TString> inputColumns;
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
@@ -582,6 +582,18 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
                 .Seal()
                 .Build());
 
+            if (many) {
+                if (root->IsCallable("Unwrap")) {
+                    root = root->HeadPtr();
+                } else {
+                    root = Ctx.Builder(Node->Pos())
+                        .Callable("Just")
+                            .Add(0, root)
+                        .Seal()
+                        .Build();
+                }
+            }
+
             extractorRoots.push_back(root);
         }
 
@@ -605,7 +617,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     TExprNode::TListType keyIdxs;
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, false);
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, false, false);
     if (!blocks) {
         return nullptr;
     }
@@ -2107,9 +2119,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     // process with distincts
     // Combine + Map with Just over states
     //      for each distinct field:
-    //          Combine by keys + field
-    //          MergeFinalize by keys + field
-    //          Map with Just over init func
+    //          Aggregate by keys + field w/o aggs
+    //          Combine by keys + field with aggs
+    //          Map with Just over states
     // UnionAll
     // MergeManyFinalize
     TExprNode::TListType unionAllInputs;
@@ -2141,6 +2153,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         auto& indicies = Distinct2Columns[distinctField->Content()];
         TExprNode::TListType allKeyColumns = KeyColumns->ChildrenList();
         allKeyColumns.push_back(distinctField);
+
         auto distinct = Ctx.Builder(Node->Pos())
             .Callable("Aggregate")
                 .Add(0, AggList)
@@ -2151,77 +2164,141 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Seal()
             .Build();
 
-        auto mapInit = Ctx.Builder(Node->Pos())
-            .Callable("Map")
-                .Add(0, distinct)
-                .Lambda(1)
-                    .Param("item")
-                    .Callable("AsStruct")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            ui32 pos = 0;
-                            for (ui32 i = 0; i < KeyColumns->ChildrenSize(); ++i) {
-                                parent
-                                    .List(pos++)
-                                        .Add(0, KeyColumns->ChildPtr(i))
-                                        .Callable(1, "Member")
-                                            .Arg(0, "item")
-                                            .Add(1, KeyColumns->ChildPtr(i))
-                                        .Seal()
-                                    .Seal();
-                            }
-
-                            for (ui32 i: indicies) {
-                                auto trait = Traits[i];
-                                auto initLambda = trait->Child(1);
-                                auto saveLambda = trait->Child(3);
-                                if (initLambda->Head().ChildrenSize() == 1) {
-                                    parent.List(pos++)
-                                        .Add(0, InitialColumnNames[i])
-                                        .Apply(1, *saveLambda)
-                                            .With(0)
-                                                .Apply(*initLambda)
-                                                    .With(0)
-                                                        .Callable("Member")
-                                                            .Arg(0, "item")
-                                                            .Add(1, distinctField)
-                                                        .Seal()
-                                                    .Done()
-                                                .Seal()
-                                            .Done()
-                                        .Seal()
-                                    .Seal();
-                                } else {
-                                    parent.List(pos++)
-                                        .Add(0, InitialColumnNames[i])
-                                        .Apply(1, *saveLambda)
-                                            .With(0)
-                                                .Apply(*initLambda)
-                                                    .With(0)
-                                                        .Callable("Member")
-                                                            .Arg(0, "item")
-                                                            .Add(1, distinctField)
-                                                        .Seal()
-                                                    .Done()
-                                                    .With(1)
-                                                        .Callable("Uint32")
-                                                            .Atom(0, ToString(i), TNodeFlags::Default)
-                                                        .Seal()
-                                                    .Done()
-                                                .Seal()
-                                            .Done()
-                                        .Seal()
-                                    .Seal();
-                                }
-                            }
-
-                            return parent;
-                        })
+        TExprNode::TListType combineColumns;
+        for (ui32 i : indicies) {
+            auto trait = AggregatedColumns->Child(i)->ChildPtr(1);
+            bool isAggApply = trait->IsCallable("AggApply");
+            if (isAggApply) {
+                trait = Ctx.Builder(Node->Pos())
+                    .Callable("AggApply")
+                        .Add(0, trait->ChildPtr(0))
+                        .Callable(1, "StructType")
+                            .List(0)
+                                .Add(0, distinctField)
+                                .Add(1, trait->ChildPtr(1))
+                            .Seal()
+                        .Seal()
+                        .Lambda(2)
+                            .Param("row")
+                            .Apply(trait->ChildPtr(2))
+                                .With(0)
+                                    .Callable("Member")
+                                        .Arg(0, "row")
+                                        .Add(1, distinctField)
+                                    .Seal()
+                                .Done()
+                            .Seal()
+                        .Seal()
                     .Seal()
+                    .Build();
+            } else {
+                TExprNode::TPtr newInit;
+                if (trait->ChildPtr(1)->Head().ChildrenSize() == 1) {
+                    newInit = Ctx.Builder(Node->Pos())
+                        .Lambda()
+                            .Param("row")
+                            .Apply(trait->ChildPtr(1))
+                                .With(0)
+                                    .Callable("Member")
+                                        .Arg(0, "row")
+                                        .Add(1, distinctField)
+                                    .Seal()
+                                .Done()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else {
+                    newInit = Ctx.Builder(Node->Pos())
+                        .Lambda()
+                            .Param("row")
+                            .Param("parent")
+                            .Apply(trait->ChildPtr(1))
+                                .With(0)
+                                    .Callable("Member")
+                                        .Arg(0, "row")
+                                        .Add(1, distinctField)
+                                    .Seal()
+                                .Done()
+                                .With(1, "parent")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
+
+                TExprNode::TPtr newUpdate;
+                if (trait->ChildPtr(2)->Head().ChildrenSize() == 2) {
+                    newUpdate = Ctx.Builder(Node->Pos())
+                        .Lambda()
+                            .Param("row")
+                            .Param("state")
+                            .Apply(trait->ChildPtr(2))
+                                .With(0)
+                                    .Callable("Member")
+                                        .Arg(0, "row")
+                                        .Add(1, distinctField)
+                                    .Seal()
+                                .Done()
+                                .With(1, "state")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else {
+                    newUpdate = Ctx.Builder(Node->Pos())
+                        .Lambda()
+                            .Param("row")
+                            .Param("state")
+                            .Param("parent")
+                            .Apply(trait->ChildPtr(2))
+                                .With(0)
+                                    .Callable("Member")
+                                        .Arg(0, "row")
+                                        .Add(1, distinctField)
+                                    .Seal()
+                                .Done()
+                                .With(1, "state")
+                                .With(2, "parent")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
+
+                trait = Ctx.Builder(Node->Pos())
+                    .Callable("AggregationTraits")
+                        .Callable(0, "StructType")
+                            .List(0)
+                                .Add(0, distinctField)
+                                .Add(1, trait->ChildPtr(0))
+                            .Seal()
+                        .Seal()
+                        .Add(1, newInit)
+                        .Add(2, newUpdate)
+                        .Add(3, trait->ChildPtr(3))
+                        .Add(4, trait->ChildPtr(4))
+                        .Add(5, trait->ChildPtr(5))
+                        .Add(6, trait->ChildPtr(6))
+                        .Add(7, trait->ChildPtr(7))
+                    .Seal()
+                    .Build();
+            }
+
+            combineColumns.push_back(Ctx.Builder(Node->Pos())
+                .List()
+                .Add(0, InitialColumnNames[i])
+                .Add(1, trait)
                 .Seal()
+                .Build());
+        }
+
+        auto combine = Ctx.Builder(Node->Pos())
+            .Callable("AggregateCombine")
+                .Add(0, distinct)
+                .Add(1, KeyColumns)
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(combineColumns)))
+                .Add(3, Node->ChildPtr(3))
             .Seal()
             .Build();
 
-        unionAllInputs.push_back(GenerateJustOverStates(mapInit, indicies));
+        unionAllInputs.push_back(GenerateJustOverStates(combine, indicies));
     }
 
     auto unionAll = Ctx.NewCallable(Node->Pos(), "UnionAll", std::move(unionAllInputs));
@@ -2284,14 +2361,14 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TExprNode::TListType keyIdxs;
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true);
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, Suffix == "MergeManyFinalize");
     if (!blocks) {
         return nullptr;
     }
 
     auto aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("WideFromBlocks")
-                .Callable(0, "BlockMergeFinalizeHashed")
+                .Callable(0, TStringBuilder() << "Block" << Suffix << "Hashed")
                     .Add(0, blocks)
                     .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
                     .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))

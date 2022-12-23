@@ -1273,7 +1273,7 @@ TExprNode::TPtr PropagateConstPremapIntoCombineByKey(const TExprNode& node, TExp
     return ctx.ChangeChildren(node, std::move(children));
 }
 
-TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ctx) {
+TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ctx, bool useBlocks) {
     auto keyColumns = node.Keys();
     auto aggregatedColumns = node.Handlers();
     if (keyColumns.Size() > 0 || aggregatedColumns.Size() != 1) {
@@ -1443,7 +1443,7 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
         return ret;
     }
 
-    if (!onlyColumn) {
+    if (useBlocks || !onlyColumn) {
         return node.Ptr();
     }
     auto removedOptionalType = inputItemType;
@@ -2109,7 +2109,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         }
 
         TCoAggregate self(node);
-        auto ret = CountAggregateRewrite(self, ctx);
+        auto ret = CountAggregateRewrite(self, ctx, optCtx.Types->UseBlocks);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "CountAggregateRewrite";
             return ret;

@@ -305,7 +305,7 @@ bool ValidateBlockKeys(TPositionHandle pos, const TTypeAnnotationNode::TListType
 }
 
 bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems, const TExprNode& aggs,
-    TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx, bool overState) {
+    TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx, bool overState, bool many) {
     if (!EnsureTuple(aggs, ctx)) {
         return false;
     }
@@ -333,10 +333,17 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
                 return false;
             }
 
-            auto applyArgType = agg->Head().Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            if (!IsSameAnnotation(*inputItems[argColumnIndex], *applyArgType)) {
+            if (many && inputItems[argColumnIndex]->GetKind() != ETypeAnnotationKind::Optional) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
-                    "Mismatch argument type, expected: " << *applyArgType << ", got: " << *inputItems[argColumnIndex]));
+                    "Expected optional state, but got: " << *inputItems[argColumnIndex]));
+                return false;
+            }
+
+            auto applyArgType = agg->Head().Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto expectedType = many ? ctx.MakeType<TOptionalExprType>(applyArgType) : applyArgType;
+            if (!IsSameAnnotation(*inputItems[argColumnIndex], *expectedType)) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
+                    "Mismatch argument type, expected: " << *expectedType << ", got: " << *inputItems[argColumnIndex]));
                 return false;
             }
         }
@@ -376,7 +383,7 @@ IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, 
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, false)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, false, false)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -421,7 +428,7 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr, false)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr, false, false)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -437,6 +444,7 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
 
 IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
+    const bool many = input->Content().EndsWith("ManyFinalizeHashed");
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -451,7 +459,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, true)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, true, many)) {
         return IGraphTransformer::TStatus::Error;
     }
 

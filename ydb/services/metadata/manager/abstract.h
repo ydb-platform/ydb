@@ -154,19 +154,13 @@ public:
     virtual ~IOperationsManager() = default;
 
     NThreading::TFuture<TObjectOperatorResult> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const {
-        return DoCreateObject(settings, nodeId, manager, context);
-    }
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const;
 
     NThreading::TFuture<TObjectOperatorResult> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const {
-        return DoAlterObject(settings, nodeId, manager, context);
-    }
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const;
 
     NThreading::TFuture<TObjectOperatorResult> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TModificationContext& context) const {
-        return DoDropObject(settings, nodeId, manager, context);
-    }
+        IClassBehaviour::TPtr manager, const TModificationContext& context) const;
 
     const TTableSchema& GetSchema() const {
         Y_VERIFY(!!ActualSchema);

@@ -1,4 +1,5 @@
 #include "abstract.h"
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -31,6 +32,27 @@ NKikimr::NMetadata::NModifications::TTableSchema& TTableSchema::AddColumn(const 
         PKColumnIds.emplace_back(info.name());
     }
     return *this;
+}
+
+NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId, IClassBehaviour::TPtr manager, const TModificationContext& context) const {
+    if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        return NThreading::MakeFuture<TObjectOperatorResult>("metadata provider service is disabled");
+    }
+    return DoDropObject(settings, nodeId, manager, context);
+}
+
+NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId, IClassBehaviour::TPtr manager, const TModificationContext& context) const {
+    if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        return NThreading::MakeFuture<TObjectOperatorResult>("metadata provider service is disabled");
+    }
+    return DoAlterObject(settings, nodeId, manager, context);
+}
+
+NThreading::TFuture<NKikimr::NMetadata::NModifications::TObjectOperatorResult> IOperationsManager::CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId, IClassBehaviour::TPtr manager, const TModificationContext& context) const {
+    if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        return NThreading::MakeFuture<TObjectOperatorResult>("metadata provider service is disabled");
+    }
+    return DoCreateObject(settings, nodeId, manager, context);
 }
 
 }

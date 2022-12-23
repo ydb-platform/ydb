@@ -31,24 +31,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
 
     Y_UNIT_TEST(TestDeallocated) {
         TScopedAlloc alloc(__LOCATION__);
-        void* p1 = MKQLAllocWithSize(10);
-        void* p2 = MKQLAllocWithSize(20);
+        void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
+        void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(20);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
-        MKQLFreeWithSize(p1, 10);
+        TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 10);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
-        MKQLFreeWithSize(p2, 20);
+        TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 20);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
-        p1 = MKQLAllocWithSize(10);
+        p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
-        MKQLFreeWithSize(p1, 10);
+        TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
@@ -59,13 +59,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
             return;
         }
         TScopedAlloc alloc1(__LOCATION__);
-        void* p1 = MKQLAllocWithSize(10);
-        void* p2 = MKQLAllocWithSize(10);
+        void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
+        void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
         {
             TScopedAlloc alloc2(__LOCATION__);
-            MKQLFreeWithSize(p1, 10);
+            TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
         }
-        MKQLFreeWithSize(p2, 10);
+        TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 10);
     }
 }
 

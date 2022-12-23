@@ -23,9 +23,9 @@ extern "C" void UdfUnregisterObject(::NYql::NUdf::TBoxedValue* object) {
 }
 
 extern "C" void* UdfAllocateWithSize(ui64 size) {
-    return ::NKikimr::NMiniKQL::MKQLAllocWithSize(size);
+    return ::NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc::AllocWithSize(size);
 }
 
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size) {
-    return ::NKikimr::NMiniKQL::MKQLFreeWithSize(mem, size);
+    return ::NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc::FreeWithSize(mem, size);
 }

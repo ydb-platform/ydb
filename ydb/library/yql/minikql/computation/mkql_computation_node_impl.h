@@ -789,20 +789,19 @@ protected:
     const EValueRepresentation Kind;
 };
 
-template <typename TDerived, typename TBase = NUdf::IBoxedValue>
-class TComputationValue: public TBase, public TWithMiniKQLAlloc
+template <typename TDerived, typename TBaseExt = NYql::NUdf::IBoxedValue>
+class TComputationValueBase: public TBaseExt
 {
+private:
+    using TBase = TBaseExt;
 public:
     template <typename... Args>
-    TComputationValue(TMemoryUsageInfo* memInfo, Args&&... args)
+    TComputationValueBase(Args&&... args)
         : TBase(std::forward<Args>(args)...)
     {
-        M_.MemInfo = memInfo;
-        MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived), __MKQL_LOCATION__);
     }
 
-    ~TComputationValue() {
-        MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
+    ~TComputationValueBase() {
     }
 
 private:
@@ -1020,18 +1019,53 @@ public:
     }
 
 protected:
-    inline TMemoryUsageInfo* GetMemInfo() const {
-        return static_cast<TMemoryUsageInfo*>(M_.MemInfo);
-    }
-
     [[noreturn]] void ThrowNotSupported(const char* func) const {
         THROW yexception() << "Unsupported access to '" << func << "' method of: " << TypeName(*this);
     }
+};
 
+template <typename TDerived, typename TBaseExt, EMemorySubPool MemoryPool>
+class TComputationValueImpl: public TComputationValueBase<TDerived, TBaseExt>,
+    public TWithMiniKQLAlloc<MemoryPool> {
+private:
+    using TBase = TComputationValueBase<TDerived, TBaseExt>;
+protected:
+    inline TMemoryUsageInfo* GetMemInfo() const {
+        return static_cast<TMemoryUsageInfo*>(M_.MemInfo);
+    }
+    using TWithMiniKQLAlloc<MemoryPool>::AllocWithSize;
+    using TWithMiniKQLAlloc<MemoryPool>::FreeWithSize;
+public:
+    template <typename... Args>
+    TComputationValueImpl(TMemoryUsageInfo* memInfo, Args&&... args)
+        : TBase(std::forward<Args>(args)...) {
+        M_.MemInfo = memInfo;
+        MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived), __MKQL_LOCATION__);
+    }
+
+    ~TComputationValueImpl() {
+        MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
+    }
 private:
     struct {
         void* MemInfo; // used for tracking memory usage during execution
     } M_;
+};
+
+template <typename TDerived, typename TBaseExt = NUdf::IBoxedValue>
+class TTemporaryComputationValue: public TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Temporary> {
+private:
+    using TBase = TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Temporary>;
+public:
+    using TBase::TBase;
+};
+
+template <typename TDerived, typename TBaseExt = NUdf::IBoxedValue>
+class TComputationValue: public TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Default> {
+private:
+    using TBase = TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Default>;
+public:
+    using TBase::TBase;
 };
 
 template<bool IsStream>

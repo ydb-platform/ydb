@@ -255,7 +255,7 @@ public:
     void* operator new[](size_t sz) = delete;
     void operator delete(void *mem, std::size_t sz) {
         const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + offsetof(TDirectArrayHolderInplace, Size));
-        MKQLFreeWithSize(mem, sz + *static_cast<ui32*>(pSize) * sizeof(NUdf::TUnboxedValue));
+        FreeWithSize(mem, sz + *static_cast<ui32*>(pSize) * sizeof(NUdf::TUnboxedValue));
     }
 
     void operator delete[](void *mem, std::size_t sz) = delete;
@@ -285,10 +285,10 @@ public:
     }
 
 private:
-    class TIterator : public TComputationValue<TIterator> {
+    class TIterator : public TTemporaryComputationValue<TIterator> {
     public:
         TIterator(const TDirectArrayHolderInplace* parent)
-            : TComputationValue(parent->GetMemInfo()), Parent(const_cast<TDirectArrayHolderInplace*>(parent))
+            : TTemporaryComputationValue(parent->GetMemInfo()), Parent(const_cast<TDirectArrayHolderInplace*>(parent))
         {}
 
     private:
@@ -314,10 +314,10 @@ private:
         ui32 Current = ~0U;
     };
 
-    class TKeysIterator : public TComputationValue<TKeysIterator> {
+    class TKeysIterator : public TTemporaryComputationValue<TKeysIterator> {
     public:
         TKeysIterator(const TDirectArrayHolderInplace& parent)
-            : TComputationValue(parent.GetMemInfo()), Size(parent.GetSize())
+            : TTemporaryComputationValue(parent.GetMemInfo()), Size(parent.GetSize())
         {}
     private:
         bool Skip() final {
@@ -1832,10 +1832,10 @@ private:
 class THashedDictHolder: public TComputationValue<THashedDictHolder> {
 public:
     template <bool NoSwap>
-    class TIterator: public TComputationValue<TIterator<NoSwap>> {
+    class TIterator: public TTemporaryComputationValue<TIterator<NoSwap>> {
     public:
         TIterator(const THashedDictHolder* parent)
-            : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
+            : TTemporaryComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent(const_cast<THashedDictHolder*>(parent))
             , Iterator(Parent->Map.begin())
             , End(Parent->Map.end())
@@ -3140,7 +3140,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui32 size, NUdf::
         return GetEmptyContainer();
     }
 
-    const auto buffer = MKQLAllocFastWithSize(sizeof(TDirectArrayHolderInplace) + size * sizeof(NUdf::TUnboxedValue), CurrentAllocState);
+    const auto buffer = MKQLAllocFastWithSize(
+        sizeof(TDirectArrayHolderInplace) + size * sizeof(NUdf::TUnboxedValue), CurrentAllocState, EMemorySubPool::Default);
     const auto h = ::new(buffer) TDirectArrayHolderInplace(&MemInfo, size);
 
     auto res = NUdf::TUnboxedValuePod(h);

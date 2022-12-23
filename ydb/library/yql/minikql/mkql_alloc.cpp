@@ -10,6 +10,7 @@ namespace NMiniKQL {
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
 TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, nullptr, nullptr };
+TAllocState::TCurrentPages TAllocState::EmptyCurrentPages = { &TAllocState::EmptyPageHeader, &TAllocState::EmptyPageHeader };
 
 void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
     Left = root;
@@ -115,7 +116,7 @@ void TScopedAlloc::Release() {
     }
 }
 
-void* MKQLAllocSlow(size_t sz, TAllocState* state) {
+void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
     auto currPage = (TAllocPageHeader*)state->GetBlock(capacity);
@@ -123,11 +124,12 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state) {
     currPage->Capacity = capacity;
     currPage->Offset = roundedSize;
 
+    auto& mPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
     auto newPageAvailable = capacity - roundedSize;
-    auto curPageAvailable = state->CurrentPage->Capacity - state->CurrentPage->Offset;
+    auto curPageAvailable = mPage->Capacity - mPage->Offset;
 
     if (newPageAvailable > curPageAvailable) {
-        state->CurrentPage = currPage;
+        mPage = currPage;
     }
 
     void* ret = (char*)currPage + sizeof(TAllocPageHeader);
@@ -137,39 +139,42 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state) {
     return ret;
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state) noexcept {
+void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept {
     Y_VERIFY_DEBUG(state);
     Y_VERIFY_DEBUG(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     state->ReturnBlock(header, header->Capacity);
-    if (header == state->CurrentPage) {
-        state->CurrentPage = &TAllocState::EmptyPageHeader;
+    if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
+        state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;
     }
 }
 
-void* TPagedArena::AllocSlow(size_t sz) {
-    auto prevLink = CurrentPage_;
+void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
+    auto& currentPage = CurrentPages_[(TMemorySubPoolIdx)mPool];
+    auto prevLink = currentPage;
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);
-    CurrentPage_ = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
-    CurrentPage_->Capacity = capacity;
-    void* ret = (char*)CurrentPage_ + sizeof(TAllocPageHeader);
-    CurrentPage_->Offset = roundedSize;
-    CurrentPage_->UseCount = 0;
-    CurrentPage_->MyAlloc = PagePool_;
-    CurrentPage_->Link = prevLink;
+    currentPage = (TAllocPageHeader*)PagePool_->GetBlock(capacity);
+    currentPage->Capacity = capacity;
+    void* ret = (char*)currentPage + sizeof(TAllocPageHeader);
+    currentPage->Offset = roundedSize;
+    currentPage->UseCount = 0;
+    currentPage->MyAlloc = PagePool_;
+    currentPage->Link = prevLink;
     return ret;
 }
 
 void TPagedArena::Clear() noexcept {
-    auto current = CurrentPage_;
-    while (current != &TAllocState::EmptyPageHeader) {
-        auto next = current->Link;
-        PagePool_->ReturnBlock(current, current->Capacity);
-        current = next;
-    }
+    for (auto&& i : CurrentPages_) {
+        auto current = i;
+        while (current != &TAllocState::EmptyPageHeader) {
+            auto next = current->Link;
+            PagePool_->ReturnBlock(current, current->Capacity);
+            current = next;
+        }
 
-    CurrentPage_ = &TAllocState::EmptyPageHeader;
+        i = &TAllocState::EmptyPageHeader;
+    }
 }
 
 } // NMiniKQL

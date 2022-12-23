@@ -14,10 +14,10 @@ public:
     typedef std::function<NUdf::TUnboxedValue(const TItem&)> TItemFactory;
     typedef TComputationValue<TVectorListAdapter<TVectorType>> TBase;
 
-    class TIterator: public TComputationValue<TIterator> {
+    class TIterator: public TTemporaryComputationValue<TIterator> {
     public:
         TIterator(TMemoryUsageInfo* memInfo, const TVectorType& list, TItemFactory itemFactory, ui64 start, ui64 finish, bool reversed)
-            : TComputationValue<TIterator>(memInfo)
+            : TTemporaryComputationValue<TIterator>(memInfo)
             , List(list)
             , ItemFactory(itemFactory)
             , Start(start)
@@ -57,10 +57,10 @@ public:
         ui64 Index;
     };
 
-    class TDictIterator : public TComputationValue<TDictIterator> {
+    class TDictIterator : public TTemporaryComputationValue<TDictIterator> {
     public:
         TDictIterator(TMemoryUsageInfo* memInfo, THolder<TIterator>&& iter)
-            : TComputationValue<TDictIterator>(memInfo)
+            : TTemporaryComputationValue<TDictIterator>(memInfo)
             , Iter(std::move(iter))
             , Index(Max<ui64>())
         {}

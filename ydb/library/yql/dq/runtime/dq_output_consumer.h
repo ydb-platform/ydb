@@ -10,7 +10,8 @@ class TTypeEnvironment;
 
 namespace NYql::NDq {
 
-class IDqOutputConsumer : public TSimpleRefCount<IDqOutputConsumer>, public NKikimr::NMiniKQL::TWithMiniKQLAlloc {
+class IDqOutputConsumer : public TSimpleRefCount<IDqOutputConsumer>,
+    public NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc {
 public:
     using TPtr = TIntrusivePtr<IDqOutputConsumer>;
 

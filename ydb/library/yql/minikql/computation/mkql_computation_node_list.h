@@ -27,7 +27,7 @@ namespace NKikimr {
             }
 
             static TSelf* AllocateChunk(ui64 length) {
-                const auto block = MKQLAllocWithSize(length * sizeof(T) + sizeof(TListChunk));
+                const auto block = TWithDefaultMiniKQLAlloc::AllocWithSize(length * sizeof(T) + sizeof(TListChunk));
                 const auto ptr = new (block) TListChunk(length);
                 PlacementNew(reinterpret_cast<T*>(ptr + 1), length);
                 return ptr;
@@ -45,7 +45,8 @@ namespace NKikimr {
                 for (auto it = DataBegin(); it != DataEnd(); it++) {
                     it->~T();
                 }
-                MKQLFreeWithSize(static_cast<void*>(this), sizeof(TListChunk) + sizeof(T) * (DataEnd() - DataBegin()));
+                TWithDefaultMiniKQLAlloc::FreeWithSize(
+                    static_cast<void*>(this), sizeof(TListChunk) + sizeof(T) * (DataEnd() - DataBegin()));
             }
 
             inline T* DataBegin() {

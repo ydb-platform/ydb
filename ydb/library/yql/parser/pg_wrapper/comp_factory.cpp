@@ -374,7 +374,7 @@ public:
         }
 
         MemSize = SizeForFunctionCallInfo(numArgs);
-        Ptr = MKQLAllocWithSize(MemSize);
+        Ptr = TWithDefaultMiniKQLAlloc::AllocWithSize(MemSize);
         auto& callInfo = Ref();
         Zero(callInfo);
         callInfo.flinfo = &CopyFmgrInfo; // client may mutate fn_extra
@@ -389,7 +389,7 @@ public:
 
     ~TFunctionCallInfo() {
         if (Ptr) {
-            MKQLFreeWithSize(Ptr, MemSize);
+            TWithDefaultMiniKQLAlloc::FreeWithSize(Ptr, MemSize);
         }
     }
 
@@ -406,13 +406,13 @@ private:
 class TReturnSetInfo {
 public:
     TReturnSetInfo() {
-        Ptr = MKQLAllocWithSize(sizeof(ReturnSetInfo));
+        Ptr = TWithDefaultMiniKQLAlloc::AllocWithSize(sizeof(ReturnSetInfo));
         Zero(Ref());
         Ref().type = T_ReturnSetInfo;
     }
 
     ~TReturnSetInfo() {
-        MKQLFreeWithSize(Ptr, sizeof(ReturnSetInfo));
+        TWithDefaultMiniKQLAlloc::FreeWithSize(Ptr, sizeof(ReturnSetInfo));
     }
 
     ReturnSetInfo& Ref() {
@@ -863,14 +863,14 @@ public:
             auto lb = ARR_LBOUND(arr);
             auto nitems = ArrayGetNItems(ndim, dims);
 
-            Datum* elems = (Datum*)MKQLAllocWithSize(nitems * sizeof(Datum));
+            Datum* elems = (Datum*)TWithDefaultMiniKQLAlloc::AllocWithSize(nitems * sizeof(Datum));
             Y_DEFER {
-                MKQLFreeWithSize(elems, nitems * sizeof(Datum));
+                TWithDefaultMiniKQLAlloc::FreeWithSize(elems, nitems * sizeof(Datum));
             };
 
-            bool* nulls = (bool*)MKQLAllocWithSize(nitems);
+            bool* nulls = (bool*)TWithDefaultMiniKQLAlloc::AllocWithSize(nitems);
             Y_DEFER {
-                MKQLFreeWithSize(nulls, nitems);
+                TWithDefaultMiniKQLAlloc::FreeWithSize(nulls, nitems);
             };
 
             array_iter iter;
@@ -1271,14 +1271,14 @@ public:
             args.push_back(value);
         }
 
-        Datum* dvalues = (Datum*)MKQLAllocWithSize(nelems * sizeof(Datum));
+        Datum* dvalues = (Datum*)TWithDefaultMiniKQLAlloc::AllocWithSize(nelems * sizeof(Datum));
         Y_DEFER {
-            MKQLFreeWithSize(dvalues, nelems * sizeof(Datum));
+            TWithDefaultMiniKQLAlloc::FreeWithSize(dvalues, nelems * sizeof(Datum));
         };
 
-        bool *dnulls = (bool*)MKQLAllocWithSize(nelems);
+        bool *dnulls = (bool*)TWithDefaultMiniKQLAlloc::AllocWithSize(nelems);
         Y_DEFER {
-            MKQLFreeWithSize(dnulls, nelems);
+            TWithDefaultMiniKQLAlloc::FreeWithSize(dnulls, nelems);
         };
 
         TPAllocScope call;
@@ -2163,9 +2163,9 @@ NUdf::TUnboxedValue ReadSkiffPg(TPgType* type, NCommon::TInputBuf& buf) {
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
-        char* s = (char*)MKQLAllocWithSize(size);
+        char* s = (char*)TWithDefaultMiniKQLAlloc::AllocWithSize(size);
         Y_DEFER {
-            MKQLFreeWithSize(s, size);
+            TWithDefaultMiniKQLAlloc::FreeWithSize(s, size);
         };
 
         buf.ReadMany(s, size);
@@ -2570,15 +2570,15 @@ NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVect
 
 void* PgInitializeContext(const std::string_view& contextType) {
     if (contextType == "Agg") {
-        auto ctx = (AggState*)MKQLAllocWithSize(sizeof(AggState));
+        auto ctx = (AggState*)TWithDefaultMiniKQLAlloc::AllocWithSize(sizeof(AggState));
         Zero(*ctx);
         *(NodeTag*)ctx = T_AggState;
-        ctx->curaggcontext = (ExprContext*)MKQLAllocWithSize(sizeof(ExprContext));
+        ctx->curaggcontext = (ExprContext*)TWithDefaultMiniKQLAlloc::AllocWithSize(sizeof(ExprContext));
         Zero(*ctx->curaggcontext);
         ctx->curaggcontext->ecxt_per_tuple_memory = (MemoryContext)&((TMainContext*)TlsAllocState->MainContext)->Data;
         return ctx;
     } else if (contextType == "WinAgg") {
-        auto ctx = (WindowAggState*)MKQLAllocWithSize(sizeof(WindowAggState));
+        auto ctx = (WindowAggState*)TWithDefaultMiniKQLAlloc::AllocWithSize(sizeof(WindowAggState));
         Zero(*ctx);
         *(NodeTag*)ctx = T_WindowAggState;
         ctx->curaggcontext = (MemoryContext)&((TMainContext*)TlsAllocState->MainContext)->Data;
@@ -2590,10 +2590,10 @@ void* PgInitializeContext(const std::string_view& contextType) {
 
 void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     if (contextType == "Agg") {
-        MKQLFreeWithSize(((AggState*)ctx)->curaggcontext, sizeof(ExprContext));
-        MKQLFreeWithSize(ctx, sizeof(AggState));
+        TWithDefaultMiniKQLAlloc::FreeWithSize(((AggState*)ctx)->curaggcontext, sizeof(ExprContext));
+        TWithDefaultMiniKQLAlloc::FreeWithSize(ctx, sizeof(AggState));
     } else if (contextType == "WinAgg") {
-        MKQLFreeWithSize(ctx, sizeof(WindowAggState));
+        TWithDefaultMiniKQLAlloc::FreeWithSize(ctx, sizeof(WindowAggState));
     } else {
         Y_FAIL("Unsupported context type");
     }

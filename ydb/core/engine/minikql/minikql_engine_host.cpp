@@ -344,7 +344,9 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
 }
 
 template<class TTableIt>
-class TSelectRangeLazyRow : public TComputationValue<TSelectRangeLazyRow<TTableIt>>{
+class TSelectRangeLazyRow : public TComputationValue<TSelectRangeLazyRow<TTableIt>> {
+private:
+    using TBase = TComputationValue<TSelectRangeLazyRow<TTableIt>>;
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         BuildValue(index);
         return GetPtr()[index];
@@ -362,7 +364,7 @@ public:
     void operator delete(void *mem, std::size_t sz) {
         auto ptr = (TSelectRangeLazyRow*)mem;
         auto extraSize = ptr->Size() * sizeof(NUdf::TUnboxedValue) + ptr->GetMaskSize() * sizeof(ui64);
-        MKQLFreeWithSize(mem, sz + extraSize);
+        TBase::FreeWithSize(mem, sz + extraSize);
     }
 
     void operator delete[](void *mem, std::size_t sz) = delete;
@@ -372,7 +374,7 @@ public:
         ui32 size = dbData.ColumnCount + systemColumnTags.size();
 
         ui32 maskSize = size > 0 ? (size - 1) / 64 + 1 : 0;
-        void* buffer = MKQLAllocWithSize(sizeof(TSelectRangeLazyRow)
+        void* buffer = TBase::AllocWithSize(sizeof(TSelectRangeLazyRow)
             + size * sizeof(NUdf::TUnboxedValue)
             + maskSize * sizeof(ui64));
 

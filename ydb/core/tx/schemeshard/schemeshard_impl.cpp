@@ -491,10 +491,10 @@ bool TSchemeShard::ApplyStorageConfig(
     return true;
 }
 
-void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node) {
+void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool force) {
     Y_VERIFY(node);
 
-    if (node->Dropped() || !node->IsCreateFinished()) {
+    if ((node->Dropped() || !node->IsCreateFinished()) && !force) {
         return;
     }
 

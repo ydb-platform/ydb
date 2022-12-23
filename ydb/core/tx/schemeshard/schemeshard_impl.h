@@ -483,7 +483,7 @@ public:
     static bool ResolveChannelsDetailsAsIs(ui32 /*profileId*/, const TChannelProfiles::TProfile& profile, const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
     static bool TabletResolveChannelsDetails(ui32 profileId, const TChannelProfiles::TProfile& profile, const TStoragePools& storagePools, TChannelsBindings& channelsBinding);
 
-    void ClearDescribePathCaches(const TPathElement::TPtr node);
+    void ClearDescribePathCaches(const TPathElement::TPtr node, bool force = false);
     TString PathToString(TPathElement::TPtr item);
     NKikimrSchemeOp::TPathVersion  GetPathVersion(const TPath& pathEl) const;
     ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;

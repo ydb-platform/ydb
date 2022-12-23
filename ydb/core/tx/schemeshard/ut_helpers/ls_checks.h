@@ -112,6 +112,7 @@ namespace NLs {
 
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+    TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
     TCheckFunc IndexesCount(ui32 count);
 
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);

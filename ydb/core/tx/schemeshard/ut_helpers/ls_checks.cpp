@@ -502,6 +502,20 @@ TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui
     };
 }
 
+TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasSelf());
+        auto self = descr.GetSelf();
+        UNIT_ASSERT(self.HasCreateFinished());
+        UNIT_ASSERT_STRINGS_EQUAL(self.GetName(), name);
+        UNIT_ASSERT(descr.HasPersQueueGroup());
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetPersQueueGroup().GetAlterVersion(), alterVersion);
+    };
+}
+
 TCheckFunc PathVersionEqual(ui64 version) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);

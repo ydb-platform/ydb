@@ -126,8 +126,8 @@ public:
             return node;
         }
 
-        if (!TDqCnUnionAll::Match(node.Get())) {
-            ctx.AddError(TIssue(node->Pos(ctx), "Last connection must be union all"));
+        if (!(TDqCnUnionAll::Match(node.Get()) || TDqCnMerge::Match(node.Get()))) {
+            ctx.AddError(TIssue(node->Pos(ctx), "Last connection must be union all or merge"));
             return {};
         }
 
@@ -165,7 +165,7 @@ public:
     }
 
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
-        if (!TDqCnUnionAll::Match(&node)) {
+        if (!(TDqCnUnionAll::Match(&node) || TDqCnMerge::Match(&node))) {
             return false;
         }
 

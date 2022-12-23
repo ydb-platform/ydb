@@ -147,6 +147,37 @@ NUdf::TUnboxedValuePod OwnedPointerDatumToPod(Datum datum) {
     return NUdf::TUnboxedValuePod(std::move(ref));
 }
 
+class TVPtrHolder {
+public:
+    TVPtrHolder() {
+        new(Dummy) TBoxedValueWithFree();
+    }
+
+    static bool IsBoxedVPtr(Datum ptr) {
+        return *(const uintptr_t*)((char*)ptr - PallocHdrSize) == *(const uintptr_t*)Instance.Dummy;
+    }
+
+private:
+    char Dummy[sizeof(NUdf::IBoxedValue)];
+
+    static TVPtrHolder Instance;
+};
+
+TVPtrHolder TVPtrHolder::Instance;
+
+NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByValue) {
+    if (passByValue) {
+        return ScalarDatumToPod(datum);
+    }
+
+    if (TVPtrHolder::IsBoxedVPtr(datum)) {
+        // returned one of arguments
+        return OwnedPointerDatumToPod(datum);
+    }
+
+    return PointerDatumToPod(datum);
+}
+
 Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value) {
     return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
 }
@@ -236,24 +267,6 @@ const MemoryContextMethods MkqlMethods = {
 #endif
 };
 
-class TVPtrHolder {
-public:
-    TVPtrHolder() {
-        new(Dummy) TBoxedValueWithFree();
-    }
-
-    static bool IsBoxedVPtr(Datum ptr) {
-        return *(const uintptr_t*)((char*)ptr - PallocHdrSize) == *(const uintptr_t*)Instance.Dummy;
-    }
-
-private:
-    char Dummy[sizeof(NUdf::IBoxedValue)];
-
-    static TVPtrHolder Instance;
-};
-
-TVPtrHolder TVPtrHolder::Instance;
-
 inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
     return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
 }
@@ -304,7 +317,7 @@ public:
         {
             auto ret = FInfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            return TypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
+            return AnyDatumToPod(ret, TypeDesc.PassByValue);
         }
         PG_CATCH();
         {
@@ -551,16 +564,7 @@ private:
                 return NUdf::TUnboxedValuePod();
             }
 
-            if (this->RetTypeDesc.PassByValue) {
-                return ScalarDatumToPod(ret);
-            }
-
-            if (TVPtrHolder::IsBoxedVPtr(ret)) {
-                // returned one of arguments
-                return OwnedPointerDatumToPod(ret);
-            }
-
-            return PointerDatumToPod(ret);
+            return AnyDatumToPod(ret, this->RetTypeDesc.PassByValue);
         }
         PG_CATCH();
         {
@@ -641,13 +645,8 @@ private:
 
                     if (callInfo.isnull) {
                         value = NUdf::TUnboxedValuePod();
-                    } else if (RetTypeDesc.PassByValue) {
-                        value = ScalarDatumToPod(ret);
-                    } else if (TVPtrHolder::IsBoxedVPtr(ret)) {
-                        // returned one of arguments
-                        value = OwnedPointerDatumToPod(ret);
                     } else {
-                        value = PointerDatumToPod(ret);
+                        value = AnyDatumToPod(ret, RetTypeDesc.PassByValue);
                     }
 
                     return true;
@@ -898,7 +897,7 @@ public:
                 ScalarDatumFromPod(value) :
                 PointerDatumFromPod(value);
             auto ret = ConvertDatum(datum, state, typeMod);
-            return TargetTypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
+            return AnyDatumToPod(ret, TargetTypeDesc.PassByValue);
         }
     }
 
@@ -1978,7 +1977,7 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
             errMsg << "Not all data has been consumed by 'recv' function: " << NPg::LookupProc(receiveFuncId).Name << ", data size: " << stringInfo.len << ", consumed size: " << stringInfo.cursor;
             UdfTerminate(errMsg.c_str());
         }
-        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+        return AnyDatumToPod(x, typeInfo.PassByValue);
     }
     PG_CATCH();
     {
@@ -2024,7 +2023,7 @@ NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) 
 
         auto x = finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
-        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+        return AnyDatumToPod(x, typeInfo.PassByValue);
     }
     PG_CATCH();
     {

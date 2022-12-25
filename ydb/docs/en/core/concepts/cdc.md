@@ -19,6 +19,21 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
    Adding rows is a special case of updates, and a record of adding a row in a changefeed will look similar to an update record.
 
+## Virtual timestamps {#virtual-timestamps}
+
+All changes in {{ ydb-short-name }} tables are arranged according to the order in which transactions are performed. Each change is marked with a virtual timestamp which consists of two elements:
+
+1. Global coordinator time.
+1. Unique transaction ID.
+
+Using these stamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
+
+{% note info %}
+
+By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table.md#changefeed-options) when creating a changefeed.
+
+{% endnote %}
+
 ## Record structure {#record-structure}
 
 Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md#changefeed-options), the structure of a record may differ.
@@ -31,7 +46,8 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
     "update": {<columns>},
     "erase": {},
     "newImage": {<columns>},
-    "oldImage": {<columns>}
+    "oldImage": {<columns>},
+    "ts": [<step>, <txId>]
 }
 ```
 
@@ -40,6 +56,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `erase`: Erase flag. Present if a record matches the delete operation.
 * `newImage`: Row snapshot that results from its change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `oldImage`: Row snapshot before its change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
+* `ts`: Virtual timestamp. Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
 
 > Sample record of an update in `UPDATES` mode:
 >
@@ -78,6 +95,18 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 >    }
 > }
 > ```
+>
+> Record with virtual timestamps:
+> ```json
+> {
+>    "key": [1],
+>    "update": {
+>        "created": "2022-12-12T00:00:00.000000Z",
+>        "customer": "Name123"
+>    },
+>    "ts": [1670792400, 562949953607163]
+> }
+> ```
 
 {% note info %}
 
@@ -87,6 +116,18 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * If a record contains the `erase` field (indicating that the record matches the erase operation), this is always an empty JSON object (`{}`).
 
 {% endnote %}
+
+## Record retention period {#retention-period}
+
+By default, records are stored in the changefeed for 24 hours from the time they are sent. Depending on usage scenarios, the retention period can be reduced or increased up to 30 days.
+
+{% note warning %}
+
+Records whose retention time has expired are deleted, regardless of whether they were processed (read) or not.
+
+{% endnote %}
+
+Deleting records before they are processed by the client will cause [offset](topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
 
 ## Creating and deleting a changefeed {#ddl}
 

@@ -64,6 +64,8 @@ You can also add or remove a secondary index using the {{ ydb-short-name }} CLI 
    * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
 * `FORMAT`: Data write format.
    * `JSON`: The record structure is given on the [changefeed description](../../../../concepts/cdc#record-structure) page.
+* `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc#virtual-timestamps). Disabled by default.
+* `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
 
 The code below adds a changefeed named `updates_feed`, where the values of updated table columns will be exported in JSON format:
 
@@ -71,6 +73,26 @@ The code below adds a changefeed named `updates_feed`, where the values of updat
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES'
+);
+```
+
+Records in this changefeed will be stored for 24 hours (default value). The code in the following example will create a changefeed with a record retention period of 12 hours:
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    RETENTION_PERIOD = Interval('PT12H')
+);
+```
+
+The example of creating a changefeed with enabled virtual timestamps:
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    VIRTUAL_TIMESTAMPS = TRUE
 );
 ```
 

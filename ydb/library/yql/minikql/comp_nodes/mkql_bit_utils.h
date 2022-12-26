@@ -191,5 +191,15 @@ inline T* CompressArray(const T* src, const ui8* sparseBitmap, T* dst, size_t co
     return dst;
 }
 
+inline ui8* CompressAsSparseBitmap(const ui8* src, size_t srcOffset, const ui8* sparseBitmap, ui8* dst, size_t count) {
+    while (count--) {
+        ui8 inputBit = (src[srcOffset >> 3] >> (srcOffset & 7)) & 1;
+        *dst = inputBit;
+        ++srcOffset;
+        dst += *sparseBitmap++;
+    }
+    return dst;
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

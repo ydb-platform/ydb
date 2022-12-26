@@ -1,6 +1,7 @@
 #include "mkql_block_skiptake.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
+#include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -56,7 +57,7 @@ public:
             }
 
             Y_VERIFY_DEBUG(datum.is_array());
-            *output[i] = ctx.HolderFactory.CreateArrowBlock(datum.array()->Slice(count, tailSize));
+            *output[i] = ctx.HolderFactory.CreateArrowBlock(DeepSlice(datum.array(), count, tailSize));
         }
 
         *output[Width - 1] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(tailSize)));
@@ -113,7 +114,7 @@ public:
                     }
 
                     Y_VERIFY_DEBUG(datum.is_array());
-                    *output[i] = ctx.HolderFactory.CreateArrowBlock(datum.array()->Slice(0, count));
+                    *output[i] = ctx.HolderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0, count));
                 }
                 *output[Width - 1] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(count)));
                 state = NUdf::TUnboxedValuePod::Zero();

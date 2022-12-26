@@ -41,6 +41,7 @@ const ui32 CodegenArraysFallbackLimit = 1000u;
 
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
 using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
+using TTemporaryUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
 using TUnboxedValueDeque = std::deque<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
 using TKeyPayloadPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
 using TKeyPayloadPairVector = std::vector<TKeyPayloadPair, TMKQLAllocator<TKeyPayloadPair>>;
@@ -407,6 +408,11 @@ public:
     NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum) const;
 
     NUdf::TUnboxedValuePod VectorAsArray(TUnboxedValueVector& values) const;
+
+    NUdf::TUnboxedValuePod VectorAsVectorHolder(TUnboxedValueVector&& list) const;
+    NUdf::TUnboxedValuePod NewVectorHolder() const;
+    NUdf::TUnboxedValuePod NewTemporaryVectorHolder() const;
+
 
     template <class TForwardIterator>
     NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const {

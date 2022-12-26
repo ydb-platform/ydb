@@ -442,6 +442,203 @@ private:
     const ui32 Size;
 };
 
+template <class TBaseVector>
+class TVectorHolderBase: public TComputationValue<TVectorHolderBase<TBaseVector>>, public TBaseVector {
+private:
+    using TBaseValue = TComputationValue<TVectorHolderBase<TBaseVector>>;
+public:
+    TVectorHolderBase(TMemoryUsageInfo* memInfo)
+        : TBaseValue(memInfo)
+    {
+
+    }
+    TVectorHolderBase(TMemoryUsageInfo* memInfo, TBaseVector&& vector)
+        : TBaseValue(memInfo)
+        , TBaseVector(std::move(vector)) {
+    }
+
+    ~TVectorHolderBase() {
+    }
+
+private:
+    class TValuesIterator: public TTemporaryComputationValue<TValuesIterator> {
+    private:
+        using TBase = TTemporaryComputationValue<TValuesIterator>;
+    public:
+        TValuesIterator(const TVectorHolderBase* parent)
+            : TBase(parent->GetMemInfo())
+            , Size(parent->size())
+            , Parent(const_cast<TVectorHolderBase*>(parent)) {
+        }
+
+    private:
+        bool Skip() final {
+            return ++Current < Size;
+        }
+
+        bool Next(NUdf::TUnboxedValue& value) final {
+            if (Size <= Current) {
+                return false;
+            }
+            value = (*Parent)[Current];
+            ++Current;
+            return true;
+        }
+
+        const size_t Size;
+        ui64 Current = 0;
+        const NUdf::TRefCountedPtr<TVectorHolderBase> Parent;
+    };
+
+    class TDictIterator: public TTemporaryComputationValue<TDictIterator> {
+    private:
+        using TBase = TTemporaryComputationValue<TDictIterator>;
+    public:
+        TDictIterator(const TVectorHolderBase* parent)
+            : TBase(parent->GetMemInfo())
+            , Size(parent->size())
+            , Parent(const_cast<TVectorHolderBase*>(parent)) {
+        }
+    private:
+        bool Skip() final {
+            return ++Current < Size;
+        }
+
+        bool Next(NUdf::TUnboxedValue& key) final {
+            if (Current == Size) {
+                return false;
+            }
+            key = NUdf::TUnboxedValuePod(Current);
+            ++Current;
+            return true;
+        }
+
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
+            if (Current == Size) {
+                return false;
+            }
+            key = NUdf::TUnboxedValuePod(Current);
+            payload = (*Parent)[Current];
+            ++Current;
+            return true;
+        }
+
+        const size_t Size;
+        ui64 Current = 0;
+        const NUdf::TRefCountedPtr<TVectorHolderBase> Parent;
+    };
+
+    bool HasListItems() const final {
+        return TBaseVector::size();
+    }
+
+    bool HasDictItems() const final {
+        return TBaseVector::size();
+    }
+
+    bool HasFastListLength() const final {
+        return true;
+    }
+
+    ui64 GetListLength() const final {
+        return TBaseVector::size();
+    }
+
+    ui64 GetDictLength() const final {
+        return TBaseVector::size();
+    }
+
+    ui64 GetEstimatedListLength() const final {
+        return TBaseVector::size();
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const final {
+        return NUdf::TUnboxedValuePod(new TValuesIterator(this));
+    }
+
+    NUdf::TUnboxedValue GetDictIterator() const final {
+        return NUdf::TUnboxedValuePod(new TDictIterator(this));
+    }
+
+    NUdf::TUnboxedValue GetPayloadsIterator() const final {
+        return NUdf::TUnboxedValuePod(new TValuesIterator(this));
+    }
+
+    NUdf::TUnboxedValue GetKeysIterator() const final {
+        return NUdf::TUnboxedValuePod(new TDictIterator(this));
+    }
+
+    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const final {
+        if (1U >= TBaseVector::size()) {
+            return const_cast<TVectorHolderBase*>(this);
+        }
+
+        TBaseVector copy(TBaseVector::rbegin(), TBaseVector::rend());
+        return new TVectorHolderBase(TBaseValue::GetMemInfo(), std::move(copy));
+    }
+
+    void Push(const NUdf::TUnboxedValuePod& value) final {
+        TBaseVector::emplace_back(value);
+    }
+
+    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const final {
+        if (!count)
+            return const_cast<TVectorHolderBase*>(this);
+
+        if (count >= TBaseVector::size())
+            return builder.NewEmptyList().Release().AsBoxed();
+
+        TBaseVector copy(TBaseVector::begin() + count, TBaseVector::end());
+        return new TVectorHolderBase(TBaseValue::GetMemInfo(), std::move(copy));
+    }
+
+    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const final {
+        if (!count)
+            return builder.NewEmptyList().Release().AsBoxed();
+
+        if (count >= TBaseVector::size())
+            return const_cast<TVectorHolderBase*>(this);
+
+        TBaseVector copy(TBaseVector::begin(), TBaseVector::begin() + count);
+        return new TVectorHolderBase(TBaseValue::GetMemInfo(), std::move(copy));
+    }
+
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder&) const final {
+        return const_cast<TVectorHolderBase*>(this);
+    }
+
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final {
+        return key.Get<ui64>() < TBaseVector::size();
+    }
+
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
+        const auto index = key.Get<ui64>();
+        return index < TBaseVector::size() ? TBaseVector::at(index).MakeOptional() : NUdf::TUnboxedValuePod();
+    }
+
+    const NUdf::TUnboxedValue* GetElements() const final {
+        return TBaseVector::data();
+    }
+
+    bool IsSortedDict() const override {
+        return true;
+    }
+};
+
+class TVectorHolder: public TVectorHolderBase<TUnboxedValueVector> {
+private:
+    using TBase = TVectorHolderBase<TUnboxedValueVector>;
+public:
+    using TBase::TBase;
+};
+
+class TTemporaryVectorHolder: public TVectorHolderBase<TTemporaryUnboxedValueVector> {
+private:
+    using TBase = TVectorHolderBase<TTemporaryUnboxedValueVector>;
+public:
+    using TBase::TBase;
+};
+
 class TArrayNode: public TMutableCodegeneratorFallbackNode<TArrayNode> {
     typedef TMutableCodegeneratorFallbackNode<TArrayNode> TBaseComputation;
 public:
@@ -3164,6 +3361,18 @@ NUdf::TUnboxedValuePod THolderFactory::VectorAsArray(TUnboxedValueVector& values
     }
 
     return tuple;
+}
+
+NUdf::TUnboxedValuePod THolderFactory::NewVectorHolder() const {
+    return NUdf::TUnboxedValuePod(new TVectorHolder(&MemInfo));
+}
+
+NUdf::TUnboxedValuePod THolderFactory::NewTemporaryVectorHolder() const {
+    return NUdf::TUnboxedValuePod(new TTemporaryVectorHolder(&MemInfo));
+}
+
+NUdf::TUnboxedValuePod THolderFactory::VectorAsVectorHolder(TUnboxedValueVector&& list) const {
+    return NUdf::TUnboxedValuePod(new TVectorHolder(&MemInfo, std::move(list)));
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CloneArray(const NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& items) const {

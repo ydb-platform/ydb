@@ -244,6 +244,29 @@ bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const 
     return node.Includes(*this);
 }
 
+bool TSortedConstraintNode::IsOrderBy(const TUniqueConstraintNode& unique) const {
+    NSorted::TSimpleSet<TColumnsSet> columns;
+    for (const auto& key : Content_)
+        if (!key.first.empty())
+            columns.insert_unique(key.first);
+
+    const auto ordered = columns;
+    for (const auto& set : unique.GetAllSets()) {
+        if (std::all_of(set.cbegin(), set.cend(), [&ordered](const TPathType& path) {
+            return !path.empty() && std::any_of(ordered.cbegin(), ordered.cend(), [&path](const TColumnsSet& s) { return s.contains(path.front()); });
+        })) {
+            std::for_each(set.cbegin(), set.cend(), [&columns](const TPathType& path) {
+                if (const auto it = std::find_if(columns.cbegin(), columns.cend(), [&path](const TColumnsSet& s) { return s.contains(path.front()); }); columns.cend() != it)
+                    columns.erase(it);
+            });
+            if (columns.empty())
+                return true;
+        }
+    }
+
+    return false;
+}
+
 const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;

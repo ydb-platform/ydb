@@ -19,7 +19,6 @@ namespace NKikimr::NBlobDepot {
         THashMap<std::tuple<ui64, ui8>, TBarrier> Barriers;
 
     private:
-        class TTxAdvanceBarrier;
         class TTxCollectGarbage;
 
     public:
@@ -53,8 +52,6 @@ namespace NKikimr::NBlobDepot {
                 callback(tabletId, channel, value.SoftGenCtr, value.Soft, value.HardGenCtr, value.Hard);
             }
         }
-
-        void FinishRequest(ui64 tabletId, ui8 channel, std::optional<TString> error);
     };
 
 } // NKikimr::NBlobDepot

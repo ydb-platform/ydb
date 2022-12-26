@@ -13,7 +13,7 @@ namespace NKikimr::NBlobDepot {
             ui64 IssuerGuid = 0;
             TDuration TimeToLive;
             TMonotonic ExpirationTimestamp; // not valid after
-            bool RefreshInFlight = false;
+            ui64 RefreshId = 0;
             TIntrusiveList<TQuery, TPendingBlockChecks> PendingBlockChecks;
         };
 

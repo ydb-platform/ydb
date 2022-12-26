@@ -218,6 +218,7 @@ namespace NKikimr::NBlobDepot {
         void HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev);
 
         void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map);
+        void DropTabletRequest(ui64 id);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -245,9 +246,9 @@ namespace NKikimr::NBlobDepot {
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
 
         template<typename T, typename = typename TEvBlobDepot::TEventFor<T>::Type>
-        void Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context);
+        ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context);
 
-        void Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
+        ui64 Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
 
         void Handle(TEvBlobDepot::TEvPushNotify::TPtr ev);
 

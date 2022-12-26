@@ -4,167 +4,59 @@
 
 namespace NKikimr::NBlobDepot {
 
-    using TAdvanceBarrierCallback = std::function<void(std::optional<TString>)>;
-
-    class TBlobDepot::TBarrierServer::TTxAdvanceBarrier : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
-
-        const ui64 TabletId;
-        const ui8 Channel;
-        const bool Hard;
-        const TGenStep GenCtr;
-        const TGenStep CollectGenStep;
-        TAdvanceBarrierCallback Callback;
-
-        bool MoreData = false;
-        bool Success = false;
-
-    public:
-        TTxAdvanceBarrier(TBlobDepot *self, ui64 tabletId, ui8 channel, bool hard, TGenStep genCtr, TGenStep collectGenStep,
-                TAdvanceBarrierCallback callback)
-            : TTransactionBase(self)
-            , TabletId(tabletId)
-            , Channel(channel)
-            , Hard(hard)
-            , GenCtr(genCtr)
-            , CollectGenStep(collectGenStep)
-            , Callback(std::move(callback))
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            Y_VERIFY(Self->Data->IsLoaded());
-
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT75, "TTxAdvanceBarrier::Execute", (Id, Self->GetLogId()), (TabletId, TabletId),
-                (Channel, int(Channel)), (Hard, Hard), (GenCtr, GenCtr), (CollectGenStep, CollectGenStep));
-
-            const auto key = std::make_tuple(TabletId, Channel);
-            auto& barriers = Self->BarrierServer->Barriers;
-            const auto [it, inserted] = barriers.try_emplace(key);
-            if (!inserted) {
-                // extract existing barrier record
-                auto& barrier = it->second;
-                const TGenStep barrierGenCtr = Hard ? barrier.HardGenCtr : barrier.SoftGenCtr;
-                const TGenStep barrierGenStep = Hard ? barrier.Hard : barrier.Soft;
-
-                // validate them
-                if (GenCtr < barrierGenCtr) {
-                    Callback("record generation:counter is obsolete");
-                    return true;
-                } else if (GenCtr == barrierGenCtr) {
-                    if (barrierGenStep != CollectGenStep) {
-                        Callback("repeated command with different collect parameters received");
-                        return true;
-                    }
-                } else if (CollectGenStep < barrierGenStep) {
-                    Callback("decreasing barrier");
-                    return true;
-                }
-            }
-
-            TBarrier& barrier = it->second;
-            TGenStep& barrierGenCtr = Hard ? barrier.HardGenCtr : barrier.SoftGenCtr;
-            TGenStep& barrierGenStep = Hard ? barrier.Hard : barrier.Soft;
-
-            Y_VERIFY(barrierGenCtr <= GenCtr);
-            Y_VERIFY(barrierGenStep <= CollectGenStep);
-
-            ui32 maxItems = MaxKeysToProcessAtOnce;
-            if (!Self->Data->OnBarrierShift(TabletId, Channel, Hard, barrierGenStep, CollectGenStep, maxItems, txc, this)) {
-                MoreData = true;
-                return true;
-            }
-
-            barrierGenCtr = GenCtr;
-            barrierGenStep = CollectGenStep;
-
-            Self->BarrierServer->ValidateBlobInvariant(TabletId, Channel);
-
-            auto row = NIceDb::TNiceDb(txc.DB).Table<Schema::Barriers>().Key(TabletId, Channel);
-            if (Hard) {
-                row.Update(
-                    NIceDb::TUpdate<Schema::Barriers::HardGenCtr>(ui64(GenCtr)),
-                    NIceDb::TUpdate<Schema::Barriers::Hard>(ui64(CollectGenStep))
-                );
-            } else {
-                row.Update(
-                    NIceDb::TUpdate<Schema::Barriers::SoftGenCtr>(ui64(GenCtr)),
-                    NIceDb::TUpdate<Schema::Barriers::Soft>(ui64(CollectGenStep))
-                );
-            }
-
-            Success = true;
-            return true;
-        }
-
-        void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT76, "TTxAdvanceBarrier::Complete", (Id, Self->GetLogId()), (TabletId, TabletId),
-                (Channel, int(Channel)), (MoreData, MoreData), (Success, Success));
-
-            Self->Data->CommitTrash(this);
-
-            if (MoreData) {
-                Self->Execute(std::make_unique<TTxAdvanceBarrier>(Self, TabletId, Channel, Hard, GenCtr, CollectGenStep,
-                    std::move(Callback)));
-            } else if (Success) {
-                Callback(std::nullopt);
-            }
-        }
-    };
-
     class TBlobDepot::TBarrierServer::TTxCollectGarbage : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        std::optional<TString> Error;
-
-        TBarrier& Barrier;
-        std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>& Request;
-        const ui64 TabletId;
-        const ui8 Channel;
+        std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> Request;
         int KeepIndex = 0;
         int DoNotKeepIndex = 0;
 
-        ui32 NumKeysProcessed = 0;
+        ui32 MaxItems = 10'000;
+
+        bool Finished = false;
         bool MoreData = false;
 
-        static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
-
     public:
-        TTxCollectGarbage(TBlobDepot *self, ui64 tabletId, ui8 channel, ui32 keepIndex = 0, ui32 doNotKeepIndex = 0)
+        TTxCollectGarbage(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> request)
             : TTransactionBase(self)
-            , Barrier(Self->BarrierServer->Barriers[std::make_tuple(tabletId, channel)])
-            , Request(Barrier.ProcessingQ.front())
-            , TabletId(tabletId)
-            , Channel(channel)
-            , KeepIndex(keepIndex)
-            , DoNotKeepIndex(doNotKeepIndex)
+            , Request(std::move(request))
+        {}
+
+        TTxCollectGarbage(TTxCollectGarbage& predecessor)
+            : TTransactionBase(predecessor.Self)
+            , Request(std::move(predecessor.Request))
+            , KeepIndex(predecessor.KeepIndex)
+            , DoNotKeepIndex(predecessor.DoNotKeepIndex)
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT77, "TTxCollectGarbage::Execute", (Id, Self->GetLogId()),
-                (TabletId, TabletId), (Channel, int(Channel)));
+                (Sender, Request->Sender), (Cookie, Request->Cookie));
+
+            Y_VERIFY(Self->Data->IsLoaded());
+
+            if (!ValidateRequest()) {
+                return true;
+            }
+
             auto& record = Request->Get()->Record;
-            MoreData = !ProcessFlags(txc, KeepIndex, record.GetKeep(), NKikimrBlobDepot::EKeepState::Keep)
-                || !ProcessFlags(txc, DoNotKeepIndex, record.GetDoNotKeep(), NKikimrBlobDepot::EKeepState::DoNotKeep);
+
+            MoreData = !ProcessFlags(txc, KeepIndex, record.GetKeep(), NKikimrBlobDepot::EKeepState::Keep) ||
+                !ProcessFlags(txc, DoNotKeepIndex, record.GetDoNotKeep(), NKikimrBlobDepot::EKeepState::DoNotKeep) ||
+                !ProcessBarrier(txc);
+
             return true;
         }
 
         void Complete(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT78, "TTxCollectGarbage::Complete", (Id, Self->GetLogId()),
-                (TabletId, TabletId), (Channel, int(Channel)), (MoreData, MoreData));
+                (Sender, Request->Sender), (Cookie, Request->Cookie), (Finished, Finished), (MoreData, MoreData));
 
             Self->Data->CommitTrash(this);
 
-            if (MoreData) {
-                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, TabletId, Channel, KeepIndex, DoNotKeepIndex));
-            } else if (auto& record = Request->Get()->Record; record.HasCollectGeneration() && record.HasCollectStep()) {
-                Self->Execute(std::make_unique<TTxAdvanceBarrier>(Self, TabletId, Channel, record.GetHard(),
-                        TGenStep(record.GetGeneration(), record.GetPerGenerationCounter()),
-                        TGenStep(record.GetCollectGeneration(), record.GetCollectStep()),
-                        [self = Self, tabletId = TabletId, channel = Channel](std::optional<TString> error) {
-                    self->BarrierServer->FinishRequest(tabletId, channel, std::move(error));
-                }));
-            } else if (record.HasCollectGeneration() || record.HasCollectStep()) {
-                Self->BarrierServer->FinishRequest(TabletId, Channel, "incorrect CollectGeneration/CollectStep setting");
-            } else { // do not collect anything here
-                Self->BarrierServer->FinishRequest(TabletId, Channel, std::nullopt);
+            if (Finished) { // do nothing, error has already been reported
+            } else if (MoreData) { // resume processing in next transaction
+                Self->Execute(std::make_unique<TTxCollectGarbage>(*this));
+            } else {
+                Finish(std::nullopt);
             }
         }
 
@@ -172,12 +64,103 @@ namespace NKikimr::NBlobDepot {
                 const NProtoBuf::RepeatedPtrField<NKikimrProto::TLogoBlobID>& items,
                 NKikimrBlobDepot::EKeepState state) {
             NIceDb::TNiceDb db(txc.DB);
-            for (; index < items.size() && NumKeysProcessed < MaxKeysToProcessAtOnce; ++index) {
-                const auto id = LogoBlobIDFromLogoBlobID(items[index]);
-                TData::TKey key(id);
-                NumKeysProcessed += Self->Data->UpdateKeepState(key, state, txc, this);
+            for (; index < items.size() && MaxItems; ++index) {
+                MaxItems -= Self->Data->UpdateKeepState(TData::TKey(LogoBlobIDFromLogoBlobID(items[index])), state, txc, this);
             }
             return index == items.size();
+        }
+
+        bool ProcessBarrier(TTransactionContext& txc) {
+            const auto& record = Request->Get()->Record;
+            if (!record.HasCollectGeneration() || !record.HasCollectStep()) {
+                return true; // no barrier, nothing to do
+            }
+
+            const ui64 tabletId = record.GetTabletId();
+            const ui8 channel = record.GetChannel();
+            const bool hard = record.GetHard();
+            const TGenStep genCtr(record.GetGeneration(), record.GetPerGenerationCounter());
+            const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
+
+            const auto key = std::make_tuple(tabletId, channel);
+            TBarrier& barrier = Self->BarrierServer->Barriers[key];
+            TGenStep& barrierGenCtr = hard ? barrier.HardGenCtr : barrier.SoftGenCtr;
+            TGenStep& barrierGenStep = hard ? barrier.Hard : barrier.Soft;
+
+            Y_VERIFY(barrierGenCtr <= genCtr);
+            Y_VERIFY(barrierGenStep <= collectGenStep);
+
+            if (!Self->Data->OnBarrierShift(tabletId, channel, hard, barrierGenStep, collectGenStep, MaxItems, txc, this)) {
+                return false;
+            }
+
+            barrierGenCtr = genCtr;
+            barrierGenStep = collectGenStep;
+
+            Self->BarrierServer->ValidateBlobInvariant(tabletId, channel);
+
+            auto row = NIceDb::TNiceDb(txc.DB).Table<Schema::Barriers>().Key(tabletId, channel);
+            if (hard) {
+                row.Update(
+                    NIceDb::TUpdate<Schema::Barriers::HardGenCtr>(ui64(genCtr)),
+                    NIceDb::TUpdate<Schema::Barriers::Hard>(ui64(collectGenStep))
+                );
+            } else {
+                row.Update(
+                    NIceDb::TUpdate<Schema::Barriers::SoftGenCtr>(ui64(genCtr)),
+                    NIceDb::TUpdate<Schema::Barriers::Soft>(ui64(collectGenStep))
+                );
+            }
+
+            return true;
+        }
+
+        bool ValidateRequest() {
+            const auto& record = Request->Get()->Record;
+            if (!record.HasCollectGeneration() && !record.HasCollectStep()) {
+                return true;
+            } else if (!record.HasCollectGeneration() || !record.HasCollectStep()) {
+                Finish("incorrect CollectGeneration/CollectStep pair");
+                return false;
+            }
+
+            const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
+            auto& barriers = Self->BarrierServer->Barriers;
+            if (const auto it = barriers.find(key); it != barriers.end()) {
+                // extract existing barrier record
+                auto& barrier = it->second;
+                const bool hard = record.GetHard();
+                const TGenStep barrierGenCtr = hard ? barrier.HardGenCtr : barrier.SoftGenCtr;
+                const TGenStep barrierGenStep = hard ? barrier.Hard : barrier.Soft;
+                const TGenStep genCtr(record.GetGeneration(), record.GetPerGenerationCounter());
+                const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
+
+                // validate them
+                if (genCtr < barrierGenCtr) {
+                    Finish("record generation:counter is obsolete");
+                    return false;
+                } else if (genCtr == barrierGenCtr) {
+                    if (barrierGenStep != collectGenStep) {
+                        Finish("repeated command with different collect parameters received");
+                        return false;
+                    }
+                } else if (collectGenStep < barrierGenStep) {
+                    Finish("decreasing barrier");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void Finish(std::optional<TString> error) {
+            Y_VERIFY(!Finished);
+            auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, error ? NKikimrProto::ERROR : NKikimrProto::OK,
+                std::move(error));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT82, "TTxCollectGarbage::Finish", (Id, Self->GetLogId()),
+                (Sender, Request->Sender), (Cookie, Request->Cookie), (Error, error));
+            TActivationContext::Send(response.release());
+            Finished = true;
         }
     };
 
@@ -243,12 +226,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()), (Msg, record));
-        const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
-        auto& barrier = Barriers[key];
-        barrier.ProcessingQ.emplace_back(ev.Release());
-        if (Self->Data->IsLoaded() && barrier.ProcessingQ.size() == 1) {
-            Self->Execute(std::make_unique<TTxCollectGarbage>(Self, record.GetTabletId(), record.GetChannel()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()),
+            (Sender, ev->Sender), (Cookie, ev->Cookie), (Msg, record));
+        if (Self->Data->IsLoaded()) {
+            Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
+                std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));
+        } else {
+            const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
+            Barriers[key].ProcessingQ.emplace_back(ev.Release());
         }
     }
 
@@ -261,9 +246,8 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::OnDataLoaded() {
         for (auto& [key, barrier] : Barriers) {
-            if (!barrier.ProcessingQ.empty()) {
-                const auto& [tabletId, channel] = key;
-                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, tabletId, channel));
+            for (auto& ev : std::exchange(barrier.ProcessingQ, {})) {
+                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(ev)));
             }
         }
     }
@@ -299,20 +283,6 @@ namespace NKikimr::NBlobDepot {
         Y_UNUSED(tabletId);
         Y_UNUSED(channel);
 #endif
-    }
-
-    void TBlobDepot::TBarrierServer::FinishRequest(ui64 tabletId, ui8 channel, std::optional<TString> error) {
-        const auto key = std::make_tuple(tabletId, channel);
-        auto& barrier = Barriers[key];
-        Y_VERIFY(!barrier.ProcessingQ.empty());
-        auto& request = barrier.ProcessingQ.front();
-        auto [response, _] = TEvBlobDepot::MakeResponseFor(*request, Self->SelfId(),
-            error ? NKikimrProto::ERROR : NKikimrProto::OK, std::move(error));
-        TActivationContext::Send(response.release());
-        barrier.ProcessingQ.pop_front();
-        if (!barrier.ProcessingQ.empty()) {
-            Self->Execute(std::make_unique<TTxCollectGarbage>(Self, tabletId, channel));
-        }
     }
 
 } // NKikimr::NBlobDepot

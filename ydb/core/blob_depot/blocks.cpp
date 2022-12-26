@@ -173,20 +173,19 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
             const ui32 agentId = ev->Sender.NodeId();
-            const size_t numErased = NodesWaitingForPushResult.erase(agentId);
-            Y_VERIFY(numErased == 1);
+            if (NodesWaitingForPushResult.erase(agentId)) {
+                // mark lease as successfully revoked one
+                auto& block = Self->BlocksManager->Blocks[TabletId];
+                block.PerAgentInfo.erase(agentId);
 
-            // mark lease as successfully revoked one
-            auto& block = Self->BlocksManager->Blocks[TabletId];
-            block.PerAgentInfo.erase(agentId);
+                TAgent& agent = Self->GetAgent(agentId);
+                const auto it = agent.BlockToDeliver.find(TabletId);
+                Y_VERIFY(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
+                agent.BlockToDeliver.erase(it);
 
-            TAgent& agent = Self->GetAgent(agentId);
-            const auto it = agent.BlockToDeliver.find(TabletId);
-            Y_VERIFY(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
-            agent.BlockToDeliver.erase(it);
-
-            if (NodesWaitingForPushResult.empty()) {
-                Finish();
+                if (NodesWaitingForPushResult.empty()) {
+                    Finish();
+                }
             }
         }
 
@@ -290,7 +289,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, Self->SelfId(), NKikimrProto::OK,
+        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, NKikimrProto::OK,
             std::nullopt, BlockLeaseTime.MilliSeconds());
 
         if (!record.HasTabletId() || !record.HasBlockedGeneration()) {
@@ -320,7 +319,7 @@ namespace NKikimr::NBlobDepot {
         const TMonotonic now = TActivationContext::Monotonic();
 
         const auto& record = ev->Get()->Record;
-        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, Self->SelfId());
+        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev);
         responseRecord->SetTimeToLiveMs(BlockLeaseTime.MilliSeconds());
 
         for (const ui64 tabletId : record.GetTabletIds()) {

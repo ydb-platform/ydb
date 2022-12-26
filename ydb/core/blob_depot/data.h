@@ -348,6 +348,7 @@ namespace NKikimr::NBlobDepot {
 
         bool Loaded = false;
         std::map<TKey, TValue> Data;
+        std::set<TKey> LoadSkip; // keys to skip while loading
         THashMap<TLogoBlobID, ui32> RefCount;
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
@@ -449,7 +450,8 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(ui8 channel, ui32 groupId);
 
-        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite);
+        void AddLoadSkip(TKey key);
+        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite, bool skip);
         void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
@@ -492,7 +494,7 @@ namespace NKikimr::NBlobDepot {
         void StartLoad();
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
-        bool IsKeyLoaded(const TKey& key) const { return key <= LastLoadedKey || Data.contains(key); }
+        bool IsKeyLoaded(const TKey& key) const { return key <= LastLoadedKey || Data.contains(key) || LoadSkip.contains(key); }
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);
@@ -507,6 +509,12 @@ namespace NKikimr::NBlobDepot {
 
         bool BeginCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId);
         void EndCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+        TMonotonic LastRecordsValidationTimestamp;
+
+        void ValidateRecords();
 
     private:
         void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,

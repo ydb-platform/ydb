@@ -69,7 +69,7 @@ namespace NKikimr::NBlobDepot {
 
         OnAgentConnect(agent);
 
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), Executor()->Generation());
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Executor()->Generation());
         record->SetSpaceColor(agent.LastPushedSpaceColor);
         record->SetApproximateFreeSpaceShare(agent.LastPushedApproximateFreeSpaceShare);
 
@@ -114,7 +114,11 @@ namespace NKikimr::NBlobDepot {
                 blockActorsPending.push_back(actorId);
             }
 
-            TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, reply.release(), 0, id));
+            auto r = std::make_unique<IEventHandle>(ev->Sender, ev->Recipient, reply.release(), 0, id);
+            if (ev->InterconnectSession) {
+                r->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+            }
+            TActivationContext::Send(r.release());
 
             agent.PushCallbacks.emplace(id, [this, sender = ev->Sender, m = std::move(blockActorsPending)](
                     TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
@@ -136,7 +140,7 @@ namespace NKikimr::NBlobDepot {
             (PipeServerId, ev->Recipient));
 
         const ui32 generation = Executor()->Generation();
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), ev->Get()->Record.GetChannelKind(), generation);
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
 
         if (const auto it = ChannelKinds.find(record->GetChannelKind()); it != ChannelKinds.end()) {
             auto& kind = it->second;

@@ -156,30 +156,31 @@ namespace NKikimr::NBlobDepot {
     }
 
     template<typename T, typename TEvent>
-    void TBlobDepotAgent::Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context) {
+    ui64 TBlobDepotAgent::Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context) {
         auto ev = std::make_unique<TEvent>();
         msg.Swap(&ev->Record);
-        Issue(std::move(ev), sender, std::move(context));
+        return Issue(std::move(ev), sender, std::move(context));
     }
 
-    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
-    template void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
 
-    void TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
+    ui64 TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextTabletRequestId++;
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA10, "Issue", (VirtualGroupId, VirtualGroupId), (RequestId, id), (Msg, ev->ToString()));
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id);
         RegisterRequest(id, sender, std::move(context), {}, true);
+        return id;
     }
 
     void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
         auto& msg = ev->Get()->Record;
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (VirtualGroupId, VirtualGroupId), (Msg, msg),
-            (Id, ev->Cookie), (Sender, ev->Sender), (PipeServerId, PipeServerId));
+            (Id, ev->Cookie), (Sender, ev->Sender), (PipeServerId, PipeServerId), (Match, ev->Sender == PipeServerId));
         if (ev->Sender != PipeServerId) {
             return; // race with previous connection
         }

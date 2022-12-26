@@ -73,8 +73,12 @@ namespace NKikimr::NBlobDepot {
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA16, "HandleTabletResponse", (VirtualGroupId, VirtualGroupId),
-            (Id, ev->Cookie), (Type, TypeName<TEvent>()));
-        OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
+            (Id, ev->Cookie), (Type, TypeName<TEvent>()), (Sender, ev->Sender), (PipeServerId, PipeServerId),
+            (Match, ev->Sender == PipeServerId));
+        if (ev->Sender == PipeServerId) {
+            Y_VERIFY(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
+            OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
+        }
     }
 
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvRegisterAgentResult::TPtr ev);
@@ -100,6 +104,11 @@ namespace NKikimr::NBlobDepot {
             auto& requestInFlight = node.value();
             requestInFlight.Sender->OnRequestComplete(requestInFlight, std::move(response));
         }
+    }
+
+    void TBlobDepotAgent::DropTabletRequest(ui64 id) {
+        const size_t numErased = TabletRequestInFlight.erase(id);
+        Y_VERIFY(numErased == 1);
     }
 
 } // NKikimr::NBlobDepot

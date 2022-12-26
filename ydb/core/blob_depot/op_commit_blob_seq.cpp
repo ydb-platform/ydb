@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
                 NIceDb::TNiceDb db(txc.DB);
 
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
-                std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
+                std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
 
                 const ui32 generation = Self->Executor()->Generation();
 
@@ -122,7 +122,9 @@ namespace NKikimr::NBlobDepot {
                         success = false;
                     } else if (row.IsValid()) {
                         Self->Data->AddDataOnLoad(std::move(key), row.GetValue<Table::Value>(),
-                            row.GetValueOrDefault<Table::UncertainWrite>());
+                            row.GetValueOrDefault<Table::UncertainWrite>(), true);
+                    } else {
+                        Self->Data->AddLoadSkip(std::move(key));
                     }
                 }
                 return success;

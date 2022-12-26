@@ -27,7 +27,7 @@ namespace NKikimr::NBlobDepot {
                     return;
                 }
 
-                BDEV_QUERY(BDEV02, "TEvRange_new", (U.TabletId, Request.TabletId), (U.From, Request.From), (U.To, Request.To),
+                BDEV_QUERY(BDEV21, "TEvRange_new", (U.TabletId, Request.TabletId), (U.From, Request.From), (U.To, Request.To),
                     (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IndexOnly, Request.IsIndexOnly));
 
                 Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, Request.From, Request.To,
@@ -170,7 +170,7 @@ namespace NKikimr::NBlobDepot {
             void EndWithSuccess() {
                 if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (const auto& r : Response->Responses) {
-                        BDEV_QUERY(BDEV03, "TEvRange_item", (BlobId, r.Id), (Buffer.size, r.Buffer.size()));
+                        BDEV_QUERY(BDEV22, "TEvRange_item", (BlobId, r.Id), (Buffer.size, r.Buffer.size()));
                     }
                     BDEV_QUERY(BDEV14, "TEvRange_end", (Status, NKikimrProto::OK), (ErrorReason, ""));
                 }

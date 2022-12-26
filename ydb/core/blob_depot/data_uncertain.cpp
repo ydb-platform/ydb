@@ -47,7 +47,7 @@ namespace NKikimr::NBlobDepot {
             // we had no more uncertain keys to resolve
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT63, "uncertainty resolver finished with noop", (Id, Self->GetLogId()),
                 (Sender, entry->Result.GetSender()), (Cookie, entry->Result.GetCookie()));
-            entry->Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
+            entry->Result.Send(NKikimrProto::OK, std::nullopt);
         } else {
             NumKeysQueried += entry->NumUncertainKeys;
         }
@@ -206,7 +206,7 @@ namespace NKikimr::NBlobDepot {
             if (--request->NumUncertainKeys == 0) { // we can finish the request
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT67, "uncertainty resolver finished", (Id, Self->GetLogId()),
                     (Sender, request->Result.GetSender()), (Cookie, request->Result.GetCookie()));
-                request->Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
+                request->Result.Send(NKikimrProto::OK, std::nullopt);
             }
         }
 

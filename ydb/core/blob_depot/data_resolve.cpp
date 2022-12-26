@@ -9,6 +9,7 @@ namespace NKikimr::NBlobDepot {
 
     TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandle<TEvBlobDepot::TEvResolve>& ev)
         : Sender(ev.Sender)
+        , Recipient(ev.Recipient)
         , Cookie(ev.Cookie)
         , InterconnectSession(ev.InterconnectSession)
     {}
@@ -20,10 +21,9 @@ namespace NKikimr::NBlobDepot {
         KeysToFilterOut.push_back(false);
     }
 
-    void TData::TResolveResultAccumulator::Send(TActorIdentity selfId, NKikimrProto::EReplyStatus status,
-            std::optional<TString> errorReason) {
+    void TData::TResolveResultAccumulator::Send(NKikimrProto::EReplyStatus status, std::optional<TString> errorReason) {
         auto sendResult = [&](std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev) {
-            auto handle = std::make_unique<IEventHandle>(Sender, selfId, ev.release(), 0, Cookie);
+            auto handle = std::make_unique<IEventHandle>(Sender, Recipient, ev.release(), 0, Cookie);
             if (InterconnectSession) {
                 handle->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
             }
@@ -152,16 +152,12 @@ namespace NKikimr::NBlobDepot {
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex),
                 (LastScannedKey, LastScannedKey));
 
-            if (Self->Data->Loaded) {
-                GenerateResponse();
-                return true;
-            }
-
             bool progress = false; // have we made some progress during scan?
             const auto& record = Request->Get()->Record;
             const auto& items = record.GetItems();
             for (; ItemIndex < items.size(); ++ItemIndex, LastScannedKey.reset(), NumKeysRead = 0) {
                 const auto& item = items[ItemIndex];
+                std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
 
                 std::optional<TKey> begin;
                 std::optional<TKey> end;
@@ -181,12 +177,22 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                if (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey) {
-                    // we have everything we need contained in memory, skip this item
+                if (Self->Data->Loaded || (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey)) {
+                    // we have everything we need contained in memory, generate response from memory
+                    auto callback = [&](const TKey& key, const TValue& value) {
+                        IssueResponseItem(cookie, key, value);
+                        return ++NumKeysRead != maxKeys;
+                    };
+                    Self->Data->ScanRange(begin ? &begin.value() : nullptr, end ? &end.value() : nullptr, flags, callback);
                     continue;
-                } else if (Self->Data->LastLoadedKey && (!begin || *begin <= Self->Data->LastLoadedKey) && !(flags & EScanFlags::REVERSE)) {
-                    // we can scan only some part from memory -- do it
-                    auto callback = [&](const TKey& key, const TValue&) {
+                }
+
+                if (Self->Data->LastLoadedKey && begin <= Self->Data->LastLoadedKey && !(flags & EScanFlags::REVERSE)) {
+                    Y_VERIFY(!end || *Self->Data->LastLoadedKey < *end);
+
+                    // special case -- forward scan and we have some data in memory
+                    auto callback = [&](const TKey& key, const TValue& value) {
+                        IssueResponseItem(cookie, key, value);
                         LastScannedKey = key;
                         return ++NumKeysRead != maxKeys;
                     };
@@ -203,7 +209,7 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                auto processRange = [&](auto&& table) {
+                auto processRange = [&](auto table) {
                     for (auto rowset = table.Select();; rowset.Next()) {
                         if (!rowset.IsReady()) {
                             return false;
@@ -215,14 +221,22 @@ namespace NKikimr::NBlobDepot {
                         if (key != LastScannedKey) {
                             LastScannedKey = key;
                             progress = true;
-                            Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
-                                rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
+
+                            if (!Self->Data->IsKeyLoaded(key)) {
+                                Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
+                                    rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>(), true);
+                            }
 
                             const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
                             const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
-                            if (matchBegin && matchEnd && ++NumKeysRead == maxKeys) {
-                                // we have hit the MaxItems limit, exit
-                                return true;
+                            if (matchBegin && matchEnd) {
+                                const TValue *value = Self->Data->FindKey(key);
+                                Y_VERIFY(value); // value must exist as it was just loaded into memory and exists in the database
+                                IssueResponseItem(cookie, key, *value);
+                                if (++NumKeysRead == maxKeys) {
+                                    // we have hit the MaxItems limit, exit
+                                    return true;
+                                }
                             } else if (flags & EScanFlags::REVERSE ? !matchBegin : !matchEnd) {
                                 // we have exceeded the opposite boundary, exit
                                 return true;
@@ -258,7 +272,6 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            GenerateResponse();
             return true;
         }
 
@@ -270,29 +283,9 @@ namespace NKikimr::NBlobDepot {
             if (SuccessorTx) {
                 Self->Execute(std::make_unique<TTxResolve>(*this));
             } else if (Uncertainties.empty()) {
-                Result.Send(Self->SelfId(), NKikimrProto::OK, std::nullopt);
+                Result.Send(NKikimrProto::OK, std::nullopt);
             } else {
                 Self->Data->UncertaintyResolver->PushResultWithUncertainties(std::move(Result), std::move(Uncertainties));
-            }
-        }
-
-        void GenerateResponse() {
-            for (const auto& item : Request->Get()->Record.GetItems()) {
-                std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
-
-                std::optional<TKey> begin;
-                std::optional<TKey> end;
-                TScanFlags flags;
-                ui64 count;
-                const bool success = GetScanParams(item, &begin, &end, &flags, &count);
-                Y_VERIFY_DEBUG(success);
-
-                auto callback = [&](const TKey& key, const TValue& value) {
-                    IssueResponseItem(cookie, key, value);
-                    return --count != 0;
-                };
-
-                Self->Data->ScanRange(begin ? &begin.value() : nullptr, end ? &end.value() : nullptr, flags, callback);
             }
         }
 
@@ -349,7 +342,7 @@ namespace NKikimr::NBlobDepot {
             for (const auto& item : ev->Get()->Record.GetItems()) {
                 if (!item.HasTabletId()) {
                    STLOG(PRI_CRIT, BLOB_DEPOT, BDT42, "incorrect request", (Id, Self->GetLogId()), (Item, item));
-                   auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Self->SelfId(), NKikimrProto::ERROR,
+                   auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, NKikimrProto::ERROR,
                         "incorrect request");
                    TActivationContext::Send(response.release());
                    return;
@@ -459,8 +452,8 @@ namespace NKikimr::NBlobDepot {
                     }
                     if (!--context.NumRangesInFlight) {
                         if (context.Errors) {
-                           auto [response, record] = TEvBlobDepot::MakeResponseFor(*context.Ev, Self->SelfId(),
-                                NKikimrProto::ERROR, "errors in range queries");
+                           auto [response, record] = TEvBlobDepot::MakeResponseFor(*context.Ev, NKikimrProto::ERROR,
+                                "errors in range queries");
                            TActivationContext::Send(response.release());
                         } else {
                             Self->Execute(std::make_unique<TTxResolve>(Self, context.Ev));

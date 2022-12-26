@@ -1,7 +1,6 @@
 #pragma once
 
-#include <util/generic/map.h>
-#include <util/generic/list.h>
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 class TDigest {
@@ -50,13 +49,18 @@ protected:
 public:
     TDigest(double delta = 0.01, double k = 25);
     TDigest(double delta, double k, double firstValue);
-    TDigest(const TString& serializedDigest);
+    TDigest(TStringBuf serializedDigest);
     TDigest(const TDigest* digest1, const TDigest* digest2); // merge
+
     TString Serialize();
+
     TDigest operator+(const TDigest& other);
     TDigest& operator+=(const TDigest& other);
+
     void AddValue(double value);
     void Compress();
     void Clear();
     double GetPercentile(double percentile);
+    double GetRank(double value);
+    i64 GetCount() const;
 };

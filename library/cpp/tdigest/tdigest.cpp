@@ -19,11 +19,11 @@ TDigest::TDigest(double delta, double k, double firstValue)
     AddValue(firstValue);
 }
 
-TDigest::TDigest(const TString& serializedDigest)
+TDigest::TDigest(TStringBuf serializedDigest)
     : N(0)
 {
     NTDigest::TDigest digest;
-    Y_VERIFY(digest.ParseFromString(serializedDigest));
+    Y_VERIFY(digest.ParseFromArray(serializedDigest.data(), serializedDigest.size()));
     Delta = digest.GetDelta();
     K = digest.GetK();
     for (int i = 0; i < digest.centroids_size(); ++i) {
@@ -157,6 +157,33 @@ double TDigest::GetPercentile(double percentile) {
     return Centroids.back().Mean;
 }
 
+double TDigest::GetRank(double value) {
+    Compress();
+    if (Centroids.empty()) {
+        return 0.0;
+    }
+    if (value < Centroids.front().Mean) {
+        return 0.0;
+    }
+    if (value == Centroids.front().Mean) {
+        return Centroids.front().Count * 0.5 / N;
+    }
+    double sum = 0.0;
+    double prev_x = 0.0;
+    double prev_mean = Centroids.front().Mean;
+    for (const auto& C : Centroids) {
+        double current_x = sum + C.Count * 0.5;
+        if (value <= C.Mean) {
+            double k = (value - prev_mean) / (C.Mean - prev_mean);
+            return (prev_x + k * (current_x - prev_x)) / N;
+        }
+        sum += C.Count;
+        prev_mean = C.Mean;
+        prev_x = current_x;
+    }
+    return 1.0;
+}
+
 TString TDigest::Serialize() {
     Compress();
     NTDigest::TDigest digest;
@@ -168,4 +195,8 @@ TString TDigest::Serialize() {
         centroid->SetWeight(it.Count);
     }
     return digest.SerializeAsString();
+}
+
+i64 TDigest::GetCount() const {
+    return std::llround(N);
 }

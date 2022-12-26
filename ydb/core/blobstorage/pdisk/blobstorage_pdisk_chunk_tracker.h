@@ -121,8 +121,8 @@ public:
     }
 
     // Tread-safe status flag getter
-    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner id, i64 allocationSize) const {
-        return QuotaForOwner[id].EstimateSpaceColor(allocationSize);
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner id, i64 allocationSize, double *occupancy) const {
+        return QuotaForOwner[id].EstimateSpaceColor(allocationSize, occupancy);
     }
 
     bool TryAllocate(TOwner id, i64 count, TString &outErrorReason) {
@@ -149,9 +149,11 @@ public:
         str << "<td>" << q.GetHardLimit() << "</td>";
         str << "<td>" << q.GetFree() << "</td>";
         str << "<td>" << q.GetUsed() << "</td>";
-        str << "<td>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(q.EstimateSpaceColor(0)) << "</td>";
-
+        double occupancy;
+        str << "<td>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(q.EstimateSpaceColor(0, &occupancy)) << "</td>";
+        str << "<td>" << occupancy << "</td>";
         str << "<td>" << q.Cyan << "</td>";
+        str << "<td>" << q.LightYellow << "</td>";
         str << "<td>" << q.Yellow << "</td>";
         str << "<td>" << q.LightOrange << "</td>";
         str << "<td>" << q.PreOrange << "</td>";
@@ -180,8 +182,10 @@ public:
                 <th>Free</th>
                 <th>Used</th>
                 <th>Color</th>
+                <th>Occupancy</th>
 
                 <th>Cyan</th>
+                <th>LightYellow</th>
                 <th>Yellow</th>
                 <th>LightOrange</th>
                 <th>PreOrange</th>
@@ -219,6 +223,7 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     TKeeperParams Params;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+    double ColorBorderOccupancy = 0;
 
 public:
 
@@ -327,6 +332,7 @@ public:
         }
 
         ColorBorder = params.SpaceColorBorder;
+        ColorBorderOccupancy = chunkLimits.GetOccupancyForColor(ColorBorder, GlobalQuota->GetHardLimit(OwnerBeginUser));
         return true;
     }
 
@@ -408,19 +414,24 @@ public:
         }
     }
 
-    TStatusFlags GetSpaceStatusFlags(TOwner owner) const {
-        return SpaceColorToStatusFlag(GetSpaceColor(owner));
+    TStatusFlags GetSpaceStatusFlags(TOwner owner, double *occupancy) const {
+        return SpaceColorToStatusFlag(GetSpaceColor(owner, occupancy));
     }
 
-    TColor::E GetSpaceColor(TOwner owner) const {
-        return EstimateSpaceColor(owner, 0);
+    TColor::E GetSpaceColor(TOwner owner, double *occupancy) const {
+        return EstimateSpaceColor(owner, 0, occupancy);
     }
 
     // Estimate status flags after allocation of allocatinoSize
-    TColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize) const {
+    TColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
         if (IsOwnerUser(owner)) {
-            TColor::E ret = Min(ColorBorder, OwnerQuota->EstimateSpaceColor(owner, allocationSize));
-            ret = Max(ret, SharedQuota->EstimateSpaceColor(allocationSize));
+            double ownerOccupancy, sharedOccupancy;
+            TColor::E ret = Min(ColorBorder, OwnerQuota->EstimateSpaceColor(owner, allocationSize, &ownerOccupancy));
+            ret = Max(ret, SharedQuota->EstimateSpaceColor(allocationSize, &sharedOccupancy));
+            *occupancy = Max(
+                Min(ColorBorderOccupancy, ownerOccupancy), // owner occupancy can't exceed its color border top value
+                sharedOccupancy
+            );
             return ret;
         } else {
             switch (owner) {
@@ -428,29 +439,26 @@ public:
                     if (Params.SeparateCommonLog) {
                         if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
                             // No static group bonus, use common quota for the request
-                            return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize);
+                            return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize, occupancy);
                         } else {
-                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize);
+                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize, occupancy);
                         }
                     } else {
                         if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
                             // No static group bonus, use common quota for the request
-                            return SharedQuota->EstimateSpaceColor(allocationSize);
+                            return SharedQuota->EstimateSpaceColor(allocationSize, occupancy);
                         } else {
-                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize);
+                            return GlobalQuota->EstimateSpaceColor(OwnerCommonStaticLog, allocationSize, occupancy);
                         }
                     }
-                    break;
                 case OwnerSystem:
                     if (Params.SeparateCommonLog) {
-                        return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize);
+                        return GlobalQuota->EstimateSpaceColor(OwnerSystem, allocationSize, occupancy);
                     } else {
-                        return SharedQuota->EstimateSpaceColor(allocationSize);
+                        return SharedQuota->EstimateSpaceColor(allocationSize, occupancy);
                     }
-                    break;
                 default:
-                    return GlobalQuota->EstimateSpaceColor(owner, allocationSize);
-                    break;
+                    return GlobalQuota->EstimateSpaceColor(owner, allocationSize, occupancy);
             }
         }
     }

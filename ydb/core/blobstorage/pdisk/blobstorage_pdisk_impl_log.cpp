@@ -659,7 +659,8 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
 
     // Check space and free it if needed
     using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-    TColor::E color = Keeper.EstimateSpaceColor(keeperOwner, chunksNeeded);
+    double occupancy;
+    TColor::E color = Keeper.EstimateSpaceColor(keeperOwner, chunksNeeded, &occupancy);
     if (color >= TColor::RED && !isAllowedForSpaceRed) {
         return false;
     }

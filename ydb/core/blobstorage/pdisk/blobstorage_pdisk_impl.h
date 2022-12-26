@@ -230,7 +230,7 @@ public:
     ui32 GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
-    TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType) const;
+    TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy = nullptr) const;
     TStatusFlags NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

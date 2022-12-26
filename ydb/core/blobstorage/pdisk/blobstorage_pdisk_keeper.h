@@ -124,12 +124,12 @@ public:
         ChunkTracker.Release(owner, 1);
     }
 
-    TStatusFlags GetSpaceStatusFlags(TOwner owner) const {
-        return ChunkTracker.GetSpaceStatusFlags(owner);
+    TStatusFlags GetSpaceStatusFlags(TOwner owner, double *occupancy) const {
+        return ChunkTracker.GetSpaceStatusFlags(owner, occupancy);
     }
 
-    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize) const {
-        return ChunkTracker.EstimateSpaceColor(owner, allocationSize);
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
+        return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
     }
 
     //

@@ -70,7 +70,9 @@ public:
         str << " HardLimit# " << HardLimit;
         str << " Free# " << Free;
         str << " Used# " << GetUsed();
-        str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0)) << "\n";
+        double occupancy;
+        str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0, &occupancy)) << "\n";
+        str << " Occupancy# " << occupancy << "\n";
 #define PRINT_DISK_SPACE_COLOR(NAME) str << " " #NAME "# " << NAME;
         DISK_SPACE_COLORS(PRINT_DISK_SPACE_COLOR)
 #undef PRINT_DISK_SPACE_COLOR
@@ -133,9 +135,11 @@ public:
 
     // Called from any thread
     // TODO(cthulhu): Profile and consider caching
-    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count) const {
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count, double *occupancy) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         const i64 newFree = AtomicGet(Free) - count;
+
+        *occupancy = HardLimit ? (double)(HardLimit - newFree) / HardLimit : 1.0;
 
         if (newFree > AtomicGet(Cyan)) {
             return TColor::GREEN;

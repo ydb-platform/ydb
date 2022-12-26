@@ -585,12 +585,22 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
     return ownedChunks;
 }
 
-NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType) const {
+NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
+    double occupancy_;
+    NPDisk::TStatusFlags res;
+
     if (IsOwnerUser(ownerId)) {
-        return Keeper.GetSpaceStatusFlags(ownerId);
+        res = Keeper.GetSpaceStatusFlags(ownerId, &occupancy_);
+    } else {
+        TOwner keeperOwner = (ownerGroupType == EOwnerGroupType::Dynamic ? OwnerSystem : OwnerCommonStaticLog);
+        res = Keeper.GetSpaceStatusFlags(keeperOwner, &occupancy_);
     }
-    TOwner keeperOwner = (ownerGroupType == EOwnerGroupType::Dynamic ? OwnerSystem : OwnerCommonStaticLog);
-    return Keeper.GetSpaceStatusFlags(keeperOwner);
+
+    if (occupancy) {
+        *occupancy = occupancy_;
+    }
+
+    return res;
 }
 
 NPDisk::TStatusFlags TPDisk::NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
@@ -1005,7 +1015,8 @@ TVector<TChunkIdx> TPDisk::LockChunksForOwner(TOwner owner, const ui32 count, TS
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(owner);
-    auto color = Keeper.EstimateSpaceColor(owner, count);
+    double occupancy;
+    auto color = Keeper.EstimateSpaceColor(owner, count, &occupancy);
 
     auto makeError = [&](TString info) {
         guard.Release();
@@ -1016,6 +1027,7 @@ TVector<TChunkIdx> TPDisk::LockChunksForOwner(TOwner owner, const ui32 count, TS
             << " sharedFree# " << sharedFree
             << " ownerFree# " << ownerFree
             << " estimatedColor after lock# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color)
+            << " occupancy after lock# " << occupancy
             << " " << info
             << " Marker# BPD21";
         errorReason = str.Str();
@@ -1246,7 +1258,8 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner);
-    auto color = Keeper.EstimateSpaceColor(req->Owner, count);
+    double occupancy;
+    auto color = Keeper.EstimateSpaceColor(req->Owner, count, &occupancy);
 
     auto makeError = [&](TString info) {
         guard.Release();
@@ -1257,6 +1270,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             << " sharedFree# " << sharedFree
             << " ownerFree# " << ownerFree
             << " estimatedColor after allocation# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color)
+            << " occupancy after allocation# " << occupancy
             << " " << info
             << " Marker# BPD20";
         errorReason = str.Str();
@@ -1479,7 +1493,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             vdiskMetrics->MutableVDiskId()->ClearGroupGeneration();
             vdiskMetrics->SetAvailableSize(ownerFree);
             vdiskMetrics->SetAllocatedSize(ownerAllocated);
-            vdiskMetrics->SetStatusFlags(Keeper.GetSpaceStatusFlags(owner));
+            double occupancy;
+            vdiskMetrics->SetStatusFlags(Keeper.GetSpaceStatusFlags(owner, &occupancy));
+            vdiskMetrics->SetOccupancy(occupancy);
             auto *vslotId = vdiskMetrics->MutableVSlotId();
             vslotId->SetNodeId(ActorSystem->NodeId);
             vslotId->SetPDiskId(PDiskId);
@@ -1915,14 +1931,16 @@ void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
-    THolder<NPDisk::TEvCheckSpaceResult> result(new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK,
-                GetStatusFlags(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
+    double occupancy;
+    auto result = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK,
+                GetStatusFlags(evCheckSpace.Owner, evCheckSpace.OwnerGroupType, &occupancy),
                 GetFreeChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetTotalChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetUsedChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 AtomicGet(TotalOwners),
-                TString()));
-    ActorSystem->Send(evCheckSpace.Sender, result.Release());
+                TString());
+    result->Occupancy = occupancy;
+    ActorSystem->Send(evCheckSpace.Sender, result.release());
     Mon.CheckSpace.CountResponse();
     return;
 }

@@ -1303,6 +1303,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
     ui32 TotalChunks; // contains common limit in shared free space mode, Total != Free + Used
     ui32 UsedChunks; // number of chunks allocated by requesting owner
     ui32 NumSlots; // number of VSlots over PDisk
+    double Occupancy = 0;
     TString ErrorReason;
 
     TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,

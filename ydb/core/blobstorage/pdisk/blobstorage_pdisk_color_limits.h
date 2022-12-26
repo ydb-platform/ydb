@@ -22,6 +22,10 @@ struct TDiskColor {
     i64 CalculateQuota(i64 total) const {
         return total * Multiplier / Divisor + Addend;
     }
+
+    double CalculateOccupancy(i64 total) const {
+        return (double)CalculateQuota(total) / total;
+    }
 };
 
 struct TColorLimits {
@@ -69,6 +73,24 @@ struct TColorLimits {
             {930, 1000}, // LightYellow
             {982, 1000}, // Cyan: Ask to cut log
         };
+    }
+
+    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
+        switch (color) {
+            case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:          return Cyan.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:           return LightYellow.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:   return Yellow.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:         return LightOrange.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:   return PreOrange.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:     return Orange.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:         return Red.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::RED:            return Black.CalculateOccupancy(total);
+            case NKikimrBlobStorage::TPDiskSpaceColor::BLACK:          return 1.0;
+
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+                Y_FAIL();
+        }
     }
 };
 

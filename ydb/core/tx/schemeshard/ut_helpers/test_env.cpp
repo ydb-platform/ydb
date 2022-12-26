@@ -876,7 +876,11 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    Run(testScenario, true);
+    //NOTE: Run testScenario only with (datashard) log batching disabled.
+    // It is safe because log batching could only hide problems by potentially "glueing"
+    // sequential transactions together and thus eliminating a chance of something bad happen
+    // in between those transactions. So running tests without log batching is more thorough.
+    // (Also tests run slightly faster without log batching).
     Run(testScenario, false);
 }
 

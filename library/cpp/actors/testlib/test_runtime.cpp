@@ -663,10 +663,10 @@ namespace NActors {
 
         TInstant time = scheduledEvents.begin()->Deadline;
         while (!scheduledEvents.empty() && scheduledEvents.begin()->Deadline == time) {
-            static THashMap<std::pair<TActorId, TString>, ui64> eventTypes;
+//            static THashMap<std::pair<TActorId, TString>, ui64> eventTypes;
             auto& item = *scheduledEvents.begin();
             TString name = item.Event->GetBase() ? TypeName(*item.Event->GetBase()) : Sprintf("%08" PRIx32, item.Event->Type);
-            eventTypes[std::make_pair(item.Event->Recipient, name)]++;
+//            eventTypes[std::make_pair(item.Event->Recipient, name)]++;
             runtime.ScheduledCount++;
             if (runtime.ScheduledCount > runtime.ScheduledLimit) {
 //                TScheduledTreeItem root("Root");

@@ -3,7 +3,7 @@
 ## Query Processor
 1. Support for **Snapshot Readonly** transactions mode
 1. **Better resource management** for KQP Resource Manager (share information about nodes resources, avoid OOMs)
-1. Switch to **New Engine** for OLTP queries
+1. ✅ Switch to **New Engine** for OLTP queries
 1. ✅ Support **`not null` for PK (primary key) table columns**
 1. **Aggregates and predicates push down to column-oriented tables**
 1. **Optimize data formats** for data transition between query phases
@@ -25,13 +25,13 @@
 1. **DDL for column-oriented tables**
 
 ## Database Core (Tablets, etc)
-1. Get **YDB topics** (aka pers queue, streams) ready for production
+1. ✅ Get **YDB topics** (aka pers queue, streams) ready for production
 1. ✅ Turn on **MVCC support** by default
-1. Enable **Snapshot read mode** by default (take and use MVCC snapshot for reads instead of running distributed transaction for reads)
-1. **Change Data Capture** (be able to get change feed of table updates)
+1. ✅ Enable **Snapshot read mode** by default (take and use MVCC snapshot for reads instead of running distributed transaction for reads)
+1. ✅ **Change Data Capture** (be able to get change feed of table updates)
 1. **Async Replication** between YDB databases
 1. ✅ **Background compaction for DataShards**
-1. **Compressed Backups**. Add functionality to compress backup data
+1. ✅ **Compressed Backups**. Add functionality to compress backup data
 1. Process of **Extending State Storage** without cluster downtime. If a cluster grows from, say, 9 nodes to 900 State Storage configuration stays the same (9 nodes), it leads to a performance bottleneck.
 1. **Splite/Merge DataShards *BY LOAD* by default**. Most users require this feature turned on by default
 1. Support **PostgreSQL datatypes** in tablet local database

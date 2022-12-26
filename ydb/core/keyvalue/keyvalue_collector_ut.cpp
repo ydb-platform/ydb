@@ -100,6 +100,10 @@ public:
     TEvent* GrabEvent(TAutoPtr<IEventHandle>& handle) {
         return Runtime->GrabEdgeEventRethrow<TEvent>(handle);
     }
+
+    void AllowSchedule(TActorId actorId) {
+        Runtime->EnableScheduleForActor(actorId);
+    }
 };
 
 
@@ -169,6 +173,54 @@ Y_UNIT_TEST(TestKeyValueCollectorSingle) {
     UNIT_ASSERT(eraseCollect);
 }
 
+Y_UNIT_TEST(TestKeyValueCollectorSingleWithOneError) {
+    TContext context;
+    context.Setup();
+
+    TVector<TLogoBlobID> keep;
+    keep.emplace_back(0x10010000001000Bull, 5, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
+    TVector<TLogoBlobID> doNotKeep;
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    context.SetActor(CreateKeyValueCollector(
+                context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
+
+    ui32 erased = 0;
+    for (ui32 idx = 0; idx < 6; ++idx) {
+        TAutoPtr<IEventHandle> handle;
+        auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+        UNIT_ASSERT(collect);
+        if (handle->Recipient == context.GetProxyActorId(NKeyValue::BLOB_CHANNEL, 5)) {
+            UNIT_ASSERT(collect->Keep.Get());
+            UNIT_ASSERT(collect->Keep->size() == 1);
+            auto keep = *collect->Keep;
+            ui32 generation = (*collect->Keep)[0].Generation();
+            UNIT_ASSERT(handle->Recipient == context.GetProxyActorId(collect->Channel, generation));
+            context.AllowSchedule(handle->Sender);
+
+            context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::ERROR, collect->TabletId,
+                    collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel));
+            collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+            UNIT_ASSERT(collect->Keep.Get());
+            UNIT_ASSERT(collect->Keep->size() == 1);
+            UNIT_ASSERT(keep == *collect->Keep);
+            generation = (*collect->Keep)[0].Generation();
+            UNIT_ASSERT(handle->Recipient == context.GetProxyActorId(collect->Channel, generation));
+
+            ++erased;
+        } else {
+            UNIT_ASSERT(!collect->Keep.Get());
+        }
+
+        context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, collect->TabletId,
+                    collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel));
+    }
+    UNIT_ASSERT(erased == 1);
+
+    TAutoPtr<IEventHandle> handle;
+    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);
+    UNIT_ASSERT(eraseCollect);
+}
+
 Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
     TContext context;
     context.Setup();
@@ -199,6 +251,12 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
         TAutoPtr<IEventHandle> handle;
         auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
         UNIT_ASSERT(collect);
+        if (collect->DoNotKeep && collect->DoNotKeep->size()) {
+            context.AllowSchedule(handle->Sender);
+            context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::ERROR, collect->TabletId,
+                    collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel));
+            collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+        }
         bool isPresent = false;
         for (auto it = ids.begin(); it != ids.end(); ++it) {
             if (handle->Recipient == context.GetProxyActorId(it->Channel(), it->Generation())) {
@@ -220,6 +278,9 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
 
         if (collect && collect->DoNotKeep && collect->DoNotKeep->size()) {
             auto complete = context.GrabEvent<TEvKeyValue::TEvPartialCompleteGC>(handle);
+            THashSet<TLogoBlobID> uniqueBlobs;
+            uniqueBlobs.insert(complete->CollectedDoNotKeep.begin(), complete->CollectedDoNotKeep.end());
+            UNIT_ASSERT_VALUES_EQUAL(uniqueBlobs.size(), complete->CollectedDoNotKeep.size());
             complete->CollectedDoNotKeep.clear();
             auto cont = std::make_unique<TEvKeyValue::TEvContinueGC>(std::move(complete->CollectedDoNotKeep));
             context.Send(cont.release());

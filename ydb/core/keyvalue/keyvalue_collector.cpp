@@ -15,7 +15,8 @@ namespace NKeyValue {
 struct TGroupCollector {
     TDeque<TLogoBlobID> Keep;
     TDeque<TLogoBlobID> DoNotKeep;
-    ui32 Step = 0;
+    ui32 CountOfSentFlags = 0;
+    ui32 NextCountOfSentFlags = 0;
 };
 
 class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
@@ -27,6 +28,7 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     TBackoffTimer BackoffTimer;
     ui64 CollectorErrors;
     bool IsSpringCleanup;
+    bool IsRepeatedRequest = false;
 
     // [channel][groupId]
     TVector<TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
@@ -143,7 +145,8 @@ public:
             bool isLastRequestInCollector = false;
             {
                 TGroupCollector &collector = currentCollectorIterator->second;
-                isLastRequestInCollector = (collector.Step == collector.Keep.size() + collector.DoNotKeep.size());
+                collector.CountOfSentFlags = collector.NextCountOfSentFlags;
+                isLastRequestInCollector = (collector.CountOfSentFlags == collector.Keep.size() + collector.DoNotKeep.size());
             }
             if (isLastRequestInCollector) {
                 STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC08, "Last group was empty, it's erased",
@@ -180,6 +183,7 @@ public:
         }
 
         // Rertry
+        IsRepeatedRequest = true;
         ui64 backoffMs = BackoffTimer.NextBackoffMs();
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC02, "Collector got not OK status, retry",
             (TabletId, TabletInfo->TabletID), (GroupId, groupId), (Channel, channelId),
@@ -230,10 +234,11 @@ public:
         THolder<TVector<TLogoBlobID>> doNotKeep;
 
         TGroupCollector &collector = currentCollectorIterator->second;
+        collector.NextCountOfSentFlags = collector.CountOfSentFlags;
 
         ui32 doNotKeepSize = collector.DoNotKeep.size();
-        if (collector.Step < doNotKeepSize) {
-            doNotKeepSize -= collector.Step;
+        if (collector.NextCountOfSentFlags < doNotKeepSize) {
+            doNotKeepSize -= collector.NextCountOfSentFlags;
         } else {
             doNotKeepSize = 0;
         }
@@ -241,17 +246,19 @@ public:
         if (doNotKeepSize) {
             doNotKeepSize = Min(doNotKeepSize, (ui32)MaxCollectGarbageFlagsPerMessage);
             doNotKeep.Reset(new TVector<TLogoBlobID>(doNotKeepSize));
-            auto begin = collector.DoNotKeep.begin() + collector.Step;
+            auto begin = collector.DoNotKeep.begin() + collector.NextCountOfSentFlags;
             auto end = begin + doNotKeepSize;
 
-            collector.Step += doNotKeepSize;
+            collector.NextCountOfSentFlags += doNotKeepSize;
             Copy(begin, end, doNotKeep->begin());
-            Copy(doNotKeep->cbegin(), doNotKeep->cend(), std::back_inserter(CollectedDoNotKeep));
+            if (!IsRepeatedRequest) {
+                Copy(doNotKeep->cbegin(), doNotKeep->cend(), std::back_inserter(CollectedDoNotKeep));
+            }
         }
 
         ui32 keepStartIdx = 0;
-        if (collector.Step >= collector.DoNotKeep.size()) {
-            keepStartIdx = collector.Step - collector.DoNotKeep.size();
+        if (collector.NextCountOfSentFlags >= collector.DoNotKeep.size()) {
+            keepStartIdx = collector.NextCountOfSentFlags - collector.DoNotKeep.size();
         }
         ui32 keepSize = Min(collector.Keep.size() - keepStartIdx, MaxCollectGarbageFlagsPerMessage - doNotKeepSize);
         if (keepSize) {
@@ -269,10 +276,10 @@ public:
                 }
                 (*keep)[idx] = *it;
             }
-            collector.Step += idx;
+            collector.NextCountOfSentFlags += idx;
         }
 
-        bool isLast = (collector.Keep.size() + collector.DoNotKeep.size() == collector.Step);
+        bool isLast = (collector.Keep.size() + collector.DoNotKeep.size() == collector.NextCountOfSentFlags);
 
         ui32 collectGeneration = CollectOperation->Header.CollectGeneration;
         ui32 collectStep = CollectOperation->Header.CollectStep;
@@ -288,6 +295,7 @@ public:
             new TEvBlobStorage::TEvCollectGarbage(TabletInfo->TabletID, RecordGeneration, PerGenerationCounter,
                 channelIdx, isLast, collectGeneration, collectStep,
                 keep.Release(), doNotKeep.Release(), TInstant::Max(), true), (ui64)TKeyValueState::ECollectCookie::Soft);
+        IsRepeatedRequest = false;
     }
 
     void HandleContinueGC(TEvKeyValue::TEvContinueGC::TPtr &ev) {

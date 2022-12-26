@@ -689,6 +689,8 @@ private:
                     YQL_ENSURE(srcFieldIndex != -1, "Missing field: " << targetField->name());
                     auto targetType = targetField->type();
                     auto originalType = schema->field(srcFieldIndex)->type();
+                    YQL_ENSURE(!originalType->layout().has_dictionary, "Unsupported dictionary encoding is used for field: "
+                               << targetField->name() << ", type: " << originalType->ToString());
                     if (targetType->Equals(originalType)) {
                         columnConverters.emplace_back();
                     } else {

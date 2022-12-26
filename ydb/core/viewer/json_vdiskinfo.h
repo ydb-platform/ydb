@@ -47,15 +47,16 @@ namespace NKikimr {
 namespace NViewer {
 
 template <>
-struct TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse> {
-    using TResponseType = TEvWhiteboard::TEvVDiskStateResponse;
+struct TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse> {
+    using TResponseEventType = TEvWhiteboard::TEvVDiskStateResponse;
+    using TResponseType = NKikimrWhiteboard::TEvVDiskStateResponse;
     using TElementType = NKikimrWhiteboard::TVDiskStateInfo;
     using TElementKeyType = NKikimrBlobStorage::TVDiskID;
 
     static constexpr bool StaticNodesOnly = true;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
-        return *response->Record.MutableVDiskStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType& response) {
+        return *response.MutableVDiskStateInfo();
     }
 
     static const NKikimrBlobStorage::TVDiskID& GetElementKey(const TElementType& type) {
@@ -66,11 +67,11 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse> {
         return "VDiskId";
     }
 
-    static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {
+    static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
         if (fields == GetDefaultMergeField()) {
-            return TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(responses);
+            TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(result, responses);
         } else {
-            return TWhiteboardMerger<TResponseType>::MergeResponses(responses, fields);
+            TWhiteboardMerger<TResponseType>::MergeResponses(result, responses, fields);
         }
     }
 };

@@ -103,7 +103,7 @@ protected:
     const FieldDescriptor* Field;
 };
 
-template <typename ResponseType>
+template<typename ResponseType>
 class TWhiteboardFilter {
 public:
     using TResponseType = typename TWhiteboardInfo<ResponseType>::TResponseType;
@@ -228,10 +228,10 @@ public:
         CppType Value;
     };
 
-    static THolder<ResponseType> FilterResponse(THolder<TResponseType>& source, const TVector<THolder<IFieldProtoFilter>>& filters) {
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
-        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
-        auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
+    static void FilterResponse(TResponseType& source, const TVector<THolder<IFieldProtoFilter>>& filters) {
+        ResponseType result;
+        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result);
+        auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source);
         field.Reserve(sourceField.size());
         for (TElementType& info : sourceField) {
             size_t cnt = 0;
@@ -246,8 +246,8 @@ public:
                 element->Swap(&info);
             }
         }
-        result->Record.SetResponseTime(source->Record.GetResponseTime());
-        return result;
+        result.SetResponseTime(source.GetResponseTime());
+        source = std::move(result);
     }
 
     template <typename Type>
@@ -544,11 +544,11 @@ public:
     }
 };
 
-template <typename ResponseType>
-THolder<ResponseType> FilterWhiteboardResponses(THolder<ResponseType>& response, const TString& filters) {
+template<typename ResponseType>
+void FilterWhiteboardResponses(ResponseType& response, const TString& filters) {
     TVector<THolder<typename TWhiteboardFilter<ResponseType>::IFieldProtoFilter>> filterFilters =
             TWhiteboardFilter<ResponseType>::GetProtoFilters(filters);
-    return TWhiteboardFilter<ResponseType>::FilterResponse(response, filterFilters);
+    TWhiteboardFilter<ResponseType>::FilterResponse(response, filterFilters);
 }
 
 }

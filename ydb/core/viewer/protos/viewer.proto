@@ -395,6 +395,7 @@ message TNodeInfo {
     uint32 NodeId = 1;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 2;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 3;
+    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 4;
     repeated NKikimrWhiteboard.TTabletStateInfo Tablets = 5;
 }
 
@@ -483,4 +484,23 @@ message TComputeInfo {
     EFlag Overall = 1;
     repeated TComputeTenantInfo Tenants = 2;
     repeated string Errors = 3;
+}
+
+message TNodeLocation {
+    repeated uint32 NodeId = 1;
+}
+
+message TEvViewerRequest {
+    TNodeLocation Location = 1;
+    uint32 Timeout = 2; // ms
+    oneof Request {
+        NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
+    }
+}
+
+message TEvViewerResponse {
+    TNodeLocation LocationResponded = 2;
+    oneof Response {
+        NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
+    }
 }

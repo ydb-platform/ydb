@@ -89,7 +89,6 @@ class TWhiteboardMerger : public TWhiteboardMergerBase {
 public:
     using TResponseType = typename TWhiteboardInfo<ResponseType>::TResponseType;
     using TElementType = typename TWhiteboardInfo<ResponseType>::TElementType;
-    using TElementKeyType = typename TWhiteboardInfo<ResponseType>::TElementKeyType;
 
     static TString GetFieldString(const Reflection& reflection, const Message& message, const FieldDescriptor* fieldDescriptor) {
         switch (fieldDescriptor->cpp_type()) {
@@ -149,7 +148,7 @@ public:
     };
 
     template<typename MergeKey>
-    static THolder<TResponseType> MergeResponsesBaseHybrid(TMap<ui32, THolder<TResponseType>>& responses, const MergeKey& mergeKey) {
+    static void MergeResponsesBaseHybrid(TResponseType& result, TMap<ui32, TResponseType>& responses, const MergeKey& mergeKey) {
         using TElementType = typename TWhiteboardInfo<ResponseType>::TElementType;
         using TElementTypePacked5 = typename TWhiteboardInfo<ResponseType>::TElementTypePacked5;
 
@@ -164,9 +163,7 @@ public:
 
         size_t projectedSize = 0;
         for (auto it = responses.begin(); it != responses.end(); ++it) {
-            if (it->second != nullptr) {
-                projectedSize += TWhiteboardInfo<ResponseType>::GetElementsCount(it->second.Get());
-            }
+            projectedSize += TWhiteboardInfo<ResponseType>::GetElementsCount(it->second);
         }
         mergedData.reserve(projectedSize);
         mergedDataPacked5.reserve(projectedSize);
@@ -176,87 +173,9 @@ public:
         ui64 sumProcessDuration = 0;
 
         for (auto it = responses.begin(); it != responses.end(); ++it) {
-            if (it->second != nullptr) {
-                {
-                    TWhiteboardMergerComparator<TElementType> comparator;
-                    auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second.Get());
-                    for (TElementType& info : stateInfo) {
-                        if (!info.HasNodeId()) {
-                            info.SetNodeId(it->first);
-                        }
-                        auto key = mergeKey.GetKey(info);
-                        auto inserted = mergedData.emplace(key, &info);
-                        if (!inserted.second) {
-                            if (comparator(*inserted.first->second, info)) {
-                                inserted.first->second = &info;
-                            }
-                        }
-                    }
-                }
-                {
-                    TWhiteboardMergerComparator<TElementTypePacked5> comparator;
-                    auto stateInfo = TWhiteboardInfo<ResponseType>::GetElementsFieldPacked5(it->second.Get());
-                    for (auto& info : stateInfo) {
-                        auto key = mergeKey.GetKey(info);
-                        auto inserted = mergedDataPacked5.emplace(key, TPackedDataCtx{
-                            .Element = &info,
-                            .NodeId = it->first
-                        });
-                        if (!inserted.second) {
-                            if (comparator(*inserted.first->second.Element, info)) {
-                                inserted.first->second = {
-                                    .Element = &info,
-                                    .NodeId = it->first
-                                };
-                            }
-                        }
-                    }
-                }
-                if (minResponseTime == 0 || it->second->Record.GetResponseTime() < minResponseTime) {
-                    minResponseTime = it->second->Record.GetResponseTime();
-                }
-                if (maxResponseDuration == 0 || it->second->Record.GetResponseDuration() > maxResponseDuration) {
-                    maxResponseDuration = it->second->Record.GetResponseDuration();
-                }
-                sumProcessDuration += it->second->Record.GetProcessDuration();
-            }
-        }
-
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
-        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
-        field.Reserve(mergedData.size() + mergedDataPacked5.size());
-        for (auto it = mergedDataPacked5.begin(); it != mergedDataPacked5.end(); ++it) {
-            auto* element = field.Add();
-            it->second.Element->Fill(*element);
-            element->SetNodeId(it->second.NodeId);
-            mergedData.erase(it->first);
-        }
-        for (auto it = mergedData.begin(); it != mergedData.end(); ++it) {
-            auto* element = field.Add();
-            element->Swap(it->second);
-        }
-        if (minResponseTime) {
-            result->Record.SetResponseTime(minResponseTime);
-        }
-        if (maxResponseDuration) {
-            result->Record.SetResponseDuration(maxResponseDuration);
-        }
-        if (sumProcessDuration) {
-            result->Record.SetProcessDuration(sumProcessDuration);
-        }
-        return result;
-    }
-
-    template<typename MergeKey>
-    static THolder<TResponseType> MergeResponsesBase(TMap<ui32, THolder<TResponseType>>& responses, const MergeKey& mergeKey) {
-        std::unordered_map<typename MergeKey::KeyType, TElementType*> mergedData;
-        ui64 minResponseTime = 0;
-        ui64 maxResponseDuration = 0;
-        //ui64 sumProcessDuration = 0;
-        TWhiteboardMergerComparator<TElementType> comparator;
-        for (auto it = responses.begin(); it != responses.end(); ++it) {
-            if (it->second != nullptr) {
-                auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second.Get());
+            {
+                TWhiteboardMergerComparator<TElementType> comparator;
+                auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second);
                 for (TElementType& info : stateInfo) {
                     if (!info.HasNodeId()) {
                         info.SetNodeId(it->first);
@@ -269,49 +188,119 @@ public:
                         }
                     }
                 }
-                if (minResponseTime == 0 || it->second->Record.GetResponseTime() < minResponseTime) {
-                    minResponseTime = it->second->Record.GetResponseTime();
-                }
-                if (maxResponseDuration == 0 || it->second->Record.GetResponseDuration() > maxResponseDuration) {
-                    maxResponseDuration = it->second->Record.GetResponseDuration();
-                }
-                //sumProcessDuration += it->second->Record.GetProcessDuration();
             }
+            {
+                TWhiteboardMergerComparator<TElementTypePacked5> comparator;
+                auto stateInfo = TWhiteboardInfo<ResponseType>::GetElementsFieldPacked5(it->second);
+                for (auto& info : stateInfo) {
+                    auto key = mergeKey.GetKey(info);
+                    auto inserted = mergedDataPacked5.emplace(key, TPackedDataCtx{
+                        .Element = &info,
+                        .NodeId = it->first
+                    });
+                    if (!inserted.second) {
+                        if (comparator(*inserted.first->second.Element, info)) {
+                            inserted.first->second = {
+                                .Element = &info,
+                                .NodeId = it->first
+                            };
+                        }
+                    }
+                }
+            }
+            if (minResponseTime == 0 || it->second.GetResponseTime() < minResponseTime) {
+                minResponseTime = it->second.GetResponseTime();
+            }
+            if (maxResponseDuration == 0 || it->second.GetResponseDuration() > maxResponseDuration) {
+                maxResponseDuration = it->second.GetResponseDuration();
+            }
+            sumProcessDuration += it->second.GetProcessDuration();
         }
 
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
-        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
+        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result);
+        field.Reserve(mergedData.size() + mergedDataPacked5.size());
+        for (auto it = mergedDataPacked5.begin(); it != mergedDataPacked5.end(); ++it) {
+            auto* element = field.Add();
+            it->second.Element->Fill(*element);
+            element->SetNodeId(it->second.NodeId);
+            mergedData.erase(it->first);
+        }
+        for (auto it = mergedData.begin(); it != mergedData.end(); ++it) {
+            auto* element = field.Add();
+            element->Swap(it->second);
+        }
+        if (minResponseTime) {
+            result.SetResponseTime(minResponseTime);
+        }
+        if (maxResponseDuration) {
+            result.SetResponseDuration(maxResponseDuration);
+        }
+        if (sumProcessDuration) {
+            result.SetProcessDuration(sumProcessDuration);
+        }
+    }
+
+    template<typename MergeKey>
+    static void MergeResponsesBase(TResponseType& result, TMap<ui32, TResponseType>& responses, const MergeKey& mergeKey) {
+        std::unordered_map<typename MergeKey::KeyType, TElementType*> mergedData;
+        ui64 minResponseTime = 0;
+        ui64 maxResponseDuration = 0;
+        //ui64 sumProcessDuration = 0;
+        TWhiteboardMergerComparator<TElementType> comparator;
+        for (auto it = responses.begin(); it != responses.end(); ++it) {
+            auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(it->second);
+            for (TElementType& info : stateInfo) {
+                if (!info.HasNodeId()) {
+                    info.SetNodeId(it->first);
+                }
+                auto key = mergeKey.GetKey(info);
+                auto inserted = mergedData.emplace(key, &info);
+                if (!inserted.second) {
+                    if (comparator(*inserted.first->second, info)) {
+                        inserted.first->second = &info;
+                    }
+                }
+            }
+            if (minResponseTime == 0 || it->second.GetResponseTime() < minResponseTime) {
+                minResponseTime = it->second.GetResponseTime();
+            }
+            if (maxResponseDuration == 0 || it->second.GetResponseDuration() > maxResponseDuration) {
+                maxResponseDuration = it->second.GetResponseDuration();
+            }
+            //sumProcessDuration += it->second.GetProcessDuration();
+        }
+
+        auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result);
         field.Reserve(mergedData.size());
         for (auto it = mergedData.begin(); it != mergedData.end(); ++it) {
             auto* element = field.Add();
             element->Swap(it->second);
         }
         if (minResponseTime) {
-            result->Record.SetResponseTime(minResponseTime);
+            result.SetResponseTime(minResponseTime);
         }
         if (maxResponseDuration) {
-            result->Record.SetResponseDuration(maxResponseDuration);
+            result.SetResponseDuration(maxResponseDuration);
         }
         //if (sumProcessDuration) {
         //    result->Record.SetProcessDuration(sumProcessDuration);
         //}
-        return result;
     }
 
-    static THolder<TResponseType> MergeResponsesElementKey(TMap<ui32, THolder<TResponseType>>& responses) {
+    static void MergeResponsesElementKey(TResponseType& result, TMap<ui32, TResponseType>& responses) {
         TStaticMergeKey<ResponseType> mergeKey;
-        return MergeResponsesBase(responses, mergeKey);
+        MergeResponsesBase(result, responses, mergeKey);
     }
 
-    static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields) {
+    static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields) {
         TDynamicMergeKey mergeKey(fields);
-        return MergeResponsesBase(responses, mergeKey);
+        MergeResponsesBase(result, responses, mergeKey);
     }
 };
 
-template <typename ResponseType>
-THolder<ResponseType> MergeWhiteboardResponses(TMap<ui32, THolder<ResponseType>>& responses, const TString& fields = TWhiteboardInfo<ResponseType>::GetDefaultMergeField()) {
-    return TWhiteboardInfo<ResponseType>::MergeResponses(responses, fields);
+template<typename ResponseType>
+void MergeWhiteboardResponses(ResponseType& result, TMap<ui32, ResponseType>& responses, const TString& fields = TWhiteboardInfo<ResponseType>::GetDefaultMergeField()) {
+    TWhiteboardInfo<ResponseType>::MergeResponses(result, responses, fields);
 }
 
 }

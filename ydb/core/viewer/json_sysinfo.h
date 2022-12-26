@@ -33,22 +33,23 @@ public:
 };
 
 template <>
-struct TWhiteboardInfo<TEvWhiteboard::TEvSystemStateResponse> {
-    using TResponseType = TEvWhiteboard::TEvSystemStateResponse;
+struct TWhiteboardInfo<NKikimrWhiteboard::TEvSystemStateResponse> {
+    using TResponseType = NKikimrWhiteboard::TEvSystemStateResponse;
+    using TResponseEventType = TEvWhiteboard::TEvSystemStateResponse;
     using TElementType = NKikimrWhiteboard::TSystemStateInfo;
 
     static constexpr bool StaticNodesOnly = false;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
-        return *response->Record.MutableSystemStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType& response) {
+        return *response.MutableSystemStateInfo();
     }
 
     static TString GetDefaultMergeField() {
         return "NodeId";
     }
 
-    static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {
-        return TWhiteboardMerger<TResponseType>::MergeResponses(responses, fields);
+    static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
+        TWhiteboardMerger<TResponseType>::MergeResponses(result, responses, fields);
     }
 };
 

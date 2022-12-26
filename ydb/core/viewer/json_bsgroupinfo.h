@@ -11,15 +11,16 @@ namespace NKikimr {
 namespace NViewer {
 
 template <>
-struct TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse> {
-    using TResponseType = TEvWhiteboard::TEvBSGroupStateResponse;
+struct TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse> {
+    using TResponseType = NKikimrWhiteboard::TEvBSGroupStateResponse;
+    using TResponseEventType = TEvWhiteboard::TEvBSGroupStateResponse;
     using TElementType = NKikimrWhiteboard::TBSGroupStateInfo;
     using TElementKeyType = ui32;
 
     static constexpr bool StaticNodesOnly = true;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
-        return *response->Record.MutableBSGroupStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType& response) {
+        return *response.MutableBSGroupStateInfo();
     }
 
     static ui32 GetElementKey(const TElementType& type) {
@@ -35,11 +36,11 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse> {
         TWhiteboardMergerBase::FieldMerger[field] = &TWhiteboardMergerBase::ProtoMaximizeEnumField;
     }
 
-    static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {
+    static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
         if (fields == GetDefaultMergeField()) {
-            return TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(responses);
+            TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(result, responses);
         } else {
-            return TWhiteboardMerger<TResponseType>::MergeResponses(responses, fields);
+            TWhiteboardMerger<TResponseType>::MergeResponses(result, responses, fields);
         }
     }
 };

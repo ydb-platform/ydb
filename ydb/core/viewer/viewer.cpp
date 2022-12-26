@@ -14,6 +14,7 @@
 #include <util/system/fstat.h>
 #include <util/stream/file.h>
 #include "viewer.h"
+#include "viewer_request.h"
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/util/wildcard.h>
 #include "browse_pq.h"
@@ -69,11 +70,14 @@ public:
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
-    TViewer(const TKikimrRunConfig &kikimrRunConfig)
+    TViewer(const TKikimrRunConfig& kikimrRunConfig)
         : KikimrRunConfig(kikimrRunConfig)
-    {}
+    {
+        CurrentMonitoringPort = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort();
+        CurrentWorkerName = TStringBuilder() << FQDNHostName() << ":" << CurrentMonitoringPort;
+    }
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
         NActors::TMon* mon = AppData(ctx)->Mon;
         if (mon) {
@@ -126,8 +130,8 @@ public:
             ViewerJsonHandlers.Init();
             VDiskJsonHandlers.Init();
 
-            TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse>::InitMerger();
-            TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::InitMerger();
+            TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
+            TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
         }
     }
 
@@ -174,10 +178,13 @@ private:
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
     TString AllowOrigin;
+    ui32 CurrentMonitoringPort;
+    TString CurrentWorkerName;
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(TEvViewer::TEvViewerRequest, Handle);
         }
     }
 
@@ -271,6 +278,16 @@ private:
             return true;
         }
         return false;
+    }
+
+    void Handle(TEvViewer::TEvViewerRequest::TPtr& ev) {
+        IActor* actor = CreateViewerRequestHandler(ev);
+        if (actor) {
+            Register(actor);
+        } else {
+            BLOG_ERROR("Unable to process EvViewerRequest");
+            Send(ev->Sender, new TEvViewer::TEvViewerResponse(), 0, ev->Cookie);
+        }
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
@@ -395,12 +412,7 @@ TString IViewer::TContentRequestContext::Dump() const
     return result;
 }
 
-ui32 CurrentMonitoringPort = 8765;
-
-IActor* CreateViewer(
-    const TKikimrRunConfig &kikimrRunConfig
-) {
-    CurrentMonitoringPort = kikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort();
+IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
     return new TViewer(kikimrRunConfig);
 }
 
@@ -409,7 +421,7 @@ TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString respons
     TString origin;
     res << "HTTP/1.1 200 Ok\r\n"
         << "Content-Type: application/json; charset=utf-8\r\n"
-        << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n";
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
     if (AllowOrigin) {
         origin = AllowOrigin;
     } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
@@ -434,7 +446,7 @@ TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString respons
 TString TViewer::GetHTTPGATEWAYTIMEOUT() {
     return TStringBuilder()
             << "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n"
-            << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n"
+            << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentWorkerName << "\r\n"
             << "\r\nGateway Time-out\r\n";
 }
 

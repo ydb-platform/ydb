@@ -7,7 +7,6 @@
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include "viewer.h"
 #include "json_pipe_req.h"
 #include "json_sysinfo.h"
@@ -29,9 +28,10 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
     std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    std::unordered_map<TNodeId, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
-    std::unordered_map<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> TabletInfo;
-    std::unordered_map<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> SysInfo;
+    std::unordered_map<TNodeId, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
+    std::unordered_map<TNodeId, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
+    std::unordered_map<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse> TabletInfo;
+    std::unordered_map<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> SysInfo;
     std::unordered_map<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TGroup*> BaseConfigGroupIndex;
@@ -58,7 +58,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
         Static,
         Dynamic,
     };
-    EType Type = EType::Static;
+    EType Type = EType::Any;
 
     enum class ESort {
         NodeId,
@@ -77,12 +77,19 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
 
     bool Storage = true;
     bool Tablets = true;
+    bool ResolveGroupsToNodes = false;
     TNodeId MinAllowedNodeId = std::numeric_limits<TNodeId>::min();
     TNodeId MaxAllowedNodeId = std::numeric_limits<TNodeId>::max();
+    ui32 RequestsBeforeNodeList = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
+    }
+
+    TString GetLogPrefix() {
+        static TString prefix = "json/nodes ";
+        return prefix;
     }
 
     TJsonNodes(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -98,6 +105,11 @@ public:
         FilterTenant = params.Get("tenant");
         FilterStoragePool = params.Get("pool");
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
+        auto itZero = FilterNodeIds.find(0);
+        if (itZero != FilterNodeIds.end()) {
+            FilterNodeIds.erase(itZero);
+            FilterNodeIds.insert(TlsActivationContext->ActorSystem()->NodeId);
+        }
         if (params.Get("with") == "missing") {
             With = EWith::MissingDisks;
         } else if (params.Get("with") == "space") {
@@ -118,6 +130,7 @@ public:
         }
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
+        ResolveGroupsToNodes = FromStringWithDefault<bool>(params.Get("resolve_groups"), ResolveGroupsToNodes);
         TStringBuf sort = params.Get("sort");
         if (sort) {
             if (sort.StartsWith("-") || sort.StartsWith("+")) {
@@ -145,6 +158,7 @@ public:
     }
 
     void Bootstrap() {
+        BLOG_TRACE("Bootstrap()");
         if (Type != EType::Any) {
             TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
             if (dynamicNameserviceConfig) {
@@ -158,42 +172,34 @@ public:
         }
 
         if (Storage) {
+            BLOG_TRACE("RequestBSControllerConfig()");
             RequestBSControllerConfig();
         }
+
         if (!FilterTenant.empty()) {
-            SendNavigate(FilterTenant);
-        } else {
-            auto itZero = FilterNodeIds.find(0);
-            if (itZero != FilterNodeIds.end()) {
-                FilterNodeIds.erase(itZero);
-                FilterNodeIds.insert(TlsActivationContext->ActorSystem()->NodeId);
-            }
-            if (FilterNodeIds.empty()) {
-                SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
-            } else {
-                for (TNodeId nodeId : FilterNodeIds) {
-                    SendNodeRequest(nodeId);
+            if (Type == EType::Static || Type == EType::Any) {
+                if (ResolveGroupsToNodes) {
+                    if (!Storage) {
+                        BLOG_TRACE("RequestBSControllerConfig()");
+                        RequestBSControllerConfig();
+                    }
+                    ++RequestsBeforeNodeList;
                 }
             }
+            if (Type == EType::Dynamic || Type == EType::Any) {
+                BLOG_TRACE("RequestStateStorageEndpointsLookup()");
+                RequestStateStorageEndpointsLookup(FilterTenant); // to get dynamic nodes
+                ++RequestsBeforeNodeList;
+            }
         }
+        BLOG_TRACE("Request TEvListNodes");
+        SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        ++RequestsBeforeNodeList;
         if (Requests == 0) {
             ReplyAndPassAway();
             return;
         }
         TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-    }
-
-    void SendNavigate(const TString& path) {
-        TAutoPtr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
-        if (!Event->Get()->UserToken.empty()) {
-            request->Record.SetUserToken(Event->Get()->UserToken);
-        }
-        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
-        record->SetPath(path);
-        request->Record.SetUserToken(Event->Get()->UserToken);
-        TActorId txproxy = MakeTxProxyID();
-        Send(txproxy, request.Release());
-        ++Requests;
     }
 
     void PassAway() override {
@@ -204,82 +210,38 @@ public:
     }
 
     void SendNodeRequest(TNodeId nodeId) {
-        if (nodeId >= MinAllowedNodeId && nodeId <= MaxAllowedNodeId) {
-            if (PassedNodeIds.insert(nodeId).second) {
-                if (SortedNodeList && With == EWith::Everything) {
-                    // optimization for paging with default sort
-                    LimitApplied = true;
-                    if (Offset.has_value()) {
-                        if (PassedNodeIds.size() <= Offset.value()) {
-                            return;
-                        }
-                    }
-                    if (Limit.has_value()) {
-                        if (NodeIds.size() >= Limit.value()) {
-                            return;
-                        }
+        if (PassedNodeIds.insert(nodeId).second) {
+            if (SortedNodeList && With == EWith::Everything) {
+                // optimization for paging with default sort
+                LimitApplied = true;
+                if (Offset.has_value()) {
+                    if (PassedNodeIds.size() <= Offset.value()) {
+                        return;
                     }
                 }
-                NodeIds.push_back(nodeId);
-                TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                if (Storage) {
-                    SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                }
-                if (Tablets) {
-                    auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
-                    request->Record.SetGroupBy("Type,State");
-                    SendRequest(whiteboardServiceId, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-                }
-            }
-        }
-    }
-
-    void SendGroupNodeRequests(ui32 groupId) {
-        auto itBaseConfigGroupIndex = BaseConfigGroupIndex.find(groupId);
-        if (itBaseConfigGroupIndex != BaseConfigGroupIndex.end()) {
-            for (const NKikimrBlobStorage::TVSlotId& vslot : itBaseConfigGroupIndex->second->GetVSlotId()) {
-                SendNodeRequest(vslot.GetNodeId());
-            }
-        }
-    }
-
-    void Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
-        for (const auto& matchingGroups : ev->Get()->Record.GetMatchingGroups()) {
-            for (const auto& group : matchingGroups.GetGroups()) {
-                TString storagePoolName = group.GetStoragePoolName();
-                if (FilterStoragePool.empty() || FilterStoragePool == storagePoolName) {
-                    if (FilterGroupIds.emplace(group.GetGroupID()).second && BaseConfig) {
-                        SendGroupNodeRequests(group.GetGroupID());
+                if (Limit.has_value()) {
+                    if (NodeIds.size() >= Limit.value()) {
+                        return;
                     }
                 }
             }
-        }
-        RequestDone();
-    }
-
-    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
-        const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
-        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
-            const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
-            if (pbStatus.HasBaseConfig()) {
-                BaseConfig.reset(ev->Release().Release());
-                const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
-                const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
-                const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
-                for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
-                    BaseConfigGroupIndex[group.GetGroupId()] = &group;
-                }
-                for (ui32 groupId : FilterGroupIds) {
-                    SendGroupNodeRequests(groupId);
-                }
+            NodeIds.push_back(nodeId); // order is important
+            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
+            SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+            if (Storage) {
+                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+            }
+            if (Tablets) {
+                auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
+                request->Record.SetGroupBy("Type,State");
+                SendRequest(whiteboardServiceId, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
             }
         }
-        RequestDone();
     }
 
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        NodesInfo.reset(ev->Release().Release());
+    void ProcessNodeIds() {
+        BLOG_TRACE("ProcessNodeIds()");
         bool reverse = ReverseSort;
         std::function<void(TVector<TEvInterconnect::TNodeInfo>&)> sortFunc;
         switch (Sort) {
@@ -315,12 +277,41 @@ public:
             SortedNodeList = true;
         }
         for (const auto& ni : NodesInfo->Nodes) {
-            SendNodeRequest(ni.NodeId);
+            if ((FilterNodeIds.empty() || FilterNodeIds.count(ni.NodeId) > 0) && ni.NodeId >= MinAllowedNodeId && ni.NodeId <= MaxAllowedNodeId) {
+                SendNodeRequest(ni.NodeId);
+            }
         }
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
+        BLOG_TRACE("Received TEvControllerConfigResponse");
+        const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
+        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
+            const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
+            if (pbStatus.HasBaseConfig()) {
+                BaseConfig.reset(ev->Release().Release());
+                const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
+                const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
+                const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
+                for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
+                    BaseConfigGroupIndex[group.GetGroupId()] = &group;
+                }
+            }
+        }
+        if (ResolveGroupsToNodes) {
+            RequestTxProxyDescribe(FilterTenant); // to get storage pools and then groups and then pdisks
+            ++RequestsBeforeNodeList;
+
+            if (--RequestsBeforeNodeList == 0) {
+                ProcessNodeIds();
+            }
+        }
+
         RequestDone();
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        BLOG_TRACE("Received TEvDescribeSchemeResult");
         TString path = ev->Get()->GetRecord().GetPath();
         const NKikimrSchemeOp::TPathDescription& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         if (Storage) {
@@ -330,10 +321,60 @@ public:
                 request->Record.SetReturnAllMatchingGroups(true);
                 request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
                 RequestBSControllerSelectGroups(std::move(request));
+                ++RequestsBeforeNodeList;
             }
         }
 
         DescribeResult[path] = ev->Release();
+
+        if (--RequestsBeforeNodeList == 0) {
+            ProcessNodeIds();
+        }
+        RequestDone();
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
+        BLOG_TRACE("Received TEvControllerSelectGroupsResult");
+        for (const auto& matchingGroups : ev->Get()->Record.GetMatchingGroups()) {
+            for (const auto& group : matchingGroups.GetGroups()) {
+                TString storagePoolName = group.GetStoragePoolName();
+                if (FilterStoragePool.empty() || FilterStoragePool == storagePoolName) {
+                    if (FilterGroupIds.emplace(group.GetGroupID()).second && BaseConfig) {
+                        auto itBaseConfigGroupIndex = BaseConfigGroupIndex.find(group.GetGroupID());
+                        if (itBaseConfigGroupIndex != BaseConfigGroupIndex.end()) {
+                            for (const NKikimrBlobStorage::TVSlotId& vslot : itBaseConfigGroupIndex->second->GetVSlotId()) {
+                                FilterNodeIds.insert(vslot.GetNodeId());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (--RequestsBeforeNodeList == 0) {
+            ProcessNodeIds();
+        }
+        RequestDone();
+    }
+
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        BLOG_TRACE("Received TEvNodesInfo");
+        NodesInfo.reset(ev->Release().Release());
+        if (--RequestsBeforeNodeList == 0) {
+            ProcessNodeIds();
+        }
+        RequestDone();
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        BLOG_TRACE("Received TEvBoardInfo");
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            for (const auto& [actorId, infoEntry] : ev->Get()->InfoEntries) {
+                FilterNodeIds.insert(actorId.NodeId());
+            }
+        }
+        if (--RequestsBeforeNodeList == 0) {
+            ProcessNodeIds();
+        }
         RequestDone();
     }
 
@@ -341,17 +382,22 @@ public:
         ui32 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->SourceType) {
         case TEvWhiteboard::EvSystemStateRequest:
-            if (SysInfo.emplace(nodeId, nullptr).second) {
+            if (SysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
                 RequestDone();
             }
             break;
         case TEvWhiteboard::EvPDiskStateRequest:
-            if (PDiskInfo.emplace(nodeId, nullptr).second) {
+            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
+                RequestDone();
+            }
+            break;
+        case TEvWhiteboard::EvVDiskStateRequest:
+            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
                 RequestDone();
             }
             break;
         case TEvWhiteboard::EvTabletStateRequest:
-            if (TabletInfo.emplace(nodeId, nullptr).second) {
+            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 RequestDone();
             }
             break;
@@ -360,16 +406,19 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (SysInfo.emplace(nodeId, nullptr).second) {
+        if (SysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
             RequestDone();
         }
         if (Storage) {
-            if (PDiskInfo.emplace(nodeId, nullptr).second) {
+            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
+                RequestDone();
+            }
+            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
                 RequestDone();
             }
         }
         if (Tablets) {
-            if (TabletInfo.emplace(nodeId, nullptr).second) {
+            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 RequestDone();
             }
         }
@@ -377,22 +426,28 @@ public:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        SysInfo[nodeId] = ev->Release();
+        SysInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskInfo[nodeId] = ev->Release();
+        PDiskInfo[nodeId] = std::move(ev->Get()->Record);
+        RequestDone();
+    }
+
+    void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
+        ui64 nodeId = ev.Get()->Cookie;
+        VDiskInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         bool needToGroup = ev->Get()->Record.TabletStateInfoSize() > 0 && !ev->Get()->Record.GetTabletStateInfo(0).HasCount();
-        TabletInfo[nodeId] = ev->Release();
+        TabletInfo[nodeId] = std::move(ev->Get()->Record);
         if (needToGroup) { // for compatibility with older versions
-            TabletInfo[nodeId] = GroupWhiteboardResponses(TabletInfo[nodeId], "Type,State", false);
+            GroupWhiteboardResponses(TabletInfo[nodeId], "Type,Overall", false);
         }
         RequestDone();
     }
@@ -402,10 +457,12 @@ public:
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroupsResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
@@ -413,23 +470,19 @@ public:
         }
     }
 
-    NKikimrViewer::TNodesInfo Result;
-
     NKikimrWhiteboard::TPDiskStateInfo& GetPDisk(TPDiskId pDiskId) {
         auto itPDiskInfo = PDiskInfo.find(pDiskId.first);
         if (itPDiskInfo == PDiskInfo.end()) {
-            itPDiskInfo = PDiskInfo.insert({pDiskId.first, MakeHolder<TEvWhiteboard::TEvPDiskStateResponse>()}).first;
-        } else if (itPDiskInfo->second == nullptr) {
-            itPDiskInfo->second = MakeHolder<TEvWhiteboard::TEvPDiskStateResponse>();
+            itPDiskInfo = PDiskInfo.insert({pDiskId.first, NKikimrWhiteboard::TEvPDiskStateResponse{}}).first;
         }
 
-        for (auto& pDiskInfo : *itPDiskInfo->second->Record.mutable_pdiskstateinfo()) {
+        for (auto& pDiskInfo : *itPDiskInfo->second.mutable_pdiskstateinfo()) {
             if (pDiskInfo.pdiskid() == pDiskId.second) {
                 return pDiskInfo;
             }
         }
 
-        NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo = *itPDiskInfo->second->Record.add_pdiskstateinfo();
+        NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo = *itPDiskInfo->second.add_pdiskstateinfo();
         pDiskInfo.SetPDiskId(pDiskId.second);
         return pDiskInfo;
     }
@@ -452,6 +505,7 @@ public:
     }
 
     void ReplyAndPassAway() {
+        NKikimrViewer::TNodesInfo result;
         if (Storage && BaseConfig) {
             const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
@@ -481,32 +535,32 @@ public:
             if (Storage) {
                 if (With == EWith::MissingDisks) {
                     auto itPDiskState = PDiskInfo.find(nodeId);
-                    if (itPDiskState != PDiskInfo.end() && itPDiskState->second) {
+                    if (itPDiskState != PDiskInfo.end()) {
                         int disksNormal = 0;
-                        for (const auto& protoPDiskInfo : itPDiskState->second->Record.GetPDiskStateInfo()) {
+                        for (const auto& protoPDiskInfo : itPDiskState->second.GetPDiskStateInfo()) {
                             if (protoPDiskInfo.state() == NKikimrBlobStorage::TPDiskState::Normal) {
                                 ++disksNormal;
                             }
                         }
-                        if (itPDiskState->second->Record.pdiskstateinfo_size() == disksNormal) {
+                        if (itPDiskState->second.pdiskstateinfo_size() == disksNormal) {
                             continue;
                         }
                     }
                 }
                 if (With == EWith::SpaceProblems) {
                     auto itSystemState = SysInfo.find(nodeId);
-                    if (itSystemState != SysInfo.end() && itSystemState->second && itSystemState->second->Record.SystemStateInfoSize() > 0) {
-                        if (itSystemState->second->Record.GetSystemStateInfo(0).GetMaxDiskUsage() < 85) {
+                    if (itSystemState != SysInfo.end() && itSystemState->second.SystemStateInfoSize() > 0) {
+                        if (itSystemState->second.GetSystemStateInfo(0).GetMaxDiskUsage() < 85) {
                             continue;
                         }
                     }
                 }
             }
-            NKikimrViewer::TNodeInfo& nodeInfo = *Result.add_nodes();
+            NKikimrViewer::TNodeInfo& nodeInfo = *result.add_nodes();
             nodeInfo.set_nodeid(nodeId);
             auto itSystemState = SysInfo.find(nodeId);
-            if (itSystemState != SysInfo.end() && itSystemState->second) {
-                *nodeInfo.MutableSystemState() = itSystemState->second->Record.GetSystemStateInfo(0);
+            if (itSystemState != SysInfo.end() && itSystemState->second.SystemStateInfoSize() > 0) {
+                *nodeInfo.MutableSystemState() = itSystemState->second.GetSystemStateInfo(0);
             } else if (NodesInfo != nullptr) {
                 auto* icNodeInfo = NodesInfo->GetNodeInfo(nodeId);
                 if (icNodeInfo != nullptr) {
@@ -515,17 +569,24 @@ public:
             }
             if (Storage) {
                 auto itPDiskState = PDiskInfo.find(nodeId);
-                if (itPDiskState != PDiskInfo.end() && itPDiskState->second) {
-                    for (auto& protoPDiskInfo : *itPDiskState->second->Record.MutablePDiskStateInfo()) {
+                if (itPDiskState != PDiskInfo.end()) {
+                    for (auto& protoPDiskInfo : *itPDiskState->second.MutablePDiskStateInfo()) {
                         NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo = *nodeInfo.AddPDisks();
                         pDiskInfo = std::move(protoPDiskInfo);
+                    }
+                }
+                auto itVDiskState = VDiskInfo.find(nodeId);
+                if (itVDiskState != VDiskInfo.end()) {
+                    for (auto& protoVDiskInfo : *itVDiskState->second.MutableVDiskStateInfo()) {
+                        NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo = *nodeInfo.AddVDisks();
+                        vDiskInfo = std::move(protoVDiskInfo);
                     }
                 }
             }
             if (Tablets) {
                 auto itTabletState = TabletInfo.find(nodeId);
-                if (itTabletState != TabletInfo.end() && itTabletState->second) {
-                    for (auto& protoTabletInfo : *itTabletState->second->Record.MutableTabletStateInfo()) {
+                if (itTabletState != TabletInfo.end()) {
+                    for (auto& protoTabletInfo : *itTabletState->second.MutableTabletStateInfo()) {
                         NKikimrWhiteboard::TTabletStateInfo& tabletInfo = *nodeInfo.AddTablets();
                         tabletInfo = std::move(protoTabletInfo);
                     }
@@ -540,7 +601,7 @@ public:
         if (With == EWith::Everything) {
             foundNodes = totalNodes;
         } else {
-            foundNodes = Result.NodesSize();
+            foundNodes = result.NodesSize();
         }
 
         if (!SortedNodeList) {
@@ -551,27 +612,27 @@ public:
                     // already sorted
                     break;
                 case ESort::Version:
-                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
                         return reverse ^ (a.GetSystemState().GetVersion() < b.GetSystemState().GetVersion());
                     });
                     break;
                 case ESort::Uptime:
-                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
                         return reverse ^ !(a.GetSystemState().GetStartTime() < b.GetSystemState().GetStartTime());
                     });
                     break;
                 case ESort::Memory:
-                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
                         return reverse ^ (a.GetSystemState().GetMemoryUsed() < b.GetSystemState().GetMemoryUsed());
                     });
                     break;
                 case ESort::CPU:
-                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
                         return reverse ^ (GetCPU(a.GetSystemState()) < GetCPU(b.GetSystemState()));
                     });
                     break;
                 case ESort::LoadAverage:
-                    ::Sort(*Result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
                         return reverse ^ (GetLoadAverage(a.GetSystemState()) < GetLoadAverage(b.GetSystemState()));
                     });
                     break;
@@ -579,26 +640,26 @@ public:
         }
 
         if (!LimitApplied) {
-            auto& result = *Result.MutableNodes();
+            auto& nodes = *result.MutableNodes();
             if (Offset.has_value()) {
-                if (size_t(result.size()) > Offset.value()) {
-                    result.erase(result.begin(), std::next(result.begin(), Offset.value()));
+                if (size_t(nodes.size()) > Offset.value()) {
+                    nodes.erase(nodes.begin(), std::next(nodes.begin(), Offset.value()));
                 } else {
-                    result.Clear();
+                    nodes.Clear();
                 }
             }
             if (Limit.has_value()) {
-                if (size_t(result.size()) > Limit.value()) {
-                    result.erase(std::next(result.begin(), Limit.value()), result.end());
+                if (size_t(nodes.size()) > Limit.value()) {
+                    nodes.erase(std::next(nodes.begin(), Limit.value()), nodes.end());
                 }
             }
         }
 
-        Result.SetTotalNodes(totalNodes);
-        Result.SetFoundNodes(foundNodes);
+        result.SetTotalNodes(totalNodes);
+        result.SetFoundNodes(foundNodes);
 
         TStringStream json;
-        TProtoToJson::ProtoToJson(json, Result, JsonSettings);
+        TProtoToJson::ProtoToJson(json, result, JsonSettings);
         Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
@@ -637,14 +698,14 @@ struct TJsonRequestParameters<TJsonNodes> {
 template <>
 struct TJsonRequestSummary<TJsonNodes> {
     static TString GetSummary() {
-        return "\"Storage nodes info\"";
+        return "\"Nodes info\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodes> {
     static TString GetDescription() {
-        return "\"Storage state by physicall nodes\"";
+        return "\"Information about nodes\"";
     }
 };
 

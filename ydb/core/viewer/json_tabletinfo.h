@@ -15,25 +15,26 @@ namespace NKikimr {
 namespace NViewer {
 
 template<>
-struct TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse> {
-    using TResponseType = TEvWhiteboard::TEvTabletStateResponse;
+struct TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse> {
+    using TResponseEventType = TEvWhiteboard::TEvTabletStateResponse;
+    using TResponseType = NKikimrWhiteboard::TEvTabletStateResponse;
     using TElementType = NKikimrWhiteboard::TTabletStateInfo;
     using TElementTypePacked5 = NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponsePacked5;
     using TElementKeyType = std::pair<ui64, ui32>;
 
     static constexpr bool StaticNodesOnly = false;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
-        return *response->Record.MutableTabletStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType& response) {
+        return *response.MutableTabletStateInfo();
     }
 
-    static std::span<const TElementTypePacked5> GetElementsFieldPacked5(TResponseType* response) {
-        const auto& packed5 = response->Record.GetPacked5();
+    static std::span<const TElementTypePacked5> GetElementsFieldPacked5(const TResponseType& response) {
+        const auto& packed5 = response.GetPacked5();
         return std::span{reinterpret_cast<const TElementTypePacked5*>(packed5.data()), packed5.size() / sizeof(TElementTypePacked5)};
     }
 
-    static size_t GetElementsCount(TResponseType* response) {
-        return response->Record.GetTabletStateInfo().size() + response->Record.GetPacked5().size() / sizeof(TElementTypePacked5);
+    static size_t GetElementsCount(const TResponseType& response) {
+        return response.GetTabletStateInfo().size() + response.GetPacked5().size() / sizeof(TElementTypePacked5);
     }
 
     static TElementKeyType GetElementKey(const TElementType& type) {
@@ -48,13 +49,13 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse> {
         return "TabletId,FollowerId";
     }
 
-    static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {
+    static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
         if (fields == GetDefaultMergeField()) {
             TStaticMergeKey<TResponseType> mergeKey;
-            return TWhiteboardMerger<TResponseType>::MergeResponsesBaseHybrid(responses, mergeKey);
+            TWhiteboardMerger<TResponseType>::MergeResponsesBaseHybrid(result, responses, mergeKey);
         } else {
             TWhiteboardMerger<TResponseType>::TDynamicMergeKey mergeKey(fields);
-            return TWhiteboardMerger<TResponseType>::MergeResponsesBase(responses, mergeKey);
+            TWhiteboardMerger<TResponseType>::MergeResponsesBase(result, responses, mergeKey);
         }
     }
 };
@@ -86,23 +87,9 @@ public:
         LogPrefix = prefix;
     }
 
-    static NTabletPipe::TClientConfig InitPipeClientConfig() {
-        NTabletPipe::TClientConfig clientConfig;
-        if (WithRetry) {
-            clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        }
-        return clientConfig;
-    }
-
-    static const NTabletPipe::TClientConfig& GetPipeClientConfig() {
-        static NTabletPipe::TClientConfig clientConfig = InitPipeClientConfig();
-        return clientConfig;
-    }
-
     void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (params.Has("path")) {
             THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
             if (!Event->Get()->UserToken.empty()) {
@@ -113,7 +100,7 @@ public:
 
             TActorId txproxy = MakeTxProxyID();
             TBase::Send(txproxy, request.Release());
-            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
         }
@@ -173,23 +160,19 @@ public:
         TBase::Bootstrap();
     }
 
-    virtual void FilterResponse(THolder<TEvWhiteboard::TEvTabletStateResponse>& response) override {
+    virtual void FilterResponse(NKikimrWhiteboard::TEvTabletStateResponse& response) override {
         if (!Tablets.empty()) {
-            if (response != nullptr) {
-                TAutoPtr<TEvWhiteboard::TEvTabletStateResponse> result = new TEvWhiteboard::TEvTabletStateResponse();
-                for (const NKikimrWhiteboard::TTabletStateInfo& info : response->Record.GetTabletStateInfo()) {
-                    if (BinarySearch(Tablets.begin(), Tablets.end(), info.GetTabletId())) {
-                        result->Record.MutableTabletStateInfo()->Add()->CopyFrom(info);
-                    }
+            NKikimrWhiteboard::TEvTabletStateResponse result;
+            for (const NKikimrWhiteboard::TTabletStateInfo& info : response.GetTabletStateInfo()) {
+                if (BinarySearch(Tablets.begin(), Tablets.end(), info.GetTabletId())) {
+                    result.MutableTabletStateInfo()->Add()->CopyFrom(info);
                 }
-                result->Record.SetResponseTime(response->Record.GetResponseTime());
-                response = result;
             }
+            result.SetResponseTime(response.GetResponseTime());
+            response = std::move(result);
         }
-        if (response != nullptr) {
-            for (NKikimrWhiteboard::TTabletStateInfo& info : *response->Record.MutableTabletStateInfo()) {
-                info.SetOverall(GetWhiteboardFlag(GetFlagFromTabletState(info.GetState())));
-            }
+        for (NKikimrWhiteboard::TTabletStateInfo& info : *response.MutableTabletStateInfo()) {
+            info.SetOverall(GetWhiteboardFlag(GetFlagFromTabletState(info.GetState())));
         }
         TBase::FilterResponse(response);
     }

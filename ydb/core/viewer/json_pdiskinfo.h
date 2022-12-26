@@ -10,15 +10,16 @@ namespace NKikimr {
 namespace NViewer {
 
 template <>
-struct TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse> {
-    using TResponseType = TEvWhiteboard::TEvPDiskStateResponse;
+struct TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse> {
+    using TResponseType = NKikimrWhiteboard::TEvPDiskStateResponse;
+    using TResponseEventType = TEvWhiteboard::TEvPDiskStateResponse;
     using TElementType = NKikimrWhiteboard::TPDiskStateInfo;
     using TElementKeyType = std::pair<ui32, ui32>;
 
     static constexpr bool StaticNodesOnly = true;
 
-    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType* response) {
-        return *response->Record.MutablePDiskStateInfo();
+    static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType& response) {
+        return *response.MutablePDiskStateInfo();
     }
 
     static std::pair<ui32, ui32> GetElementKey(const TElementType& type) {
@@ -29,11 +30,11 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse> {
         return "NodeId,PDiskId";
     }
 
-    static THolder<TResponseType> MergeResponses(TMap<ui32, THolder<TResponseType>>& responses, const TString& fields = GetDefaultMergeField()) {
+    static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
         if (fields == GetDefaultMergeField()) {
-            return TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(responses);
+            TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(result, responses);
         } else {
-            return TWhiteboardMerger<TResponseType>::MergeResponses(responses, fields);
+            TWhiteboardMerger<TResponseType>::MergeResponses(result, responses, fields);
         }
     }
 };

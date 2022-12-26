@@ -12,7 +12,7 @@ using namespace ::google::protobuf;
 template <typename ResponseType>
 struct TWhiteboardInfo;
 
-template <typename ResponseType>
+template<typename ResponseType>
 class TWhiteboardGrouper {
 public:
     using TResponseType = typename TWhiteboardInfo<ResponseType>::TResponseType;
@@ -242,9 +242,9 @@ public:
         return true;
     }
 
-    static THolder<ResponseType> GroupResponse(THolder<TResponseType>& source, const TVector<const FieldDescriptor*>& groupFields, bool allEnums = false) {
-        THolder<TResponseType> result = MakeHolder<TResponseType>();
-        TElementsFieldType& field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
+    static void GroupResponse(TResponseType& source, const TVector<const FieldDescriptor*>& groupFields, bool allEnums = false) {
+        ResponseType result;
+        TElementsFieldType& field = TWhiteboardInfo<ResponseType>::GetElementsField(result);
         bool allKeys = allEnums && IsEnum(groupFields);
         TMap<TPartProtoKey, ui32> counters;
         TMap<TPartProtoKey, TElementType*> elements;
@@ -258,7 +258,7 @@ public:
                 elements.emplace(key, element);
             } while (++keyEnum);
         }
-        auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
+        auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source);
         for (TElementType& info : sourceField) {
             TPartProtoKey key(info, groupFields);
             if (key.Exists()) {
@@ -276,8 +276,8 @@ public:
                 }
             }
         }
-        result->Record.SetResponseTime(source->Record.GetResponseTime());
-        return result;
+        result.SetResponseTime(source.GetResponseTime());
+        source = std::move(result);
     }
 
     static TVector<const FieldDescriptor*> GetProtoFields(const TString& fields) {
@@ -297,10 +297,10 @@ public:
     }
 };
 
-template <typename ResponseType>
-THolder<ResponseType> GroupWhiteboardResponses(THolder<ResponseType>& response, const TString& fields, bool allEnums = false) {
+template<typename ResponseType>
+void GroupWhiteboardResponses(ResponseType& response, const TString& fields, bool allEnums = false) {
     TVector<const FieldDescriptor*> groupFields = TWhiteboardGrouper<ResponseType>::GetProtoFields(fields);
-    return TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, allEnums);
+    TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, allEnums);
 }
 
 }

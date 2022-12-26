@@ -18,7 +18,47 @@ inline TActorId MakeViewerID(ui32 node) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig);
+struct TEvViewer {
+    enum EEv {
+        // requests
+        EvViewerRequest = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
+        EvViewerResponse,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER)");
+
+    struct TEvViewerRequest : TEventPB<TEvViewerRequest, NKikimrViewer::TEvViewerRequest, EvViewerRequest> {
+        TEvViewerRequest() = default;
+    };
+
+    struct TEvViewerResponse : TEventPB<TEvViewerResponse, NKikimrViewer::TEvViewerResponse, EvViewerResponse> {
+        TEvViewerResponse() = default;
+    };
+};
+
+struct TRequestSettings {
+    ui64 ChangedSince = 0;
+    bool AliveOnly = false;
+    std::vector<ui32> FilterNodeIds;
+    TString GroupFields;
+    bool AllEnums = false;
+    TString FilterFields;
+    TString MergeFields;
+    ui32 Timeout = 0;
+    ui32 Retries = 0;
+    TDuration RetryPeriod = TDuration::MilliSeconds(500);
+    TString Format;
+    std::optional<bool> StaticNodesOnly;
+    bool DistributedMerge = false;
+
+    bool Followers = true; // hive tablet info
+    bool Metrics = true; // hive tablet info
+    bool WithRetry = true; // pipes
+};
+
+IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig);
 
 class IViewer {
 public:

@@ -33,8 +33,8 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     NMon::TEvHttpInfo::TPtr Event;
     THashSet<TNodeId> NodeIds;
-    THashMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodeSysInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> NodeTabletInfo;
+    THashMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> NodeSysInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse> NodeTabletInfo;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
@@ -203,25 +203,25 @@ public:
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
-        NodeSysInfo[nodeId] = ev->Release();
+        NodeSysInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
-        NodeTabletInfo[nodeId] = ev->Release();
+        NodeTabletInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
         if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest) {
-            if (NodeSysInfo.emplace(nodeId, nullptr).second) {
+            if (NodeSysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
                 RequestDone();
             }
         }
         if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvTabletStateRequest) {
-            if (NodeTabletInfo.emplace(nodeId, nullptr).second) {
+            if (NodeTabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 RequestDone();
             }
         }
@@ -229,18 +229,19 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (NodeSysInfo.emplace(nodeId, nullptr).second) {
+        if (NodeSysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
             RequestDone();
         }
-        if (NodeTabletInfo.emplace(nodeId, nullptr).second) {
+        if (NodeTabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
             RequestDone();
         }
     }
 
     void ReplyAndPassAway() {
         THashMap<TNodeId, TVector<const NKikimrWhiteboard::TTabletStateInfo*>> tabletInfoIndex;
-        THolder<TEvWhiteboard::TEvTabletStateResponse> tabletInfo = MergeWhiteboardResponses(NodeTabletInfo);
-        for (const auto& info : tabletInfo->Record.GetTabletStateInfo()) {
+        NKikimrWhiteboard::TEvTabletStateResponse tabletInfo;
+        MergeWhiteboardResponses(tabletInfo, NodeTabletInfo);
+        for (const auto& info : tabletInfo.GetTabletStateInfo()) {
             tabletInfoIndex[info.GetNodeId()].emplace_back(&info);
         }
         THashMap<TNodeId, const NKikimrHive::THiveNodeStats*> hiveNodeStatsIndex;
@@ -271,8 +272,8 @@ public:
                     computeNodeInfo.SetNodeId(nodeId);
                     auto itSysInfo = NodeSysInfo.find(nodeId);
                     if (itSysInfo != NodeSysInfo.end()) {
-                        if (itSysInfo->second != nullptr && itSysInfo->second->Record.SystemStateInfoSize() == 1) {
-                            const NKikimrWhiteboard::TSystemStateInfo& sysInfo = itSysInfo->second->Record.GetSystemStateInfo(0);
+                        if (itSysInfo->second.SystemStateInfoSize() == 1) {
+                            const NKikimrWhiteboard::TSystemStateInfo& sysInfo = itSysInfo->second.GetSystemStateInfo(0);
                             if (sysInfo.HasStartTime()) {
                                 computeNodeInfo.SetStartTime(sysInfo.GetStartTime());
                             }

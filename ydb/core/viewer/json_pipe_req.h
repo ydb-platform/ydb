@@ -5,9 +5,11 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include "viewer.h"
 
 namespace NKikimr {
@@ -174,10 +176,36 @@ protected:
         SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
 
+    void RequestTxProxyDescribe(const TString& path) {
+        THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+        request->Record.MutableDescribePath()->SetPath(path);
+        SendRequest(MakeTxProxyID(), request.Release());
+    }
+
+    void RequestStateStorageEndpointsLookup(const TString& path) {
+        if (AppData()->DomainsInfo->Domains.empty()) {
+            return;
+        }
+        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
+        TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
+                                                              TBase::SelfId(),
+                                                            domainInfo->DefaultStateStorageGroup,
+                                                               EBoardLookupMode::Second,
+                                                                false,
+                                               false));
+        ++Requests;
+    }
+
     void InitConfig(const TCgiParameters& params) {
         Followers = FromStringWithDefault(params.Get("followers"), Followers);
         Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);
         WithRetry = FromStringWithDefault(params.Get("with_retry"), WithRetry);
+    }
+
+    void InitConfig(const TRequestSettings& settings) {
+        Followers = settings.Followers;
+        Metrics = settings.Metrics;
+        WithRetry = settings.WithRetry;
     }
 
     void ClosePipes() {

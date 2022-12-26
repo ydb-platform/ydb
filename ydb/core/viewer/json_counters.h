@@ -21,10 +21,10 @@ class TJsonCounters : public TActorBootstrapped<TJsonCounters> {
     ui32 Requested;
     ui32 Received;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvTabletStateResponse>> TabletInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> TabletInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -82,22 +82,22 @@ public:
         ui32 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->SourceType) {
         case TEvWhiteboard::EvVDiskStateRequest:
-            if (VDiskInfo.emplace(nodeId, nullptr).second) {
+            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
                 NodeStateInfoReceived(ctx);
             }
             break;
         case TEvWhiteboard::EvPDiskStateRequest:
-            if (PDiskInfo.emplace(nodeId, nullptr).second) {
+            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
                 NodeStateInfoReceived(ctx);
             }
             break;
         case TEvWhiteboard::EvTabletStateRequest:
-            if (TabletInfo.emplace(nodeId, nullptr).second) {
+            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 NodeStateInfoReceived(ctx);
             }
             break;
         case TEvWhiteboard::EvBSGroupStateRequest:
-            if (BSGroupInfo.emplace(nodeId, nullptr).second) {
+            if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
                 NodeStateInfoReceived(ctx);
             }
             break;
@@ -106,41 +106,41 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (VDiskInfo.emplace(nodeId, nullptr).second) {
+        if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
             NodeStateInfoReceived(ctx);
         }
-        if (PDiskInfo.emplace(nodeId, nullptr).second) {
+        if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
             NodeStateInfoReceived(ctx);
         }
-        if (TabletInfo.emplace(nodeId, nullptr).second) {
+        if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
             NodeStateInfoReceived(ctx);
         }
-        if (BSGroupInfo.emplace(nodeId, nullptr).second) {
+        if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
             NodeStateInfoReceived(ctx);
         }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        VDiskInfo[nodeId] = ev->Release();
+        VDiskInfo[nodeId] = std::move(ev->Get()->Record);
         NodeStateInfoReceived(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskInfo[nodeId] = ev->Release();
+        PDiskInfo[nodeId] = std::move(ev->Get()->Record);
         NodeStateInfoReceived(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletInfo[nodeId] = ev->Release();
+        TabletInfo[nodeId] = std::move(ev->Get()->Record);
         NodeStateInfoReceived(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        BSGroupInfo[nodeId] = ev->Release();
+        BSGroupInfo[nodeId] = std::move(ev->Get()->Record);
         NodeStateInfoReceived(ctx);
     }
 
@@ -170,15 +170,15 @@ public:
         }
     }
 
-    template <typename ResponseType>
+    template<typename ResponseType>
     void RenderStats(TStringStream& json,
-                     THolder<ResponseType>& response,
+                     ResponseType& response,
                      const TEvInterconnect::TNodeInfo& nodeInfo,
                      const TString& subsystem,
                      const TVector<const FieldDescriptor*>& groupFields) {
 
-        THolder<ResponseType> groupedResponse = TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, true);
-        auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(groupedResponse.Get());
+        TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, true);
+        auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(response);
         TStringBuf host(nodeInfo.Host);
         size_t pos = host.find('.');
         if (pos != TString::npos) {
@@ -205,32 +205,32 @@ public:
     }
 
     void RenderStats(TStringStream& json,
-                     THolder<TEvWhiteboard::TEvVDiskStateResponse>& response,
+                     NKikimrWhiteboard::TEvVDiskStateResponse& response,
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
-        if (response == nullptr)
+        if (response.VDiskStateInfoSize() == 0)
             return;
         static TVector<const FieldDescriptor*> groupFields
-                = TWhiteboardGrouper<TEvWhiteboard::TEvVDiskStateResponse>::GetProtoFields("VDiskState");
+                = TWhiteboardGrouper<NKikimrWhiteboard::TEvVDiskStateResponse>::GetProtoFields("VDiskState");
         RenderStats(json, response, nodeInfo, "VDisk", groupFields);
     }
 
     void RenderStats(TStringStream& json,
-                     THolder<TEvWhiteboard::TEvPDiskStateResponse>& response,
+                     NKikimrWhiteboard::TEvPDiskStateResponse& response,
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
-        if (response == nullptr)
+        if (response.PDiskStateInfoSize() == 0)
             return;
         static TVector<const FieldDescriptor*> groupFields
-                = TWhiteboardGrouper<TEvWhiteboard::TEvPDiskStateResponse>::GetProtoFields("State");
+                = TWhiteboardGrouper<NKikimrWhiteboard::TEvPDiskStateResponse>::GetProtoFields("State");
         RenderStats(json, response, nodeInfo, "PDisk", groupFields);
     }
 
     void RenderStats(TStringStream& json,
-                     THolder<TEvWhiteboard::TEvTabletStateResponse>& response,
+                     NKikimrWhiteboard::TEvTabletStateResponse& response,
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
-        if (response == nullptr)
+        if (response.TabletStateInfoSize() == 0)
             return;
         static TVector<const FieldDescriptor*> groupFields
-                = TWhiteboardGrouper<TEvWhiteboard::TEvTabletStateResponse>::GetProtoFields("State");
+                = TWhiteboardGrouper<NKikimrWhiteboard::TEvTabletStateResponse>::GetProtoFields("State");
         RenderStats(json, response, nodeInfo, "Tablet", groupFields);
     }
 
@@ -247,8 +247,8 @@ public:
         });
 
         ui32 nodesResponded = 0;
-        for (const std::pair<const ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>>& value : VDiskInfo) {
-            if (value.second != nullptr) {
+        for (const std::pair<const ui32, NKikimrWhiteboard::TEvVDiskStateResponse>& value : VDiskInfo) {
+            if (value.second.HasResponseTime()) {
                 ++nodesResponded;
             }
         }
@@ -260,17 +260,18 @@ public:
         json << "},\"value\":" << nodesResponded;
         json << '}';
 
-        THolder<TEvWhiteboard::TEvTabletStateResponse> mergedTabletInfo = MergeWhiteboardResponses(TabletInfo, TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse>::GetDefaultMergeField());
+        NKikimrWhiteboard::TEvTabletStateResponse mergedTabletInfo;
+        MergeWhiteboardResponses(mergedTabletInfo, TabletInfo);
         TabletInfo.clear();
-        for (const auto& tabletInfo : mergedTabletInfo->Record.GetTabletStateInfo()) {
+        for (const auto& tabletInfo : mergedTabletInfo.GetTabletStateInfo()) {
             if (!tabletInfo.HasNodeId()) {
                 continue;
             }
             auto it = TabletInfo.find(tabletInfo.GetNodeId());
             if (it == TabletInfo.end()) {
-                it = TabletInfo.emplace(tabletInfo.GetNodeId(), new TEvWhiteboard::TEvTabletStateResponse).first;
+                it = TabletInfo.emplace(tabletInfo.GetNodeId(), NKikimrWhiteboard::TEvTabletStateResponse{}).first;
             }
-            it->second->Record.AddTabletStateInfo()->CopyFrom(tabletInfo);
+            it->second.AddTabletStateInfo()->CopyFrom(tabletInfo);
         }
 
         std::array<int, 20> pDiskUserSpaceHistogram = {};
@@ -282,15 +283,15 @@ public:
         for (const auto& nodeInfo : NodesInfo->Nodes) {
             while (itVDiskInfo != VDiskInfo.end() && itVDiskInfo->first < nodeInfo.NodeId)
                 ++itVDiskInfo;
-            if (itVDiskInfo != VDiskInfo.end() && itVDiskInfo->first == nodeInfo.NodeId && itVDiskInfo->second) {
+            if (itVDiskInfo != VDiskInfo.end() && itVDiskInfo->first == nodeInfo.NodeId) {
                 RenderStats(json, itVDiskInfo->second, nodeInfo);
             }
             while (itPDiskInfo != PDiskInfo.end() && itPDiskInfo->first < nodeInfo.NodeId)
                 ++itPDiskInfo;
-            if (itPDiskInfo != PDiskInfo.end() && itPDiskInfo->first == nodeInfo.NodeId && itPDiskInfo->second) {
+            if (itPDiskInfo != PDiskInfo.end() && itPDiskInfo->first == nodeInfo.NodeId) {
                 RenderStats(json, itPDiskInfo->second, nodeInfo);
-                auto& stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(itPDiskInfo->second.Get());
-                for (const typename TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::TElementType& info : stateInfo) {
+                auto& stateInfo = TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse>::GetElementsField(itPDiskInfo->second);
+                for (const typename TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse>::TElementType& info : stateInfo) {
                     if (info.GetTotalSize() > 0 && info.GetAvailableSize() > 0) {
                         ++pDiskUserSpaceHistogram[std::min((info.GetTotalSize() - info.GetAvailableSize()) * pDiskUserSpaceHistogram.size() / info.GetTotalSize(), pDiskUserSpaceHistogram.size() - 1)];
                     }
@@ -298,7 +299,7 @@ public:
             }
             while (itTabletInfo != TabletInfo.end() && itTabletInfo->first < nodeInfo.NodeId)
                 ++itTabletInfo;
-            if (itTabletInfo != TabletInfo.end() && itTabletInfo->first == nodeInfo.NodeId && itTabletInfo->second) {
+            if (itTabletInfo != TabletInfo.end() && itTabletInfo->first == nodeInfo.NodeId) {
                 RenderStats(json, itTabletInfo->second, nodeInfo);
             }
         }
@@ -316,12 +317,15 @@ public:
             json << '}';
         }
 
-        THolder<TEvWhiteboard::TEvVDiskStateResponse> mergedVDiskInfo = MergeWhiteboardResponses(VDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetDefaultMergeField());
+        NKikimrWhiteboard::TEvVDiskStateResponse mergedVDiskInfo;
+        MergeWhiteboardResponses(mergedVDiskInfo, VDiskInfo);
         RenderStats(json, mergedVDiskInfo, totals);
-        THolder<TEvWhiteboard::TEvPDiskStateResponse> mergedPDiskInfo = MergeWhiteboardResponses(PDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetDefaultMergeField());
+        NKikimrWhiteboard::TEvPDiskStateResponse mergedPDiskInfo;
+        MergeWhiteboardResponses(mergedPDiskInfo, PDiskInfo);
         RenderStats(json, mergedPDiskInfo, totals);
         RenderStats(json, mergedTabletInfo, totals);
-        THolder<TEvWhiteboard::TEvBSGroupStateResponse> mergedBSGroupInfo = MergeWhiteboardResponses(BSGroupInfo, TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetDefaultMergeField());
+        NKikimrWhiteboard::TEvBSGroupStateResponse mergedBSGroupInfo;
+        MergeWhiteboardResponses(mergedBSGroupInfo, BSGroupInfo);
 
         std::array<int, 9> bsGroupUnavaiableHistogram = {};
         std::array<int, 9> bsGroupGreenHistogram = {};
@@ -330,14 +334,14 @@ public:
         std::unordered_map<ui64, int> bsGroupGreenVDisks;
         std::unordered_map<ui64, int> bsGroupNotGreenVDisks;
         {
-            auto& stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(mergedBSGroupInfo.Get());
-            for (const typename TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::TElementType& info : stateInfo) {
+            auto& stateInfo = TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::GetElementsField(mergedBSGroupInfo);
+            for (const typename TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::TElementType& info : stateInfo) {
                 bsGroupVDisks[info.GetGroupID()] = info.VDiskIdsSize();
             }
         }
         {
-            auto& stateInfo = TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(mergedVDiskInfo.Get());
-            for (const typename TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::TElementType& info : stateInfo) {
+            auto& stateInfo = TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse>::GetElementsField(mergedVDiskInfo);
+            for (const typename TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse>::TElementType& info : stateInfo) {
                 auto groupId = info.GetVDiskId().GetGroupID();
                 bsGroupVDisks[groupId]--;
                 auto flag = GetVDiskOverallFlag(info);

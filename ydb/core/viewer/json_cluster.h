@@ -24,11 +24,11 @@ class TJsonCluster : public TActorBootstrapped<TJsonCluster> {
     ui32 Received;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> SystemInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvTabletStateResponse>> TabletInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> SystemInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
+    TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse> TabletInfo;
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TSet<TNodeId> NodesAlive;
     TJsonSettings JsonSettings;
@@ -120,27 +120,27 @@ public:
         ui32 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->SourceType) {
         case TEvWhiteboard::EvSystemStateRequest:
-            if (VDiskInfo.emplace(nodeId, nullptr).second) {
+            if (SystemInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
                 RequestDone(ctx);
             }
             break;
         case TEvWhiteboard::EvVDiskStateRequest:
-            if (VDiskInfo.emplace(nodeId, nullptr).second) {
+            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
                 RequestDone(ctx);
             }
             break;
         case TEvWhiteboard::EvPDiskStateRequest:
-            if (PDiskInfo.emplace(nodeId, nullptr).second) {
+            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
                 RequestDone(ctx);
             }
             break;
         case TEvWhiteboard::EvBSGroupStateRequest:
-            if (BSGroupInfo.emplace(nodeId, nullptr).second) {
+            if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
                 RequestDone(ctx);
             }
             break;
         case TEvWhiteboard::EvTabletStateRequest:
-            if (TabletInfo.emplace(nodeId, nullptr).second) {
+            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 RequestDone(ctx);
             }
             break;
@@ -149,20 +149,20 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (SystemInfo.emplace(nodeId, nullptr).second) {
+        if (SystemInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
             RequestDone(ctx);
         }
-        if (VDiskInfo.emplace(nodeId, nullptr).second) {
+        if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
             RequestDone(ctx);
         }
-        if (PDiskInfo.emplace(nodeId, nullptr).second) {
+        if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
             RequestDone(ctx);
         }
-        if (BSGroupInfo.emplace(nodeId, nullptr).second) {
+        if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
             RequestDone(ctx);
         }
         if (Tablets) {
-            if (TabletInfo.emplace(nodeId, nullptr).second) {
+            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
                 RequestDone(ctx);
             }
         }
@@ -170,35 +170,35 @@ public:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        SystemInfo[nodeId] = ev->Release();
+        SystemInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
         RequestDone(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        VDiskInfo[nodeId] = ev->Release();
+        VDiskInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
         RequestDone(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskInfo[nodeId] = ev->Release();
+        PDiskInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
         RequestDone(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        BSGroupInfo[nodeId] = ev->Release();
+        BSGroupInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
         RequestDone(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev, const TActorContext& ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletInfo[nodeId] = ev->Release();
+        TabletInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
         RequestDone(ctx);
     }
@@ -245,23 +245,23 @@ public:
         }
     }
 
-    THolder<TEvWhiteboard::TEvBSGroupStateResponse> MergedBSGroupInfo;
-    THolder<TEvWhiteboard::TEvVDiskStateResponse> MergedVDiskInfo;
-    THolder<TEvWhiteboard::TEvPDiskStateResponse> MergedPDiskInfo;
-    THolder<TEvWhiteboard::TEvTabletStateResponse> MergedTabletInfo;
+    NKikimrWhiteboard::TEvBSGroupStateResponse MergedBSGroupInfo;
+    NKikimrWhiteboard::TEvVDiskStateResponse MergedVDiskInfo;
+    NKikimrWhiteboard::TEvPDiskStateResponse MergedPDiskInfo;
+    NKikimrWhiteboard::TEvTabletStateResponse MergedTabletInfo;
     TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
     TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
 
     void ReplyAndDie(const TActorContext& ctx) {
         TStringStream json;
-        MergedBSGroupInfo = MergeWhiteboardResponses(BSGroupInfo, TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetDefaultMergeField());
-        MergedVDiskInfo = MergeWhiteboardResponses(VDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetDefaultMergeField());
-        MergedPDiskInfo = MergeWhiteboardResponses(PDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetDefaultMergeField());
+        MergeWhiteboardResponses(MergedBSGroupInfo, BSGroupInfo);
+        MergeWhiteboardResponses(MergedVDiskInfo, VDiskInfo);
+        MergeWhiteboardResponses(MergedPDiskInfo, PDiskInfo);
 
         THashSet<TTabletId> tablets;
 
         if (Tablets) {
-            MergedTabletInfo = MergeWhiteboardResponses(TabletInfo, TWhiteboardInfo<TEvWhiteboard::TEvTabletStateResponse>::GetDefaultMergeField());
+            MergeWhiteboardResponses(MergedTabletInfo, TabletInfo);
             TIntrusivePtr<TDomainsInfo> domains = AppData(ctx)->DomainsInfo;
             TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
             ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
@@ -302,21 +302,21 @@ public:
         ui64 totalStorageSize = 0;
         ui64 availableStorageSize = 0;
 
-        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo)) {
             if (element.HasTotalSize() && element.HasAvailableSize()) {
                 totalStorageSize += element.GetTotalSize();
                 availableStorageSize += element.GetAvailableSize();
             }
             element.SetStateFlag(GetWhiteboardFlag(GetPDiskStateFlag(element)));
             element.SetOverall(GetWhiteboardFlag(GetPDiskOverallFlag(element)));
-            PDisksIndex.emplace(TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementKey(element), element);
+            PDisksIndex.emplace(TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse>::GetElementKey(element), element);
         }
-        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo)) {
             element.SetOverall(GetWhiteboardFlag(GetVDiskOverallFlag(element)));
-            VDisksIndex.emplace(TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementKey(element), element);
+            VDisksIndex.emplace(TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse>::GetElementKey(element), element);
         }
         NKikimrViewer::EFlag flag = NKikimrViewer::Grey;
-        for (const auto& element : TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
+        for (const auto& element : TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo)) {
             flag = Max(flag, GetBSGroupOverallFlag(element, VDisksIndex, PDisksIndex));
         }
         ui32 numberOfCpus = 0;
@@ -325,9 +325,9 @@ public:
         THashSet<TString> versions;
         THashSet<TString> hosts;
         THashMap<TString, int> names;
-        for (const auto& pr : SystemInfo) {
-            if (pr.second != nullptr) {
-                const NKikimrWhiteboard::TSystemStateInfo& systemState = pr.second->Record.GetSystemStateInfo(0);
+        for (const auto& [nodeId, sysInfo] : SystemInfo) {
+            if (sysInfo.SystemStateInfoSize() > 0) {
+                const NKikimrWhiteboard::TSystemStateInfo& systemState = sysInfo.GetSystemStateInfo(0);
                 if (systemState.HasNumberOfCpus() && (!systemState.HasHost() || hosts.emplace(systemState.GetHost()).second)) {
                     numberOfCpus += systemState.GetNumberOfCpus();
                     if (systemState.LoadAverageSize() > 0) {
@@ -350,7 +350,7 @@ public:
 
         if (Tablets) {
             std::unordered_set<std::pair<ui64, ui64>> tenants; /// group by tenantid (TDomainKey)
-            for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : MergedTabletInfo->Record.GetTabletStateInfo()) {
+            for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : MergedTabletInfo.GetTabletStateInfo()) {
                 if (tablets.contains(tabletInfo.GetTabletId())) {
                     NKikimrWhiteboard::TTabletStateInfo* tablet = pbCluster.AddSystemTablets();
                     tablet->CopyFrom(tabletInfo);
@@ -364,7 +364,7 @@ public:
                 }
                 tenants.emplace(tenantId);
             }
-            pbCluster.SetTablets(MergedTabletInfo->Record.TabletStateInfoSize());
+            pbCluster.SetTablets(MergedTabletInfo.TabletStateInfoSize());
             pbCluster.SetTenants(tenants.size());
         }
 

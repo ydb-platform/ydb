@@ -46,9 +46,9 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
     THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     THolder<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
@@ -278,17 +278,17 @@ public:
         ui32 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->SourceType) {
         case TEvWhiteboard::EvVDiskStateRequest:
-            if (VDiskInfo.emplace(nodeId, nullptr).second) {
+            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
                 RequestDone();
             }
             break;
         case TEvWhiteboard::EvPDiskStateRequest:
-            if (PDiskInfo.emplace(nodeId, nullptr).second) {
+            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
                 RequestDone();
             }
             break;
         case TEvWhiteboard::EvBSGroupStateRequest:
-            if (BSGroupInfo.emplace(nodeId, nullptr).second) {
+            if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
                 RequestDone();
             }
             break;
@@ -297,32 +297,30 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (VDiskInfo.emplace(nodeId, nullptr).second) {
+        if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
             RequestDone();
         }
-        if (PDiskInfo.emplace(nodeId, nullptr).second) {
+        if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
             RequestDone();
         }
-        if (BSGroupInfo.emplace(nodeId, nullptr).second) {
+        if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
             RequestDone();
         }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        auto& vDiskInfo = VDiskInfo[nodeId] = ev->Release();
-        if (vDiskInfo != nullptr) {
-            for (auto& vDiskStateInfo : *(vDiskInfo->Record.MutableVDiskStateInfo())) {
-                vDiskStateInfo.SetNodeId(nodeId);
-                VDiskId2vDiskStateInfo[VDiskIDFromVDiskID(vDiskStateInfo.GetVDiskId())] = &vDiskStateInfo;
-            }
+        auto& vDiskInfo = VDiskInfo[nodeId] = std::move(ev->Get()->Record);
+        for (auto& vDiskStateInfo : *(vDiskInfo.MutableVDiskStateInfo())) {
+            vDiskStateInfo.SetNodeId(nodeId);
+            VDiskId2vDiskStateInfo[VDiskIDFromVDiskID(vDiskStateInfo.GetVDiskId())] = &vDiskStateInfo;
         }
         RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskInfo[nodeId] = ev->Release();
+        PDiskInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
@@ -338,7 +336,7 @@ public:
             }
         }
         ui64 nodeId = ev.Get()->Cookie;
-        BSGroupInfo[nodeId] = ev->Release();
+        BSGroupInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
@@ -361,9 +359,9 @@ public:
     }
 
     NKikimrViewer::TStorageInfo StorageInfo;
-    THolder<TEvWhiteboard::TEvBSGroupStateResponse> MergedBSGroupInfo;
-    THolder<TEvWhiteboard::TEvVDiskStateResponse> MergedVDiskInfo;
-    THolder<TEvWhiteboard::TEvPDiskStateResponse> MergedPDiskInfo;
+    NKikimrWhiteboard::TEvBSGroupStateResponse MergedBSGroupInfo;
+    NKikimrWhiteboard::TEvVDiskStateResponse MergedVDiskInfo;
+    NKikimrWhiteboard::TEvPDiskStateResponse MergedPDiskInfo;
     TMap<TString, const NKikimrWhiteboard::TBSGroupStateInfo&> BSGroupIndex;
     TMap<TString, NKikimrHive::THiveStorageGroupStats> BSGroupHiveIndex;
     TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
@@ -483,16 +481,14 @@ public:
                 if (FilterNodeIds.count(nodeId) == 0) {
                     continue;
                 }
-                if (vDiskInfo != nullptr) {
-                    THashSet<ui32> additionalNodes;
-                    for (const auto& vDiskStateInfo : vDiskInfo->Record.GetVDiskStateInfo()) {
-                        ui32 groupId = vDiskStateInfo.GetVDiskId().GetGroupID();
-                        auto itNodes = Group2NodeId.find(groupId);
-                        if (itNodes != Group2NodeId.end()) {
-                            for (TNodeId groupNodeId : itNodes->second) {
-                                if (groupNodeId != nodeId && additionalNodes.insert(groupNodeId).second) {
-                                    SendNodeRequests(groupNodeId);
-                                }
+                THashSet<ui32> additionalNodes;
+                for (const auto& vDiskStateInfo : vDiskInfo.GetVDiskStateInfo()) {
+                    ui32 groupId = vDiskStateInfo.GetVDiskId().GetGroupID();
+                    auto itNodes = Group2NodeId.find(groupId);
+                    if (itNodes != Group2NodeId.end()) {
+                        for (TNodeId groupNodeId : itNodes->second) {
+                            if (groupNodeId != nodeId && additionalNodes.insert(groupNodeId).second) {
+                                SendNodeRequests(groupNodeId);
                             }
                         }
                     }
@@ -507,20 +503,20 @@ public:
         }
 
         TStringStream json;
-        MergedBSGroupInfo = MergeWhiteboardResponses(BSGroupInfo, TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetDefaultMergeField());
-        MergedVDiskInfo = MergeWhiteboardResponses(VDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetDefaultMergeField());
-        MergedPDiskInfo = MergeWhiteboardResponses(PDiskInfo, TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetDefaultMergeField());
-        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo.Get())) {
+        MergeWhiteboardResponses(MergedBSGroupInfo, BSGroupInfo);
+        MergeWhiteboardResponses(MergedVDiskInfo, VDiskInfo);
+        MergeWhiteboardResponses(MergedPDiskInfo, PDiskInfo);
+        for (auto& element : TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse>::GetElementsField(MergedPDiskInfo)) {
             element.SetStateFlag(GetWhiteboardFlag(GetPDiskStateFlag(element)));
             auto overall = NKikimrViewer::EFlag_Name(GetPDiskOverallFlag(element));
-            auto key = TWhiteboardInfo<TEvWhiteboard::TEvPDiskStateResponse>::GetElementKey(element);
+            auto key = TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse>::GetElementKey(element);
             element.ClearOverall();
             PDisksOverall.emplace(key, overall);
             PDisksIndex.emplace(key, element);
         }
-        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse>::GetElementsField(MergedVDiskInfo)) {
             auto overall = NKikimrViewer::EFlag_Name(GetVDiskOverallFlag(element));
-            auto key = TWhiteboardInfo<TEvWhiteboard::TEvVDiskStateResponse>::GetElementKey(element);
+            auto key = TWhiteboardInfo<NKikimrWhiteboard::TEvVDiskStateResponse>::GetElementKey(element);
             element.ClearOverall();
             element.ClearStoragePoolName();
             VDisksOverall.emplace(key, overall);
@@ -533,9 +529,9 @@ public:
                 VSlotsIndex.emplace(std::move(slotId), element);
             }
         }
-        for (auto& element : TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
+        for (auto& element : TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo)) {
             auto state = GetBSGroupOverallState(element, VDisksIndex, PDisksIndex);
-            auto key = ToString(TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementKey(element));
+            auto key = ToString(TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::GetElementKey(element));
             if (state.MissingDisks > 0) {
                 BSGroupWithMissingDisks.insert(key);
             }

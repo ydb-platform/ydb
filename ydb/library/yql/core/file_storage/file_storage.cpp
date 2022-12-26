@@ -237,8 +237,9 @@ private:
         }
 
         // todo: remove oldContentLink ?
-        const auto urlContentFile = BuildUrlContentFileName(url, token, etag, lastModified);
-        TFileLinkPtr result = Storage.Put(urlContentFile, TString(), TString(), puller);
+        const auto urlChecksum = BuildUrlChecksum(url, token, etag, lastModified);
+        const auto urlContentFile = BuildUrlContentFileName(urlChecksum);
+        TFileLinkPtr result = Storage.Put(urlContentFile, TString(), UseFakeChecksums ? urlChecksum : TString(), puller);
 
         // save meta using rename for atomicity
         urlMeta.ETag = etag;
@@ -267,9 +268,13 @@ private:
         return MD5::Calc(TStringBuilder() << token << url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url_meta";
     }
 
-    static TString BuildUrlContentFileName(const THttpURL& url, const TString& token, const TString& etag, const TString& lastModified) {
+    static TString BuildUrlChecksum(const THttpURL& url, const TString& token, const TString& etag, const TString& lastModified) {
         TString needle = etag ? etag : lastModified;
-        return MD5::Calc(TStringBuilder() << token << needle << url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii)) + ".url";
+        return MD5::Calc(TStringBuilder() << token << needle << url.PrintS(THttpURL::FlagNoFrag | THttpURL::FlagHostAscii));
+    }
+
+    static TString BuildUrlContentFileName(const TString& urlChecksum) {
+        return urlChecksum + ".url";
     }
 
 private:

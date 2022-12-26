@@ -19,14 +19,18 @@
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/system/env.h>
 
 
 namespace NYql {
 
 class THttpDownloader: public TDownloadConfig<THttpDownloader, THttpDownloaderConfig>, public NYql::NFS::IDownloader {
 public:
-    THttpDownloader(const TFileStorageConfig& config) {
+    THttpDownloader(const TFileStorageConfig& config)
+        : UseFakeChecksums(GetEnv("YQL_LOCAL") == "1")
+    {
         Configure(config, "http");
+
     }
     ~THttpDownloader() = default;
 
@@ -58,8 +62,8 @@ public:
 
         auto pair = ExtractETagAndLastModified(*fr1);
 
-        auto puller = [urlStr = url.PrintS(), fr1](const TFsPath& dstPath) -> std::pair<ui64, TString> {
-            return CopyToFile(urlStr, *fr1, dstPath);
+        auto puller = [urlStr = url.PrintS(), fr1, useFakeChecksums = UseFakeChecksums](const TFsPath& dstPath) -> std::pair<ui64, TString> {
+            return CopyToFile(urlStr, *fr1, dstPath, useFakeChecksums);
         };
 
         return std::make_tuple(puller, pair.first, pair.second);
@@ -88,16 +92,23 @@ private:
         }
     }
 
-    static std::pair<ui64, TString> CopyToFile(const TString& url, IFetchResult& src, const TString& dstFile) {
+    static std::pair<ui64, TString> CopyToFile(const TString& url, IFetchResult& src, const TString& dstFile, bool useFakeChecksums) {
         TFile outFile(dstFile, CreateAlways | ARW | AX);
-        TUnbufferedFileOutput out(outFile);
-        TMd5OutputStream md5Out(out);
-
         THttpInput& httpStream = src.GetStream();
         TDownloadStream input(httpStream);
-        const ui64 size = TransferData(&input, &md5Out);
-        auto result = std::make_pair(size, md5Out.Finalize());
-        out.Finish();
+        ui64 size = 0;
+        TString md5;
+        if (useFakeChecksums) {
+            TFileOutput out(outFile);
+            size = TransferData(&input, &out);
+            out.Finish();
+        } else {
+            TUnbufferedFileOutput out(outFile);
+            TMd5OutputStream md5Out(out);
+            size = TransferData(&input, &md5Out);
+            md5 = md5Out.Finalize();
+            out.Finish();
+        }
         outFile.Close();
 
         ui64 contentLength = 0;
@@ -113,7 +124,7 @@ private:
         }
 
         YQL_ENSURE(static_cast<ui64>(dstFileLen) == size);
-        return result;
+        return std::make_pair(size, md5);
     }
 
     static TString WeakETag2Strong(const TString& etag) {
@@ -140,6 +151,7 @@ private:
     }
 
 private:
+    const bool UseFakeChecksums = false;
     ui32 SocketTimeoutMs = 300000;
 };
 

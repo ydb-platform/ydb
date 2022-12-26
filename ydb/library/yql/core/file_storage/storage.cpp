@@ -207,7 +207,7 @@ public:
             Y_ENSURE(!hardlinkFile.Exists(), "FileStorage: temporary file " << hardlinkFile.GetPath().Quote() << " already exists");
 
             ui64 fileSize = 0;
-            TString pullerMd5; // overrides input arg 'md5'
+            TString pullerMd5; // overrides input arg 'md5' when puller returns non-empty result
             try {
                 std::tie(fileSize, pullerMd5) = puller(hardlinkFile);
             } catch (...) {
@@ -228,6 +228,9 @@ public:
             TouchFile(storageFile.c_str());
 
             newFileAdded = true;
+            if (pullerMd5.empty()) {
+                pullerMd5 = md5;
+            }
             result = MakeIntrusive<TFileLink>(hardlinkFile, storageFileName, fileSize, pullerMd5);
         }
 

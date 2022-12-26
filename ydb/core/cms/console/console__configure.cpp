@@ -60,7 +60,7 @@ public:
             if (field->number() != static_cast<int>(kind)) {
                 Error(Ydb::StatusIds::BAD_REQUEST,
                       TStringBuilder() << "wrong config item: field '" << field->name()
-                      << "' shouldn't be set for confg item "
+                      << "' shouldn't be set for config item "
                       << TConfigItem::KindName(kind) << " (" << kind << ")",
                       ctx);
                 return false;

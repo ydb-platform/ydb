@@ -111,16 +111,14 @@ namespace NActors {
         }
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
-        template <typename TEvent>
-        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
-            return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
         bool Send(TAutoPtr<IEventHandle> ev) const;
         bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
         bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
-        template <typename TEvent>
-        bool SendWithContinuousExecution(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
-            return SendWithContinuousExecution(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
+        bool SendWithContinuousExecution(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return SendWithContinuousExecution(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
 
         TInstant Now() const;
@@ -467,9 +465,8 @@ namespace NActors {
     protected:
         void Describe(IOutputStream&) const noexcept override;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
-        template <typename TEvent>
-        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
-            return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
+            return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
 
         template <class TEvent, class ... TEventArgs>
@@ -478,9 +475,8 @@ namespace NActors {
         }
 
         bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
-        template <typename TEvent>
-        bool SendWithContinuousExecution(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
-            return SendWithContinuousExecution(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie, std::move(traceId));
+        bool SendWithContinuousExecution(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
+            return SendWithContinuousExecution(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
 
         template <class TEvent, class ... TEventArgs>

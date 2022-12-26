@@ -111,8 +111,7 @@ namespace NActors {
             return GetActorContext().Send(recipient, ev, flags, cookie, std::move(traceId));
         }
 
-        template <typename TEvent>
-        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
             return GetActorContext().Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
 

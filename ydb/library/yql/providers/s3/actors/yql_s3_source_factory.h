@@ -8,12 +8,14 @@
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
+#include <util/generic/size_literals.h>
 
 namespace NYql::NDq {
 
 struct TS3ReadActorFactoryConfig {
     ui64 RowsInBatch = 1000;
     ui64 MaxInflight = 20;
+    ui64 DataInflight = 1_GB;
 };
 
 void RegisterS3ReadActorFactory(
@@ -21,6 +23,8 @@ void RegisterS3ReadActorFactory(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),
     const IRetryPolicy<long>::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
-    const TS3ReadActorFactoryConfig& = {});
+    const TS3ReadActorFactoryConfig& = {},
+    ::NMonitoring::TDynamicCounterPtr counters = nullptr,
+    ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);
 
 }

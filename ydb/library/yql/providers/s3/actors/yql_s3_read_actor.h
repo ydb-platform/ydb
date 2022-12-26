@@ -23,6 +23,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const IRetryPolicy<long>::TPtr& retryPolicy,
-    const TS3ReadActorFactoryConfig& cfg);
+    const TS3ReadActorFactoryConfig& cfg,
+    ::NMonitoring::TDynamicCounterPtr counters,
+    ::NMonitoring::TDynamicCounterPtr taskCounters);
 
 } // namespace NYql::NDq

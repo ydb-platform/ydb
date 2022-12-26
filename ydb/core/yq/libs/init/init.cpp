@@ -71,7 +71,9 @@ void Init(
 {
     Y_VERIFY(iyqSharedResources, "No YQ shared resources created");
     TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
-    const auto clientCounters = appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ClientMetrics");
+
+    auto yqCounters = appData->Counters->GetSubgroup("counters", "yq");
+    const auto clientCounters = yqCounters->GetSubgroup("subsystem", "ClientMetrics");
 
     if (protoConfig.GetControlPlaneStorage().GetEnabled()) {
         auto controlPlaneStorage = protoConfig.GetControlPlaneStorage().GetUseInMemory()
@@ -79,7 +81,7 @@ void Init(
             : NYq::CreateYdbControlPlaneStorageServiceActor(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetCommon(),
-                appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneStorage"),
+                yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage"),
                 yqSharedResources,
                 credentialsProviderFactory,
                 tenant);
@@ -87,13 +89,13 @@ void Init(
 
         actorRegistrator(NYq::ControlPlaneConfigActorId(),
             CreateControlPlaneConfigActor(yqSharedResources, credentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
-                appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneConfig"))
+                yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig"))
         );
     }
 
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
         auto controlPlaneProxy = NYq::CreateControlPlaneProxyActor(protoConfig.GetControlPlaneProxy(),
-            appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneProxy"), protoConfig.GetQuotasManager().GetEnabled());
+            yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"), protoConfig.GetQuotasManager().GetEnabled());
         actorRegistrator(NYq::ControlPlaneProxyActorId(), controlPlaneProxy);
     }
 
@@ -110,7 +112,7 @@ void Init(
     if (protoConfig.GetAudit().GetEnabled()) {
         auto* auditSerive = auditServiceFactory(
             protoConfig.GetAudit(),
-            appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "audit"));
+            yqCounters->GetSubgroup("subsystem", "audit"));
         actorRegistrator(NYq::YqAuditServiceActorId(), auditSerive);
     }
 
@@ -125,7 +127,6 @@ void Init(
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
-    auto yqCounters = appData->Counters->GetSubgroup("counters", "yq");
     auto workerManagerCounters = NYql::NDqs::TWorkerManagerCounters(yqCounters->GetSubgroup("subsystem", "worker_manager"));
 
     TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
@@ -170,10 +171,13 @@ void Init(
         if (const ui64 maxInflight = s3readConfig.GetMaxInflight()) {
             readActorFactoryCfg.MaxInflight = maxInflight;
         }
+        if (const ui64 dataInflight = s3readConfig.GetDataInflight()) {
+            readActorFactoryCfg.DataInflight = dataInflight;
+        }
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
-        RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory,
-            httpGateway, s3HttpRetryPolicy, readActorFactoryCfg);
+        RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
+            yqCounters->GetSubgroup("subsystem", "S3ReadActor"), appData->Counters->GetSubgroup("counters", "dq_tasks"));
         RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory,
             httpGateway, s3HttpRetryPolicy);
         RegisterClickHouseReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway);
@@ -262,7 +266,7 @@ void Init(
                 pqCmConnections,
                 appData->FunctionRegistry,
                 httpGateway,
-                appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "TestConnection"));
+                yqCounters->GetSubgroup("subsystem", "TestConnection"));
         actorRegistrator(NYq::TestConnectionActorId(), testConnection);
     }
 

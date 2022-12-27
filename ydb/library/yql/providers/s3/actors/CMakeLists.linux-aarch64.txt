@@ -28,23 +28,23 @@ target_link_libraries(providers-s3-actors PUBLIC
   cpp-string_utils-base64
   cpp-string_utils-quote
   cpp-xml-document
-  dq-actors-compute
   yql-minikql-computation
-  providers-common-http_gateway
-  common-schema-mkql
   common-token_accessor-client
+  common-schema-mkql
+  yql-public-types
+  dq-actors-compute
+  providers-common-http_gateway
   providers-s3-common
   providers-s3-compressors
   providers-s3-proto
+  clickhouse_client_udf
   providers-s3-range_helpers
   providers-s3-serializations
-  yql-public-types
-  clickhouse_client_udf
 )
 target_sources(providers-s3-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp
 )

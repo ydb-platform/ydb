@@ -45,6 +45,7 @@ protected:
     using TBase = TViewerPipeClient<TDerived>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     TRequestSettings RequestSettings;
+    THolder<TRequestEventType> Request;
     std::unordered_set<TNodeId> NodeIds;
     TMap<TNodeId, TResponseType> PerNodeStateInfo; // map instead of unordered_map only for sorting reason
     std::unordered_map<TNodeId, TString> NodeErrors;
@@ -77,9 +78,15 @@ public:
         return request;
     }
 
+    THolder<TRequestEventType> CloneRequest() {
+        THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
+        request->Record.MergeFrom(Request->Record);
+        return request;
+    }
+
     void SendNodeRequestToWhiteboard(TNodeId nodeId) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        THolder<TRequestEventType> request = BuildRequest();
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId );
+        THolder<TRequestEventType> request = CloneRequest();
         BLOG_TRACE("Sent WhiteboardRequest to " << nodeId << " Request: " << request->Record.ShortDebugString());
         TBase::SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         NodeIds.insert(nodeId);
@@ -105,6 +112,7 @@ public:
                      TlsActivationContext->ActorSystem()->NodeId);
 
         TBase::InitConfig(RequestSettings);
+        Request = BuildRequest();
         if (RequestSettings.FilterNodeIds.empty()) {
             if (RequestSettings.AliveOnly) {
                 static const TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(TBase::SelfId().NodeId());

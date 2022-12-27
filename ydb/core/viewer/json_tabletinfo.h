@@ -7,6 +7,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/util/wildcard.h>
 #include "json_pipe_req.h"
 #include "json_wb_req.h"
 #include <span>
@@ -103,6 +104,16 @@ public:
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
+            if (!TBase::RequestSettings.FilterFields.empty()) {
+                if (IsMatchesWildcard(TBase::RequestSettings.FilterFields, "(TabletId=*)")) {
+                    TString strTabletId(TBase::RequestSettings.FilterFields.substr(10, TBase::RequestSettings.FilterFields.size() - 11));
+                    TTabletId uiTabletId(FromStringWithDefault<TTabletId>(strTabletId, {}));
+                    if (uiTabletId) {
+                        Tablets.push_back(uiTabletId);
+                        Request->Record.AddFilterTabletId(uiTabletId);
+                    }
+                }
+            }
         }
     }
 
@@ -156,6 +167,10 @@ public:
         }
         if (Tablets.empty()) {
             ReplyAndPassAway();
+        } else {
+            for (TTabletId tabletId : Tablets) {
+                Request->Record.AddFilterTabletId(tabletId);
+            }
         }
         TBase::Bootstrap();
     }

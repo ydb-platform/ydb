@@ -1,4 +1,7 @@
-
+---
+title: "Обзор клиентской балансировки в {{ ydb-short-name }}"
+description: "В разделе содержатся рецепты кода с настройкой клиентской балансировки в разных {{ ydb-short-name }} SDK."
+---
 # Балансировка
 
 {% include [work in progress message](_includes/addition.md) %}

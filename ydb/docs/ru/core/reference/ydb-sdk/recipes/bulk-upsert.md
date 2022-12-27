@@ -1,3 +1,8 @@
+---
+title: "Обзор рецепта кода по пакетной вставке данных в {{ ydb-short-name }}"
+description: "В статье вы ознакомитесь с примерами кода использования встроенных в {{ ydb-short-name }} SDK средств выполнения пакетной вставки."
+---
+
 # Пакетная вставка данных
 
 {% include [work in progress message](_includes/addition.md) %}

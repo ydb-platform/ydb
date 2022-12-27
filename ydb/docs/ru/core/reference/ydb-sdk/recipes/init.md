@@ -1,3 +1,8 @@
+---
+title: "Инструкция по инициализации драйвера в {{ ydb-short-name }}"
+description: "В статье приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK."
+---
+
 # Инициализация драйвера
 
 {% include [work in progress message](_includes/addition.md) %}

@@ -1,3 +1,8 @@
+---
+title: "Обзор оператора GROUP BY в {{ ydb-full-name }}"
+description: "В статье рассказываем о том, какие функции применяются совместно с оператором GROUP BY в {{ ydb-full-name }}. Рассматриваем примеры запросов с использованием оператора GROUP BY."
+---
+
 {% if select_command == "SELECT STREAM" %}
 
   {% include [x](_includes/group_by/general_stream.md) %}

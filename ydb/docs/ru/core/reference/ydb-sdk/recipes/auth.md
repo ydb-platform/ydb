@@ -1,3 +1,8 @@
+---
+title: "Инструкция по аутентификации подключения к серверной стороне в {{ ydb-short-name }}"
+description: "В разделе содержатся рецепты кода с настройкой аутентификации в разных {{ ydb-short-name }} SDK."
+---
+
 # Аутентификация
 
 {% include [work in progress message](_includes/addition.md) %}

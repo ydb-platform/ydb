@@ -191,20 +191,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             input.ApplyDiff(diff);
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "4@staff", NACLib::InheritOnly);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject | NACLib::InheritOnly);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "4@staff", NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject | NACLib::InheritOnly);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff");
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "1@staff", NACLib::InheritNone);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer | NACLib::InheritOnly);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff");
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "1@staff", NACLib::InheritNone);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << input.DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), input.DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), input.DebugString());
             }
 
             Y_ASSERT(!firstACL);
@@ -216,46 +216,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             // InheritOnly is not filtered from self effective.
             // Record with InheritOnly doesn't counted at CheckAccess
             // InheritOnly flag is eliminated on inheriting
-            NACLib::TACL connonic;
-            connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject);
-            connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "4@staff", NACLib::InheritOnly);
-            connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject | NACLib::InheritOnly);
+            NACLib::TACL canonic;
+            canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject);
+            canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "4@staff", NACLib::InheritOnly);
+            canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject | NACLib::InheritOnly);
 
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff");
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "1@staff", NACLib::InheritNone);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer | NACLib::InheritOnly);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff");
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "1@staff", NACLib::InheritNone);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer | NACLib::InheritOnly);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
 
 
-            Cerr << "canonic: " << connonic.DebugString() << Endl;
+            Cerr << "canonic: " << canonic.DebugString() << Endl;
             Cerr << "result: " << NACLib::TACL(firstACL.GetForSelf()).DebugString() << Endl;
-            UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(firstACL.GetForSelf()).DebugString());
+            UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(firstACL.GetForSelf()).DebugString());
         }
 
         {
-            NACLib::TACL connonic;
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+            NACLib::TACL canonic;
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-            Cerr << "canonic: " << connonic.DebugString() << Endl;
+            Cerr << "canonic: " << canonic.DebugString() << Endl;
             Cerr << "result: " << NACLib::TACL(firstACL.GetForChildren(/*isContainer=*/ true)).DebugString() << Endl;
-            UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(firstACL.GetForChildren(/*isContainer=*/ true)).DebugString());
+            UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(firstACL.GetForChildren(/*isContainer=*/ true)).DebugString());
         }
 
         {
-            NACLib::TACL connonic;
-            connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-            connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+            NACLib::TACL canonic;
+            canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+            canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-            connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+            canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-            Cerr << "canonic: " << connonic.DebugString() << Endl;
+            Cerr << "canonic: " << canonic.DebugString() << Endl;
             Cerr << "result: " << NACLib::TACL(firstACL.GetForChildren(/*isContainer=*/ false)).DebugString() << Endl;
-            UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(firstACL.GetForChildren(/*isContainer=*/ false)).DebugString());
+            UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(firstACL.GetForChildren(/*isContainer=*/ false)).DebugString());
         }
 
         {
@@ -281,59 +281,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "44@staff", NACLib::InheritOnly);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject | NACLib::InheritOnly);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "44@staff", NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject | NACLib::InheritOnly);
 
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff");
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "11@staff", NACLib::InheritNone);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer | NACLib::InheritOnly);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff");
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "11@staff", NACLib::InheritNone);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForSelf()).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
             }
         }
 
@@ -360,60 +360,60 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "44@staff", NACLib::InheritOnly);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "44@staff", NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject | NACLib::InheritOnly);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff");
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "11@staff", NACLib::InheritNone);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer | NACLib::InheritOnly);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff");
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "11@staff", NACLib::InheritNone);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer | NACLib::InheritOnly);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer | NACLib::InheritOnly);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForSelf()).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "33@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "66@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "22@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "55@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "00@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "77@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
             }
         }
 
@@ -427,40 +427,40 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Y_ASSERT(secondACL);
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForSelf()).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
             }
         }
 
@@ -474,40 +474,40 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Y_ASSERT(secondACL);
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForSelf()).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());            }
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForSelf()).DebugString());            }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "3@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "6@staff", NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ true)).DebugString());
             }
 
             {
-                NACLib::TACL connonic;
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); connonic.MutableACE()->rbegin()->SetInherited(true);
+                NACLib::TACL canonic;
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "2@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericRead, "5@staff", NACLib::InheritObject); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); connonic.MutableACE()->rbegin()->SetInherited(true);
-                connonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); connonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "0@staff"); canonic.MutableACE()->rbegin()->SetInherited(true);
+                canonic.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "7@staff", NACLib::InheritObject | NACLib::InheritContainer); canonic.MutableACE()->rbegin()->SetInherited(true);
 
-                Cerr << "canonic: " << connonic.DebugString() << Endl;
+                Cerr << "canonic: " << canonic.DebugString() << Endl;
                 Cerr << "result: " << NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString() << Endl;
-                UNIT_ASSERT_NO_DIFF(connonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
+                UNIT_ASSERT_NO_DIFF(canonic.DebugString(), NACLib::TACL(secondACL.GetForChildren(/*isContainer=*/ false)).DebugString());
             }
         }
 
@@ -1700,7 +1700,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
          )");
         env.TestWaitNotification(runtime, txId);
 
-        //simonteniously
+        //simultaneously
         AsyncDropTable(runtime, ++txId, "/MyRoot/DirA", "dst1");
         AsyncDropTable(runtime, ++txId, "/MyRoot/DirA", "dst2");
         AsyncConsistentCopyTables(runtime, ++txId, "/", R"(
@@ -2315,7 +2315,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
     }
 
-    Y_UNIT_TEST(CreateIndexedTableAndForceDropSimonteniously) { //+
+    Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -2357,7 +2357,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
     }
 
-    Y_UNIT_TEST(DropIndexedTableAndForceDropSimonteniously) { //+
+    Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -2524,7 +2524,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::ShardsInsideDomain(20)});
     }
 
-    Y_UNIT_TEST(CreateTableWithSplitBounadaries) { //+
+    Y_UNIT_TEST(CreateTableWithSplitBoundaries) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
@@ -2868,7 +2868,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Try to Copy over existing table
         TestCopyTable(runtime, ++txId, "/MyRoot", "Table", "/MyRoot/NewTable", NKikimrScheme::StatusAlreadyExists);
 
-        // Try to Copy over exisitng dir
+        // Try to Copy over existing dir
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir");
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "Dir", "/MyRoot/Table");
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
@@ -3364,7 +3364,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             CopyFromTable: "/MyRoot/Table")");
         env.TestWaitNotification(runtime, txId);
 
-        auto checher = [] (NKikimrSchemeOp::EColumnCache cacheType, size_t families = 1) {
+        auto checker = [] (NKikimrSchemeOp::EColumnCache cacheType, size_t families = 1) {
             return [=] (const NKikimrSchemeOp::TTableDescription& tableDescription) {
                 auto partConfig = tableDescription.GetPartitionConfig();
                 Cdbg << "-----------" << Endl << partConfig.DebugString() << "\n~~~~~~\n" << Endl;
@@ -3383,25 +3383,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // /Root/Table
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-            checher(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
         }
 
         // /Root/CopyTable
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
-            checher(NKikimrSchemeOp::EColumnCache::ColumnCacheOnce)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheOnce)(tableDescription);
         }
 
         // /Root/CopyTable2
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
-            checher(NKikimrSchemeOp::EColumnCache::ColumnCacheNone, 2)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheNone, 2)(tableDescription);
         }
 
         // /Root/CopyTable3
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+9, TTestTxConfig::FakeHiveTablets+10, TTestTxConfig::FakeHiveTablets+11}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 5);
-            checher(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
         }
 
         auto descrChecker = [] (size_t families) {
@@ -4901,7 +4901,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
     }
 
-    Y_UNIT_TEST(DefaulColumnFamiliesWithNonCanonicName) { //+
+    Y_UNIT_TEST(DefaultColumnFamiliesWithNonCanonicName) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -5347,14 +5347,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         });
     }
 
-    NLs::TCheckFunc CheckCompactionPolicy(NKikimr::NLocalDb::TCompactionPolicyPtr expecedPolicy) {
+    NLs::TCheckFunc CheckCompactionPolicy(NKikimr::NLocalDb::TCompactionPolicyPtr expectedPolicy) {
         return [=] (const NKikimrScheme::TEvDescribeSchemeResult& describeRec) {
             NKikimr::NLocalDb::TCompactionPolicy realPolicy(describeRec.GetPathDescription().GetTable().GetPartitionConfig().GetCompactionPolicy());
-            UNIT_ASSERT(realPolicy == *expecedPolicy);
+            UNIT_ASSERT(realPolicy == *expectedPolicy);
         };
     }
 
-    Y_UNIT_TEST(AlterTableComapctionPolicy) { //+
+    Y_UNIT_TEST(AlterTableCompactionPolicy) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -6010,7 +6010,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         checkSchema({ 0, 1, 2 }, { "Key", "Value" });
 
-        // Alter table adding more volumns
+        // Alter table adding more volumes
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table1"
                             Columns { Name: "Add1"  Type: "Uint32" }
@@ -7187,7 +7187,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        auto tableDesrc = [=] (const TString& name) {
+        auto tableDescr = [=] (const TString& name) {
             return Sprintf(R"(Name: "%s"
                 Columns { Name: "RowId" Type: "Uint64" }
                 KeyColumnNames: ["RowId"]
@@ -7198,16 +7198,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA", {NKikimrScheme::StatusAlreadyExists});
-        TestCreateTable(runtime, ++txId, "/MyRoot", tableDesrc("DirA"), {NKikimrScheme::StatusNameConflict});
+        TestCreateTable(runtime, ++txId, "/MyRoot", tableDescr("DirA"), {NKikimrScheme::StatusNameConflict});
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "AAA", {NKikimrScheme::StatusPathDoesNotExist});
 
-        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("Table1"));
-        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA/", tableDesrc("Table1"));
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDescr("Table1"));
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA/", tableDescr("Table1"));
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId, txId-1});
 
-        TestCreateTable(runtime, ++txId, "/MyRoot/DirA/", tableDesrc("Table1"), {NKikimrScheme::StatusAlreadyExists});
+        TestCreateTable(runtime, ++txId, "/MyRoot/DirA/", tableDescr("Table1"), {NKikimrScheme::StatusAlreadyExists});
         TestMkDir(runtime, ++txId, "/MyRoot/DirA", "Table1", {NKikimrScheme::StatusNameConflict});
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/Table1", "CCC", {NKikimrScheme::StatusPathIsNotDirectory});
 
@@ -7219,9 +7219,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::IsTable,
                             NLs::Finished});
 
-        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("/WrongPath"), {NKikimrScheme::StatusSchemeError});
-        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("WrongPath/"), {NKikimrScheme::StatusSchemeError});
-        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("Table1/WrongPath"), {NKikimrScheme::StatusPathIsNotDirectory});
+        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDescr("/WrongPath"), {NKikimrScheme::StatusSchemeError});
+        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDescr("WrongPath/"), {NKikimrScheme::StatusSchemeError});
+        TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDescr("Table1/WrongPath"), {NKikimrScheme::StatusPathIsNotDirectory});
     }
 
     Y_UNIT_TEST(SchemeErrors) { //+
@@ -7367,26 +7367,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::Finished});
     }
 
-    class TSuppresPlanStepObserver : public TNonCopyable {
+    class TSuppressPlanStepObserver : public TNonCopyable {
     public:
-        typedef std::function<void(TTestActorRuntime& runtime, bool& suppres)> TEventInjection;
+        typedef std::function<void(TTestActorRuntime& runtime, bool& suppress)> TEventInjection;
 
     private:
         ui64 Coordinator;
         ui64 Shard;
-        TEventInjection InjectionUnderSuppres;
+        TEventInjection InjectionUnderSuppress;
         bool Injected;
-        bool Suppres;
+        bool Suppress;
 
     public:
-        TSuppresPlanStepObserver(ui64 fromCoordinator,
+        TSuppressPlanStepObserver(ui64 fromCoordinator,
                                  ui64 toShard,
                                  TEventInjection injection)
             : Coordinator(fromCoordinator)
             , Shard(toShard)
-            , InjectionUnderSuppres(injection)
+            , InjectionUnderSuppress(injection)
             , Injected(false)
-            , Suppres(true)
+            , Suppress(true)
         {
         }
 
@@ -7421,11 +7421,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             if (!Injected) {
                 Cerr << "!Do injection!\n";
                 Injected = true;
-                InjectionUnderSuppres(runtime, Suppres);
+                InjectionUnderSuppress(runtime, Suppress);
                 Cerr << "!Do injection DONE!\n";
             }
 
-            if (Suppres) {
+            if (Suppress) {
                 Cerr << "!Suppress planStep event!\n";
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -9199,7 +9199,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
     }
 
-    Y_UNIT_TEST(SimultaneousDropFroceDrop) { //+
+    Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -9587,7 +9587,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             }
                         )", {NKikimrScheme::StatusInvalidParameter});
 
-        // Drop the table and wait for everytTFamilyDescriptionhing to be cleaned up
+        // Drop the table and wait for every TFamilyDescription to be cleaned up
         TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table");
         env.TestWaitNotification(runtime, txId);
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+2, TTestTxConfig::FakeHiveTablets+10));
@@ -9876,20 +9876,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TVector<THolder<IEventHandle>> supressed;
-        auto defOberver = SetSuppressObserver(runtime, supressed, TEvTxProcessing::EvPlanStep);
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
-        WaitForSuppressed(runtime, supressed, 1, defOberver);
+        WaitForSuppressed(runtime, suppressed, 1, defObserver);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir"),
                            {NLs::NotFinished,
                            NLs::PathVersionEqual(2),
                            NLs::ChildrenCount(0)});
 
-        for (auto &msg : supressed) {
+        for (auto &msg : suppressed) {
             runtime.Send(msg.Release());
         }
-        supressed.clear();
+        suppressed.clear();
 
         env.TestWaitNotification(runtime, txId);
 
@@ -9904,8 +9904,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TVector<THolder<IEventHandle>> supressed;
-        auto defOberver = SetSuppressObserver(runtime, supressed, TEvTxProcessing::EvPlanStep);
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -9920,7 +9920,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Type: EIndexTypeGlobalAsync
             }
         )");
-        WaitForSuppressed(runtime, supressed, 1, defOberver);
+        WaitForSuppressed(runtime, suppressed, 1, defObserver);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
@@ -9948,10 +9948,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            NLs::PathVersionEqual(1),
                            NLs::ChildrenCount(0)});
 
-        for (auto &msg : supressed) {
+        for (auto &msg : suppressed) {
             runtime.Send(msg.Release());
         }
-        supressed.clear();
+        suppressed.clear();
 
         env.TestWaitNotification(runtime, txId);
 
@@ -10014,10 +10014,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, 0);
         }
 
-        TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Sync", {"value"});
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Sync", {"value"});
         env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard);
 
-        auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
         Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "Copy1", "/MyRoot/Table1");
@@ -10098,8 +10098,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            TVector<THolder<IEventHandle>> supressed;
-            auto defOberver = SetSuppressObserver(runtime, supressed, TEvDataShard::EvInitSplitMergeDestination);
+            TVector<THolder<IEventHandle>> suppressed;
+            auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
 
             ++txId;
             TestSplitTable(runtime, 103, "/MyRoot/Table", R"(
@@ -10115,12 +10115,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         Columns { Name: "add_1"  Type: "Uint32"}
                     )");
 
-            WaitForSuppressed(runtime, supressed, 2, defOberver);
+            WaitForSuppressed(runtime, suppressed, 2, defObserver);
         }
 
         {
-            TVector<THolder<IEventHandle>> supressed;
-            auto defOberver = SetSuppressObserver(runtime, supressed, TEvTxProcessing::EvPlanStep);
+            TVector<THolder<IEventHandle>> suppressed;
+            auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
 
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
@@ -10132,7 +10132,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                              DstPath: "/MyRoot/copy"
                            })", {NKikimrScheme::StatusMultipleModifications});
 
-            WaitForSuppressed(runtime, supressed, 3, defOberver);
+            WaitForSuppressed(runtime, suppressed, 3, defObserver);
         }
 
     }
@@ -10205,15 +10205,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(3)});
 
         {
-            TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", "indexByValue", {"value"});
-            ui64 builIndexId = txId;
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", "indexByValue", {"value"});
+            ui64 buildIndexId = txId;
 
-            auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            auto listing = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             Y_ASSERT(listing.EntriesSize() == 1);
 
-            env.TestWaitNotification(runtime, builIndexId, TTestTxConfig::SchemeShard);
+            env.TestWaitNotification(runtime, buildIndexId, TTestTxConfig::SchemeShard);
 
-            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", builIndexId);
+            auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
         }
 
@@ -10327,7 +10327,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             bool itIsEnough = false;
 
-            auto desrc = DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true);
+            auto descr = DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true);
 
             NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                 if (record.GetPathDescription().TablePartitionsSize() == 1) {
@@ -10335,13 +10335,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             };
 
-            auto pathVersion = TestDescribeResult(desrc, {checkPartitionCount});
+            auto pathVersion = TestDescribeResult(descr, {checkPartitionCount});
 
             if (itIsEnough) {
                 break;
             }
 
-            for (const auto& tPart: desrc.GetPathDescription().GetTablePartitions()) {
+            for (const auto& tPart: descr.GetPathDescription().GetTablePartitions()) {
                 TActorId sender = runtime.AllocateEdgeActor();
                 auto evTx = new TEvDataShard::TEvCompactBorrowed(pathVersion.PathId);
                 ForwardToTablet(runtime, tPart.GetDatashardId(), sender, evTx);

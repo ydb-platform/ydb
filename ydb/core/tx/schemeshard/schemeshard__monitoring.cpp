@@ -355,13 +355,13 @@ private:
                         "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << debug;
 
-            TStringStream templateAnsver = str;
+            TStringStream templateAnswer = str;
             str.clear();
 
-            OutputAdminPage(templateAnsver);
+            OutputAdminPage(templateAnswer);
 
-            auto func = [templateAnsver] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
-                TStringStream str = templateAnsver;
+            auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
+                TStringStream str = templateAnswer;
                 HTML(str) {
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
@@ -406,13 +406,13 @@ private:
                         "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << debug;
 
-            TStringStream templateAnsver = str;
+            TStringStream templateAnswer = str;
             str.clear();
 
-            OutputAdminPage(templateAnsver);
+            OutputAdminPage(templateAnswer);
 
-            auto func = [templateAnsver] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
-                TStringStream str = templateAnsver;
+            auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
+                TStringStream str = templateAnswer;
                 HTML(str) {
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
@@ -530,7 +530,7 @@ private:
         }
         {
             str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
-            str << "<legend> Make all Access Database rights no inheritable at all datatabase: </legend>";
+            str << "<legend> Make all Access Database rights no inheritable at all database: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
             str << TCgi::FixAccessDatabaseInheritance.AsHiddenInput("1");

@@ -35,7 +35,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
-        // Initiate asynchonous deletion of all shards
+        // Initiate asynchronous deletion of all shards
         for (auto shard : txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }
@@ -78,11 +78,11 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
+        auto paths = context.SS->ListSubTree(pathId, context.Ctx);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
+        context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         ++parentDir->DirAlterVersion;
@@ -91,7 +91,7 @@ public:
 
         if (!context.SS->DisablePublicationsOfDropping) {
             context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-            for (const TPathId pathId : pathes) {
+            for (const TPathId pathId : paths) {
                 context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
             }
         }
@@ -111,10 +111,10 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxForceDropSubDomain);
 
-        auto pathes = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
-        NForceDrop::ValidateNoTransactionOnPathes(OperationId, pathes, context);
-        context.SS->MarkAsDropping(pathes, OperationId.GetTxId(), context.Ctx);
-        NForceDrop::CollectShards(pathes, OperationId, txState, context);
+        auto paths = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
+        NForceDrop::ValidateNoTransactionOnPaths(OperationId, paths, context);
+        context.SS->MarkAsDropping(paths, OperationId.GetTxId(), context.Ctx);
+        NForceDrop::CollectShards(paths, OperationId, txState, context);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -180,7 +180,7 @@ public:
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        " UNSAFE DELETION IS CALLED."
                        " TDropForceUnsafe is UNSAFE operation."
-                       " Nornally it is called for deleting user's DB (tenant)."
+                       " Usually it is called for deleting user's DB (tenant)."
                        " But it could be triggered by administrator for special emergency cases. And there is that case."
                        " I hope you are aware of the problems with it."
                        " 1: Shared transactions among the tables could be broken if one of the tables is force dropped. Dependent transactions on other tables could be blocked forever."
@@ -246,9 +246,9 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto pathes = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
+        auto paths = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
 
-        auto relatedTx = context.SS->GetRelatedTransactions(pathes, context.Ctx);
+        auto relatedTx = context.SS->GetRelatedTransactions(paths, context.Ctx);
         for (auto otherTxId: relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
@@ -271,7 +271,7 @@ public:
             }
         }
 
-        context.SS->MarkAsDropping(pathes, OperationId.GetTxId(), context.Ctx);
+        context.SS->MarkAsDropping(paths, OperationId.GetTxId(), context.Ctx);
 
         txState.State = TTxState::Propose;
         context.OnComplete.ActivateTx(OperationId);

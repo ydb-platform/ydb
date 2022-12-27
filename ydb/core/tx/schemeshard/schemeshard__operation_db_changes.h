@@ -13,7 +13,7 @@ namespace NKikimr::NSchemeShard {
 class TSchemeShard;
 
 class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
-    TDeque<TPathId> Pathes;
+    TDeque<TPathId> Paths;
 
     TDeque<TPathId> Tables;
     TDeque<std::pair<TPathId, TTxId>> TableSnapshots;
@@ -38,7 +38,7 @@ public:
     ~TStorageChanges() = default;
 
     void PersistPath(const TPathId& pathId) {
-        Pathes.push_back(pathId);
+        Paths.push_back(pathId);
     }
 
     void PersistTable(const TPathId& pathId) {

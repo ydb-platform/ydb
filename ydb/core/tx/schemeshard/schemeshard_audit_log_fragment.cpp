@@ -194,7 +194,7 @@ TAuditLogFragment::TAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
     : Operation(DefineUserOperationName(tx.GetOperationType()))
     , ProtoRequest(tx.ShortDebugString())
 {
-    FillPathes(tx);
+    FillPaths(tx);
     FillACL(tx);
 }
 
@@ -223,7 +223,7 @@ void TAuditLogFragment::FillACL(const NKikimrSchemeOp::TModifyScheme& tx) {
     }
 }
 
-void TAuditLogFragment::FillPathes(const NKikimrSchemeOp::TModifyScheme& tx) {
+void TAuditLogFragment::FillPaths(const NKikimrSchemeOp::TModifyScheme& tx) {
     switch (tx.GetOperationType()) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
         Path = JoinPath({tx.GetWorkingDir(), tx.GetMkDir().GetName()});

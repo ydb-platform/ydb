@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NSchemeShard {
     TEvSchemeShard::TEvInitTenantSchemeShard::TEvInitTenantSchemeShard(
         ui64 selfTabletId,
-        ui64 pathId, TString tenanatRootPath,
+        ui64 pathId, TString tenantRootPath,
         TString owner, TString effectiveRootACL, ui64 effectiveRootACLVersion,
         const NKikimrSubDomains::TProcessingParams &processingParams, const TStoragePools &storagePools,
         const TMap<TString, TString> userAttrData, ui64 UserAttrsVersion, const NSchemeShard::TSchemeLimits &limits,
@@ -14,7 +14,7 @@ namespace NSchemeShard {
     {
         Record.SetDomainSchemeShard(selfTabletId);
         Record.SetDomainPathId(pathId);
-        Record.SetRootPath(tenanatRootPath);
+        Record.SetRootPath(tenantRootPath);
         Record.SetOwner(owner);
 
         Record.SetEffectiveACL(effectiveRootACL);

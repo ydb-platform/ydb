@@ -281,7 +281,7 @@ public:
 
         TString errStr;
         if (!alter.HasName() && !alter.HasPathId()) {
-            errStr = "Niether kesus name nor pathId in Kesus";
+            errStr = "Neither kesus name nor pathId in Kesus";
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }

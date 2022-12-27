@@ -362,7 +362,7 @@ public:
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody,
-                    context.SS->SelectProcessingPrarams(txState->TargetPathId));
+                    context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
@@ -627,8 +627,8 @@ public:
                 storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
                 Y_VERIFY(storeInfo, "Unexpected failure to find an tablestore info");
 
-                NSchemeShard::TPath::TChecker ckecksStore = olapStorePath.Check();
-                ckecksStore
+                NSchemeShard::TPath::TChecker storeChecks = olapStorePath.Check();
+                storeChecks
                     .NotUnderDomainUpgrade()
                     .IsAtLocalSchemeShard()
                     .IsResolved()
@@ -637,7 +637,7 @@ public:
                     .IsOlapStore()
                     .NotUnderOperation();
 
-                if (!ckecksStore) {
+                if (!storeChecks) {
                     result->SetError(checks.GetStatus(), checks.GetError());
                     return result;
                 }

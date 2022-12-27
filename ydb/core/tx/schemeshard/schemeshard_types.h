@@ -59,8 +59,8 @@ struct TGlobalTimestamp {
     }
 
     bool operator < (const TGlobalTimestamp& ts) const {
-        Y_VERIFY_DEBUG(Step, "Comparing with unset timestemp");
-        Y_VERIFY_DEBUG(ts.Step, "Comparing with unset timestemp");
+        Y_VERIFY_DEBUG(Step, "Comparing with unset timestamp");
+        Y_VERIFY_DEBUG(ts.Step, "Comparing with unset timestamp");
         return Step < ts.Step || Step == ts.Step && TxId < ts.TxId;
     }
 
@@ -100,7 +100,7 @@ enum class EAttachChildResult : ui32 {
     RejectAsOlderActual,
 
     AttachedAsCreatedActual,
-    RejectAsInactve,
+    RejectAsInactive,
 
     AttachedAsOlderUnCreated,
     RejectAsNewerUnCreated

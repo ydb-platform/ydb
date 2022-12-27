@@ -77,7 +77,7 @@ public:
             CoordinatorProposesShards.push_back(TProposeShards(opId, shard));
         }
     }
-    void CoordinatorAck(TActorId coordiantor, TStepId stepId, TTxId txId);
+    void CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId);
     void MediatorAck(TActorId mediator, TStepId stepId);
 
     void UpdateTenant(TPathId pathIds);
@@ -108,7 +108,7 @@ public:
     void DoneOperation(TOperationId opId);
     void ReadyToNotify(TOperationId opId);
 
-    void Dependence(TTxId parend, TTxId child);
+    void Dependence(TTxId parent, TTxId child);
     void ActivateTx(TOperationId opId);
     void ActivateOperation(TTxId txId);
 

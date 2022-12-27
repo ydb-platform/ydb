@@ -144,7 +144,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
-        // Initiate asynchonous deletion of all shards
+        // Initiate asynchronous deletion of all shards
         for (auto shard : txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }
@@ -199,8 +199,8 @@ public:
         Y_VERIFY(pqGroup);
 
         // KIKIMR-13173
-        // Repeat it here for a waile, delete it from TDeleteParts after
-        // Initiate asynchonous deletion of all shards
+        // Repeat it here for a while, delete it from TDeleteParts after
+        // Initiate asynchronous deletion of all shards
         for (auto shard : txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }

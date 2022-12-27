@@ -69,7 +69,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
 
         if (!cloud_id || !folder_id || !database_id) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxServerlessStorageBilling: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attrubutes at the domain"
+                         "TTxServerlessStorageBilling: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                          << ", schemeshardId: " << Self->SelfTabletId()
                          << ", domainId: " << Self->ParentDomainId
                          << ", next retry at: " << TimeToNextBill);

@@ -16,7 +16,7 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     context.SS->DescribeTable(srcTableInfo, typeRegistry, true, false, &completedSchema);
     completedSchema.SetName(name);
 
-    //inherit all from Src exept PartitionConfig, PartitionConfig could be altered
+    //inherit all from Src except PartitionConfig, PartitionConfig could be altered
     completedSchema.MutablePartitionConfig()->CopyFrom(schema->GetPartitionConfig());
     schema->Swap(&completedSchema);
 }
@@ -67,7 +67,7 @@ public:
         const TTableInfo::TPtr dstTableInfo = *context.SS->Tables.FindPtr(txState->TargetPathId);
 
         Y_VERIFY(srcTableInfo->GetPartitions().size() == dstTableInfo->GetPartitions().size(),
-                 "CopyTable paritition counts don't match");
+                 "CopyTable partition counts don't match");
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
         const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
@@ -108,7 +108,7 @@ public:
                                                     context.Ctx.SelfID,
                                                     ui64(OperationId.GetTxId()),
                                                     txBody,
-                                                    context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                    context.SS->SelectProcessingParams(txState->TargetPathId)));
             context.OnComplete.BindMsgToPipe(OperationId, dstDatashardId, dstShardIdx, dstEvent.Release());
 
             // Send "SendParts" transaction to source datashard
@@ -127,7 +127,7 @@ public:
                                                     context.Ctx.SelfID,
                                                     ui64(OperationId.GetTxId()),
                                                     txBody,
-                                                    context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                    context.SS->SelectProcessingParams(txState->TargetPathId)));
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }
 
@@ -349,7 +349,7 @@ public:
                 if (parent.Base()->IsTableIndex()) {
                     checks
                         .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one
-                        .NotChildren(); //imp table doesnt have indexes
+                        .NotChildren(); //imp table doesn't have indexes
                 } else {
                     checks.IsCommonSensePath();
                 }
@@ -417,7 +417,7 @@ public:
             transactionSupport |= domainInfo->GetAlter()->IsSupportTransactions();
         }
         if (!transactionSupport) {
-            result->SetError(NKikimrScheme::StatusNameConflict, "Inclusive subDomian do not support shared transactions");
+            result->SetError(NKikimrScheme::StatusNameConflict, "Inclusive subDomain do not support shared transactions");
             return result;
         }
 

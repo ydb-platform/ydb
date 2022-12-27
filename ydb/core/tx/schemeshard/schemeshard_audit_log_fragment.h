@@ -23,7 +23,7 @@ struct TAuditLogFragment {
     TAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);
 
     void FillACL(const NKikimrSchemeOp::TModifyScheme& tx);
-    void FillPathes(const NKikimrSchemeOp::TModifyScheme& tx);
+    void FillPaths(const NKikimrSchemeOp::TModifyScheme& tx);
 
     TString GetAnyPath() const;
     TString GetOperation() const;

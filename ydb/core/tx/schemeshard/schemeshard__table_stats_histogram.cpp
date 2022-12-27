@@ -57,7 +57,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
         } else {
             // med == lo and med != hi, so we want to find a value that is > med and <= hi
             if (IsIntegerType(columnType) && !keyMed.GetCells()[i].IsNull()) {
-                // For interger types we can add 1 to med
+                // For integer types we can add 1 to med
                 ui64 val = 0;
                 size_t sz =  keyMed.GetCells()[i].Size();
                 memcpy(&val, keyMed.GetCells()[i].Data(), sz);
@@ -235,7 +235,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const 
     ui64 rowCount = rec.GetTableStats().GetRowCount();
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Got partition histogran at tablet " << TabletID()
+               "Got partition histogram at tablet " << TabletID()
                <<" from datashard " << datashardId
                << " state: '" << DatashardStateName(rec.GetShardState()) << "'"
                << " data size: " << dataSize
@@ -288,7 +288,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     ui64 rowCount = rec.GetTableStats().GetRowCount();
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxPartitionHistogram::Execute partition histogran"
+                "TTxPartitionHistogram::Execute partition histogram"
                     << " at tablet " << Self->SelfTabletId()
                     << " from datashard " << datashardId
                     << " for pathId " << tableId

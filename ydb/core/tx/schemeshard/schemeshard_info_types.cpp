@@ -392,31 +392,31 @@ NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TA
 bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
-    const TAppData *appData, TString &errDesr)
+    const TAppData *appData, TString &errDescr)
 {
     result.CopyFrom(src); // inherit all data from src
 
-    if (!ApplyChangesInColumnFamilies(result, src, changes, errDesr)) {
+    if (!ApplyChangesInColumnFamilies(result, src, changes, errDescr)) {
         return false;
     }
 
     if (changes.StorageRoomsSize()) {
-        errDesr = TStringBuilder()
+        errDescr = TStringBuilder()
             << "StorageRooms should not be present in request.";
         return false;
     }
 
     if (changes.HasFreezeState()) {
         if (changes.GetFreezeState() == NKikimrSchemeOp::EFreezeState::Unspecified) {
-            errDesr = TStringBuilder() << "Unexpected freeze state";
+            errDescr = TStringBuilder() << "Unexpected freeze state";
             return false;
         }
         TVector<const NProtoBuf::FieldDescriptor*> fields;
         auto reflection = changes.GetReflection();
         reflection->ListFields(changes, &fields);
         if (fields.size() > 1) {
-            errDesr = TStringBuilder()
-                << "Mix freeze cmd with other options is forbiden";
+            errDescr = TStringBuilder()
+                << "Mix freeze cmd with other options is forbidden";
             return false;
         }
     }
@@ -429,12 +429,12 @@ bool TPartitionConfigMerger::ApplyChanges(
     if (changes.HasNamedCompactionPolicy()) {
         auto policyName = changes.GetNamedCompactionPolicy();
         if (policyName.empty()) {
-            errDesr = "Empty compaction policy name, either set name or don't fill the section NamedCompactionPolicy";
+            errDescr = "Empty compaction policy name, either set name or don't fill the section NamedCompactionPolicy";
             return false;
         }
 
         if (!appData->DomainsInfo->NamedCompactionPolicies.contains(policyName)) {
-            errDesr = TStringBuilder() << "Invalid compaction policy name: " <<  policyName;
+            errDescr = TStringBuilder() << "Invalid compaction policy name: " <<  policyName;
             return false;
         }
 
@@ -470,7 +470,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasCrossDataCenterFollowerCount()) {
         if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbidded downgrade from FollowerGroup option to the HasCrossDataCenterFollowerCount option";
+            errDescr = TStringBuilder() << "Downgrade from FollowerGroup option to the HasCrossDataCenterFollowerCount option is forbidden";
             return false;
         }
 
@@ -485,12 +485,12 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasFollowerCount()) {
         if (result.HasCrossDataCenterFollowerCount()) {
-            errDesr = TStringBuilder() << "Forbidded downgrade from CrossDataCenterFollowerCount option to the FollowerGroup option";
+            errDescr = TStringBuilder() << "Downgrade from CrossDataCenterFollowerCount option to the FollowerGroup option is forbidden";
             return false;
         }
 
         if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbidded downgrade from FollowerGroup option to the FollowerGroup option";
+            errDescr = TStringBuilder() << "Downgrade from FollowerGroup option to the FollowerGroup option is forbidden";
             return false;
         }
 
@@ -499,7 +499,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasAllowFollowerPromotion()) {
         if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbidded downgrade from FollowerGroup option to the AllowFollowerPromotion option";
+            errDescr = TStringBuilder() << "Downgrade from FollowerGroup option to the AllowFollowerPromotion option is forbidden";
             return false;
         }
 
@@ -596,7 +596,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
-    TString &errDesr)
+    TString &errDescr)
 {
     result.MutableColumnFamilies()->CopyFrom(src.GetColumnFamilies());
     TColumnFamiliesMerger merger(result);
@@ -606,13 +606,13 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     for (const auto& changesFamily : changes.GetColumnFamilies()) {
         NKikimrSchemeOp::TFamilyDescription* cFamilyPtr = nullptr;
         if (changesFamily.HasId() && changesFamily.HasName()) {
-            cFamilyPtr = merger.AddOrGet(changesFamily.GetId(), changesFamily.GetName(), errDesr);
+            cFamilyPtr = merger.AddOrGet(changesFamily.GetId(), changesFamily.GetName(), errDescr);
         } else if (changesFamily.HasId()) {
-            cFamilyPtr = merger.AddOrGet(changesFamily.GetId(), errDesr);
+            cFamilyPtr = merger.AddOrGet(changesFamily.GetId(), errDescr);
         } else if (changesFamily.HasName()) {
-            cFamilyPtr = merger.AddOrGet(changesFamily.GetName(), errDesr);
+            cFamilyPtr = merger.AddOrGet(changesFamily.GetName(), errDescr);
         } else {
-            cFamilyPtr = merger.AddOrGet(0, errDesr);
+            cFamilyPtr = merger.AddOrGet(0, errDescr);
         }
 
         if (!cFamilyPtr) {
@@ -624,13 +624,13 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         const auto& familyName = dstFamily.GetName();
 
         if (!changedCFamilies.insert(familyId).second) {
-            errDesr = TStringBuilder()
+            errDescr = TStringBuilder()
                 << "Multiple changes for the same column family are not allowed. ColumnFamily id: " << familyId << " name: " << familyName;
             return false;
         }
 
         if (changesFamily.HasRoom() || changesFamily.HasCodec() || changesFamily.HasInMemory()) {
-            errDesr = TStringBuilder()
+            errDescr = TStringBuilder()
                 << "Deprecated parameters in column family. ColumnFamily id: " << familyId << " name: " << familyName;
             return false;
         }
@@ -640,7 +640,7 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
                 KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES ||
                 AppData()->AllowColumnFamiliesForTest);
             if (!allowColumnFamilies) {
-                errDesr = TStringBuilder()
+                errDescr = TStringBuilder()
                     << "Server support for column families is not yet available";
                 return false;
             }
@@ -651,13 +651,13 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
                     changesFamily.GetStorageConfig().HasLog() ||
                     changesFamily.GetStorageConfig().HasExternal())
                 {
-                    errDesr = TStringBuilder()
+                    errDescr = TStringBuilder()
                         << "Unsupported StorageConfig settings found. Column Family id: " << familyId << " name: " << familyName;
                     return false;
                 }
             }
             if (changesFamily.HasStorage()) {
-                errDesr = TStringBuilder()
+                errDescr = TStringBuilder()
                     << "Deprecated Storage parameter in column family. ColumnFamily id: " << familyId << " name: " << familyName;
                 return false;
             }
@@ -665,7 +665,7 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
         if (changesFamily.HasColumnCodec()) {
             if (changesFamily.GetColumnCodec() == NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) {
-                errDesr = TStringBuilder()
+                errDescr = TStringBuilder()
                     << "Unsupported ColumnCodec. ColumnFamily id: " << familyId << " name: " << familyName;
                 return false;
             }
@@ -886,7 +886,7 @@ bool TPartitionConfigMerger::VerifyCreateParams(
             if (fName == "default") {
                 errDescr = TStringBuilder()
                     << "Column family with id " << fId << " has name default"
-                    << ", name default is reseved for family with id 0";
+                    << ", name default is reserved for family with id 0";
             }
         }
     }
@@ -1119,7 +1119,7 @@ bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::T
             srcConfig.GetFreezeState() == NKikimrSchemeOp::EFreezeState::Freeze) {
         if (dstConfig.HasFreezeState() &&
                 dstConfig.GetFreezeState() == NKikimrSchemeOp::EFreezeState::Unfreeze) {
-            // Only unfreeze cmd is allowd
+            // Only unfreeze cmd is allowed
             return true;
         }
         return false;
@@ -1375,7 +1375,7 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     }
 }
 
-void TTableInfo::RegisterSplitMegreOp(TOperationId opId, const TTxState& txState) {
+void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
     Y_VERIFY(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
     Y_VERIFY(txState.SplitDescription);
 

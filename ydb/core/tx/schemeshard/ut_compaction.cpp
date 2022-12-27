@@ -1338,7 +1338,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
     }
 
-    Y_UNIT_TEST(EnqueuBelowSearchHeightThreshold) {
+    Y_UNIT_TEST(EnqueueBelowSearchHeightThreshold) {
         TCompactionQueueImpl::TConfig config;
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;

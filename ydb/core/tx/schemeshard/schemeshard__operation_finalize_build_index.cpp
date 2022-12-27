@@ -57,8 +57,8 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const TTxId snapshotTxId = context.SS->TablesWithSnaphots.at(pathId);
-        const TStepId snapshotStepid = context.SS->SnapshotsStepIds.at(snapshotTxId);
+        const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+        const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
@@ -71,7 +71,7 @@ public:
             PathIdFromPathId(pathId, op->MutablePathId());
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
-            op->SetSnapshotStep(ui64(snapshotStepid));
+            op->SetSnapshotStep(ui64(snapshotStepId));
             op->SetTableSchemaVersion(table->AlterVersion+1);
             op->SetBuildIndexId(ui64(txState->BuildIndexId));
             if (txState->BuildIndexOutcome) {
@@ -98,7 +98,7 @@ public:
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
                                                         txBody,
-                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                        context.SS->SelectProcessingParams(txState->TargetPathId)));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx,  event.Release());
         }
@@ -155,13 +155,13 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         TPathId tableId = txState->TargetPathId;
-        TTxId snapshotTxId = context.SS->TablesWithSnaphots.at(tableId);
+        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tableId);
         context.SS->SnapshotsStepIds.erase(snapshotTxId);
         context.SS->SnapshotTables.at(snapshotTxId).erase(tableId);
         if (context.SS->SnapshotTables.at(snapshotTxId).empty()) {
             context.SS->SnapshotTables.erase(snapshotTxId);
         }
-        context.SS->TablesWithSnaphots.erase(tableId);
+        context.SS->TablesWithSnapshots.erase(tableId);
 
         context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
 
@@ -351,7 +351,7 @@ public:
             return result;
         }
 
-        if (!context.SS->TablesWithSnaphots.contains(tablePathId)) {
+        if (!context.SS->TablesWithSnapshots.contains(tablePathId)) {
             errStr = TStringBuilder()
                 << "No snapshot presents for table"
                 << ", tableId:" << tablePathId
@@ -360,15 +360,15 @@ public:
             return result;
         }
 
-        TTxId shapshotTxId = context.SS->TablesWithSnaphots.at(tablePathId);
-        if (TTxId(finalizeMainTable.GetSnapshotTxId()) != shapshotTxId) {
+        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tablePathId);
+        if (TTxId(finalizeMainTable.GetSnapshotTxId()) != snapshotTxId) {
             errStr = TStringBuilder()
                 << "No snapshot with requested txId presents for table"
                 << ", tableId:" << tablePathId
                 << ", txId: " << OperationId.GetTxId()
                 << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
-                << ", snapshotTxId: " << shapshotTxId
-                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(shapshotTxId);
+                << ", snapshotTxId: " << snapshotTxId
+                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }

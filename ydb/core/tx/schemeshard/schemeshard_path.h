@@ -135,7 +135,7 @@ public:
     bool IsUnderAltering() const;
     bool IsUnderDomainUpgrade() const;
     bool IsUnderCopying() const;
-    bool IsUnderBackuping() const;
+    bool IsUnderBackingUp() const;
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;

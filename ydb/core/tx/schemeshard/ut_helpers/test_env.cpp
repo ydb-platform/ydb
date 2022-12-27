@@ -230,10 +230,10 @@ private:
         if (!SchemeTxWaiters.contains(txId))
             return;
 
-        // Notifify all waiters and forget TxId
+        // Notify all waiters and forget TxId
         for (TActorId waiter : SchemeTxWaiters[txId]) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "tests -- TTxNotificationSubscriber satisfy subsriber"
+                        "tests -- TTxNotificationSubscriber satisfy subscriber"
                         << ", waiter: " << waiter
                         << ", txId: " << txId);
             ctx.Send(waiter, new TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
@@ -324,7 +324,7 @@ public:
     {}
 
 private:
-    using TPreSerialisedMessage = std::pair<ui32, TIntrusivePtr<TEventSerializedData>>; // ui32 it's a type
+    using TPreSerializedMessage = std::pair<ui32, TIntrusivePtr<TEventSerializedData>>; // ui32 it's a type
 
 private:
     void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
@@ -379,7 +379,7 @@ private:
 
         // Save TxId, forward to schemeshard
         SchemeTxWaiters[txId] = ev->Sender;
-        OnlineRequests[txId] = GetSerialisedMessage(ev->ReleaseBase());
+        OnlineRequests[txId] = GetSerializedMessage(ev->ReleaseBase());
         SendToSchemeshard(txId, ctx);
     }
 
@@ -440,8 +440,8 @@ private:
             SchemeShardPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SchemeshardTabletId, GetPipeConfigWithRetries()));
         }
 
-        TPreSerialisedMessage& preSerialisedMessages = OnlineRequests[txId];
-        NTabletPipe::SendData(ctx, SchemeShardPipe, preSerialisedMessages.first, preSerialisedMessages.second, 0);
+        TPreSerializedMessage& preSerializedMessages = OnlineRequests[txId];
+        NTabletPipe::SendData(ctx, SchemeShardPipe, preSerializedMessages.first, preSerializedMessages.second, 0);
     }
 
     void Handle(TEvents::TEvPoisonPill::TPtr, const TActorContext &ctx) {
@@ -451,18 +451,18 @@ private:
         Die(ctx);
     }
 
-    TPreSerialisedMessage GetSerialisedMessage(TAutoPtr<IEventBase> message) {
+    TPreSerializedMessage GetSerializedMessage(TAutoPtr<IEventBase> message) {
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_VERIFY(success);
         TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->IsExtendedFormat());
-        return TPreSerialisedMessage(message->Type(), data);
+        return TPreSerializedMessage(message->Type(), data);
     }
 
 private:
     ui64 SchemeshardTabletId;
     TActorId SchemeShardPipe;
-    THashMap<ui64, TPreSerialisedMessage> OnlineRequests;
+    THashMap<ui64, TPreSerializedMessage> OnlineRequests;
     THashMap<ui64, TActorId> SchemeTxWaiters;
 };
 
@@ -691,11 +691,11 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, ui64 schemeshardId) {
-    if (!TxNotificationSubcribers.contains(schemeshardId)) {
-        TxNotificationSubcribers[schemeshardId] = CreateNotificationSubscriber(runtime, schemeshardId);
+    if (!TxNotificationSubscribers.contains(schemeshardId)) {
+        TxNotificationSubscribers[schemeshardId] = CreateNotificationSubscriber(runtime, schemeshardId);
     }
 
-    NSchemeShardUT_Private::TestWaitNotification(runtime, txIds, TxNotificationSubcribers.at(schemeshardId));
+    NSchemeShardUT_Private::TestWaitNotification(runtime, txIds, TxNotificationSubscribers.at(schemeshardId));
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(TTestActorRuntime &runtime, int txId, ui64 schemeshardId) {

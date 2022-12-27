@@ -14,7 +14,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
     TTxDeleteTabletReply(TSelf* self, TEvHive::TEvDeleteTabletReply::TPtr& ev)
         : TRwTxBase(self)
         , Ev(ev)
-        , ShardIdx(self->MakeLocalId(TLocalShardIdx(Ev->Get()->Record.GetTxId_Deprecated()))) // We use TxId field as a cookie where we store shrdIdx
+        , ShardIdx(self->MakeLocalId(TLocalShardIdx(Ev->Get()->Record.GetTxId_Deprecated()))) // We use TxId field as a cookie where we store shardIdx
         , TabletId(InvalidTabletId)
         , Status(Ev->Get()->Record.GetStatus())
         , HiveId(Ev->Get()->Record.GetOrigin())

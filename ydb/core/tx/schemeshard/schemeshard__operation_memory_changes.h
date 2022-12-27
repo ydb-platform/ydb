@@ -15,7 +15,7 @@ class TSchemeShard;
 
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TPathState = std::pair<TPathId, TPathElement::TPtr>;
-    TStack<TPathState> Pathes;
+    TStack<TPathState> Paths;
 
     using TIndexState = std::pair<TPathId, TTableIndexInfo::TPtr>;
     TStack<TIndexState> Indexes;
@@ -24,7 +24,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     TStack<TCdcStreamState> CdcStreams;
 
     using TTableSnapshotState = std::pair<TPathId, TTxId>;
-    TStack<TTableSnapshotState> TablesWithSnaphots;
+    TStack<TTableSnapshotState> TablesWithSnapshots;
 
     using TLockState = std::pair<TPathId, TTxId>;
     TStack<TLockState> LockedPaths;

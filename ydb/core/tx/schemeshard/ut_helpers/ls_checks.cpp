@@ -144,7 +144,7 @@ TCheckFunc SubDomainVersion(ui64 descrVersion) {
         const auto& pathDescr = record.GetPathDescription();
         const auto& processingParams = pathDescr.GetDomainDescription().GetProcessingParams();
         UNIT_ASSERT_EQUAL_C(processingParams.GetVersion(), descrVersion,
-                            "subdomain version mistmach"
+                            "subdomain version mismatch"
                                 << ", path id " << pathDescr.GetSelf().GetPathId()
                                 << ", domain id " << pathDescr.GetDomainDescription().GetDomainKey().GetPathId()
                                 << ", has version " << processingParams.GetVersion()
@@ -326,8 +326,8 @@ TCheckFunc UserAttrsEqual(TUserAttrs attrs) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
         const auto& pathDescr = record.GetPathDescription();
 
-        TUserAttrs requered = attrs;
-        std::sort(requered.begin(), requered.end());
+        TUserAttrs required = attrs;
+        std::sort(required.begin(), required.end());
 
         TUserAttrs present;
         for (const auto& item: pathDescr.GetUserAttributes()) {
@@ -337,7 +337,7 @@ TCheckFunc UserAttrsEqual(TUserAttrs attrs) {
 
         TUserAttrs diff;
         std::set_difference(present.begin(), present.end(),
-                            requered.begin(), requered.end(),
+                            required.begin(), required.end(),
                             std::back_inserter(diff));
         UNIT_ASSERT_C(diff.empty(),
                       diff.size() << " items are different, for example" <<
@@ -346,7 +346,7 @@ TCheckFunc UserAttrsEqual(TUserAttrs attrs) {
                           " the item is extra or has a different value in listing");
 
         diff.clear();
-        std::set_difference(requered.begin(), requered.end(),
+        std::set_difference(required.begin(), required.end(),
                             present.begin(), present.end(),
                             std::back_inserter(diff));
         UNIT_ASSERT_C(diff.empty(),
@@ -362,8 +362,8 @@ TCheckFunc UserAttrsHas(TUserAttrs attrs) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
         const auto& pathDescr = record.GetPathDescription();
 
-        TUserAttrs requered = attrs;
-        std::sort(requered.begin(), requered.end());
+        TUserAttrs required = attrs;
+        std::sort(required.begin(), required.end());
 
         TUserAttrs present;
         for (const auto& item: pathDescr.GetUserAttributes()) {
@@ -372,7 +372,7 @@ TCheckFunc UserAttrsHas(TUserAttrs attrs) {
         std::sort(present.begin(), present.end());
 
         TUserAttrs diff;
-        std::set_difference(requered.begin(), requered.end(),
+        std::set_difference(required.begin(), required.end(),
                             present.begin(), present.end(),
                             std::back_inserter(diff));
         UNIT_ASSERT_C(diff.empty(),
@@ -524,7 +524,7 @@ TCheckFunc PathVersionEqual(ui64 version) {
         const auto& curVersion = self.GetPathVersion();
 
         UNIT_ASSERT_EQUAL_C(curVersion, version,
-                            "path version mistmach, path with id " << self.GetPathId() <<
+                            "path version mismatch, path with id " << self.GetPathId() <<
                                 " has version " << curVersion <<
                                 " but expected " << version);
     };
@@ -538,7 +538,7 @@ TCheckFunc PathVersionOneOf(TSet<ui64> versions) {
         const auto& curVersion = self.GetPathVersion();
 
         UNIT_ASSERT_C(versions.count(curVersion) > 0,
-                      "path version mistmach, path with id " << self.GetPathId() <<
+                      "path version mismatch, path with id " << self.GetPathId() <<
                           " has version " << curVersion <<
                           " but expected one of set");
     };
@@ -579,7 +579,7 @@ TCheckFunc PathsInsideDomain(ui64 count) {
         const auto& curCount = domain.GetPathsInside();
 
         UNIT_ASSERT_EQUAL_C(curCount, count,
-                            "paths inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                            "paths inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                                 " has count " << curCount <<
                                 " but expected " << count);
     };
@@ -594,7 +594,7 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
         const auto& curCount = domain.GetPQPartitionsInside();
 
         UNIT_ASSERT_EQUAL_C(curCount, count,
-                            "pq partitions inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                            "pq partitions inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                                 " has count " << curCount <<
                                 " but expected " << count);
     };
@@ -609,7 +609,7 @@ TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants) {
         const auto& curCount = domain.GetPathsInside();
 
         UNIT_ASSERT_C(variants.count(curCount) > 0,
-                      "paths inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                      "paths inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has version " << curCount <<
                           " but expected one of set");
     };
@@ -624,8 +624,8 @@ TCheckFunc ShardsInsideDomain(ui64 count) {
         const auto& curCount = domain.GetShardsInside();
 
         UNIT_ASSERT_C(count == curCount,
-                      "shards inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
-                          " has shardsInsize " << curCount <<
+                      "shards inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
+                          " has shardsInside " << curCount <<
                           " but expected " << count);
     };
 }
@@ -639,7 +639,7 @@ TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants) {
         const auto& curCount = domain.GetShardsInside();
 
         UNIT_ASSERT_C(variants.count(curCount) > 0,
-                      "paths inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                      "paths inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has shards " << curCount <<
                           " but expected one of set");
     };
@@ -655,17 +655,17 @@ TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions) {
         const auto& pqPartitionsLimit = domain.GetPQPartitionsLimit();
 
         UNIT_ASSERT_C(pathLimit == maxPaths,
-                      "paths limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                      "paths limit mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has limit " << pathLimit <<
                           " but expected " << maxPaths);
 
         UNIT_ASSERT_C(shardsLimit == maxShards,
-                      "shards limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                      "shards limit mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has limit " << shardsLimit <<
                           " but expected " << maxShards);
 
         UNIT_ASSERT_C(!maxPQPartitions || pqPartitionsLimit == maxPQPartitions,
-                      "pq partitions limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                      "pq partitions limit mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has limit " << pqPartitionsLimit <<
                           " but expected " << maxPQPartitions);
     };
@@ -1000,14 +1000,14 @@ void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, c
     NACLib::TSecurityObject required;
     required.FromString(right);
 
-    for (const auto& requeriedAce : required.GetACL().GetACE()) {
+    for (const auto& requiredAce : required.GetACL().GetACE()) {
         bool has = false;
 
         for (const auto& srcAce: src.GetACL().GetACE()) {
-            if (srcAce.GetAccessType() == requeriedAce.GetAccessType() &&
-                srcAce.GetAccessRight() == requeriedAce.GetAccessRight() &&
-                srcAce.GetSID() == requeriedAce.GetSID() &&
-                srcAce.GetInheritanceType() == requeriedAce.GetInheritanceType())
+            if (srcAce.GetAccessType() == requiredAce.GetAccessType() &&
+                srcAce.GetAccessRight() == requiredAce.GetAccessRight() &&
+                srcAce.GetSID() == requiredAce.GetSID() &&
+                srcAce.GetInheritanceType() == requiredAce.GetInheritanceType())
             {
                 has = true;
             }
@@ -1048,7 +1048,7 @@ TCheckFunc DatabaseQuotas(ui64 dataStreamShards) {
         const auto count = domain.GetDatabaseQuotas().data_stream_shards_quota();
 
         UNIT_ASSERT_C(count == dataStreamShards,
-                      "data stream shards inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
+                      "data stream shards inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has data stream shards " << count <<
                           " but expected " << dataStreamShards);
     };

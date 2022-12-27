@@ -33,7 +33,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             if (operation->IsReadyToNotify(ctx)) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"
-                               << ", operation is ready to notificate"
+                               << ", operation is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
@@ -65,7 +65,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             if (exportInfo->IsFinished()) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"
-                               << ", export is ready to notificate"
+                               << ", export is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
@@ -86,7 +86,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             if (importInfo->IsFinished()) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"
-                               << ", import is ready to notificate"
+                               << ", import is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
@@ -108,7 +108,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             if (indexInfo->IsFinished()) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"
-                               << ", index build is ready to notificate"
+                               << ", index build is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));

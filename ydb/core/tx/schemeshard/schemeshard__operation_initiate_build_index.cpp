@@ -118,7 +118,7 @@ public:
                 NKikimrTxDataShard::TX_KIND_SCHEME,
                 context.SS->TabletID(), context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()), txBody,
-                context.SS->SelectProcessingPrarams(txState->TargetPathId)
+                context.SS->SelectProcessingParams(txState->TargetPathId)
             );
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx,  event.Release());
@@ -392,7 +392,7 @@ public:
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
-        context.SS->TablesWithSnaphots.emplace(tablePathId, OperationId.GetTxId());
+        context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());
         context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
 

@@ -35,7 +35,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
-        // Initiate asynchonous deletion of all shards
+        // Initiate asynchronous deletion of all shards
         for (auto shard : txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }
@@ -80,9 +80,9 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
-        Y_VERIFY(pathes.size() == 1);
-        context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
+        auto paths = context.SS->ListSubTree(pathId, context.Ctx);
+        Y_VERIFY(paths.size() == 1);
+        context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemoveSolomonVolume(db, pathId);

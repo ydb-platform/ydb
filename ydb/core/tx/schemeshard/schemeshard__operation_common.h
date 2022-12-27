@@ -552,7 +552,7 @@ public:
         TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
 
-        // Dettach datashard pipe
+        // Detach datashard pipe
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
@@ -994,7 +994,7 @@ public:
         auto oldVolumeSpace = volume->GetVolumeSpace();
         volume->FinishAlter();
         auto newVolumeSpace = volume->GetVolumeSpace();
-        // Decrease in occupied space is appled on tx finish
+        // Decrease in occupied space is applied on tx finish
         auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
         Y_VERIFY(domainDir);
         domainDir->ChangeVolumeSpaceCommit(newVolumeSpace, oldVolumeSpace);
@@ -1098,7 +1098,7 @@ public:
             auto ev = MakeHolder<TEvDataShard::TEvProposeTransaction>(
                 NKikimrTxDataShard::TX_KIND_SCHEME, context.SS->TabletID(), context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()), txBody,
-                context.SS->SelectProcessingPrarams(pathId)
+                context.SS->SelectProcessingParams(pathId)
             );
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, ev.Release());
@@ -1217,9 +1217,9 @@ protected:
 } // NCdcStreamState
 
 namespace NForceDrop {
-void ValidateNoTransactionOnPathes(TOperationId operationId, const THashSet<TPathId>& pathes, TOperationContext& context);
+void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPathId>& paths, TOperationContext& context);
 
-void CollectShards(const THashSet<TPathId>& pathes, TOperationId operationId, TTxState* txState, TOperationContext& context);
+void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTxState* txState, TOperationContext& context);
 } // namespace NForceDrop
 
 } // namespace NSchemeShard

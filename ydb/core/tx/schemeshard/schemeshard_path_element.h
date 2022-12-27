@@ -173,7 +173,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
     bool CheckLimits(TString& errStr) const {
         const ui64 bytes = Bytes();
         if (bytes > TUserAttributesLimits::MaxBytes) {
-            errStr = Sprintf("UserArttibutes::CheckLimits: user attributes too big: %" PRIu64, bytes);
+            errStr = Sprintf("UserAttributes::CheckLimits: user attributes too big: %" PRIu64, bytes);
             return false;
         }
 
@@ -187,13 +187,13 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
         }
 
         if (name.size() > TUserAttributesLimits::MaxNameLen) {
-            errStr = Sprintf("UserArttibutes: name too long, name# '%s' value# '%s'"
+            errStr = Sprintf("UserAttributes: name too long, name# '%s' value# '%s'"
                              , name.c_str(), value.c_str());
             return false;
         }
 
         if (value.size() > TUserAttributesLimits::MaxValueLen) {
-            errStr = Sprintf("UserArttibutes: value too long, name# '%s' value# '%s'"
+            errStr = Sprintf("UserAttributes: value too long, name# '%s' value# '%s'"
                              , name.c_str(), value.c_str());
             return false;
         }
@@ -255,7 +255,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
 
     static bool CheckAttributeStringWithWeakCheck(const TString& name, const TString& value, TString& errStr) {
         if (!IsValidPathName_WeakCheck(value)) {
-            errStr = Sprintf("UserArttibutes: attribute '%s' has invalid value '%s', forbidden symbols are found",
+            errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s', forbidden symbols are found",
                                 name.c_str(), value.c_str());
             return false;
         }

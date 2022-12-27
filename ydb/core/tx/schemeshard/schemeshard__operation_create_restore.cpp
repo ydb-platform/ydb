@@ -21,7 +21,7 @@ struct TRestore {
         const auto& pathId = txState.TargetPathId;
 
         const auto seqNo = context.SS->StartRound(txState);
-        const auto& processingParams = context.SS->SelectProcessingPrarams(pathId);
+        const auto& processingParams = context.SS->SelectProcessingParams(pathId);
 
         Y_VERIFY(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);

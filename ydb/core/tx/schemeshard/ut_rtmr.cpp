@@ -6,7 +6,7 @@ using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TRtmrTest) {
-    Y_UNIT_TEST(CreataWithoutTimeCastBuckets) {
+    Y_UNIT_TEST(CreateWithoutTimeCastBuckets) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;

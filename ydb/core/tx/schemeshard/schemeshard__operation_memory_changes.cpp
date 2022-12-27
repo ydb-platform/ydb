@@ -14,14 +14,14 @@ void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& op) {
 void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
     Y_VERIFY(!ss->PathsById.contains(pathId));
 
-    Pathes.emplace(pathId, nullptr);
+    Paths.emplace(pathId, nullptr);
 }
 
 void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) {
     Y_VERIFY(ss->PathsById.contains(pathId));
 
     TPathElement::TPtr copy = new TPathElement(*ss->PathsById.at(pathId));
-    Pathes.emplace(pathId, copy);
+    Paths.emplace(pathId, copy);
 }
 
 void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
@@ -75,9 +75,9 @@ void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
 }
 
 void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
-    Y_VERIFY(!ss->TablesWithSnaphots.contains(pathId));
+    Y_VERIFY(!ss->TablesWithSnapshots.contains(pathId));
 
-    TablesWithSnaphots.emplace(pathId, snapshotTxId);
+    TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
 void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
@@ -90,14 +90,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
 
-    while (Pathes) {
-        const auto& [id, elem] = Pathes.top();
+    while (Paths) {
+        const auto& [id, elem] = Paths.top();
         if (elem) {
             ss->PathsById[id] = elem;
         } else {
             ss->PathsById.erase(id);
         }
-        Pathes.pop();
+        Paths.pop();
     }
 
     while (Indexes) {
@@ -120,10 +120,10 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         CdcStreams.pop();
     }
 
-    while (TablesWithSnaphots) {
-        const auto& [id, snapshotTxId] = TablesWithSnaphots.top();
+    while (TablesWithSnapshots) {
+        const auto& [id, snapshotTxId] = TablesWithSnapshots.top();
 
-        ss->TablesWithSnaphots.erase(id);
+        ss->TablesWithSnapshots.erase(id);
         auto it = ss->SnapshotTables.find(snapshotTxId);
         if (it != ss->SnapshotTables.end()) {
             it->second.erase(id);
@@ -132,7 +132,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             }
         }
 
-        TablesWithSnaphots.pop();
+        TablesWithSnapshots.pop();
     }
 
     while (LockedPaths) {

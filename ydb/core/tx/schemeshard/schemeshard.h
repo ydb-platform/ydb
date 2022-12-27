@@ -377,7 +377,7 @@ struct TEvSchemeShard {
         TEvInitTenantSchemeShard() = default;
 
         TEvInitTenantSchemeShard(ui64 selfTabletId,
-                                 ui64 pathId, TString tenanatRootPath,
+                                 ui64 pathId, TString tenantRootPath,
                                  TString owner, TString effectiveRootACL, ui64 effectiveRootACLVersion,
                                  const NKikimrSubDomains::TProcessingParams& processingParams,
                                  const TStoragePools& storagePools,

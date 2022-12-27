@@ -6,7 +6,7 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
-    static const ui32 BacketSize = 100;
+    static const ui32 BucketSize = 100;
     TVector<TPathId> TablesToClean;
     ui32 RemovedCount;
 
@@ -24,7 +24,7 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
         NIceDb::TNiceDb db(txc.DB);
 
         ui32 RemovedCount = 0;
-        while (RemovedCount < BacketSize && TablesToClean) {
+        while (RemovedCount < BucketSize && TablesToClean) {
             TPathId tableId = TablesToClean.back();
             Self->PersistRemoveTable(db, tableId, ctx);
 
@@ -38,7 +38,7 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
     void Complete(const TActorContext &ctx) override {
         if (RemovedCount) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "TTxCleanPathes Complete"
+                       "TTxCleanTables Complete"
                            << ", done PersistRemoveTable for " << RemovedCount << " tables"
                            << ", left " << TablesToClean.size()
                            << ", at schemeshard: "<< Self->TabletID());

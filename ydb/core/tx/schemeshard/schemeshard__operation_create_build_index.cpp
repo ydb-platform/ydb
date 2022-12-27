@@ -81,8 +81,8 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId opId, const TTxTr
         auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
 
-        auto& shapshot = *outTx.MutableInitiateBuildIndexMainTable();
-        shapshot.SetTableName(table.LeafName());
+        auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
+        snapshot.SetTableName(table.LeafName());
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }

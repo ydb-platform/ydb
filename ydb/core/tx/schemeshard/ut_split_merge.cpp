@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
         suppressed.clear();
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+111));
-        // test requeres more txids than cached at start
+        // test requires more txids than cached at start
     }
 
     Y_UNIT_TEST(AutoMergeInOne) {
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
     }
 
     void TryMergeWithInflyLimit(TTestActorRuntime &runtime, TTestEnv &env, const ui64 mergeNum, const ui64 remainMergeNum, const ui64 acceptedMergeNum, ui64 &txId) {
-        const ui64 shardsNum = mergeNum * 2;    
+        const ui64 shardsNum = mergeNum * 2;
         const ui64 startMergePart = mergeNum - remainMergeNum;
         TSet<ui64> txIds;
         ui64 startTxId = txId;
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
     };
 
     void AsyncMergeWithInflyLimit(const ui64 mergeNum, const ui64 mergeLimit) {
-        const ui64 shardsNum = mergeNum * 2;        
+        const ui64 shardsNum = mergeNum * 2;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;

@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                               "Mediators: 1 "
                               "TimeCastBucketsPerMediator: 2 "
                               "ExternalSchemeShard: true "
-                              "ExternalHive: false " // ExternalHive is imposible in that enviroment yet
+                              "ExternalHive: false " // ExternalHive is impossible in that environment yet
                               "Name: \"SharedDB\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         auto grabMeteringMessage = [&meteringMessages](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
-                Cerr << "grabMeteringMessage has happend" << Endl;
+                Cerr << "grabMeteringMessage has happened" << Endl;
                 meteringMessages << msg->MeteringJson;
             }
 

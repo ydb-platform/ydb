@@ -450,7 +450,7 @@ public:
             context.MemChanges.GrabNewTableSnapshot(context.SS, tablePath.Base()->PathId, OperationId.GetTxId());
             context.DbChanges.PersistTableSnapshot(tablePath.Base()->PathId, OperationId.GetTxId());
 
-            context.SS->TablesWithSnaphots.emplace(tablePath.Base()->PathId, OperationId.GetTxId());
+            context.SS->TablesWithSnapshots.emplace(tablePath.Base()->PathId, OperationId.GetTxId());
             context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePath.Base()->PathId);
         }
 
@@ -650,7 +650,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
         if (initialScan) {
             outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
         }
-        
+
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
     }
 
@@ -712,7 +712,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
                     Y_VERIFY(table->Columns.contains(tag));
                     const auto typeId = table->Columns.at(tag).PType;
                     const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
-                    Y_VERIFY(ok, "Failed to build key tuple at postition %" PRIu32 " error: %s", ki, errStr.data());
+                    Y_VERIFY(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
                 }
 
                 mg.MutableKeyRange()->SetToBound(cur.EndOfRange);

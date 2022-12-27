@@ -159,7 +159,7 @@ void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, c
     if (responseTime > SELF_PING_INTERVAL) {
         DoSelfPing(ctx);
     } else {
-        SheduleSelfPingWakeup(ctx);
+        ScheduleSelfPingWakeup(ctx);
     }
 }
 
@@ -190,7 +190,7 @@ void TSelfPinger::DoSelfPing(const NActors::TActorContext &ctx) {
     SelfPingInFlight = true;
 }
 
-void TSelfPinger::SheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
+void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
     if (SelfPingWakeupScheduled)
         return;
 
@@ -203,12 +203,12 @@ void TSelfPinger::SheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
 
 namespace NTableIndex {
 
-TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDesrc) {
+TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {
     NTableIndex::TTableColumns result;
-    for (auto& column: tableDesrc.GetColumns()) {
+    for (auto& column: tableDescr.GetColumns()) {
         result.Columns.insert(column.GetName());
     }
-    for (auto& keyName: tableDesrc.GetKeyColumnNames()) {
+    for (auto& keyName: tableDescr.GetKeyColumnNames()) {
         result.Keys.push_back(keyName);
     }
     return result;
@@ -320,7 +320,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NKikimrSchemeOp::TTableDescription &baseTableDesrc,
+    const NKikimrSchemeOp::TTableDescription &baseTableDescr,
     const TTableColumns &implTableColumns,
     const NKikimrSchemeOp::TTableDescription &indexTableDesc)
 {
@@ -336,7 +336,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
         result.MutableSplitBoundary()->CopyFrom(indexTableDesc.GetSplitBoundary());
     }
 
-    *result.MutablePartitionConfig() = PartitionConfigForIndexes(baseTableDesrc, indexTableDesc);
+    *result.MutablePartitionConfig() = PartitionConfigForIndexes(baseTableDescr, indexTableDesc);
 
     //Columns and KeyColumnNames order is really important
     //the order of implTableColumns.Keys is the right one
@@ -347,7 +347,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     }
 
     result.ClearColumns();
-    for (auto& column: baseTableDesrc.GetColumns()) {
+    for (auto& column: baseTableDescr.GetColumns()) {
         auto& columnName = column.GetName();
         if (implTableColumns.Columns.contains(columnName)) {
             auto item = result.AddColumns();
@@ -469,17 +469,17 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
 }
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
-    const NKikimrSchemeOp::TTableDescription& baseTableDesrc,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
-    return PartitionConfigForIndexes(baseTableDesrc.GetPartitionConfig(), indexTableDesc);
+    return PartitionConfigForIndexes(baseTableDescr.GetPartitionConfig(), indexTableDesc);
 }
 
-bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesrc, TColumnTypes& columnTypes, TString& explain) {
+bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_VERIFY(typeRegistry);
 
-    for (auto& column: baseTableDesrc.GetColumns()) {
+    for (auto& column: baseTableDescr.GetColumns()) {
         auto& columnName = column.GetName();
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
         const NScheme::IType* type = typeRegistry->GetType(typeName);
@@ -498,11 +498,11 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesrc, TCol
     return true;
 }
 
-bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columsTypes, TString& explain) {
+bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain) {
     Y_UNUSED(explain);
 
     for (const auto& [_, column] : baseTableInfo->Columns) {
-        columsTypes[column.Name] = column.PType;
+        columnsTypes[column.Name] = column.PType;
     }
 
     return true;

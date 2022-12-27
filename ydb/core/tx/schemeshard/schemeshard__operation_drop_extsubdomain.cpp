@@ -194,9 +194,9 @@ public:
         // if its root is not resolvable. And nodes could go away right in the middle of anything --
         // -- being able to reconnect node any time until extsubdomain is actually gone
         // is a good thing.
-        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
-        pathes.erase(pathId);
-        context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
+        auto paths = context.SS->ListSubTree(pathId, context.Ctx);
+        paths.erase(pathId);
+        context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         ++parentDir->DirAlterVersion;
@@ -204,7 +204,7 @@ public:
         context.SS->ClearDescribePathCaches(parentDir);
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
-        for (auto id: pathes) {
+        for (auto id: paths) {
             context.OnComplete.PublishToSchemeBoard(OperationId, id);
         }
 
@@ -225,9 +225,9 @@ public:
 
         auto targetPath = context.SS->PathsById.at(txState->TargetPathId);
 
-        auto pathes = context.SS->ListSubTree(targetPath->PathId, context.Ctx);
-        NForceDrop::ValidateNoTransactionOnPathes(OperationId, pathes, context);
-        NForceDrop::CollectShards(pathes, OperationId, txState, context);
+        auto paths = context.SS->ListSubTree(targetPath->PathId, context.Ctx);
+        NForceDrop::ValidateNoTransactionOnPaths(OperationId, paths, context);
+        NForceDrop::CollectShards(paths, OperationId, txState, context);
 
         context.SS->MarkAsDropping(targetPath, OperationId.GetTxId(), context.Ctx);
 

@@ -152,7 +152,7 @@ public:
                 THolder(new TEvDataShard::TEvInitSplitMergeDestination(ui64(OperationId.GetTxId()), context.SS->TabletID(),
                                                                    subDomainPathId,
                                                                    splitDescForShard,
-                                                                   context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                                   context.SS->SelectProcessingParams(txState->TargetPathId)));
 
             // Add a new-style CreateTable with correct per-shard settings
             // WARNING: legacy datashard will ignore this and use the schema
@@ -178,18 +178,18 @@ public:
     }
 };
 
-class TTranserData: public TSubOperationState {
+class TTransferData: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TSplitMerge TTranserData"
+                << "TSplitMerge TTransferData"
                 << " operationId#" << OperationId;
     }
 
 public:
-    TTranserData(TOperationId id)
+    TTransferData(TOperationId id)
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvInitSplitMergeDestinationAck::EventType});
@@ -288,7 +288,7 @@ public:
 
         auto oldAggrStats = tableInfo->GetStats().Aggregated;
 
-        // Delete the whole old partitioning and persist the whole new partitionig as the indexes have changed
+        // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
         context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
         context.SS->PersistTablePartitioning(db, tableId, tableInfo);
@@ -507,7 +507,7 @@ class TSplitMerge: public TSubOperation {
         case TTxState::ConfigureParts:
             return THolder(new TConfigureDestination(OperationId));
         case TTxState::TransferData:
-            return THolder(new TTranserData(OperationId));
+            return THolder(new TTransferData(OperationId));
         case TTxState::NotifyPartitioningChanged:
             return THolder(new TNotifySrc(OperationId));
         default:
@@ -799,7 +799,7 @@ public:
 
             if (!context.SS->ShardInfos.contains(srcShardIdx)) {
                 TString errMsg = TStringBuilder()
-                    << "shard doesn't present at schemesahrd at all"
+                    << "shard doesn't present at schemeshard at all"
                     << ", tablet: " << srcTabletId
                     << ", srcShardIdx: " << srcShardIdx
                     << ", pathId: " << path.Base()->PathId;
@@ -809,7 +809,7 @@ public:
 
             if (!shardIdx2partition.contains(srcShardIdx)) {
                 TString errMsg = TStringBuilder()
-                    << "shard doesn't present at schemesahrd at table"
+                    << "shard doesn't present at schemeshard at table"
                     << ", tablet: " << srcTabletId
                     << ", srcShardIdx: " << srcShardIdx
                     << ", pathId: " << path.Base()->PathId;
@@ -948,7 +948,7 @@ public:
 
         TTableInfo::TPtr mutableTableInfo = context.SS->Tables.at(path->PathId);
 
-        mutableTableInfo->RegisterSplitMegreOp(OperationId, op);
+        mutableTableInfo->RegisterSplitMergeOp(OperationId, op);
         context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId) = op;
         context.OnComplete.ActivateTx(OperationId);
 

@@ -229,8 +229,8 @@ public:
             }
 
             if (!buildInfo->SnapshotTxId || !buildInfo->SnapshotStep) {
-                Y_VERIFY(Self->TablesWithSnaphots.contains(buildInfo->TablePathId));
-                Y_VERIFY(Self->TablesWithSnaphots.at(buildInfo->TablePathId) == buildInfo->InitiateTxId);
+                Y_VERIFY(Self->TablesWithSnapshots.contains(buildInfo->TablePathId));
+                Y_VERIFY(Self->TablesWithSnapshots.at(buildInfo->TablePathId) == buildInfo->InitiateTxId);
 
                 buildInfo->SnapshotTxId = buildInfo->InitiateTxId;
                 Y_VERIFY(buildInfo->SnapshotTxId);
@@ -242,8 +242,8 @@ public:
                 TPath implTable = TPath::Init(buildInfo->TablePathId, Self).Dive(buildInfo->IndexName).Dive("indexImplTable");
                 buildInfo->ImplTablePath = implTable.PathString();
 
-                TTableInfo::TPtr imptTableInfo = Self->Tables.at(implTable.Base()->PathId);
-                buildInfo->ImplTableColumns = NTableIndex::ExtractInfo(imptTableInfo);
+                TTableInfo::TPtr implTableInfo = Self->Tables.at(implTable.Base()->PathId);
+                buildInfo->ImplTableColumns = NTableIndex::ExtractInfo(implTableInfo);
             }
 
             while (!buildInfo->ToUploadShards.empty()
@@ -595,7 +595,7 @@ public:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         case TIndexBuildInfo::EState::Rejected:
             LOG_D("TTxReply : PipeRetry"
-                  << " superflous event"
+                  << " superfluous event"
                   << ", buildIndexId# " << buildId
                   << ", tabletId# " << tabletId
                   << ", shardIdx# " << shardIdx);
@@ -732,7 +732,7 @@ public:
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
                 buildInfo->Issue += TStringBuilder()
-                    << "One of the shards report BUILD_ERROR at Filling stage, procces has to be canceled"
+                    << "One of the shards report BUILD_ERROR at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
                     << ", shardIdx: " << shardIdx;
                 Self->PersistBuildIndexIssue(db, buildInfo);
@@ -742,7 +742,7 @@ public:
                 break;
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
                 buildInfo->Issue += TStringBuilder()
-                    << "One of the shards report BAD_REQUEST at Filling stage, procces has to be canceled"
+                    << "One of the shards report BAD_REQUEST at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId
                     << ", shardIdx: " << shardIdx;
                 Self->PersistBuildIndexIssue(db, buildInfo);
@@ -765,7 +765,7 @@ public:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         case TIndexBuildInfo::EState::Rejected:
             LOG_D("TTxReply : TEvBuildIndexProgressResponse"
-                  << " superflous message " << record.ShortDebugString());
+                  << " superfluous message " << record.ShortDebugString());
             break;
         }
 
@@ -777,7 +777,7 @@ public:
 
         const auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToIndexBuilds.contains(txId)) {
-            LOG_I("TTxReply : TEvNotifyTxCompletionResult superflous message"
+            LOG_I("TTxReply : TEvNotifyTxCompletionResult superfluous message"
                   << ", txId: " << record.GetTxId()
                   << ", buildInfoId not found");
             return true;
@@ -926,7 +926,7 @@ public:
 
         const auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToIndexBuilds.contains(txId)) {
-            LOG_I("TTxReply : TEvModifySchemeTransactionResult superflous message"
+            LOG_I("TTxReply : TEvModifySchemeTransactionResult superfluous message"
                   << ", cookie: " << ModifyResult->Cookie
                   << ", txId: " << record.GetTxId()
                   << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
@@ -1074,7 +1074,7 @@ public:
                 // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
-                    << "At cancelation applying state got unsuccess propose result"
+                    << "At cancellation applying state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
@@ -1097,7 +1097,7 @@ public:
                 // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
-                    << "At cancelation unlocking state got unsuccess propose result"
+                    << "At cancellation unlocking state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
@@ -1147,7 +1147,7 @@ public:
                 // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
-                    << "At rejection_unlockiing state got unsuccess propose result"
+                    << "At rejection_unlocking state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);

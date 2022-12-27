@@ -52,7 +52,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> not found"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
                 );
         }
 
@@ -61,7 +61,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
                 );
         }
 
@@ -69,7 +69,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> hasn't been finished yet"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> hasn't been finished yet"
                 );
         }
 

@@ -147,7 +147,7 @@ public:
             if (subDomain->IsRoot()) {
                 result->SetError(
                             NKikimrScheme::StatusInvalidParameter,
-                            "Malformed subdomain request: unable to change PlanResolution at root, only additiong storage pools is allowed");
+                            "Malformed subdomain request: unable to change PlanResolution at root, only addition storage pools is allowed");
                 return result;
             }
         }
@@ -162,7 +162,7 @@ public:
             if (subDomain->IsRoot()) {
                 result->SetError(
                             NKikimrScheme::StatusInvalidParameter,
-                            "Malformed subdomain request: unable to change TimeCastBucketsPerMediator at root, only additiong storage pools is allowed");
+                            "Malformed subdomain request: unable to change TimeCastBucketsPerMediator at root, only addition storage pools is allowed");
                 return result;
             }
         }
@@ -245,15 +245,15 @@ public:
         }
 
         {
-            TVector<TStoragePool> omitedPools;
+            TVector<TStoragePool> omittedPools;
             std::set_difference(actualPools.begin(), actualPools.end(),
                                 requestedPools.begin(), requestedPools.end(),
-                                std::back_inserter(omitedPools));
+                                std::back_inserter(omittedPools));
 
-            if (omitedPools && requestedPools) {
+            if (omittedPools && requestedPools) {
                 result->SetError(
                     NKikimrScheme::StatusInvalidParameter,
-                    "Malformed subdomain request: deleting storage pool is not allowed, for example, requested deletion '" + omitedPools.begin()->GetName() +"'");
+                    "Malformed subdomain request: deleting storage pool is not allowed, for example, requested deletion '" + omittedPools.begin()->GetName() +"'");
                 return result;
             }
         }

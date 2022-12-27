@@ -19,7 +19,7 @@ struct TBackup {
 
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         auto seqNo = context.SS->StartRound(txState);
-        const auto& processingParams = context.SS->SelectProcessingPrarams(txState.TargetPathId);
+        const auto& processingParams = context.SS->SelectProcessingParams(txState.TargetPathId);
 
         Y_VERIFY(context.SS->Tables.contains(txState.TargetPathId));
         TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);

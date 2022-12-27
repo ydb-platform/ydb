@@ -220,10 +220,10 @@ public:
                      << " at tablet# " << ssId
                      << " message# " << evRecord.ShortDebugString());
 
-        bool allnotificationRecieved = NTableState::CollectSchemaChanged(OperationId, ev, context);
+        bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
         CollectStats(OperationId, ev, context);
 
-        if (!allnotificationRecieved) {
+        if (!allnotificationsReceived) {
             return false;
         }
 

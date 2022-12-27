@@ -54,16 +54,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             auto prevObserver = runtime.SetObserverFunc(defObserver);
 
-            TVector<THolder<IEventHandle>> supressed;
-            auto supressEvent  = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle> &ev) -> auto {
+            TVector<THolder<IEventHandle>> suppressed;
+            auto suppressEvent  = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle> &ev) -> auto {
                 if (ev->GetTypeRewrite() == TEvDataShard::TEvStateChanged::EventType) {
                     auto *msg = ev->Get<TEvDataShard::TEvStateChanged>();
                     auto state = msg->Record.GetState();
-                    Cerr << "TEvStateChanged has happend " << state << Endl;
+                    Cerr << "TEvStateChanged has happened " << state << Endl;
 
                     if (state == NDataShard::TShardState::Offline) {
-                        Cerr << "supressEvent has happend" << Endl;
-                        supressed.push_back(std::move(ev));
+                        Cerr << "suppressEvent has happened" << Endl;
+                        suppressed.push_back(std::move(ev));
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                 }
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 return prevObserver(runtime, ev);
             };
 
-            runtime.SetObserverFunc(supressEvent);
+            runtime.SetObserverFunc(suppressEvent);
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
                             SourceTabletId: 9437194
@@ -87,10 +87,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             runtime.SetObserverFunc(prevObserver);
-            for (auto& ev : supressed) {
+            for (auto& ev : suppressed) {
                 runtime.Send(ev.Release(), 0, /* via actor system */ true);
             }
-            supressed.clear();
+            suppressed.clear();
 
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1));
 
@@ -851,7 +851,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, false);
     }
 
-    Y_UNIT_TEST(ForceDropAndCopyInParallelAllPathesAreLocked) { //+
+    Y_UNIT_TEST(ForceDropAndCopyInParallelAllPathsAreLocked) { //+
         TTestWithReboots t(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

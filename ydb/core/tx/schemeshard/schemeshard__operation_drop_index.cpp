@@ -118,7 +118,7 @@ public:
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
                                                         txBody,
-                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                        context.SS->SelectProcessingParams(txState->TargetPathId)));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }

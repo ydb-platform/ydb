@@ -25,21 +25,21 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
     TTxType GetTxType() const override { return TXTYPE_INIT_POPULATOR; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        Y_VERIFY(Self->IsShemeShardConfigured());
+        Y_VERIFY(Self->IsSchemeShardConfigured());
 
         for (auto item: Self->PathsById) {
             TPathId pathId = item.first;
             TPathElement::TPtr pathEl = item.second;
 
             // KIKIMR-13173
-            // planned to drop pathes are added to populator
-            // also such pathes (like BSV PQ) can be considered as deleted by path description however they aren't dropped jet
+            // planned to drop paths are added to populator
+            // also such paths (like BSV PQ) can be considered as deleted by path description however they aren't dropped jet
 
             if (pathEl->Dropped())   {
-                // migrated pathes should be published directly
+                // migrated paths should be published directly
                 // but once they published on the quorum replicas as deleted directly, further publishing is unnecessary
                 // actually they are publishing strongly on the quorum as part of deleting operation
-                // so it's ok to skip migrated pathes is they has beem marked as deleted
+                // so it's ok to skip migrated paths is they has been marked as deleted
                 continue;
             }
 

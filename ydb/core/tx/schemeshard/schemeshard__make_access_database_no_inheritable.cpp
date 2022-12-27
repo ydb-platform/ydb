@@ -58,7 +58,7 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUpgradeSchema.Execute");
 
-        if (!Self->IsShemeShardConfigured()) {
+        if (!Self->IsSchemeShardConfigured()) {
             return true;
         }
 

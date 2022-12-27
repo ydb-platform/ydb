@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::PathNotExist});
 
         {
-            //seccess op
+            //success op
             ++txId;
             auto first = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Moved2");
             auto second = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Table2");
@@ -988,7 +988,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        AsyncBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "Sync", {"value0"});
+        AsyncBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "Sync", {"value0"});
 
         TVector<THolder<IEventHandle>> suppressed;
         auto id = txId;
@@ -1061,13 +1061,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         UNIT_ASSERT(req1.GetErrors().empty());
 
         {
-            TVector<THolder<IEventHandle>> supressed;
-            auto defOberver = SetSuppressObserver(runtime, supressed, NDataShard::TEvChangeExchange::EvApplyRecords);
+            TVector<THolder<IEventHandle>> suppressed;
+            auto defObserver = SetSuppressObserver(runtime, suppressed, NDataShard::TEvChangeExchange::EvApplyRecords);
 
             req1.Plan(TTestTxConfig::Coordinator);
 
-            WaitForSuppressed(runtime, supressed, 1, defOberver);
-            UNIT_ASSERT(supressed.size() == 1);
+            WaitForSuppressed(runtime, suppressed, 1, defObserver);
+            UNIT_ASSERT(suppressed.size() == 1);
         }
 
         {

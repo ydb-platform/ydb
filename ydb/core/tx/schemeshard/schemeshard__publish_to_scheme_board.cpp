@@ -110,7 +110,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                     && operation->IsReadyToNotify(ctx)) {
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "TTxAckPublishToSchemeBoard"
-                               << ", operation is ready to notificate"
+                               << ", operation is ready to notify"
                                << ", at schemeshard: " << Self->TabletID()
                                << ", txId: " << txId);
 
@@ -121,7 +121,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
             for (auto opId: toActivateWaitPublication) {
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "TTxAckPublishToSchemeBoard"
-                               << ", operation is ready to ack that some awaited pathed is published"
+                               << ", operation is ready to ack that some awaited paths are published"
                                << ", opId: " << opId
                                << ", left await publications: " << operation->CountWaitPublication(opId)
                                << ", at schemeshard: " << Self->TabletID()

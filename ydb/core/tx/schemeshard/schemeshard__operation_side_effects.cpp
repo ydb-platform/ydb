@@ -12,8 +12,8 @@ void TSideEffects::ProposeToCoordinator(TOperationId opId, TPathId pathId, TStep
     CoordinatorProposes.push_back(TProposeRec(opId, pathId, minStep));
 }
 
-void TSideEffects::CoordinatorAck(TActorId coordiantor, TStepId stepId, TTxId txId) {
-    CoordinatorAcks.push_back(TCoordinatorAck(coordiantor, stepId, txId));
+void TSideEffects::CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId) {
+    CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
 }
 
 void TSideEffects::MediatorAck(TActorId mediator, TStepId stepId) {
@@ -197,7 +197,7 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoBindMsg(ss, ctx);
 
     //attach/detach tablets
-    PendingPipeTrackerCommands.Apply(ss->PipeTracker, ctx);  //it's better to decomposite attach and detach, detach shoud be applied at ApplyOnExecute
+    PendingPipeTrackerCommands.Apply(ss->PipeTracker, ctx);  //it's better to decompose attach and detach, detach should be applied at ApplyOnExecute
     DoRegisterRelations(ss, ctx);
 
     DoTriggerDeleteShards(ss, ctx);
@@ -267,7 +267,7 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
             errExpl = TStringBuilder()
                     << "can't propose more then one operation to the shard with the same txId"
                     << ", here shardId is " << shard
-                    << " has coolision with operations " << opId
+                    << " has collision with operations " << opId
                     << " and " << position->second;
             return false;
         }
@@ -336,7 +336,7 @@ void TSideEffects::DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx) {
 }
 
 void TSideEffects::DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx) {
-    //agregate
+    //aggregate
     TMap<TActorId, TMap<TStepId, TSet<TTxId>>> toCoordinatorAck;
     for (auto& rec: CoordinatorAcks) {
         TActorId coordinator;
@@ -402,7 +402,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         if (tenantLink.TenantRootACL && tenantRoot.Base()->ACL) {
             // KIKIMR-10699: transfer tenants root ACL from GSS to the TSS
             // here GSS sees the ACL from TSS
-            // so GSS just removes what alresy has been transfered form GSS to TSS
+            // so GSS just removes what already has been transferred from GSS to TSS
 
             NACLib::TACL tenantRootACL(tenantLink.TenantRootACL);
 
@@ -434,7 +434,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (tenantRoot.Base()->ACL) {
-            // send ACL untill all rights are transfered
+            // send ACL until all rights are transferred
             message->SetUpdateTenantRootACL(tenantRoot.Base()->ACL);
             hasChanges = true;
         }
@@ -651,7 +651,7 @@ void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
 
             if (operation->PipeBindedMessages[tablet].size() == 0) {
                 operation->PipeBindedMessages.erase(tablet);
-                //Dettach(opId, tablet);
+                //Detach(opId, tablet);
             }
         }
     }
@@ -807,7 +807,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Remove dependency"
                             << ", parent tx: " << txId
-                            << ", depnedent tx: " << dependent);
+                            << ", dependent tx: " << dependent);
 
             ss->PersistRemoveTxDependency(db, txId, dependent);
 
@@ -818,7 +818,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
             auto dependentOp = ss->Operations.at(dependent);
             Y_VERIFY_S(dependentOp->WaitOperations.contains(txId),
                        "self consistency check, dependentOp must have parent operation in WaitOperations"
-                           << ", dependet " << dependent
+                           << ", dependent " << dependent
                            << ", parent " << txId);
 
             dependentOp->WaitOperations.erase(txId);

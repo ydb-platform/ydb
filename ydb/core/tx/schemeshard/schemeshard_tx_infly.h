@@ -14,7 +14,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TNotifyes {
+struct TNotifications {
     TTxId TxId = InvalidTxId;
     THashSet<TActorId> Actors;
 
@@ -24,9 +24,9 @@ struct TNotifyes {
         Actors.insert(actor);
     }
 
-    void Swap(TNotifyes& notifyes) {
-        std::swap(TxId, notifyes.TxId);
-        Actors.swap(notifyes.Actors);
+    void Swap(TNotifications& notifications) {
+        std::swap(TxId, notifications.TxId);
+        Actors.swap(notifications.Actors);
     }
 
     bool Empty() const { return Actors.empty(); }
@@ -263,7 +263,7 @@ struct TTxState {
 
     TMessageSeqNo SchemeOpSeqNo;       // For SS -> DS propose events
 
-//    TNotifyes Notify; // volatile set of actors that requested completion notification
+//    TNotifications Notify; // volatile set of actors that requested completion notification
     TInstant StartTime = TInstant::Zero();
 
     TTxState()
@@ -386,7 +386,7 @@ struct TTxState {
         case TxMoveTableIndex:
             return true;
         case TxInvalid:
-            Y_VERIFY_DEBUG("UNREACHEBLE");
+            Y_VERIFY_DEBUG("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }
@@ -472,7 +472,7 @@ struct TTxState {
         case TxMoveTableIndex:
             return false;
         case TxInvalid:
-            Y_VERIFY_DEBUG("UNREACHEBLE");
+            Y_VERIFY_DEBUG("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }
@@ -558,7 +558,7 @@ struct TTxState {
         case TxAlterBlobDepot:
             return false;
         case TxInvalid:
-            Y_VERIFY_DEBUG("UNREACHEBLE");
+            Y_VERIFY_DEBUG("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }

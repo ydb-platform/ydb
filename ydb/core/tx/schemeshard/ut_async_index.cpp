@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+        TestBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
             "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {}
         });
         env.TestWaitNotification(runtime, txId);

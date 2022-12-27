@@ -194,7 +194,7 @@ public:
     THashMap<TPathId, TReplicationInfo::TPtr> Replications;
     THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
 
-    THashMap<TPathId, TTxId> TablesWithSnaphots;
+    THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
     THashMap<TTxId, TStepId> SnapshotsStepIds;
 
@@ -386,7 +386,7 @@ public:
     void Clear();
     void BreakTabletAndRestart(const TActorContext& ctx);
 
-    bool IsShemeShardConfigured() const;
+    bool IsSchemeShardConfigured() const;
 
     ui64 Generation() const;
 
@@ -499,8 +499,8 @@ public:
     TPathId GetDomainKey(TPathElement::TPtr pathEl) const;
     TPathId GetDomainKey(TPathId pathId) const;
 
-    const NKikimrSubDomains::TProcessingParams& SelectProcessingPrarams(TPathId id) const;
-    const NKikimrSubDomains::TProcessingParams& SelectProcessingPrarams(TPathElement::TPtr pathEl) const;
+    const NKikimrSubDomains::TProcessingParams& SelectProcessingParams(TPathId id) const;
+    const NKikimrSubDomains::TProcessingParams& SelectProcessingParams(TPathElement::TPtr pathEl) const;
 
     TTabletId SelectCoordinator(TTxId txId, TPathId pathId) const;
     TTabletId SelectCoordinator(TTxId txId, TPathElement::TPtr pathEl) const;
@@ -528,19 +528,19 @@ public:
     void DeleteSplitOp(TOperationId txId, TTxState& txState);
     bool ShardIsUnderSplitMergeOp(const TShardIdx& idx) const;
 
-    THashSet<TShardIdx> CollectAllShards(const THashSet<TPathId>& pathes) const;
+    THashSet<TShardIdx> CollectAllShards(const THashSet<TPathId>& paths) const;
     void ExamineTreeVFS(TPathId nodeId, std::function<void(TPathElement::TPtr)> func, const TActorContext& ctx);
     THashSet<TPathId> ListSubTree(TPathId subdomain_root, const TActorContext& ctx);
-    THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& pathes, const TActorContext &ctx);
+    THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& paths, const TActorContext &ctx);
 
     void MarkAsDropping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
-    void MarkAsDropping(const THashSet<TPathId>& pathes, TTxId txId, const TActorContext& ctx);
+    void MarkAsDropping(const THashSet<TPathId>& paths, TTxId txId, const TActorContext& ctx);
 
     void UncountNode(TPathElement::TPtr node);
     void MarkAsMigrated(TPathElement::TPtr node, const TActorContext& ctx);
 
     void DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
-    void DropPathes(const THashSet<TPathId>& pathes, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
+    void DropPaths(const THashSet<TPathId>& paths, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
 
@@ -665,7 +665,7 @@ public:
     void PersistRemoveKesusInfo(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
-    void PersistRevertedMirgration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
+    void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
 
     // BlockStore
     void PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version);
@@ -1001,7 +1001,7 @@ public:
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
-    TOperationId RouteIncomming(TTabletId tabletId, const TActorContext& ctx);
+    TOperationId RouteIncoming(TTabletId tabletId, const TActorContext& ctx);
 
     // namespace NLongRunningCommon {
     struct TXxport {
@@ -1124,7 +1124,7 @@ public:
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
 
     // do not share pipes with operations
-    // alse do not share pipes between IndexBuilds
+    // also do not share pipes between IndexBuilds
     struct TDedicatedPipePool {
         using TMessage = std::pair<ui32, TIntrusivePtr<TEventSerializedData>>;
         using TOwnerRec = std::pair<TIndexBuildId, TTabletId>;

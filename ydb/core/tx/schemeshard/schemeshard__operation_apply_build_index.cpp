@@ -26,7 +26,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
     TPath implIndexTable = index.Child("indexImplTable");
 
 
-    TTableInfo::TPtr implInxexTableInfo = context.SS->Tables.at(implIndexTable.Base()->PathId);
+    TTableInfo::TPtr implIndexTableInfo = context.SS->Tables.at(implIndexTable.Base()->PathId);
 
     //check idempotence
 
@@ -39,7 +39,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
         *finalize.MutableLockGuard() = tx.GetLockGuard();
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
-        op->SetSnapshotTxId(config.GetSnaphotTxId());
+        op->SetSnapshotTxId(config.GetSnaphotTxId());  //TODO: fix spelling error in flat_scheme_op.proto first
         op->SetBuildIndexId(config.GetBuildIndexId());
         op->MutableOutcome()->MutableApply();
 
@@ -60,7 +60,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
         auto indexImplTableAltering = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
         auto alterTable = indexImplTableAltering.MutableAlterTable();
         alterTable->SetName(implIndexTable.LeafName());
-        alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(implInxexTableInfo->PartitionConfig().GetCompactionPolicy());
+        alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(implIndexTableInfo->PartitionConfig().GetCompactionPolicy());
         alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
         alterTable->MutablePartitionConfig()->SetShadowData(false);
 

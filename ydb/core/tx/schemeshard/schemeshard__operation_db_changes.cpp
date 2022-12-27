@@ -10,7 +10,7 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     //TODO: paths/other changes could be repeated many times, could it be a problem?
 
-    for (const auto& pId : Pathes) {
+    for (const auto& pId : Paths) {
         ss->PersistPath(db, pId);
     }
 

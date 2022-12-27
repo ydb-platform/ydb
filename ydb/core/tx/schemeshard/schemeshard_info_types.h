@@ -151,12 +151,12 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
-        const TAppData* appData, TString& errDesr);
+        const TAppData* appData, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
-        TString& errDesr);
+        TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
     static THashMap<ui32, size_t> DeduplicateStorageRoomsById(NKikimrSchemeOp::TPartitionConfig& config);
@@ -578,7 +578,7 @@ public:
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
 
-    void RegisterSplitMegreOp(TOperationId txId, const TTxState& txState);
+    void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 
     bool IsShardInSplitMergeOp(TShardIdx idx) const;
     void FinishSplitMergeOp(TOperationId txId);
@@ -1163,7 +1163,7 @@ struct TPersQueueGroupInfo : TSimpleRefCount<TPersQueueGroupInfo> {
     TString BootstrapConfig;
     THashMap<TShardIdx, TPQShardInfo::TPtr> Shards; // key - shardIdx
     TKeySchema KeySchema;
-    TPersQueueGroupInfo::TPtr AlterData; // changes to be applyed
+    TPersQueueGroupInfo::TPtr AlterData; // changes to be applied
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
 
@@ -2277,7 +2277,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
         if (!config.KeyColumnNamesSize()) {
-            errMsg += TStringBuilder() << "no key colums in index creation config";
+            errMsg += TStringBuilder() << "no key columns in index creation config";
             return nullptr;
         }
 

@@ -7,7 +7,7 @@ namespace NKikimr::NSchemeShard {
 class TTablesStorage {
 private:
     THashMap<TPathId, TColumnTableInfo::TPtr> Tables;
-    THashMap<TString, std::set<TPathId>> PathesByTieringId;
+    THashMap<TString, std::set<TPathId>> PathsByTieringId;
 
     void OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object);
     void OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object);

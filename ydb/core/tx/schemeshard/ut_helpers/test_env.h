@@ -61,7 +61,7 @@ namespace NSchemeShardUT_Private {
         TFakeHiveState::TPtr HiveState;
         TFakeCoordinator::TState::TPtr CoordinatorState;
         TAutoPtr<ITabletScheduledEventsGuard> EnableSchemeshardPipeRetriesGuard;
-        TMap<ui64, TActorId> TxNotificationSubcribers;
+        TMap<ui64, TActorId> TxNotificationSubscribers;
         TActorId TxReliablePropose;
         ui32 ChannelsCount;
         TActorId MeteringFake;

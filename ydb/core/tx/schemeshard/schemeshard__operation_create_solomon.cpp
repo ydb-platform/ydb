@@ -14,7 +14,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
                                        TEvSchemeShard::EStatus& status, TString& errStr)
 {
     if (op.GetPartitionCount() && op.AdoptedPartitionsSize()) {
-        errStr = "mutable exclusive parametrs PartitionCount and AdoptedPartitions are set";
+        errStr = "mutable exclusive parameters PartitionCount and AdoptedPartitions are set";
         status = TEvSchemeShard::EStatus::StatusInvalidParameter;
         return false;
     }
@@ -36,7 +36,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
     TSet<std::pair<ui64, ui64>> owners;
     for (auto& portion: op.GetAdoptedPartitions()) {
         if (tabletIds.contains(portion.GetTabletId())) {
-            errStr = "Dublicate tabletsId in AdoptedPartitions "
+            errStr = "Duplicate tabletsId in AdoptedPartitions "
                     + ToString(portion.GetTabletId());
             status = TEvSchemeShard::EStatus::StatusInvalidParameter;
             return false;
@@ -45,7 +45,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
 
         auto owner = std::make_pair<ui64, ui64>(portion.GetOwnerId(), portion.GetShardIdx());
         if (owners.contains(owner)) {
-            errStr = "Dublicate pair owner and shard in AdoptedPartitions "
+            errStr = "Duplicate pair owner and shard in AdoptedPartitions "
                     + ToString(owner.first) + " " +  ToString(owner.second);
             status = TEvSchemeShard::EStatus::StatusInvalidParameter;
             return false;

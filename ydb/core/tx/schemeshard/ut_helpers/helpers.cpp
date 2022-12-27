@@ -1382,7 +1382,7 @@ namespace NSchemeShardUT_Private {
                 return d.GetByKeyFilter();
             }
         }
-        UNIT_ASSERT_C(false, "ByKeyFilte delta record not found");
+        UNIT_ASSERT_C(false, "ByKeyFilter delta record not found");
         return false;
     }
 
@@ -1446,7 +1446,7 @@ namespace NSchemeShardUT_Private {
     }
 
 
-    TString EscapedDoubleQoute(const TString src) {
+    TString EscapedDoubleQuote(const TString src) {
         auto result = src;
 
         auto pos = src.find('"');
@@ -1462,7 +1462,7 @@ namespace NSchemeShardUT_Private {
         const ui64 domainId = 1;
         NKikimrMiniKQL::TResult result;
         TString err;
-        auto escapedStr = EscapedDoubleQoute(limits.ExtraPathSymbolsAllowed);
+        auto escapedStr = EscapedDoubleQuote(limits.ExtraPathSymbolsAllowed);
         TString prog = Sprintf(R"(
                                    (
                                         (let key '('('PathId (Uint64 '%lu)))) # RootPathId
@@ -1663,25 +1663,25 @@ namespace NSchemeShardUT_Private {
         return result;
     }
 
-    void AsyncBuilIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
+    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(id, dbName, src, cfg);
 
         ForwardToTablet(runtime, schemeShard, sender, request);
     }
 
-    void AsyncBuilIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
-        AsyncBuilIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
         });
     }
 
-    void TestBuilIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+    void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
                        const TString &src, const TBuildIndexConfig& cfg, Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncBuilIndex(runtime, id, schemeShard, dbName, src, cfg);
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, cfg);
 
         TAutoPtr<IEventHandle> handle;
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
@@ -1695,11 +1695,11 @@ namespace NSchemeShardUT_Private {
                                 << " issues was " << PrintIssues(event->Record.GetIssues()));
     }
 
-    void TestBuilIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+    void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
                        const TString &src, const TString &name, TVector<TString> columns,
                        Ydb::StatusIds::StatusCode expectedStatus)
     {
-        TestBuilIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+        TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
         }, expectedStatus);
     }
@@ -1748,7 +1748,7 @@ namespace NSchemeShardUT_Private {
         return new TEvIndexBuilder::TEvListRequest(dbName, 100, "");
     }
 
-    NKikimrIndexBuilder::TEvListResponse TestListBuilIndex(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
+    NKikimrIndexBuilder::TEvListResponse TestListBuildIndex(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = ListBuildIndexRequest(dbName);
 
@@ -1767,7 +1767,7 @@ namespace NSchemeShardUT_Private {
         return new TEvIndexBuilder::TEvGetRequest(dbName, id);
     }
 
-    NKikimrIndexBuilder::TEvGetResponse TestGetBuilIndex(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName, ui64 id) {
+    NKikimrIndexBuilder::TEvGetResponse TestGetBuildIndex(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName, ui64 id) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = GetBuildIndexRequest(dbName, id);
 
@@ -1786,7 +1786,7 @@ namespace NSchemeShardUT_Private {
         return new TEvIndexBuilder::TEvForgetRequest(id, dbName, buildIndexId);
     }
 
-    NKikimrIndexBuilder::TEvForgetResponse TestForgetBuilIndex(
+    NKikimrIndexBuilder::TEvForgetResponse TestForgetBuildIndex(
         TTestActorRuntime& runtime,
         const ui64 id,
         const ui64 schemeShard,
@@ -2177,7 +2177,7 @@ namespace NSchemeShardUT_Private {
         return ev->Get()->Record;
     }
 
-    NKikimrPQ::TDescribeResponse GetDescibeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId) {
+    NKikimrPQ::TDescribeResponse GetDescribeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId) {
         TActorId edge = runtime.AllocateEdgeActor();
        TAutoPtr<IEventHandle> handle;
        runtime.SendToPipe(balancerId, edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());

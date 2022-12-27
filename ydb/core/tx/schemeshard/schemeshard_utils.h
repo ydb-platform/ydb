@@ -110,7 +110,7 @@ public:
     void Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
     void OnAnyEvent(const TActorContext &ctx);
     void DoSelfPing(const TActorContext &ctx);
-    void SheduleSelfPingWakeup(const TActorContext &ctx);
+    void ScheduleSelfPingWakeup(const TActorContext &ctx);
 
 private:
     const TTabletId TabletId;
@@ -151,11 +151,11 @@ TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc
 
 using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
-bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columsTypes, TString& explain);
-bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columsTypes, TString& explain);
+bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
+bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columnsTypes, TString& explain);
 
 bool IsCompatibleKeyTypes(
-    const TColumnTypes& baseTableColumsTypes,
+    const TColumnTypes& baseTableColumnsTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
     TString& explain);
@@ -170,7 +170,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     if (indexKeys.KeyColumns.empty()) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
-        error = "No key colums in index creation config";
+        error = "No key columns in index creation config";
         return false;
     }
 
@@ -200,9 +200,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
     if (implTableColumns.Keys.size() > schemeLimits.MaxTableKeyColumns) {
         status = NKikimrScheme::EStatus::StatusSchemeError;
         error = TStringBuilder()
-            << "Too many keys indexed, index table reaches the limit of the maximum key colums count"
-            << ": indexing colums: " << indexKeys.KeyColumns.size()
-            << ", requested keys colums for index table: " << implTableColumns.Keys.size()
+            << "Too many keys indexed, index table reaches the limit of the maximum key columns count"
+            << ": indexing columns: " << indexKeys.KeyColumns.size()
+            << ", requested keys columns for index table: " << implTableColumns.Keys.size()
             << ", limit: " << schemeLimits.MaxTableKeyColumns;
         return false;
     }

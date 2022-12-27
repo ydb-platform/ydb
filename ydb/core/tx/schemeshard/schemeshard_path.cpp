@@ -873,8 +873,8 @@ TPath::operator bool() const {
 
 bool TPath::operator ==(const TPath& another) const { // likely O(1) complexity, but might be O(path length)
     if (Y_LIKELY(IsResolved() && another.IsResolved())) {
-        return Base()->PathId == another.Base()->PathId; // check pathids is the only right way to compare
-    }                                                    // PathStrings could be false equeal due operation Init form deleted path element
+        return Base()->PathId == another.Base()->PathId; // check path ids is the only right way to compare
+    }                                                    // PathStrings could be false equal due operation Init form deleted path element
     if (IsResolved() || another.IsResolved()) {
         return false;
     }
@@ -966,7 +966,7 @@ TPath TPath::FirstExistedParent() const {
 }
 
 TString TPath::GetDomainPathString() const {
-    // TODO: not effective because of creating vectors in Init() method. should keep subdomain path somethere in struct TSubDomainInfo
+    // TODO: not effective because of creating vectors in Init() method. should keep subdomain path somewhere in struct TSubDomainInfo
     return Init(GetPathIdForDomain(), SS).PathString();
 }
 
@@ -997,7 +997,7 @@ bool TPath::IsDomain() const {
 }
 
 TPath& TPath::Dive(const TString& name) {
-    if (!SS->IsShemeShardConfigured()) {
+    if (!SS->IsSchemeShardConfigured()) {
         NameParts.push_back(name);
         return *this;
     }
@@ -1151,20 +1151,20 @@ bool TPath::IsUnderOperation() const {
 
     bool result = Base()->PathState != NKikimrSchemeOp::EPathState::EPathStateNoChanges;
     if (result) {
-        ui32 summ = (ui32)IsUnderCreating()
+        ui32 sum = (ui32)IsUnderCreating()
             + (ui32)IsUnderAltering()
             + (ui32)IsUnderCopying()
-            + (ui32)IsUnderBackuping()
+            + (ui32)IsUnderBackingUp()
             + (ui32)IsUnderRestoring()
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
             + (ui32)IsUnderMoving();
-        Y_VERIFY_S(summ == 1,
+        Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
                        << " path state: " << NKikimrSchemeOp::EPathState_Name(Base()->PathState)
                        << " path: " << PathString()
-                       << " sum is: " << summ);
+                       << " sum is: " << sum);
     }
     return result;
 }
@@ -1222,7 +1222,7 @@ bool TPath::IsUnderCopying() const {
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateCopying;
 }
 
-bool TPath::IsUnderBackuping() const {
+bool TPath::IsUnderBackingUp() const {
     Y_VERIFY(IsResolved());
 
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateBackup;
@@ -1433,8 +1433,8 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (!SS->IsShemeShardConfigured()) {
-        explain += "cluster don't have inited root yet";
+    if (!SS->IsSchemeShardConfigured()) {
+        explain += "cluster don't have initialized root yet";
         return false;
     }
 
@@ -1557,11 +1557,11 @@ void TPath::MaterializeLeaf(const TString& owner, const TPathId& newPathId, bool
         Y_FAIL_S("strange result for materialization: " << result);
         break;
 
-    case EAttachChildResult::RejectAsInactve:
+    case EAttachChildResult::RejectAsInactive:
         if (allowInactivePath) {
             Y_VERIFY(!SS->PathIsActive(newPathId));
         } else {
-            Y_FAIL_S("MaterializeLeaf do not accept shadow pathes, use allowInactivePath = true");
+            Y_FAIL_S("MaterializeLeaf do not accept shadow paths, use allowInactivePath = true");
         }
         break;
 

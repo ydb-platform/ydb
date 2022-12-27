@@ -525,7 +525,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateIndexedTableAndForceDropSimonteniously) {
+    Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropIndexedTableAndForceDropSimonteniously) {
+    Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;

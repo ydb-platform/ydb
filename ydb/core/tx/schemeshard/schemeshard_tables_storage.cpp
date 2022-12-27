@@ -5,7 +5,7 @@ namespace NKikimr::NSchemeShard {
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
     const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
     if (!!tieringId) {
-        PathesByTieringId[tieringId].emplace(pathId);
+        PathsByTieringId[tieringId].emplace(pathId);
     }
 }
 
@@ -14,19 +14,19 @@ void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPt
     if (!tieringId) {
         return;
     }
-    auto it = PathesByTieringId.find(tieringId);
-    if (PathesByTieringId.end() == it) {
+    auto it = PathsByTieringId.find(tieringId);
+    if (PathsByTieringId.end() == it) {
         return;
     }
     it->second.erase(pathId);
     if (it->second.empty()) {
-        PathesByTieringId.erase(it);
+        PathsByTieringId.erase(it);
     }
 }
 
 const std::set<NKikimr::TPathId>& TTablesStorage::GetTablesWithTiering(const TString& tieringId) const {
-    auto it = PathesByTieringId.find(tieringId);
-    if (it != PathesByTieringId.end()) {
+    auto it = PathsByTieringId.find(tieringId);
+    if (it != PathsByTieringId.end()) {
         return it->second;
     } else {
         return Default<std::set<TPathId>>();

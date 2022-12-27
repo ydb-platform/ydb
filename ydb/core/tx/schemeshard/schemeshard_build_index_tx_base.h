@@ -46,7 +46,7 @@ private:
         ApplyBill(txc, ctx);
     }
 
-    void ApplyOnComlete(const TActorContext& ctx) {
+    void ApplyOnComplete(const TActorContext& ctx) {
         SideEffects.ApplyOnComplete(Self, ctx);
         ApplySchedule(ctx);
     }
@@ -125,7 +125,7 @@ private:
             }
 
             if (!cloud_id || !folder_id || !database_id) {
-                LOG_N("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attrubutes at the domain"
+                LOG_N("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                       << ", build index operation: " << buildId
                       << ", domain: " << domain.PathString()
                       << ", domainId: " << buildInfo->DomainPathId
@@ -359,7 +359,7 @@ protected:
         case NKikimrScheme::StatusTxIsNotCancellable:
         case NKikimrScheme::StatusReserved18:
         case NKikimrScheme::StatusReserved19:
-            Y_FAIL("unreadchable");
+            Y_FAIL("unreachable");
         }
 
         return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -420,7 +420,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         DoComplete(ctx);
 
-        ApplyOnComlete(ctx);
+        ApplyOnComplete(ctx);
     }
 
 };

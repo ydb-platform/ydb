@@ -88,7 +88,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
                        ui64, ui64, ui64> TPathRec;
-    typedef TDeque<TPathRec> TPathesRows;
+    typedef TDeque<TPathRec> TPathRows;
 
     TPathElement::TPtr MakePathElement(const TPathRec& rec) const {
         TPathId pathId = std::get<0>(rec);
@@ -137,7 +137,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return path;
     }
 
-    bool LoadPathes(NIceDb::TNiceDb& db, TPathesRows& pathesRows) const {
+    bool LoadPaths(NIceDb::TNiceDb& db, TPathRows& pathRows) const {
         {
             {
                 auto rows = db.Table<Schema::MigratedPaths>().Range().Select();
@@ -167,7 +167,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     ui64 userAttrsAlterVer = rows.GetValueOrDefault<Schema::MigratedPaths::UserAttrsAlterVersion>(1);
                     ui64 aclAlterVer = rows.GetValueOrDefault<Schema::MigratedPaths::ACLVersion>(0);
 
-                    pathesRows.emplace_back(pathId, parentPathId, name, owner, pathType,
+                    pathRows.emplace_back(pathId, parentPathId, name, owner, pathType,
                                             stepCreated, txIdCreated, stepDropped, txIdDropped,
                                             acl, lastTxId, dirAlterVer, userAttrsAlterVer, aclAlterVer);
 
@@ -218,11 +218,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui64 aclAlterVer = rows.GetValueOrDefault<Schema::Paths::ACLVersion>(0);
 
                 if (pathId == parentPathId) {
-                    pathesRows.emplace_front(pathId, parentPathId, name, owner, pathType,
+                    pathRows.emplace_front(pathId, parentPathId, name, owner, pathType,
                                             stepCreated, txIdCreated, stepDropped, txIdDropped,
                                             acl, lastTxId, dirAlterVer, userAttrsAlterVer, aclAlterVer);
                 } else {
-                    pathesRows.emplace_back(pathId, parentPathId, name, owner, pathType,
+                    pathRows.emplace_back(pathId, parentPathId, name, owner, pathType,
                                             stepCreated, txIdCreated, stepDropped, txIdDropped,
                                             acl, lastTxId, dirAlterVer, userAttrsAlterVer, aclAlterVer);
                 }
@@ -1122,7 +1122,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef TDeque<TTableIndexColRec> TTableIndexKeyRows;
     typedef TDeque<TTableIndexColRec> TTableIndexDataRows;
 
-    bool LoadTableIndexeKeys(NIceDb::TNiceDb& db, TTableIndexKeyRows& tableIndexKeys) const {
+    bool LoadTableIndexKeys(NIceDb::TNiceDb& db, TTableIndexKeyRows& tableIndexKeys) const {
         {
             auto rowSet = db.Table<Schema::TableIndexKeys>().Range().Select();
             if (!rowSet.IsReady()) {
@@ -1388,7 +1388,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
 #undef RETURN_IF_NO_PRECHARGED
 
-        if (!Self->IsShemeShardConfigured()) {
+        if (!Self->IsSchemeShardConfigured()) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit, SS hasn't been configured yet"
                              << ", state: " << (ui64)Self->InitState
@@ -1419,19 +1419,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // Read paths
         {
 
-            TPathesRows pathesRows;
-            if (!LoadPathes(db, pathesRows)) {
+            TPathRows pathRows;
+            if (!LoadPaths(db, pathRows)) {
                 return false;
             }
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxInit for Pathes"
-                             << ", readed records: " << pathesRows.size()
+                        "TTxInit for Paths"
+                             << ", read records: " << pathRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
-            if (pathesRows) {
+            if (pathRows) {
                 // read Root
-                TPathElement::TPtr rootPath = MakePathElement(pathesRows.front());
+                TPathElement::TPtr rootPath = MakePathElement(pathRows.front());
                 Y_VERIFY(rootPath->PathId == Self->RootPathId());
                 Y_VERIFY(rootPath->ParentPathId == Self->RootPathId());
                 Y_VERIFY(rootPath->DomainPathId == Self->RootPathId());
@@ -1442,12 +1442,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY(!rootPath->StepDropped);
                 Self->PathsById[rootPath->PathId] = rootPath;
 
-                pathesRows.pop_front();
+                pathRows.pop_front();
             }
 
-            Y_VERIFY_DEBUG(IsSorted(pathesRows.begin(), pathesRows.end()));
+            Y_VERIFY_DEBUG(IsSorted(pathRows.begin(), pathRows.end()));
 
-            for (auto& rec: pathesRows) {
+            for (auto& rec: pathRows) {
                 TPathElement::TPtr path = MakePathElement(rec);
 
                 Y_VERIFY(path->PathId != Self->RootPathId());
@@ -1473,7 +1473,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for UserAttributes"
-                             << ", readed records: " << userAttrsRows.size()
+                             << ", read records: " << userAttrsRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: userAttrsRows) {
@@ -1499,7 +1499,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for UserAttributesAlterData"
-                             << ", readed records: " << userAttrsRows.size()
+                             << ", read records: " << userAttrsRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: userAttrsRows) {
@@ -1805,7 +1805,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for Tables"
-                             << ", readed records: " << tableRows.size()
+                             << ", read records: " << tableRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (const auto& rec: tableRows) {
@@ -1885,7 +1885,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for Columns"
-                             << ", readed records: " << columnRows.size()
+                             << ", read records: " << columnRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (const auto& rec: columnRows) {
@@ -1903,7 +1903,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
-                Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doen't exist, pathId: " << pathId);
+                Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doesn't exist, pathId: " << pathId);
 
                 TTableInfo::TPtr tableInfo = Self->Tables[pathId];
                 Y_VERIFY_S(colId < tableInfo->NextColumnId, "Column id should be less than NextColId"
@@ -1937,7 +1937,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for ColumnsAlters"
-                             << ", readed records: " << columnRows.size()
+                             << ", read records: " << columnRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (const auto& rec: columnRows) {
@@ -1956,7 +1956,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
 
-                Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doen't exist, pathId: " << pathId);
+                Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doesn't exist, pathId: " << pathId);
 
                 TTableInfo::TPtr tableInfo = Self->Tables[pathId];
                 tableInfo->InitAlterData();
@@ -1976,7 +1976,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read shards (any tipe of tablets)
+        // Read shards (any type of tablets)
         THashMap<TPathId, TShardIdx> pqBalancers; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> nbsVolumeShards; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> fileStoreShards; // pathId -> shardIdx
@@ -1991,7 +1991,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for Shards"
-                             << ", readed records: " << shards.size()
+                             << ", read records: " << shards.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: shards) {
@@ -2000,7 +2000,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                              "TTxInit for Shards"
                                 << ", read: " << idx
-                                << ", tabetId: " << std::get<1>(rec)
+                                << ", tabletId: " << std::get<1>(rec)
                                 << ", PathId: " << std::get<2>(rec)
                                 << ", TabletType: " << TTabletTypes::TypeToStr(std::get<4>(rec))
                                 << ", at schemeshard: " << Self->TabletID());
@@ -2015,7 +2015,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Self->IncrementPathDbRefCount(shard.PathId);
 
-                Y_VERIFY(shard.TabletType != ETabletType::TypeInvalid, "upgrage schema was wrong");
+                Y_VERIFY(shard.TabletType != ETabletType::TypeInvalid, "upgrade schema was wrong");
 
                 switch (shard.TabletType) {
                     case ETabletType::PersQueueReadBalancer:
@@ -2074,7 +2074,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for TablePartitions"
-                             << ", readed records: " << tablePartitions.size()
+                             << ", read records: " << tablePartitions.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             TPathId prevTableId;
@@ -2140,7 +2140,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for TableShardPartitionConfigs"
-                             << ", readed records: " << tablePartitions.size()
+                             << ", read records: " << tablePartitions.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: tablePartitions) {
@@ -2269,7 +2269,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for ChannelsBinding"
-                             << ", readed records: " << channelBindingRows.size()
+                             << ", read records: " << channelBindingRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: channelBindingRows) {
@@ -2595,7 +2595,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for TableIndexes"
-                             << ", readed records: " << indexes.size()
+                             << ", read records: " << indexes.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: indexes) {
@@ -2662,7 +2662,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             TTableIndexKeyRows indexKeys;
             TTableIndexDataRows indexData;
-            if (!LoadTableIndexeKeys(db, indexKeys)) {
+            if (!LoadTableIndexKeys(db, indexKeys)) {
                 return false;
             }
 
@@ -2672,7 +2672,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for TableIndexKeys"
-                             << ", readed records: " << indexKeys.size()
+                             << ", read records: " << indexKeys.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (const auto& rec: indexKeys) {
@@ -3123,7 +3123,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for KesusInfos"
-                             << ", readed records: " << kesusRows.size()
+                             << ", read records: " << kesusRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (const auto& rec: kesusRows) {
@@ -3159,7 +3159,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for KesusAlters"
-                             << ", readed records: " << kesusAlterRows.size()
+                             << ", read records: " << kesusAlterRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (const auto& rec: kesusAlterRows) {
@@ -3265,7 +3265,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                         Y_VERIFY_S(Self->PathsById.contains(tablePathId), "Path doesn't exist, pathId: " << tablePathId);
                         Y_VERIFY_S(Self->PathsById.at(tablePathId)->IsTable(), "Path is not a table, pathId: " << tablePathId);
-                        Y_VERIFY_S(Self->Tables.FindPtr(tablePathId), "Table doen't exist, pathId: " << tablePathId);
+                        Y_VERIFY_S(Self->Tables.FindPtr(tablePathId), "Table doesn't exist, pathId: " << tablePathId);
 
                         // legacy, ???
                         Y_VERIFY(Self->Tables.contains(tablePathId));
@@ -3359,7 +3359,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for TxShards"
-                             << ", readed records: " << txShardsRows.size()
+                             << ", read records: " << txShardsRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: txShardsRows) {
@@ -3435,7 +3435,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         // After all shard operations are loaded we can fill range ends for shards participating in split operations
-        // and register shrads as busy
+        // and register shards as busy
         for (TOperationId opId : splitOpIds) {
             THashMap<TShardIdx, TString> shardIdxToRangeEnd;
             TTxState* txState = Self->FindTx(opId);
@@ -3444,7 +3444,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             Y_VERIFY(Self->Tables.contains(txState->TargetPathId));
             TTableInfo::TPtr tableInfo = Self->Tables.at(txState->TargetPathId);
-            tableInfo->RegisterSplitMegreOp(opId, *txState);
+            tableInfo->RegisterSplitMergeOp(opId, *txState);
 
             for (ui32 i = 0; i < txState->SplitDescription->DestinationRangesSize(); ++i) {
                 const auto& dst = txState->SplitDescription->GetDestinationRanges(i);
@@ -3464,8 +3464,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         for (TOperationId opId: forceDropOpIds) {
             TTxState* txState = Self->FindTx(opId);
             Y_VERIFY(txState);
-            auto pathes = Self->ListSubTree(txState->TargetPathId, ctx);
-            Self->MarkAsDropping(pathes, opId.GetTxId(), ctx);
+            auto paths = Self->ListSubTree(txState->TargetPathId, ctx);
+            Self->MarkAsDropping(paths, opId.GetTxId(), ctx);
         }
 
         // Read txid dependencies
@@ -3503,7 +3503,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for ShardToDelete"
-                             << ", readed records: " << shardsToDelete.size()
+                             << ", read records: " << shardsToDelete.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: shardsToDelete) {
@@ -3520,7 +3520,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for BackupSettings"
-                             << ", readed records: " << backupSettings.size()
+                             << ", read records: " << backupSettings.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: backupSettings) {
@@ -3662,7 +3662,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for ShardBackupStatus"
-                             << ", readed records: " << backupStatuses.size()
+                             << ", read records: " << backupStatuses.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             THashMap<TTxId, TShardBackupStatusRows> statusesByTxId;
@@ -3678,7 +3678,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for CompletedBackup"
-                             << ", readed records: " << history.size()
+                             << ", read records: " << history.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: history) {
@@ -3745,10 +3745,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Self->TabletIdToShardIdx[tabletId] = shardIdx;
 
             Y_VERIFY(Self->PathsById.contains(pathId));
-            auto path = Self->PathsById.at(pathId); //path should't be dropeed?
+            auto path = Self->PathsById.at(pathId); //path should't be dropped?
             path->IncShardsInside();
 
-            auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropeed?
+            auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropped?
             domainInfo->AddInternalShard(shardIdx, Self->IsBackupTable(pathId));
 
             switch (si.second.TabletType) {
@@ -3837,7 +3837,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             TPathElement::TPtr parent = Self->PathsById.at(path->ParentPathId);
             TPathElement::TPtr inclusiveDomainPath = Self->PathsById.at(Self->ResolvePathIdForDomain(parent)); // take upper domain id info even when the path is domain by itself
-            TSubDomainInfo::TPtr inclusivedomainInfo = Self->ResolveDomainInfo(parent);
+            TSubDomainInfo::TPtr inclusiveDomainInfo = Self->ResolveDomainInfo(parent);
 
             if (inclusiveDomainPath->IsExternalSubDomainRoot()) {
                 path->PathState = TPathElement::EPathState::EPathStateMigrated;
@@ -3847,7 +3847,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!path->IsRoot()) {
                 const bool isBackupTable = Self->IsBackupTable(item.first);
                 parent->IncAliveChildren(1, isBackupTable);
-                inclusivedomainInfo->IncPathsInside(1, isBackupTable);
+                inclusiveDomainInfo->IncPathsInside(1, isBackupTable);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
@@ -3865,8 +3865,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui64 throughput = ((ui64)delta) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
                 ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds();
 
-                inclusivedomainInfo->IncPQPartitionsInside(delta);
-                inclusivedomainInfo->IncPQReservedStorage(storage);
+                inclusiveDomainInfo->IncPQPartitionsInside(delta);
+                inclusiveDomainInfo->IncPQReservedStorage(storage);
 
                 Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta);
                 Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
@@ -3933,7 +3933,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for Publications"
-                             << ", readed records: " << publicationRows.size()
+                             << ", read records: " << publicationRows.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             for (auto& rec: publicationRows) {
@@ -4325,7 +4325,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SnapshotTables::TableOwnerId>(),
                         rowset.GetValue<Schema::SnapshotTables::TableLocalId>());
 
-                    Self->TablesWithSnaphots.emplace(tableId, id);
+                    Self->TablesWithSnapshots.emplace(tableId, id);
                     Self->SnapshotTables[id].insert(tableId);
                     ++records;
 
@@ -4666,7 +4666,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", txId: " << operation->TxId
                              << ", parts: " <<  operation->Parts.size()
                              << ", await num: " << operation->WaitOperations.size()
-                             << ", dependet num: " << operation->DependentOperations.size()
+                             << ", dependent num: " << operation->DependentOperations.size()
                              << ", at schemeshard: " << Self->TabletID());
 
             if (operation->WaitOperations.size()) {
@@ -4717,7 +4717,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         OnComplete.ApplyOnComplete(Self, ctx);
 
-        if (!Self->IsShemeShardConfigured()) {
+        if (!Self->IsSchemeShardConfigured()) {
             if (Self->IsDomainSchemeShard) { // self initiation
                 Self->Execute(Self->CreateTxInitRoot(), ctx);
             } else { // wait initiation msg

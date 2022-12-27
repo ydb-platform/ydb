@@ -214,7 +214,7 @@ public:
 
         // KIKIMR-9036
         // usually we make creation over alter, alter as null -> first version
-        // but now kesus allready has been persisted as first version at propose stage
+        // but now kesus already has been persisted as first version at propose stage
         // so we bump version to be sure that actual description pass over caches correctly
         ++kesus->Version;
         context.SS->PersistKesusVersion(db, pathId, kesus);

@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
 
-    Y_UNIT_TEST(SimultaneousCreateTableFroceDrop) {
+    Y_UNIT_TEST(SimultaneousCreateTableForceDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -900,7 +900,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
 
-    Y_UNIT_TEST(SimultaneousCreateTenantTableFroceDrop) {
+    Y_UNIT_TEST(SimultaneousCreateTenantTableForceDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -2745,7 +2745,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
 
-        // Quotas consuption is persistent, on reboot they should stay consumed
+        // Quotas consumption is persistent, on reboot they should stay consumed
         {
             TActorId sender = runtime.AllocateEdgeActor();
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);

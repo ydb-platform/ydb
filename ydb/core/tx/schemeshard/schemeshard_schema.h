@@ -1057,7 +1057,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct TxDependenciesV2 : Table<43> { // has dieded before release
+    struct TxDependenciesV2 : Table<43> { // has died before release
         struct TxId :               Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct TxPartId :           Column<2, NScheme::NTypeIds::Uint32> { using Type = TSubTxId; };
         struct DependentTxId :      Column<3, NScheme::NTypeIds::Uint64> { using Type = TTxId; };

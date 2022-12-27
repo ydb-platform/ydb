@@ -9,7 +9,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool CheckFreezeStateAlredySet(const TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter) {
+bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter) {
     if (!alter.HasPartitionConfig())
         return false;
     if (alter.GetPartitionConfig().HasFreezeState()) {
@@ -79,7 +79,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) {
         if (hasSchemaChanges) {
-            errStr = Sprintf("Mix freeze cmd with other options is forbiden");
+            errStr = Sprintf("Mix freeze cmd with other options is forbidden");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -104,8 +104,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         col.ClearId();
     }
 
-    if (CheckFreezeStateAlredySet(table, copyAlter)) {
-        errStr = Sprintf("Requested freeze state alredy set");
+    if (CheckFreezeStateAlreadySet(table, copyAlter)) {
+        errStr = Sprintf("Requested freeze state already set");
         status = NKikimrScheme::StatusAlreadyExists;
         return nullptr;
     }
@@ -180,7 +180,7 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
     context.OnComplete.ActivateTx(opId);
 }
 
-bool CheckDropingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
+bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
     TSet<TString> deletedColumns;
 
     for (const auto& colDescr: alter.GetDropColumns()) {
@@ -202,7 +202,7 @@ bool CheckDropingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDe
         for (const auto& indexKey: indexInfo->IndexKeys) {
             if (deletedColumns.contains(indexKey)) {
                 errStr = TStringBuilder ()
-                    << "Imposible drop column because table has an index with that column"
+                    << "Impossible drop column because table has an index with that column"
                     << ", column name: " << indexKey
                     << ", table name: " << tablePath.PathString()
                     << ", index name: " << childName;
@@ -213,7 +213,7 @@ bool CheckDropingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDe
         for (const auto& col: indexInfo->IndexDataColumns) {
             if (deletedColumns.contains(col)) {
                 errStr = TStringBuilder ()
-                    << "Imposible drop column because table index covers that column"
+                    << "Impossible drop column because table index covers that column"
                     << ", column name: " << col
                     << ", table name: " << tablePath.PathString()
                     << ", index name: " << childName;
@@ -281,7 +281,7 @@ public:
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
                                                         txBody,
-                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId));
+                                                        context.SS->SelectProcessingParams(txState->TargetPathId));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
@@ -557,7 +557,7 @@ public:
 
         Y_VERIFY(alterData->AlterVersion == table->AlterVersion + 1);
 
-        if (!CheckDropingColumns(context.SS, alter, path, errStr)) {
+        if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }

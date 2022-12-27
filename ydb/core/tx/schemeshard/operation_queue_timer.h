@@ -12,7 +12,7 @@
 // TODO: TOperationQueueWithTimer is a good candidate for core/util, but since
 // it uses actorlib_impl, which depends on core/util, it
 // can't be part of util. No other better place yet and since
-// it is used in schemedard only then I put it here.
+// it is used in schemeshard only then I put it here.
 
 namespace NKikimr {
 

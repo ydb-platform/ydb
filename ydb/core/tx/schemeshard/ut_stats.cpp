@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
                         })");
         env.TestWaitNotification(runtime, txId);
 
-        // we need this to fullfill batch so that actual split happens
+        // we need this to fullfil batch so that actual split happens
         CreateTable(runtime, env, "/MyRoot", "Simple2", 1, txId);
 
         while (statsCount <= statsCountBefore + batchSize) {

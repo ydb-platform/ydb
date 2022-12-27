@@ -82,7 +82,7 @@ struct TDebugEvent<TEvPrivate::TEvUndoTenantUpdate> {
     bool TSubOperationState::HandleReply(TEvType::TPtr& ev, TOperationContext& context) {   \
         if (!MsgToIgnore.empty() && MsgToIgnore.contains(TEvType::EventType)) {             \
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,      \
-               "Superflous message, " << LogHint                               \
+               "Superfluous message, " << LogHint                               \
                << " TEvType# " << #TEvType                                     \
                << " debug msg# " << DebugReply(ev)                             \
                << " at tablet# " << context.SS->TabletID());                   \

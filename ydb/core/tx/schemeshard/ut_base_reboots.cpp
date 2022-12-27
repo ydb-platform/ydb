@@ -915,7 +915,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(SimultaneousDropFroceDrop) { //+
+    Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(

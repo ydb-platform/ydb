@@ -166,7 +166,7 @@ public:
             for (const auto& p : alter.GetPartitionsToAdd()) {
                 if (!parts.insert(p.GetPartitionId()).second) {
                     errStr = TStringBuilder()
-                            << "providing partition " <<  p.GetPartitionId() << " serveral times in PartitionsToAdd is forbidden";
+                            << "providing partition " <<  p.GetPartitionId() << " several times in PartitionsToAdd is forbidden";
                     return nullptr;
                 }
                 params->PartitionsToAdd.emplace(p.GetPartitionId(), p.GetGroupId());
@@ -391,7 +391,7 @@ public:
         TString errStr;
 
         if (!alter.HasName() && !alter.HasPathId()) {
-            errStr = "Niether topic name nor pathId in Alter";
+            errStr = "Neither topic name nor pathId in Alter";
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }

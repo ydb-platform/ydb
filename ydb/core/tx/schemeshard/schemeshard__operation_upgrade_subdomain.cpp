@@ -42,14 +42,14 @@ public:
         bool isDone = true;
 
         // wait all transaction inside
-        auto pathes = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
-        auto relatedTx = context.SS->GetRelatedTransactions(pathes, context.Ctx);
+        auto paths = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
+        auto relatedTx = context.SS->GetRelatedTransactions(paths, context.Ctx);
         for (auto otherTxId: relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
             }
             TStringBuilder errMsg;
-            errMsg << "TWait ProgressState, dependence has found, but actually it is unexepcted"
+            errMsg << "TWait ProgressState, dependence has found, but actually it is unexpected"
                    << ", dependent transaction: " << OperationId.GetTxId()
                    << ", parent transaction: " << otherTxId
                    << ", at schemeshard: " << ssId;
@@ -84,7 +84,7 @@ private:
     TOperationId OperationId;
 
     TTabletId TenantSchemeShardId = InvalidTabletId;
-    THashSet<TPathId> PathesInside;
+    THashSet<TPathId> PathsInside;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -140,7 +140,7 @@ public:
                         << " at schemeshard: " << ssId);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, TenantSchemeShardId, pathId);
-        PathesInside.erase(pathId);
+        PathsInside.erase(pathId);
 
         auto next = NextMessage(context);
         if (!next) {
@@ -286,11 +286,11 @@ public:
     }
 
     THolder<TEvSchemeShard::TEvMigrateSchemeShard> NextMessage(TOperationContext& context) {
-        if (!PathesInside) {
+        if (!PathsInside) {
             return nullptr;
         }
 
-        TPathId pathId = *PathesInside.begin();
+        TPathId pathId = *PathsInside.begin();
         TPath path = TPath::Init(pathId, context.SS);
 
 
@@ -308,7 +308,7 @@ public:
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
             case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
-                Y_FAIL("imposible to migrate subDomain or extSubDomain as part of the other subDomain");
+                Y_FAIL("impossible to migrate subDomain or extSubDomain as part of the other subDomain");
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeTable:
             {
@@ -375,7 +375,7 @@ public:
 
         TPathId pathId = ev->Get()->GetPathId();
         context.OnComplete.UnbindMsgFromPipe(OperationId, TenantSchemeShardId, pathId);
-        PathesInside.erase(pathId);
+        PathsInside.erase(pathId);
 
         auto next = NextMessage(context);
         if (!next) {
@@ -429,7 +429,7 @@ public:
         shard.Operation = TTxState::ConfigureParts;
 
         TenantSchemeShardId = TTabletId(processing.GetSchemeShard());
-        PathesInside = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
+        PathsInside = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint()
@@ -518,7 +518,7 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& UpgradeDecision;
 
-    TPathElement::TChildrenCont HidenChildren;
+    TPathElement::TChildrenCont HiddenChildren;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -549,7 +549,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
 
-        path->SwapChildren(HidenChildren); //return back children, now we do not pretend that there no children, we define them as Migrated
+        path->SwapChildren(HiddenChildren); //return back children, now we do not pretend that there no children, we define them as Migrated
         auto pathsInside = context.SS->ListSubTree(pathId, context.Ctx);
         pathsInside.erase(pathId);
         for (auto pId: pathsInside) {
@@ -594,7 +594,7 @@ public:
         Y_VERIFY(item->PathType == TPathElement::EPathType::EPathTypeExtSubDomain);
         item->PathType = TPathElement::EPathType::EPathTypeSubDomain;
 
-        item->SwapChildren(HidenChildren); //return back children
+        item->SwapChildren(HiddenChildren); //return back children
         item->PreSerializedChildrenListing.clear();
 
         auto subDomain = context.SS->SubDomains.at(pathId);
@@ -605,7 +605,7 @@ public:
         subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(), /* isExternal */ false, context.SS);
 
         context.SS->RevertedMigrations[pathId].push_back(subDomain->GetTenantSchemeShardID());
-        context.SS->PersistRevertedMirgration(db, pathId, subDomain->GetTenantSchemeShardID());
+        context.SS->PersistRevertedMigration(db, pathId, subDomain->GetTenantSchemeShardID());
 
         alterData->SetAlterPrivate(nullptr);
         subDomain->SetAlterPrivate(nullptr);
@@ -666,7 +666,7 @@ public:
         subDomain->SetAlterPrivate(nullptr);
         context.SS->SubDomains[pathId] = alterData;
 
-        item->SwapChildren(HidenChildren);
+        item->SwapChildren(HiddenChildren);
         item->PreSerializedChildrenListing.clear();
 
         TPathElement::TPtr parentItem = context.SS->PathsById.at(item->ParentPathId);
@@ -717,9 +717,9 @@ public:
         Y_VERIFY(txState);
 
         Y_VERIFY(txState->Shards.size() == 1);
-        TShardIdx tenantShemeShardIdx = txState->Shards.front().Idx;
+        TShardIdx tenantSchemeShardIdx = txState->Shards.front().Idx;
 
-        context.OnComplete.DeleteShard(tenantShemeShardIdx);
+        context.OnComplete.DeleteShard(tenantSchemeShardIdx);
 
         TPathId pathId = txState->TargetPathId;
         auto subDomain = context.SS->SubDomains.at(pathId);
@@ -831,9 +831,9 @@ public:
         TenantSchemeShardId = subDomain->GetTenantSchemeShardID();
         Y_VERIFY(TenantSchemeShardId);
 
-        auto pathesInside = context.SS->ListSubTree(targetPathId, context.Ctx);
-        pathesInside.erase(targetPathId);
-        for (auto pId: pathesInside) {
+        auto pathsInside = context.SS->ListSubTree(targetPathId, context.Ctx);
+        pathsInside.erase(targetPathId);
+        for (auto pId: pathsInside) {
             TPathElement::TPtr item = context.SS->PathsById.at(pId);
 
             switch (item->PathType) {
@@ -858,7 +858,7 @@ public:
                     // no shards
                     break;
                 case NKikimrSchemeOp::EPathType::EPathTypeKesus:
-                    // the is one shard, but it's owner shuldn't be rewritten
+                    // the is one shard, but it's owner shouldn't be rewritten
                     break;
                 default:
                     Y_FAIL_S("Not implemented for " << NKikimrSchemeOp::EPathType_Name(item->PathType));
@@ -947,9 +947,9 @@ class TDoneMigrateTree: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    //we do not forget any shards. We leave them until database life. And we ensure it deleted at the removing databse
+    //we do not forget any shards. We leave them until database life. And we ensure it deleted at the removing database
     //but hang up them to the domain path
-    TDeque<TShardIdx> ShardsToRememder;
+    TDeque<TShardIdx> ShardsToRemember;
 
     bool IsInited = false;
 
@@ -977,11 +977,11 @@ public:
         }
         IsInited = true;
 
-        auto pathes = context.SS->ListSubTree(pathId, context.Ctx);
-        pathes.erase(pathId);
+        auto paths = context.SS->ListSubTree(pathId, context.Ctx);
+        paths.erase(pathId);
 
-        auto shards = context.SS->CollectAllShards(pathes);
-        ShardsToRememder.assign(shards.begin(), shards.end());
+        auto shards = context.SS->CollectAllShards(paths);
+        ShardsToRemember.assign(shards.begin(), shards.end());
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -998,8 +998,8 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        if (!ShardsToRememder.empty()) {
-            const auto shardIdx = ShardsToRememder.back();
+        if (!ShardsToRemember.empty()) {
+            const auto shardIdx = ShardsToRemember.back();
             TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
             context.SS->IncrementPathDbRefCount(txState->TargetPathId);
@@ -1019,7 +1019,7 @@ public:
             domainInfo->AddPrivateShard(shardIdx);
 
 
-            ShardsToRememder.pop_back();
+            ShardsToRemember.pop_back();
             context.OnComplete.ActivateTx(OperationId);
 
             return false;
@@ -1151,7 +1151,7 @@ public:
         Y_VERIFY(context.SS->SubDomains.contains(pathId));
         TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(pathId);
         if (!subDomain->IsSupportTransactions()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, "There are no sence to upgrade subdomain with out transactions support (NBS?).");
+            result->SetError(NKikimrScheme::StatusSchemeError, "There are no sense to upgrade subdomain with out transactions support (NBS?).");
             return result;
         }
 
@@ -1161,32 +1161,32 @@ public:
             return result;
         }
 
-        const THashSet<TPathElement::EPathType> allowedPathesToUpgrade = {
+        const THashSet<TPathElement::EPathType> allowedPathsToUpgrade = {
             TPathElement::EPathType::EPathTypeDir,
             TPathElement::EPathType::EPathTypeTable,
             TPathElement::EPathType::EPathTypeTableIndex,
             TPathElement::EPathType::EPathTypeKesus
         };
 
-        auto pathesInside = context.SS->ListSubTree(pathId, context.Ctx);
-        for (auto pId: pathesInside) {
+        auto pathsInside = context.SS->ListSubTree(pathId, context.Ctx);
+        for (auto pId: pathsInside) {
             if (pId == pathId) {
                 continue;
             }
 
             auto pElem = context.SS->PathsById.at(pId);
-            if (allowedPathesToUpgrade.contains(pElem->PathType)) {
+            if (allowedPathsToUpgrade.contains(pElem->PathType)) {
                 continue;
             }
 
             TString msg = TStringBuilder() << "Unable to upgrade subdomain"
-                                           << ", path type " << NKikimrSchemeOp::EPathType_Name(pElem->PathType) << " is forbiden to migrate"
+                                           << ", path type " << NKikimrSchemeOp::EPathType_Name(pElem->PathType) << " is forbidden to migrate"
                                            << ", pathId: " << pId;
             result->SetError(NKikimrScheme::StatusPreconditionFailed, msg);
             return result;
         }
 
-        for (auto pId: pathesInside) {
+        for (auto pId: pathsInside) {
             if (!context.SS->LockedPaths.contains(pId)) {
                 continue;
             }
@@ -1232,7 +1232,7 @@ public:
         context.SS->PersistSubDomainAlter(db, pathId, *alterData);
 
         // wait all transaction inside
-        auto relatedTx = context.SS->GetRelatedTransactions(pathesInside, context.Ctx);
+        auto relatedTx = context.SS->GetRelatedTransactions(pathsInside, context.Ctx);
         for (auto otherTxId: relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;

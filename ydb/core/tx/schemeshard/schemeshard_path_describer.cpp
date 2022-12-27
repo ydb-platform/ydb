@@ -63,13 +63,13 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
     descr->SetSchemeshardId(pathEl->PathId.OwnerId);
     descr->SetPathId(pathEl->PathId.LocalPathId);
 
-    descr->SetParentPathId(pathEl->ParentPathId.LocalPathId); //???? ParnetPathOwnerId
+    descr->SetParentPathId(pathEl->ParentPathId.LocalPathId); //???? ParentPathOwnerId
 
     descr->SetPathType(pathEl->PathType);
     descr->SetOwner(pathEl->Owner);
 
     descr->SetPathState(pathEl->PathState); // ???? can't be consistent KIKIMR-8861
-    descr->SetCreateFinished(createFinished); // use this insted PathState
+    descr->SetCreateFinished(createFinished); // use this instead of PathState
 
     descr->SetCreateTxId(ui64(pathEl->CreateTxId));
     if (createFinished) {
@@ -447,7 +447,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 const auto& desc = descriptions.at(pqId);
                 auto& partition = *entry->AddPartitions();
 
-                Y_VERIFY_S(desc.TabletId, "Unassigned tabetId for partition: " << pqId);
+                Y_VERIFY_S(desc.TabletId, "Unassigned tabletId for partition: " << pqId);
                 Y_VERIFY_S(desc.Info, "Empty info for partition: " << pqId);
 
                 partition.SetPartitionId(pqId);
@@ -889,7 +889,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     } else {
         // here we do not full any object specific information, like table description
-        // nevertheless, chindren list should be set even when dir or children is being created right now
+        // nevertheless, children list should be set even when dir or children is being created right now
         DescribeChildren(path);
     }
 
@@ -1157,7 +1157,7 @@ void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google:
             const auto& c = endKey.GetCells()[ki];
             auto type = tableInfo->Columns[tableInfo->KeyColumnIds[ki]].PType;
             bool ok = NMiniKQL::CellToValue(type, c, *boundary->AddTuple(), errStr);
-            Y_VERIFY(ok, "Failed to build key tuple at postition %" PRIu32 " error: %s", ki, errStr.data());
+            Y_VERIFY(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
         }
     }
 }

@@ -39,7 +39,7 @@ public:
         auto* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState->TxType == TTxState::TxDropFileStore);
 
-        // Initiate asynchonous deletion of all shards
+        // Initiate asynchronous deletion of all shards
         for (const auto& shard: txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }
@@ -101,8 +101,8 @@ public:
         parentDir->DecAliveChildren();
 
         // KIKIMR-13173
-        // Repeat it here for a waile, delete it from TDeleteParts after
-        // Initiate asynchonous deletion of all shards
+        // Repeat it here for a while, delete it from TDeleteParts after
+        // Initiate asynchronous deletion of all shards
         for (auto shard : txState->Shards) {
             context.OnComplete.DeleteShard(shard.Idx);
         }
@@ -272,7 +272,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     }
 
     TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropFileStore, path.Base()->PathId);
-    // Dirty hack: operation step must not be zero because 0 is treated as "hasn't been operationped"
+    // Dirty hack: operation step must not be zero because 0 is treated as "hasn't been in operation"
     txState.MinStep = TStepId(1);
     txState.State = TTxState::DeleteParts;
 

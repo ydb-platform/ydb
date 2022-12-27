@@ -831,7 +831,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(PathesAndShardsCountersSimultaneousAlterSubDomain) {
+    Y_UNIT_TEST(PathsAndShardsCountersSimultaneousAlterSubDomain) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

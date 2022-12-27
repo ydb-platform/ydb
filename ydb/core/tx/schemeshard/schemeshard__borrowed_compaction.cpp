@@ -83,7 +83,7 @@ void TSchemeShard::BorrowedCompactionHandleDisconnect(TTabletId tabletId, const 
 
     RunningBorrowedCompactions.erase(it);
 
-    // disonnected from node we have requested borrowed compaction. We just resend request, because it
+    // disconnected from node we have requested borrowed compaction. We just resend request, because it
     // is safe: if first request is executing or has been already executed, then second request will be ignored.
 
     StartBorrowedCompaction(shardIdx);

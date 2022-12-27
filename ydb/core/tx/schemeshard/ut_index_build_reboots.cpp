@@ -110,18 +110,18 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 }
             }
 
-            AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
+            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
             ui64 buildIndexId = t.TxId;
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_PREPARING);
             }
 
             t.TestEnv->TestWaitNotification(runtime, buildIndexId);
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
             }
 
@@ -181,18 +181,18 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 }
             }
 
-            AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}, {"value"});
+            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}, {"value"});
             ui64 buildIndexId = t.TxId;
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_PREPARING);
             }
 
             t.TestEnv->TestWaitNotification(runtime, buildIndexId);
 
             {
-                auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
             }
 
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                     fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
                 }
 
-                TestBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
+                TestBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
             }
 
             ui64 buildId = t.TxId;
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             t.TestEnv->TestWaitNotification(runtime, buildId);
 
-            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+            auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
 
             if (response.GetStatus() == Ydb::StatusIds::SUCCESS) {
                 Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                                    {NLs::PathExist});
             }
 
-            TestForgetBuilIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+            TestForgetBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
 
         });
     }

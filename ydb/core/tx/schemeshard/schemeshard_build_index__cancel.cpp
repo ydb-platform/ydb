@@ -53,7 +53,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> not found"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found"
                 );
         }
 
@@ -62,7 +62,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
                 );
         }
 
@@ -70,7 +70,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> has been finished already"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> has been finished already"
                 );
         }
 
@@ -78,7 +78,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> canceling already"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> canceling already"
                 );
         }
 
@@ -86,7 +86,7 @@ public:
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> are almost done, cancellation has no sense"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> are almost done, cancellation has no sense"
                 );
         }
 

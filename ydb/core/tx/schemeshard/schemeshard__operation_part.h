@@ -130,7 +130,7 @@ public:
     NTable::TDatabase& GetDB() {
         Y_VERIFY_S(ProtectDB == false,
                  "there is attempt to write to the DB when it is protected,"
-                 " in that case all writes slould be done over TStorageChanges"
+                 " in that case all writes should be done over TStorageChanges"
                  " in order to maintain revert the changes");
         DirectAccessGranted = true;
         return GetTxc().DB;
@@ -197,7 +197,7 @@ public:
     // call it inside multipart operations after failed propose
     virtual void AbortPropose(TOperationContext& context) = 0;
 
-    // call it only before execute ForceDrop operaion for path
+    // call it only before execute ForceDrop operation for path
     virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0;
 
     // getters

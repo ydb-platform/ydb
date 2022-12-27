@@ -222,7 +222,7 @@ public:
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
                                                         txBody,
-                                                        context.SS->SelectProcessingPrarams(txState->TargetPathId)));
+                                                        context.SS->SelectProcessingParams(txState->TargetPathId)));
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"
@@ -525,7 +525,7 @@ public:
             transactionSupport |= domainInfo->GetAlter()->IsSupportTransactions();
         }
         if (!transactionSupport) {
-            result->SetError(NKikimrScheme::StatusNameConflict, "Inclusive subDomian do not support shared transactions");
+            result->SetError(NKikimrScheme::StatusNameConflict, "Inclusive subDomain do not support shared transactions");
             return result;
         }
 

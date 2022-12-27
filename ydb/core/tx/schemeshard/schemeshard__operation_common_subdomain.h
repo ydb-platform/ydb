@@ -210,7 +210,7 @@ public:
             }
             case ETabletType::SysViewProcessor: {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send configure request to sysview processor: " << tabletID <<
+                    "Send configure request to sys view processor: " << tabletID <<
                     " opId: " << OperationId <<
                     " schemeshard: " << ssId);
                 auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());

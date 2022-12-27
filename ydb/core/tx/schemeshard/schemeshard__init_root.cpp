@@ -32,7 +32,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         Y_VERIFY_S(Self->IsDomainSchemeShard, "Do not run this transaction on tenant schemeshard"
                                               ", tenant schemeshard needs proper initiation by domain schemeshard");
-        Y_VERIFY(!Self->IsShemeShardConfigured());
+        Y_VERIFY(!Self->IsSchemeShardConfigured());
         Y_VERIFY_S(!rootName.empty(), "invalid root name in domain config");
 
         TVector<TString> rootPathElements = SplitPath(rootName);
@@ -214,7 +214,7 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
         ++root.Base()->DirAlterVersion;
         Self->PersistPathDirAlterVersion(db, root.Base());
 
-        // we already inited, so we have to publish changes
+        // we already initialized, so we have to publish changes
         OnComplete.PublishToSchemeBoard(TOperationId(0,0), root.Base()->PathId);
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);
@@ -301,12 +301,12 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
 
 
 
-        if (Self->IsShemeShardConfigured()) {
+        if (Self->IsSchemeShardConfigured()) {
             TPathElement::TPtr root = Self->PathsById.at(Self->RootPathId());
             if (joinedRootPath != root->Name) {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "TEvInitTenantSchemeShard DoExecute"
-                               << ", tenant SchemeShard has been alredy initialized with different root path"
+                               << ", tenant SchemeShard has been already initialized with different root path"
                                << ", at schemeshard: " << selfTabletId);
                 Reply->Record.SetStatus(NKikimrScheme::StatusInvalidParameter);
                 return;
@@ -315,7 +315,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             if (TTabletId(processingParams.GetSchemeShard()) != selfTabletId) {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "TEvInitTenantSchemeShard DoExecute"
-                               << ", tenant SchemeShard has been alredy initialized, unexpected scheme shard ID in params"
+                               << ", tenant SchemeShard has been already initialized, unexpected scheme shard ID in params"
                                << ", at schemeshard: " << selfTabletId);
                 Reply->Record.SetStatus(NKikimrScheme::StatusInvalidParameter);
                 return;
@@ -429,7 +429,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
                          << ", status: " <<Reply->Record.GetStatus()
                          << ", at schemeshard: " << Self->TabletID());
 
-        if (Reply->Record.GetStatus() != NKikimrScheme::StatusSuccess || !Self->IsShemeShardConfigured()) {
+        if (Reply->Record.GetStatus() != NKikimrScheme::StatusSuccess || !Self->IsSchemeShardConfigured()) {
             ctx.Send(Ev->Sender, Reply.Release());
             return;
         }

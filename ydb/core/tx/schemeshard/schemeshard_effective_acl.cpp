@@ -14,7 +14,7 @@ void TEffectiveACL::Init(const TString &effectiveACL)
     // InheritOnly is not filtered from self effective.
     // Record with InheritOnly doesn't counted at CheckAccess
     // InheritOnly flag is eliminated on inheriting
-    // so here is enough to copy acl withount filtering InheritOnly flags
+    // so here is enough to copy acl without filtering InheritOnly flags
     ForSelf = effectiveACL;
 }
 

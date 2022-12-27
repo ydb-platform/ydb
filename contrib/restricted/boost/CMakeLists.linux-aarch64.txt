@@ -26,7 +26,6 @@ add_subdirectory(coroutine)
 add_subdirectory(crc)
 add_subdirectory(date_time)
 add_subdirectory(detail)
-add_subdirectory(dynamic_bitset)
 add_subdirectory(endian)
 add_subdirectory(exception)
 add_subdirectory(filesystem)
@@ -38,7 +37,6 @@ add_subdirectory(functional)
 add_subdirectory(fusion)
 add_subdirectory(integer)
 add_subdirectory(interprocess)
-add_subdirectory(interval)
 add_subdirectory(intrusive)
 add_subdirectory(io)
 add_subdirectory(iostreams)
@@ -46,7 +44,6 @@ add_subdirectory(iterator)
 add_subdirectory(lambda)
 add_subdirectory(lexical_cast)
 add_subdirectory(locale)
-add_subdirectory(logic)
 add_subdirectory(math)
 add_subdirectory(move)
 add_subdirectory(mp11)
@@ -61,7 +58,6 @@ add_subdirectory(pool)
 add_subdirectory(predef)
 add_subdirectory(preprocessor)
 add_subdirectory(program_options)
-add_subdirectory(property_tree)
 add_subdirectory(proto)
 add_subdirectory(random)
 add_subdirectory(range)
@@ -81,11 +77,8 @@ add_subdirectory(tuple)
 add_subdirectory(type_index)
 add_subdirectory(type_traits)
 add_subdirectory(typeof)
-add_subdirectory(ublas)
-add_subdirectory(units)
 add_subdirectory(unordered)
 add_subdirectory(utility)
-add_subdirectory(uuid)
 add_subdirectory(variant)
 add_subdirectory(variant2)
 add_subdirectory(winapi)
@@ -106,7 +99,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-conversion
   restricted-boost-core
   restricted-boost-detail
-  restricted-boost-dynamic_bitset
   restricted-boost-endian
   restricted-boost-exception
   restricted-boost-foreach
@@ -122,14 +114,12 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-move
   restricted-boost-mpl
   restricted-boost-multi_array
-  restricted-boost-multi_index
   restricted-boost-numeric_conversion
   restricted-boost-optional
   restricted-boost-parameter
   restricted-boost-phoenix
   restricted-boost-predef
   restricted-boost-preprocessor
-  restricted-boost-property_tree
   restricted-boost-proto
   restricted-boost-random
   restricted-boost-range
@@ -142,11 +132,8 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-type_index
   restricted-boost-type_traits
   restricted-boost-typeof
-  restricted-boost-ublas
-  restricted-boost-units
   restricted-boost-unordered
   restricted-boost-utility
-  restricted-boost-uuid
   restricted-boost-variant
   restricted-boost-winapi
   restricted-boost-xpressive

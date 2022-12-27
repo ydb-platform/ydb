@@ -698,13 +698,13 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
     return indexMeta;
 }
 
-TMaybe<TKqlQuery> BuildKqlQuery(TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx,
-    bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TKikimrTablesData& tablesData,
+    TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
-    TVector<TKqlQueryBlock> queryBlocks;
-    queryBlocks.reserve(query.Blocks().Size());
+    TVector<TKqlQuery> queryBlocks;
+    queryBlocks.reserve(dataQueryBlocks.ArgCount());
 
-    for (const auto& block : query.Blocks()) {
+    for (const auto& block : dataQueryBlocks) {
         TVector <TExprBase> kqlEffects;
         for (const auto& effect : block.Effects()) {
             if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
@@ -733,7 +733,7 @@ TMaybe<TKqlQuery> BuildKqlQuery(TKiDataQuery query, const TKikimrTablesData& tab
                     .Done());
         }
 
-        queryBlocks.emplace_back(Build<TKqlQueryBlock>(ctx, query.Pos())
+        queryBlocks.emplace_back(Build<TKqlQuery>(ctx, dataQueryBlocks.Pos())
             .Results()
                 .Add(kqlResults)
                 .Build()
@@ -743,35 +743,35 @@ TMaybe<TKqlQuery> BuildKqlQuery(TKiDataQuery query, const TKikimrTablesData& tab
              .Done());
     }
 
-    TKqlQuery kqlQuery = Build<TKqlQuery>(ctx, query.Pos())
-        .Blocks()
-            .Add(queryBlocks)
-            .Build()
-        .Done();
+    for (auto& queryBlock : queryBlocks) {
+        TExprNode::TPtr optResult;
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = true;
+        auto status = OptimizeExpr(queryBlock.Ptr(), optResult,
+            [&tablesData, withSystemColumns, &kqpCtx](const TExprNode::TPtr& input, TExprContext &ctx) {
+                auto node = TExprBase(input);
+                TExprNode::TPtr effect;
 
-    TExprNode::TPtr optResult;
-    TOptimizeExprSettings optSettings(nullptr);
-    optSettings.VisitChanges = true;
-    auto status = OptimizeExpr(kqlQuery.Ptr(), optResult,
-        [&tablesData, withSystemColumns, &kqpCtx](const TExprNode::TPtr& input, TExprContext& ctx) {
-            auto node = TExprBase(input);
-            TExprNode::TPtr effect;
+                if (auto maybeRead = node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) {
+                    return HandleReadTable(maybeRead.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
+                }
 
-            if (auto maybeRead = node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) {
-                return HandleReadTable(maybeRead.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
-            }
+                return input;
+            }, ctx, optSettings);
 
-            return input;
-        }, ctx, optSettings);
+        if (status == IGraphTransformer::TStatus::Error) {
+            return {};
+        }
 
-    if (status == IGraphTransformer::TStatus::Error) {
-        return {};
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
+        YQL_ENSURE(TMaybeNode<TKqlQuery>(optResult));
+        queryBlock = TMaybeNode<TKqlQuery>(optResult).Cast();
     }
 
-    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
-
-    YQL_ENSURE(TMaybeNode<TKqlQuery>(optResult));
-    return TKqlQuery(optResult);
+    return Build<TKqlQueryList>(ctx, dataQueryBlocks.Pos())
+        .Add(queryBlocks)
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

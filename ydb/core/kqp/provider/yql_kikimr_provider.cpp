@@ -52,7 +52,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiAlterGroup::CallableName());
         DataSinkNames.insert(TKiDropGroup::CallableName());
         DataSinkNames.insert(TKiDataQueryBlock::CallableName());
-        DataSinkNames.insert(TKiDataQuery::CallableName());
+        DataSinkNames.insert(TKiDataQueryBlocks::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
 

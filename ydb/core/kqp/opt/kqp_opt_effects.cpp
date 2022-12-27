@@ -415,70 +415,59 @@ template <bool GroupEffectsByTable>
 TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
-    TVector<TKqlQueryBlock> queryBlocks;
-    queryBlocks.reserve(query.Blocks().Size());
+    TVector<TExprBase> builtEffects;
 
-    for (const auto& block : query.Blocks()) {
-        TVector<TExprBase> builtEffects;
-
-        if constexpr(GroupEffectsByTable) {
-            TMap<TStringBuf, TVector<TKqlTableEffect>> tableEffectsMap;
-            for (const auto& maybeEffect : block.Effects()) {
-                if (const auto maybeList = maybeEffect.Maybe<TExprList>()) {
-                    for (const auto effect : maybeList.Cast()) {
-                        YQL_ENSURE(effect.Maybe<TKqlTableEffect>());
-                        auto tableEffect = effect.Cast<TKqlTableEffect>();
-
-                        tableEffectsMap[tableEffect.Table().Path()].push_back(tableEffect);
-                    }
-                } else {
-                    YQL_ENSURE(maybeEffect.Maybe<TKqlTableEffect>());
-                    auto tableEffect = maybeEffect.Cast<TKqlTableEffect>();
+    if constexpr (GroupEffectsByTable) {
+        TMap<TStringBuf, TVector<TKqlTableEffect>> tableEffectsMap;
+        for (const auto& maybeEffect : query.Effects()) {
+            if (const auto maybeList = maybeEffect.Maybe<TExprList>()) {
+                for (const auto effect : maybeList.Cast()) {
+                    YQL_ENSURE(effect.Maybe<TKqlTableEffect>());
+                    auto tableEffect = effect.Cast<TKqlTableEffect>();
 
                     tableEffectsMap[tableEffect.Table().Path()].push_back(tableEffect);
                 }
-            }
+            } else {
+                YQL_ENSURE(maybeEffect.Maybe<TKqlTableEffect>());
+                auto tableEffect = maybeEffect.Cast<TKqlTableEffect>();
 
-            for (const auto& pair: tableEffectsMap) {
-                if (!BuildEffects(block.Pos(), pair.second, ctx, kqpCtx, builtEffects)) {
-                    return {};
-                }
-            }
-        } else {
-            builtEffects.reserve(block.Effects().Size() * 2);
-
-            for (const auto &maybeEffect : block.Effects()) {
-                if (const auto maybeList = maybeEffect.Maybe<TExprList>()) {
-                    for (const auto effect : maybeList.Cast()) {
-                        YQL_ENSURE(effect.Maybe<TKqlTableEffect>());
-                        auto tableEffect = effect.Cast<TKqlTableEffect>();
-
-                        if (!BuildEffects(block.Pos(), {tableEffect}, ctx, kqpCtx, builtEffects)) {
-                            return {};
-                        }
-                    }
-                } else {
-                    YQL_ENSURE(maybeEffect.Maybe<TKqlTableEffect>());
-                    auto tableEffect = maybeEffect.Cast<TKqlTableEffect>();
-
-                    if (!BuildEffects(block.Pos(), {tableEffect}, ctx, kqpCtx, builtEffects)) {
-                        return {};
-                    }
-                }
+                tableEffectsMap[tableEffect.Table().Path()].push_back(tableEffect);
             }
         }
 
-        queryBlocks.emplace_back(Build<TKqlQueryBlock>(ctx, block.Pos())
-            .Results(block.Results())
-            .Effects()
-                .Add(builtEffects)
-                .Build()
-            .Done());
+        for (const auto& pair: tableEffectsMap) {
+            if (!BuildEffects(query.Pos(), pair.second, ctx, kqpCtx, builtEffects)) {
+                return {};
+            }
+        }
+    } else {
+        builtEffects.reserve(query.Effects().Size() * 2);
+
+        for (const auto& maybeEffect : query.Effects()) {
+            if (const auto maybeList = maybeEffect.Maybe<TExprList>()) {
+                for (const auto effect : maybeList.Cast()) {
+                    YQL_ENSURE(effect.Maybe<TKqlTableEffect>());
+                    auto tableEffect = effect.Cast<TKqlTableEffect>();
+
+                    if (!BuildEffects(query.Pos(), {tableEffect}, ctx, kqpCtx, builtEffects)) {
+                        return {};
+                    }
+                }
+            } else {
+                YQL_ENSURE(maybeEffect.Maybe<TKqlTableEffect>());
+                auto tableEffect = maybeEffect.Cast<TKqlTableEffect>();
+
+                if (!BuildEffects(query.Pos(), {tableEffect}, ctx, kqpCtx, builtEffects)) {
+                    return {};
+                }
+            }
+        }
     }
 
     return Build<TKqlQuery>(ctx, query.Pos())
-        .Blocks()
-            .Add(queryBlocks)
+        .Results(query.Results())
+        .Effects()
+            .Add(builtEffects)
             .Build()
         .Done();
 }
@@ -498,13 +487,11 @@ TAutoPtr<IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrusivePtr
 
         bool requireBuild = false;
         bool hasBuilt = false;
-        for (const auto& block : query.Blocks()) {
-            for (const auto& effect : block.Effects()) {
-                if (!effect.Maybe<TDqOutput>()) {
-                    requireBuild = true;
-                } else {
-                    hasBuilt = true;
-                }
+        for (const auto& effect : query.Effects()) {
+            if (!effect.Maybe<TDqOutput>()) {
+                requireBuild = true;
+            } else {
+                hasBuilt = true;
             }
         }
 

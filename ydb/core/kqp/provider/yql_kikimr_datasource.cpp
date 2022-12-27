@@ -512,15 +512,15 @@ public:
             }
 
             auto exec = execQuery.Cast();
-            auto query = exec.Query();
+            auto queryBlocks = exec.QueryBlocks();
 
             ui32 blockId = 0;
             ui32 startBlockIndex = 0;
-            while (blockId < query.Blocks().Size() && startBlockIndex + query.Blocks().Item(blockId).Results().Size() <= index) {
-                startBlockIndex += query.Blocks().Item(blockId).Results().Size();
+            while (blockId < queryBlocks.ArgCount() && startBlockIndex + queryBlocks.Arg(blockId).Results().Size() <= index) {
+                startBlockIndex += queryBlocks.Arg(blockId).Results().Size();
                 ++blockId;
             }
-            auto results = query.Blocks().Item(blockId).Results();
+            auto results = queryBlocks.Arg(blockId).Results();
 
             auto result = results.Item(index - startBlockIndex);
             ui64 rowsLimit = ::FromString<ui64>(result.RowsLimit());
@@ -546,18 +546,13 @@ public:
                 .Done();
 
             auto newResults = ctx.ChangeChild(results.Ref(), index - startBlockIndex, newResult.Ptr());
-            auto newQueryBlock = ctx.ChangeChild(query.Blocks().Item(blockId).Ref(), 0, std::move(newResults));
-            auto newQueryBlocks = ctx.ChangeChild(query.Blocks().Ref(), blockId, std::move(newQueryBlock));
-
-            auto newQuery = Build<TKiDataQuery>(ctx, query.Pos())
-                .Operations(query.Operations())
-                .Blocks(newQueryBlocks)
-                .Done();
+            auto newQueryBlock = ctx.ChangeChild(queryBlocks.Arg(blockId).Ref(), 0, std::move(newResults));
+            auto newQueryBlocks = ctx.ChangeChild(queryBlocks.Ref(), blockId, std::move(newQueryBlock));
 
             auto newExec = Build<TKiExecDataQuery>(ctx, exec.Pos())
                 .World(exec.World())
                 .DataSink(exec.DataSink())
-                .Query(newQuery)
+                .QueryBlocks(newQueryBlocks)
                 .Settings(exec.Settings())
                 .Ast(exec.Ast())
                 .Done();

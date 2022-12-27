@@ -287,21 +287,14 @@
             "Children": [
                 {"Index": 0, "Name": "Results", "Type": "TKiResultList"},
                 {"Index": 1, "Name": "Effects", "Type": "TKiEffects"},
-                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 2, "Name": "Operations", "Type": "TKiOperationList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
-            "Name": "TKiDataQueryBlockList",
-            "ListBase": "TKiDataQueryBlock"
-        },
-        {
-            "Name": "TKiDataQuery",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KiDataQuery"},
-            "Children": [
-                {"Index": 0, "Name": "Operations", "Type": "TKiOperationList"},
-                {"Index": 1, "Name": "Blocks", "Type": "TKiDataQueryBlockList"}
-            ]
+            "Name": "TKiDataQueryBlocks",
+            "VarArgBase": "TKiDataQueryBlock",
+            "Match": {"Type": "Callable", "Name": "DataQueryBlocks"}
         },
         {
             "Name": "TKiExecDataQuery",
@@ -310,7 +303,7 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Query", "Type": "TKiDataQuery"},
+                {"Index": 2, "Name": "QueryBlocks", "Type": "TKiDataQueryBlocks"},
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
                 {"Index": 4, "Name": "Ast", "Type": "TExprBase"}
             ]

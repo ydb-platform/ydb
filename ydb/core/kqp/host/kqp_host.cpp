@@ -750,12 +750,12 @@ public:
             case EKikimrQueryType::YqlScript:
             case EKikimrQueryType::YqlScriptStreaming:
             {
-                YQL_ENSURE(TMaybeNode<TKiDataQuery>(query));
-                TKiDataQuery dataQuery(query);
+                YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
+                TKiDataQueryBlocks dataQueryBlocks(query);
 
                 auto queryAstStr = SerializeExpr(ctx, *query);
 
-                bool useScanQuery = ShouldUseScanQuery(dataQuery, settings);
+                bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
                 querySettings.CollectStats = GetStatsMode(settings.StatsMode);
@@ -765,8 +765,8 @@ public:
                 case EKikimrQueryType::YqlScript:
                     if (useScanQuery) {
                         ui64 rowsLimit = 0;
-                        if (!dataQuery.Blocks().Empty() && !dataQuery.Blocks().Item(0).Results().Empty()) {
-                            const auto& queryBlock = dataQuery.Blocks().Item(0);
+                        if (dataQueryBlocks.ArgCount() && !dataQueryBlocks.Arg(0).Results().Empty()) {
+                            const auto& queryBlock = dataQueryBlocks.Arg(0);
                             rowsLimit = FromString<ui64>(queryBlock.Results().Item(0).RowsLimit());
                         }
 
@@ -839,17 +839,17 @@ private:
         return paramsMap;
     }
 
-    bool ShouldUseScanQuery(const TKiDataQuery& query, const TExecuteSettings& settings) {
+    bool ShouldUseScanQuery(const TKiDataQueryBlocks& queryBlocks, const TExecuteSettings& settings) {
         if (settings.UseScanQuery) {
             return *settings.UseScanQuery;
         }
 
-        if (query.Blocks().Size() != 1) {
+        if (queryBlocks.ArgCount() != 1) {
             // Don't use ScanQuery for muiltiple blocks query
             return false;
         }
 
-        const auto& queryBlock = query.Blocks().Item(0);
+        const auto& queryBlock = queryBlocks.Arg(0);
 
         if (queryBlock.Effects().ArgCount() > 0) {
             // Do not use ScanQuery for queries with effects.
@@ -861,12 +861,12 @@ private:
             return false;
         }
 
-        if (query.Operations().Empty()) {
+        if (queryBlock.Operations().Empty()) {
             // Do not use ScanQuery for pure queries.
             return false;
         }
 
-        for (const auto& operation : query.Operations()) {
+        for (const auto& operation : queryBlock.Operations()) {
             auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
             if (!tableData.Metadata->SysView.empty()) {
                 // Always use ScanQuery for queries with system tables.

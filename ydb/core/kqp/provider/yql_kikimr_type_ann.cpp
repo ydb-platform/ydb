@@ -1236,9 +1236,9 @@ private:
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleDataQuery(NNodes::TKiDataQuery node, TExprContext& ctx) override {
+    virtual TStatus HandleDataQueryBlocks(NNodes::TKiDataQueryBlocks node, TExprContext& ctx) override {
         TTypeAnnotationNode::TListType resultTypes;
-        for (const auto& block : node.Blocks()) {
+        for (const auto& block : node) {
             auto blockType = block.Ref().GetTypeAnn();
             if (!EnsureTupleType(block.Pos(), *blockType, ctx)) {
                 return TStatus::Error;
@@ -1262,9 +1262,13 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureTupleType(node.QueryBlocks().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
         TTypeAnnotationNode::TListType children;
         children.push_back(node.World().Ref().GetTypeAnn());
-        children.push_back(node.Query().Ref().GetTypeAnn());
+        children.push_back(node.QueryBlocks().Ref().GetTypeAnn());
         auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
         node.Ptr()->SetTypeAnn(tupleAnn);
 

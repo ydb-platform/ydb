@@ -22,6 +22,10 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
     TExprBase inputExpr(input);
     auto query = inputExpr.Cast<TKqlQuery>();
 
+    if (query.Results().Empty()) {
+        return TStatus::Ok;
+    }
+
     auto predicate = [](const NYql::TExprNode::TPtr& node) {
         return TMaybeNode<TDqPhyPrecompute>(node).IsValid();
     };
@@ -35,48 +39,41 @@ TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TP
         return precompute != nullptr;
     };
 
-    TNodeOnNodeOwnedMap replaces;
-    for (const auto& block : query.Blocks()) {
-
-        if (block.Results().Empty()) {
+    // Currently we compute all query results in the last physical transaction, so we cannot
+    // precompute them early if no explicit DqPhyPrecompute is specified.
+    // Removing precompute in queries with multiple physical tx can lead to additional computations.
+    // More proper way to fix this is to allow partial result computation in early physical
+    // transactions.
+    bool omitResultPrecomputes = true;
+    for (const auto& result : query.Results()) {
+        if (result.Value().Maybe<TDqPhyPrecompute>()) {
             continue;
         }
 
-        // Currently we compute all query results in the last physical transaction, so we cannot
-        // precompute them early if no explicit DqPhyPrecompute is specified.
-        // Removing precompute in queries with multiple physical tx can lead to additional computations.
-        // More proper way to fix this is to allow partial result computation in early physical
-        // transactions.
-        bool omitResultPrecomputes = true;
-        for (const auto& result : block.Results()) {
-            if (result.Value().Maybe<TDqPhyPrecompute>()) {
-                continue;
-            }
-
-            if (!hasPrecomputes(result.Value())) {
-                omitResultPrecomputes = false;
-                break;
-            }
+        if (!hasPrecomputes(result.Value())) {
+            omitResultPrecomputes = false;
+            break;
         }
-        for (const auto& effect: block.Effects()) {
-            if (!hasPrecomputes(effect)) {
-                omitResultPrecomputes = false;
-                break;
-            }
+    }
+    for (const auto& effect : query.Effects()) {
+        if (!hasPrecomputes(effect)) {
+            omitResultPrecomputes = false;
+            break;
         }
+    }
 
-        for (const auto& queryResult : block.Results()) {
-            TExprBase node(queryResult.Value());
+    TNodeOnNodeOwnedMap replaces;
+    for (const auto& queryResult : query.Results()) {
+        TExprBase node(queryResult.Value());
 
-            // TODO: Missing support for DqCnValue results in scan queries
-            if (node.Maybe<TDqPhyPrecompute>() && omitResultPrecomputes && !kqpCtx.IsScanQuery()) {
-                replaces[node.Raw()] = node.Cast<TDqPhyPrecompute>().Connection().Ptr();
-            } else {
-                auto result = DqBuildPureExprStage(node, ctx);
-                if (result.Raw() != node.Raw()) {
-                    YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of pure query #" << node.Raw()->UniqueId();
-                    replaces[node.Raw()] = result.Ptr();
-                }
+        // TODO: Missing support for DqCnValue results in scan queries
+        if (node.Maybe<TDqPhyPrecompute>() && omitResultPrecomputes && !kqpCtx.IsScanQuery()) {
+            replaces[node.Raw()] = node.Cast<TDqPhyPrecompute>().Connection().Ptr();
+        } else {
+            auto result = DqBuildPureExprStage(node, ctx);
+            if (result.Raw() != node.Raw()) {
+                YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of pure query #" << node.Raw()->UniqueId();
+                replaces[node.Raw()] = result.Ptr();
             }
         }
     }
@@ -90,15 +87,13 @@ TStatus KqpBuildUnionResult(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
     auto query = inputExpr.Cast<TKqlQuery>();
     TNodeOnNodeOwnedMap replaces;
 
-    for (const auto& block : query.Blocks()) {
-        for (const auto& queryResult: block.Results()) {
-            TExprBase node(queryResult.Value());
+    for (const auto& queryResult : query.Results()) {
+        TExprBase node(queryResult.Value());
 
-            auto result = DqBuildExtendStage(node, ctx);
-            if (result.Raw() != node.Raw()) {
-                YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of union #" << node.Raw()->UniqueId();
-                replaces[node.Raw()] = result.Ptr();
-            }
+        auto result = DqBuildExtendStage(node, ctx);
+        if (result.Raw() != node.Raw()) {
+            YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of union #" << node.Raw()->UniqueId();
+            replaces[node.Raw()] = result.Ptr();
         }
     }
     output = ctx.ReplaceNodes(TExprNode::TPtr(input), replaces);
@@ -112,9 +107,13 @@ TStatus KqpDuplicateResults(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
     TExprBase inputExpr(input);
     auto query = inputExpr.Cast<TKqlQuery>();
 
+    if (query.Results().Size() <= 1) {
+        return TStatus::Ok;
+    }
+
     struct TKqlQueryResultInfo {
         TMaybeNode<TKqlQueryResult> Node;
-        TVector<std::pair<size_t, size_t>> Indexes;
+        TVector<size_t> Indexes;
         TMaybeNode<TDqStage> ReplicateStage;
         size_t NextIndex = 0;
     };
@@ -122,23 +121,20 @@ TStatus KqpDuplicateResults(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
     TNodeMap<TKqlQueryResultInfo> kqlQueryResults;
     bool hasDups = false;
 
-    for (size_t blockId = 0; blockId < query.Blocks().Size(); ++blockId) {
-        TKqlQueryBlock block = query.Blocks().Item(blockId);
-        for (size_t resultId = 0; resultId < block.Results().Size(); ++resultId) {
-            TKqlQueryResult result = block.Results().Item(resultId);
+    for (size_t resultId = 0; resultId < query.Results().Size(); ++resultId) {
+        TKqlQueryResult result = query.Results().Item(resultId);
 
-            if (!result.Value().Maybe<TDqConnection>()) {
-                return TStatus::Ok;
-            }
-
-            auto& info = kqlQueryResults[result.Raw()];
-            if (info.Indexes.empty()) {
-                info.Node = result;
-            } else {
-                hasDups = true;
-            }
-            info.Indexes.push_back({blockId, resultId});
+        if (!result.Value().Maybe<TDqConnection>()) {
+            return TStatus::Ok;
         }
+
+        auto& info = kqlQueryResults[result.Raw()];
+        if (info.Indexes.empty()) {
+            info.Node = result;
+        } else {
+            hasDups = true;
+        }
+        info.Indexes.push_back(resultId);
     }
 
     if (!hasDups) {
@@ -170,41 +166,31 @@ TStatus KqpDuplicateResults(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
         }
     }
 
-    TVector<TKqlQueryBlock> queryBlocks;
-    queryBlocks.reserve(query.Blocks().Size());
-    for (const auto& block : query.Blocks()) {
-        TVector<TExprNode::TPtr> results(block.Results().Size());
-        for (size_t i = 0; i < block.Results().Size(); ++i) {
-            auto& info = kqlQueryResults.at(block.Results().Item(i).Raw());
+    TVector<TExprNode::TPtr> results(query.Results().Size());
+    for (size_t i = 0; i < query.Results().Size(); ++i) {
+        auto& info = kqlQueryResults.at(query.Results().Item(i).Raw());
 
-            if (info.Indexes.size() == 1) {
-                results[i] = info.Node.Cast().Ptr();
-            } else {
-                results[i] = Build<TKqlQueryResult>(ctx, query.Pos())
-                    .Value<TDqCnUnionAll>()
-                        .Output()
-                            .Stage(info.ReplicateStage.Cast())
-                            .Index().Build(ToString(info.NextIndex))
-                            .Build()
+        if (info.Indexes.size() == 1) {
+            results[i] = info.Node.Cast().Ptr();
+        } else {
+            results[i] = Build<TKqlQueryResult>(ctx, query.Pos())
+                .Value<TDqCnUnionAll>()
+                    .Output()
+                        .Stage(info.ReplicateStage.Cast())
+                        .Index().Build(ToString(info.NextIndex))
                         .Build()
-                    .ColumnHints(info.Node.Cast().ColumnHints())
-                    .Done().Ptr();
-                info.NextIndex++;
-            }
+                    .Build()
+                .ColumnHints(info.Node.Cast().ColumnHints())
+                .Done().Ptr();
+            info.NextIndex++;
         }
-
-        queryBlocks.emplace_back(Build<TKqlQueryBlock>(ctx, block.Pos())
-            .Results()
-                .Add(results)
-                .Build()
-            .Effects(block.Effects())
-            .Done());
     }
 
     output = Build<TKqlQuery>(ctx, query.Pos())
-        .Blocks()
-            .Add(queryBlocks)
+        .Results()
+            .Add(results)
             .Build()
+        .Effects(query.Effects())
         .Done().Ptr();
 
     return TStatus::Ok;

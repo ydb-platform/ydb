@@ -27,6 +27,7 @@ target_link_libraries(core-kqp-opt PUBLIC
 )
 target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_build_phy_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_build_txs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_effects.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_kql.cpp
@@ -34,6 +35,7 @@ target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_check.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_finalize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_range_legacy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_blocks_transformer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.cpp
 )
 generate_enum_serilization(core-kqp-opt

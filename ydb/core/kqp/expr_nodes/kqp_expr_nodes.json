@@ -321,7 +321,7 @@
             "ListBase": "TKqlQueryResult"
         },
         {
-            "Name": "TKqlQueryBlock",
+            "Name": "TKqlQuery",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
             "Children": [
@@ -330,16 +330,8 @@
             ]
         },
         {
-            "Name": "TKqlQueryBlockList",
-            "ListBase": "TKqlQueryBlock"
-        },
-        {
-            "Name": "TKqlQuery",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Blocks", "Type": "TKqlQueryBlockList"}
-            ]
+            "Name": "TKqlQueryList",
+            "ListBase": "TKqlQuery"
         },
         {
             "Name": "TKqpEffects",

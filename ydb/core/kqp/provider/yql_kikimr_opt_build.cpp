@@ -75,14 +75,14 @@ struct TKiExploreTxResults {
     struct TKiQueryBlock {
         TVector<TExprBase> Results;
         TVector<TExprBase> Effects;
-        THashMap<TString, TPrimitiveYdbOperations> TableOperations;
+        THashMap<TString, TPrimitiveYdbOperations> TablePrimitiveOps; // needed to split query into blocks
+        TVector<TKiOperation> TableOperations;
         bool HasUncommittedChangesRead = false;
     };
 
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
     TVector<TKiQueryBlock> QueryBlocks;
-    TVector<TKiOperation> TableOperations;
     bool HasExecute;
 
     THashSet<const TExprNode*> GetSyncSet() const {
@@ -97,11 +97,22 @@ struct TKiExploreTxResults {
     void GetTableOperations(bool& hasScheme, bool& hasData) {
         hasScheme = false;
         hasData = false;
-        for (auto& node : TableOperations) {
-            auto op = FromString<TYdbOperation>(TString(node.Operation()));
-            hasScheme = hasScheme || (op & KikimrSchemeOps());
-            hasData = hasData || (op & KikimrDataOps());
+        for (auto& queryBlock : QueryBlocks) {
+            for (auto& node : queryBlock.TableOperations) {
+                auto op = FromString<TYdbOperation>(TString(node.Operation()));
+                hasScheme = hasScheme || (op & KikimrSchemeOps());
+                hasData = hasData || (op & KikimrDataOps());
+            }
         }
+    }
+
+    void AddTableOperation(TKiOperation&& op) {
+        if (QueryBlocks.empty()) {
+            AddQueryBlock();
+        }
+
+        auto& curBlock = QueryBlocks.back();
+        curBlock.TableOperations.emplace_back(std::move(op));
     }
 
     void AddReadOpToQueryBlock(const TKikimrKey& key, const TCoAtomList& readColumns, TKikimrTableMetadataPtr tableMeta) {
@@ -222,7 +233,7 @@ struct TKiExploreTxResults {
         curBlock.HasUncommittedChangesRead = uncommittedChangesRead;
 
         for (const auto& [table, op] : ops) {
-            auto& currentOps = curBlock.TableOperations[table];
+            auto& currentOps = curBlock.TablePrimitiveOps[table];
             currentOps |= op;
         }
     }
@@ -242,7 +253,7 @@ struct TKiExploreTxResults {
         }
 
         auto& curBlock = QueryBlocks.back();
-        auto currentOps = curBlock.TableOperations[table];
+        auto currentOps = curBlock.TablePrimitiveOps[table];
         return currentOps & TPrimitiveYdbOperation::Write;
     }
 
@@ -300,14 +311,12 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(maybeRead.Cast().World(), ctx, dataSink, txRes, tablesData);
 
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Select, read.Pos(), ctx));
-
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
         auto readColumns = read.GetSelectColumns(ctx, tableData);
         txRes.AddReadOpToQueryBlock(key, readColumns, tableData.Metadata);
-
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::Select, read.Pos(), ctx));
         return result;
     }
 
@@ -321,7 +330,6 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(write.World(), ctx, dataSink, txRes, tablesData);
         auto tableOp = GetTableOp(write);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
 
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
@@ -340,6 +348,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
         }
 
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
         return result;
     }
 
@@ -353,7 +362,6 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(update.World(), ctx, dataSink, txRes, tablesData);
         const auto tableOp = TYdbOperation::Update;
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, update.Pos(), ctx));
 
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
@@ -365,7 +373,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             updateColumns.emplace(item->GetName());
         }
         txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata, updateColumns);
-
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, update.Pos(), ctx));
         return result;
     }
 
@@ -379,13 +387,12 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(del.World(), ctx, dataSink, txRes, tablesData);
         const auto tableOp = TYdbOperation::Delete;
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, del.Pos(), ctx));
 
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
         txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
-
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, del.Pos(), ctx));
         return result;
     }
 
@@ -398,7 +405,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = create.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(create.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::CreateTable, create.Pos(), ctx));
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::CreateTable, create.Pos(), ctx));
         return result;
     }
 
@@ -411,7 +418,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = drop.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(drop.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::DropTable, drop.Pos(), ctx));
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::DropTable, drop.Pos(), ctx));
         return result;
     }
 
@@ -424,7 +431,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = alter.Table().Value();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(alter.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::AlterTable, alter.Pos(), ctx));
+        txRes.AddTableOperation(BuildTableOpNode(cluster, table, TYdbOperation::AlterTable, alter.Pos(), ctx));
         return result;
     }
 
@@ -436,7 +443,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
 
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(createUser.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::CreateUser, createUser.Pos(), ctx));
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::CreateUser, createUser.Pos(), ctx));
         return result;
     }
 
@@ -448,7 +455,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
 
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(alterUser.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::AlterUser, alterUser.Pos(), ctx));
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterUser, alterUser.Pos(), ctx));
         return result;
     }
 
@@ -460,7 +467,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
 
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(dropUser.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::DropUser, dropUser.Pos(), ctx));
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::DropUser, dropUser.Pos(), ctx));
         return result;
     }
 
@@ -472,7 +479,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
 
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(createGroup.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::CreateGroup, createGroup.Pos(), ctx));
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::CreateGroup, createGroup.Pos(), ctx));
         return result;
     }
 
@@ -484,7 +491,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
 
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(alterGroup.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::AlterGroup, alterGroup.Pos(), ctx));
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterGroup, alterGroup.Pos(), ctx));
         return result;
     }
 
@@ -496,7 +503,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
 
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(dropGroup.World(), ctx, dataSink, txRes, tablesData);
-        txRes.TableOperations.push_back(BuildYdbOpNode(cluster, TYdbOperation::DropGroup, dropGroup.Pos(), ctx));
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::DropGroup, dropGroup.Pos(), ctx));
         return result;
     }
 
@@ -617,7 +624,7 @@ TExprNode::TPtr MakeSchemeTx(TCoCommit commit, TExprContext& ctx) {
         .Ptr();
 }
 
-TKiDataQuery MakeKiDataQuery(TExprBase node, const TKiExploreTxResults& txExplore, TExprContext& ctx) {
+TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExploreTxResults& txExplore, TExprContext& ctx) {
     TVector<TKiDataQueryBlock> queryBlocks;
     queryBlocks.reserve(txExplore.QueryBlocks.size());
 
@@ -644,48 +651,45 @@ TKiDataQuery MakeKiDataQuery(TExprBase node, const TKiExploreTxResults& txExplor
             .Effects()
                 .Add(block.Effects)
                 .Build()
+            .Operations()
+                .Add(block.TableOperations)
+                .Build()
             .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done());
     }
 
-    auto query = Build<TKiDataQuery>(ctx, node.Pos())
-        .Operations()
-            .Add(txExplore.TableOperations)
-            .Build()
-        .Blocks()
-            .Add(queryBlocks)
-            .Build()
-        .Done();
-
-
     auto txSyncSet = txExplore.GetSyncSet();
     auto world = Build<TCoWorld>(ctx, node.Pos()).Done();
 
-    TExprNode::TPtr optResult;
-    TOptimizeExprSettings optSettings(nullptr);
-    optSettings.VisitChanges = true;
-    auto status = OptimizeExpr(query.Ptr(), optResult,
-        [world, &txSyncSet](const TExprNode::TPtr& input, TExprContext& ctx) {
-            auto node = TExprBase(input);
+    for (auto& queryBlock : queryBlocks) {
+        TExprNode::TPtr optResult;
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = true;
+        auto status = OptimizeExpr(queryBlock.Ptr(), optResult,
+            [world, &txSyncSet](const TExprNode::TPtr& input, TExprContext &ctx) {
+                auto node = TExprBase(input);
 
-            if (txSyncSet.contains(node.Raw())) {
-                return world.Ptr();
-            }
+                if (txSyncSet.contains(node.Raw())) {
+                    return world.Ptr();
+                }
 
-            if (node.Maybe<TKiReadTable>() ||
-                node.Maybe<TKiWriteTable>() ||
-                node.Maybe<TKiUpdateTable>() ||
-                node.Maybe<TKiDeleteTable>())
-            {
-                return ctx.ChangeChild(node.Ref(), 0, world.Ptr());
-            }
+                if (node.Maybe<TKiReadTable>() ||
+                    node.Maybe<TKiWriteTable>() ||
+                    node.Maybe<TKiUpdateTable>() ||
+                    node.Maybe<TKiDeleteTable>())
+                {
+                    return ctx.ChangeChild(node.Ref(), 0, world.Ptr());
+                }
 
-            return node.Ptr();
-        }, ctx, optSettings);
+                return node.Ptr();
+            }, ctx, optSettings);
 
-    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
-    YQL_ENSURE(TMaybeNode<TKiDataQuery>(optResult));
-    return TKiDataQuery(optResult);
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+        YQL_ENSURE(TMaybeNode<TKiDataQueryBlock>(optResult));
+        queryBlock = TMaybeNode<TKiDataQueryBlock>(optResult).Cast();
+    }
+
+    return queryBlocks;
 }
 
 } // namespace
@@ -726,7 +730,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
         return MakeSchemeTx(commit, ctx);
     }
 
-    auto dataQuery = MakeKiDataQuery(commit.World(), txExplore, ctx);
+    auto dataQueryBlocks = MakeKiDataQueryBlocks(commit.World(), txExplore, ctx);
 
     TKiExecDataQuerySettings execSettings;
     if (settings.Mode) {
@@ -742,7 +746,9 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
             .Add(txExplore.Sync)
             .Build()
         .DataSink(commit.DataSink().Cast<TKiDataSink>())
-        .Query(dataQuery)
+        .QueryBlocks()
+            .Add(dataQueryBlocks)
+            .Build()
         .Settings(execSettings.BuildNode(ctx, node.Pos()))
         .Ast<TCoVoid>().Build()
         .Done();
@@ -828,13 +834,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
             .Build()
         .Effects()
             .Build()
-        .Done();
-
-    auto dataQuery = Build<TKiDataQuery>(ctx, node.Pos())
         .Operations()
-            .Build()
-        .Blocks()
-            .Add(queryBlock)
             .Build()
         .Done();
 
@@ -844,7 +844,9 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
             .Category().Build(KikimrProviderName)
             .Cluster().Build(cluster)
             .Build()
-        .Query(dataQuery)
+        .QueryBlocks()
+            .Add({queryBlock})
+            .Build()
         .Settings()
             .Build()
         .Ast<TCoVoid>().Build()

@@ -38,16 +38,19 @@ struct TKqpBuildQueryContext : TThrRefBase {
     TKqpBuildQueryContext() {}
 
     TVector<NYql::NNodes::TKqpPhysicalTx> PhysicalTxs;
+    TVector<NYql::NNodes::TExprBase> QueryResults;
 
     void Reset() {
         PhysicalTxs.clear();
+        QueryResults.clear();
     }
 };
 
 bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
 
-TMaybe<NYql::NNodes::TKqlQuery> BuildKqlQuery(NYql::NNodes::TKiDataQuery query, const NYql::TKikimrTablesData& tablesData,
-    NYql::TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
+TMaybe<NYql::NNodes::TKqlQueryList> BuildKqlQuery(NYql::NNodes::TKiDataQueryBlocks queryBlocks,
+    const NYql::TKikimrTablesData& tablesData, NYql::TExprContext& ctx, bool withSystemColumns,
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpFinalizingOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryPhasesTransformer();
@@ -57,5 +60,10 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer();
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer,
     NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config);
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx);
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryBlocksTransformer(TAutoPtr<NYql::IGraphTransformer> queryBlockTransformer);
 
 } // namespace NKikimr::NKqp::NOpt

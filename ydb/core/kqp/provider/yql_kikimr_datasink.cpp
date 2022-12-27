@@ -255,17 +255,19 @@ private:
     }
 
     TStatus HandleDataQueryBlock(TKiDataQueryBlock node, TExprContext& ctx) override {
-        Y_UNUSED(node);
         Y_UNUSED(ctx);
+
+        for (const auto& op : node.Operations()) {
+            SessionCtx->Tables().GetOrAddTable(TString(op.Cluster()), SessionCtx->GetDatabase(), TString(op.Table()));
+        }
 
         return TStatus::Ok;
     }
 
-    TStatus HandleDataQuery(TKiDataQuery node, TExprContext& ctx) override {
+    TStatus HandleDataQueryBlocks(TKiDataQueryBlocks node, TExprContext& ctx) override {
+        Y_UNUSED(node);
         Y_UNUSED(ctx);
-        for (const auto& op : node.Operations()) {
-            SessionCtx->Tables().GetOrAddTable(TString(op.Cluster()), SessionCtx->GetDatabase(), TString(op.Table()));
-        }
+
         return TStatus::Ok;
     }
 
@@ -764,8 +766,8 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDataQueryBlock(node.Cast(), ctx);
     }
 
-    if (auto node = callable.Maybe<TKiDataQuery>()) {
-        return HandleDataQuery(node.Cast(), ctx);
+    if (auto node = callable.Maybe<TKiDataQueryBlocks>()) {
+        return HandleDataQueryBlocks(node.Cast(), ctx);
     }
 
     if (auto node = callable.Maybe<TKiExecDataQuery>()) {

@@ -267,7 +267,7 @@ void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
     TActorId edgeActor = runtime.AllocateEdgeActor(1);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
 
-    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.get(), 1), 1);
+    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1), 1);
 
     std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
     UNIT_ASSERT(ev->Type == TEvKeyValue::EvReadResponse);
@@ -391,7 +391,7 @@ void RunTest(TTestEnv &env, TRangeReadRequestBuilder &builder, const std::vector
     TActorId edgeActor = runtime.AllocateEdgeActor(1);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
 
-    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.get(), 1), 1);
+    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1), 1);
 
     std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
     UNIT_ASSERT(ev->Type == TEvKeyValue::EvReadRangeResponse);

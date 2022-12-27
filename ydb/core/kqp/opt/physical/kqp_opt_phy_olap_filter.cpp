@@ -722,7 +722,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 {
     Y_UNUSED(typesCtx);
 
-    if (!kqpCtx.Config->PushOlapProcess()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
 

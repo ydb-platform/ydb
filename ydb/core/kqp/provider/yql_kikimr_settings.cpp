@@ -41,8 +41,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
     REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
-    REGISTER_SETTING(*this, _KqpPushOlapProcess);
-    REGISTER_SETTING(*this, KqpPushOlapProcess);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
@@ -59,6 +57,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
+    REGISTER_SETTING(*this, OptEnableOlapPushdown);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -82,24 +81,6 @@ bool TKikimrSettings::SpillingEnabled() const {
 
 bool TKikimrSettings::DisableLlvmForUdfStages() const {
     return GetFlagValue(_KqpDisableLlvmForUdfStages.Get());
-}
-
-bool TKikimrSettings::PushOlapProcess() const {
-    auto settingsFlag = GetFlagValue(_KqpPushOlapProcess.Get());
-    auto runtimeFlag = GetFlagValue(KqpPushOlapProcess.Get());
-
-    // There are no settings or it set to False, but pragma enable pushdown
-    if (!settingsFlag && runtimeFlag) {
-        return true;
-    }
-
-    // Settings are set to True but no pragma present - enable pushdown
-    if (settingsFlag && !KqpPushOlapProcess.Get()) {
-        return true;
-    }
-
-    // Other cases handled by AND
-    return settingsFlag && runtimeFlag;
 }
 
 bool TKikimrSettings::HasOptDisableJoinRewrite() const {
@@ -128,6 +109,10 @@ bool TKikimrSettings::HasOptDisableSqlInToJoin() const {
 
 bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
     return GetFlagValue(OptEnableInplaceUpdate.Get());
+}
+
+bool TKikimrSettings::HasOptEnableOlapPushdown() const {
+    return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

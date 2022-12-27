@@ -413,7 +413,8 @@ private:
             "Scan " << ScanActorId << " send ScanData to " << ComputeActorId
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
             << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
-            << " finished: " << Result->Finished << " pageFault: " << Result->PageFault);
+            << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
+            << " arrow schema:\n" << (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : ""));
 
         if (PeerFreeSpace < Bytes) {
             PeerFreeSpace = 0;

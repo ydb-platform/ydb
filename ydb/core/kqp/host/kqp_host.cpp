@@ -1188,6 +1188,10 @@ private:
             settings.EndOfQueryCommit = sqlAutoCommit;
             settings.Flags.insert("DisableEmitStartsWith");
             settings.Flags.insert("FlexibleTypes");
+            if (SessionCtx->Query().Type == EKikimrQueryType::Scan) {
+                // We enable EmitAggApply for aggregate pushdowns to Column Shards which are accessed by Scan query only
+                settings.Flags.insert("EmitAggApply");
+            }
 
             ui16 actualSyntaxVersion = 0;
             astRes = NSQLTranslation::SqlToYql(query, settings, nullptr, &actualSyntaxVersion);

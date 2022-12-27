@@ -30,11 +30,6 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages;
-    /*
-     * Both settings for predicates push are needed.
-     */
-    NCommon::TConfSetting<bool, false> _KqpPushOlapProcess;
-    NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
 
     /* Compile time */
     NCommon::TConfSetting<ui64, false> _CommitPerShardKeysSizeLimitBytes;
@@ -52,6 +47,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
+    NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
@@ -62,7 +58,6 @@ struct TKikimrSettings {
     bool SystemColumnsEnabled() const;
     bool SpillingEnabled() const;
     bool DisableLlvmForUdfStages() const;
-    bool PushOlapProcess() const;
 
     bool HasOptDisableJoinRewrite() const;
     bool HasOptDisableJoinTableLookup() const;
@@ -70,6 +65,7 @@ struct TKikimrSettings {
     bool HasOptDisableJoinReverseTableLookupLeftSemi() const;
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
+    bool HasOptEnableOlapPushdown() const;
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetEnableLlvm() const;
 

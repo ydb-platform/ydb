@@ -54,7 +54,7 @@ bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
 
 TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!kqpCtx.Config->PushOlapProcess()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
 
@@ -135,7 +135,7 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
 
 TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!kqpCtx.Config->PushOlapProcess()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
 

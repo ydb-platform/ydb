@@ -808,10 +808,6 @@ private:
                 op.Properties["Reverse"] = true;
             }
 
-            if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
-                op.Properties["PredicatePushdown"] = SerializerCtx.Config.Get()->PushOlapProcess();
-            }
-
             ui32 operatorId;
             if (readInfo.Type == EPlanTableReadType::FullScan) {
                 op.Properties["Name"] = "TableFullScan";
@@ -1254,10 +1250,6 @@ private:
         if (settings.Reverse) {
             readInfo.Reverse = true;
             op.Properties["Reverse"] = true;
-        }
-
-        if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
-            op.Properties["PredicatePushdown"] = SerializerCtx.Config.Get()->PushOlapProcess();
         }
 
         if (read.Maybe<TKqpReadOlapTableRangesBase>()) {

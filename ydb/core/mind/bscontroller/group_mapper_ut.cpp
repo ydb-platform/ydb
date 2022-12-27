@@ -248,6 +248,83 @@ public:
         return group.Group;
     }
 
+    enum class ESanitizeResult {
+        SUCCESS,
+        FAIL,
+        ALREADY,
+    };
+
+    using TSanitizeGroupResult = std::pair<ESanitizeResult, TGroupMapper::TGroupDefinition>;
+    TSanitizeGroupResult SanitizeGroup(TGroupMapper& mapper, ui32 groupId, const TSet<TPDiskId>& unusableDisks,
+            bool makeThemForbidden = false, bool requireOperational = false, bool allowError = false,
+            std::pair<TVDiskIdShort, TPDiskId>* movedDisk = nullptr) {
+        TGroupRecord& group = Groups.at(groupId);
+
+        TGroupMapper::TForbiddenPDisks forbid(unusableDisks.begin(), unusableDisks.end());
+        if (!makeThemForbidden) {
+            forbid.clear();
+        }
+
+        Ctest << "groupId# " << groupId << " sanitizing group# " << FormatGroup(group.Group) << Endl;
+        for (ui32 i = 0; i < group.Group.size(); ++i) {
+            for (ui32 j = 0; j < group.Group[i].size(); ++j) {
+                for (ui32 k = 0; k < group.Group[i][j].size(); ++k) {
+                    auto& pdisk = group.Group[i][j][k];
+                    --PDisks.at(pdisk).NumSlots;
+                }
+            }
+        }
+
+        TGroupMapper::TMisplacedVDisks result = mapper.FindMisplacedVDisks(group.Group);
+        if (result) {
+            Ctest << "error# " << result.ErrorReason << Endl;
+            if (allowError) {
+                for (auto& realm : group.Group) {
+                    for (auto& domain : realm) {
+                        for (auto& pdisk : domain) {
+                            ++PDisks.at(pdisk).NumSlots;
+                        }
+                    }
+                }
+                return {ESanitizeResult::FAIL, {}};
+            }
+        }
+
+        ESanitizeResult status = ESanitizeResult::ALREADY;
+        TString error;
+        
+        if (!result.Disks.empty()) {
+            status = ESanitizeResult::FAIL;
+            for (auto vdisk : result.Disks) {
+                auto target = mapper.TargetMisplacedVDisk(groupId, group.Group, vdisk,
+                    std::move(forbid), 0, requireOperational, error);
+                if (target) {
+                    status = ESanitizeResult::SUCCESS;
+                    if (movedDisk) {
+                        *movedDisk = {vdisk, *target};
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (status == ESanitizeResult::FAIL) {
+            Ctest << "Sanitation failed! Last error reason: " << error << Endl;
+        }
+
+        group.PDisks.clear();
+        for (const auto& realm : group.Group) {
+            for (const auto& domain : realm) {
+                for (const auto& pdisk : domain) {
+                    group.PDisks.push_back(pdisk);
+                    ++PDisks.at(pdisk).NumSlots;
+                }
+            }
+        }
+
+        return {status, group.Group};
+    }
+
     void SetGroup(ui32 groupId, const TGroupMapper::TGroupDefinition& group) {
         auto& g = Groups[groupId];
         for (const TPDiskId& pdiskId : g.PDisks) {
@@ -448,6 +525,69 @@ public:
                 Ctest << s << Endl;
             }
         }
+    }
+
+    bool CheckGroupPlacement(const TGroupMapper::TGroupDefinition& group, TGroupGeometryInfo geom, TString& error) {
+        NLayoutChecker::TDomainMapper domainMapper;
+        if (group.size() != geom.GetNumFailRealms()) {
+            error = "Wrong fail realms number";
+            return false;
+        }
+
+        for (ui32 failRealm = 0; failRealm < geom.GetNumFailRealms(); ++failRealm) {
+            if (group[failRealm].size() != geom.GetNumFailDomainsPerFailRealm()) {
+                error = TStringBuilder() << "Wrong fail domains number in failRealm# " << failRealm;
+                return false;
+            }
+            for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
+                if (group[failRealm][failDomain].size() != geom.GetNumVDisksPerFailDomain()) {
+                    error = TStringBuilder() << "Wrong vdisks number in failRealm# " << failRealm << ", failDomain# " << failDomain;
+                    return false;
+                }
+            }
+        }
+
+        std::unordered_set<ui32> usedPRealms;
+        for (ui32 failRealm = 0; failRealm < geom.GetNumFailRealms(); ++failRealm) {
+            const NLayoutChecker::TPDiskLayoutPosition pdisk0(domainMapper, PDisks.at(group[failRealm][0][0]).GetLocation(), group[failRealm][0][0], geom);
+            ui32 pRealm = pdisk0.Realm.Index();
+            if (usedPRealms.count(pRealm)) {
+                error = "same pRealm in different fail realms detected";
+                return false;
+            }
+            usedPRealms.insert(pRealm);
+            std::unordered_set<ui32> usedPDomains;
+            for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
+                const NLayoutChecker::TPDiskLayoutPosition pdisk1(domainMapper, PDisks.at(group[failRealm][failDomain][0]).GetLocation(), 
+                    group[failRealm][failDomain][0], geom);
+                ui32 pDomain = pdisk1.Domain.Index();
+                if (usedPDomains.count(pDomain)) {
+                    error = "same pDomain in different fail domains detected";
+                    return false;
+                }
+                usedPDomains.insert(pDomain);
+                std::set<TPDiskId> usedPDisks;
+                for (ui32 vdisk = 0; vdisk < geom.GetNumVDisksPerFailDomain(); ++vdisk) {
+                    auto pdiskId = group[failRealm][failDomain][vdisk];
+                    auto pdisk = NLayoutChecker::TPDiskLayoutPosition(domainMapper, PDisks.at(pdiskId).GetLocation(), pdiskId, geom);
+                    if (pdisk.Realm.Index() != pRealm) {
+                        error = TStringBuilder() << "different pRealms within one failRealm, vdisk# " << failRealm << ":" << failDomain <<
+                            ":" << vdisk << ", expected pRealm " << pRealm << ", got " << pdisk.Realm.Index();
+                        return false;
+                    }
+                    if (pdisk.Domain.Index() != pDomain) {
+                        error = "different pDomains within one failDomain";
+                        return false;
+                    }
+                    if (usedPDisks.count(pdiskId)) {
+                        error = "same PDisk in different VDisks";
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 };
 
@@ -894,32 +1034,17 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
     Y_UNIT_TEST(SanitizeGroupTest3dc) {
         const ui32 numDataCenters = 3;
         const ui32 numRacks = 5;
-        TTestContext context(numDataCenters, 1, numRacks, 1, 1);
-        TGroupMapper::TGroupDefinition group;
+        const ui32 numDisks = 3;
+        TTestContext context(numDataCenters, 1, numRacks, 1, numDisks);
+        TGroupMapper::TGroupDefinition groupDef;
         ui32 groupId;
         {
             TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
             context.PopulateGroupMapper(mapper, 1);
-            groupId = context.AllocateGroup(mapper, group);
+            groupId = context.AllocateGroup(mapper, groupDef);
             Ctest << "group after allocation:" << Endl;
-            context.DumpGroup(group);
+            context.DumpGroup(groupDef);
         }
-
-        auto checkLayout = [&](const auto& group) {
-            TGroupGeometryInfo geom = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc);
-            THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>> layout;
-            for (ui32 i = 0; i < group.size(); ++i) {
-                for (ui32 j = 0; j < group[i].size(); ++j) {
-                    for (ui32 k = 0; k < group[i][j].size(); ++k) {
-                        layout.emplace(TVDiskIdShort(i, j, k), std::make_pair(context.GetLocation(group[i][j][k]),
-                            group[i][j][k]));
-                    }
-                }
-            }
-            return CheckGroupLayout(geom, layout);
-        };
-
-        UNIT_ASSERT(checkLayout(group));
 
         for (ui32 n = 0; n < 1000; ++n) {
             Ctest << Endl << "iteration# " << n << Endl;
@@ -929,51 +1054,61 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             context.ImportLayout(layout);
 
             Ctest << "group after layout shuffling:" << Endl;
-            context.DumpGroup(group);
+            context.DumpGroup(groupDef);
+            
+            ui32 sanitationStep = 0;
+            
+            TGroupMapper::TGroupDefinition group = groupDef;
+            TString path = "";
+            TSet<TGroupMapper::TGroupDefinition> seen;
+            TSet<TVDiskIdShort> vdiskItems;
+            TSet<TPDiskId> pdiskItems;
 
-            struct TQueueItem {
-                TGroupMapper::TGroupDefinition Group;
-                TString Path;
-                TSet<TGroupMapper::TGroupDefinition> Seen;
-                TSet<TVDiskIdShort> VDiskItems;
-                TSet<TPDiskId> PDiskItems;
-            };
-            std::deque<TQueueItem> queue;
-            for (queue.push_back({.Group = group}); !queue.empty(); ) {
-                TQueueItem item = std::move(queue.front());
-                queue.pop_front();
-                const auto [it, inserted] = item.Seen.insert(item.Group);
+            while (true) {
+                const auto [it, inserted] = seen.insert(group);
                 UNIT_ASSERT(inserted);
-                UNIT_ASSERT(item.Seen.size() <= 9);
-                Ctest << "processing path# " << item.Path << Endl;
+                UNIT_ASSERT(seen.size() <= 9);
+                Ctest << "processing path# " << path << Endl;
 
-                auto candidates = checkLayout(item.Group);
-                if (!candidates) {
-                    for (const TVDiskIdShort& vdiskId : candidates.Candidates) {
-                        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
-                        context.SetGroup(groupId, item.Group);
-                        context.PopulateGroupMapper(mapper, 2);
-                        const TPDiskId& pdiskId = item.Group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk];
-                        auto temp = context.ReallocateGroup(mapper, groupId, {pdiskId}, false, false, false);
-                        TString path = TStringBuilder() << item.Path << "/" << (int)vdiskId.FailRealm << ":"
-                            << (int)vdiskId.FailDomain << ":" << (int)vdiskId.VDisk << "@" << pdiskId;
-                        Ctest << "path# " << path << Endl;
-                        context.DumpGroup(temp);
+                TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
 
-                        auto vdiskItems = item.VDiskItems;
-//                        const auto [it1, inserted1] = vdiskItems.insert(vdiskId);
-//                        UNIT_ASSERT_C(inserted1, "Duplicate group cell# " << vdiskId);
+                context.SetGroup(groupId, group);
+                context.PopulateGroupMapper(mapper, 2);
 
-                        auto pdiskItems = item.PDiskItems;
-//                        const auto [it2, inserted2] = pdiskItems.insert(pdiskId);
-//                        UNIT_ASSERT_C(inserted2, "Duplicate origin PDisk# " << pdiskId);
+                std::pair<TVDiskIdShort, TPDiskId> movedDisk;
+                auto [res, tempGroup] = context.SanitizeGroup(mapper, groupId, {}, false, false, false, &movedDisk);
+                Ctest << "Sanititaion step# " << sanitationStep++ << ", sanitizer ";
+                switch (res) {
+                case TTestContext::ESanitizeResult::FAIL:
+                    Ctest << "FAIL" << Endl;
+                    UNIT_FAIL("Sanitizing failed");
+                    break;
+                case TTestContext::ESanitizeResult::ALREADY:
+                    Ctest << "ALREADY" << Endl;
+                    break;
+                case TTestContext::ESanitizeResult::SUCCESS:
+                    Ctest << "SUCCESS" << Endl;
+                    break;
+                }
 
-                        queue.push_front({.Group = std::move(temp), .Path = std::move(path), .Seen = item.Seen,
-                            .VDiskItems = std::move(vdiskItems), .PDiskItems = std::move(pdiskItems)});
-                    }
+                path = TStringBuilder() << path << "/" << (int)movedDisk.first.FailRealm << ":"
+                    << (int)movedDisk.first.FailDomain << ":" << (int)movedDisk.first.VDisk << "@" << movedDisk.second;
+                Ctest << "path# " << path << Endl;
+                context.DumpGroup(tempGroup);
+                if (res == TTestContext::ESanitizeResult::ALREADY) {
+                    TString error;
+                    UNIT_ASSERT_C(context.CheckGroupPlacement(group, TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc), error), error);
+                    break;
                 }
 
                 Ctest << Endl;
+                group = tempGroup;
+
+                const auto [it1, inserted1] = vdiskItems.insert(movedDisk.first);
+                UNIT_ASSERT_C(inserted1, "Duplicate group cell# " << movedDisk.first);
+
+                const auto [it2, inserted2] = pdiskItems.insert(movedDisk.second);
+                UNIT_ASSERT_C(inserted2, "Duplicate origin PDisk# " << movedDisk.second);
             }
         }
     }

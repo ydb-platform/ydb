@@ -78,6 +78,36 @@ namespace NKikimr {
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
                 TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
+
+            struct TMisplacedVDisks {
+                enum EFailLevel : ui32 {
+                    ALL_OK,
+                    DISK_FAIL,
+                    DOMAIN_FAIL,
+                    REALM_FAIL,
+                    EMPTY_SLOT,
+                    INCORRECT_LAYOUT,
+                };
+
+                TMisplacedVDisks(EFailLevel failLevel, std::vector<TVDiskIdShort> disks, TString errorReason = "")
+                    : FailLevel(failLevel)
+                    , Disks(std::move(disks))
+                    , ErrorReason(errorReason) 
+                {}
+
+                EFailLevel FailLevel;
+                std::vector<TVDiskIdShort> Disks;
+                TString ErrorReason;
+
+                operator bool() const {
+                    return FailLevel != EFailLevel::INCORRECT_LAYOUT;
+                }
+            };
+
+            TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group);
+
+            std::optional<TPDiskId> TargetMisplacedVDisk(ui32 groupId, TGroupDefinition& group, TVDiskIdShort vdisk, 
+                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
         };
 
     } // NBsController

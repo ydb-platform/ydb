@@ -79,6 +79,7 @@ namespace NKikimr {
             // volatile reconfiguration state
             THashMap<TVSlotId, TPDiskId> ExplicitReconfigureMap;
             std::set<TVSlotId> SuppressDonorMode;
+            std::unordered_set<ui32> SanitizingRequests;
 
             // just-created vslots, which are not yet committed to the storage
             TSet<TVSlotId> UncommittedVSlots;
@@ -273,6 +274,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, TStatus& status);
         };
 
     } // NBsController

@@ -218,6 +218,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(DropDonorDisk, DROP_DONOR_DISK)
                             MAP_TIMING(ReassignGroupDisk, REASSIGN_GROUP_DISK)
                             MAP_TIMING(WipeVDisk, REASSIGN_GROUP_DISK)
+                            MAP_TIMING(SanitizeGroup, REASSIGN_GROUP_DISK)
 
                             default:
                                 break;
@@ -314,6 +315,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(AllocateVirtualGroup)
                     HANDLE_COMMAND(DecommitGroups)
                     HANDLE_COMMAND(WipeVDisk)
+                    HANDLE_COMMAND(SanitizeGroup)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

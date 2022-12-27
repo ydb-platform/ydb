@@ -172,6 +172,7 @@ namespace NKikimr {
                 TStackVec<std::pair<TVSlotId, bool>, 32> replaceQueue;
                 THashMap<TVDiskIdShort, TPDiskId> replacedDisks;
                 i64 requiredSpace = Min<i64>();
+                bool sanitizingRequest = (State.SanitizingRequests.find(groupId) != State.SanitizingRequests.end());
 
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // scan through all VSlots and find matching PDisks
@@ -225,6 +226,11 @@ namespace NKikimr {
                     }
                 }
 
+                if (sanitizingRequest) {
+                    // resize group definition
+                    getGroup();
+                }
+
                 if (group) {
                     TGroupInfo *groupInfo = State.Groups.FindForUpdate(groupId);
 
@@ -249,7 +255,26 @@ namespace NKikimr {
                                 }
                             }
                         }
-                        AllocateGroup(groupId, group, replacedDisks, std::move(forbid), requiredSpace, AllowUnusableDisks);
+                        if ((replacedDisks.empty() && sanitizingRequest) || (replacedDisks.size() == 1)) {
+                            auto result = SanitizeGroup(groupId, group, std::move(forbid), requiredSpace, AllowUnusableDisks);
+
+                            if (replacedDisks.empty()) {
+                                // update information about replaced disks
+                                for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
+                                    if (vslot->GetShortVDiskId() == result.first) {
+                                        auto it = preservedSlots.find(vslot->GetVDiskId());
+                                        Y_VERIFY(it != preservedSlots.end());
+                                        preservedSlots.erase(it);
+                                        replacedSlots.emplace(result.first, vslot->VSlotId);
+                                        replaceQueue.emplace_back(vslot->VSlotId, State.SuppressDonorMode.count(vslot->VSlotId));
+                                        replacedDisks.emplace(result.first, vslot->VSlotId.ComprisingPDiskId());
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            AllocateGroup(groupId, group, replacedDisks, std::move(forbid), requiredSpace, AllowUnusableDisks);
+                        }
                         if (!IgnoreVSlotQuotaCheck) {
                             adjustSpaceAvailable = true;
                             for (const auto& [pos, vslotId] : replacedSlots) {
@@ -379,6 +404,33 @@ namespace NKikimr {
                 for (const TPDiskId pdiskId : removeQ) {
                     Mapper->UnregisterPDisk(pdiskId);
                 }
+            }
+
+            std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group, 
+                    TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace, bool addExistingDisks) {
+                if (!Mapper) {
+                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
+                    PopulateGroupMapper();
+                }
+                TStackVec<TPDiskId, 32> removeQ;
+                if (addExistingDisks) {
+                    for (const auto& realm : group) {
+                        for (const auto& domain : realm) {
+                            for (const TPDiskId id : domain) {
+                                if (id != TPDiskId()) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false)) {
+                                        removeQ.push_back(id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                auto res = Geometry.SanitizeGroup(*Mapper, groupId, group, std::move(forbid), requiredSpace);
+                for (const TPDiskId pdiskId : removeQ) {
+                    Mapper->UnregisterPDisk(pdiskId);
+                }
+                return res;
             }
 
             void PopulateGroupMapper() {

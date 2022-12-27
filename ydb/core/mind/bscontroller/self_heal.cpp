@@ -26,7 +26,7 @@ namespace NKikimr::NBsController {
         TActorId SelfHealId; // filled on bootstrap
         const TGroupId GroupId;
         const TEvControllerUpdateSelfHealInfo::TGroupContent Group;
-        const TVDiskID VDiskToReplace;
+        const std::optional<TVDiskID> VDiskToReplace;
         TBlobStorageGroupInfo::TTopology Topology;
         THolder<TBlobStorageGroupInfo::TGroupVDisks> FailedGroupDisks;
         THashSet<TVDiskID> PendingVDisks;
@@ -35,7 +35,7 @@ namespace NKikimr::NBsController {
 
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
-                TVDiskID vdiskToReplace)
+                std::optional<TVDiskID> vdiskToReplace)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
@@ -78,7 +78,7 @@ namespace NKikimr::NBsController {
             FailedGroupDisks = MakeHolder<TBlobStorageGroupInfo::TGroupVDisks>(&Topology);
 
             for (const auto& [vdiskId, vdisk] : Group.VDisks) {
-                if (vdiskId == VDiskToReplace) {
+                if (VDiskToReplace && vdiskId == *VDiskToReplace) {
                     *FailedGroupDisks |= {&Topology, vdiskId};
                     continue; // skip disk we are going to replcate -- it will be wiped out anyway
                 }
@@ -158,12 +158,17 @@ namespace NKikimr::NBsController {
             auto *request = record.MutableRequest();
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
-            auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
-            cmd->SetGroupId(VDiskToReplace.GroupID);
-            cmd->SetGroupGeneration(VDiskToReplace.GroupGeneration);
-            cmd->SetFailRealmIdx(VDiskToReplace.FailRealm);
-            cmd->SetFailDomainIdx(VDiskToReplace.FailDomain);
-            cmd->SetVDiskIdx(VDiskToReplace.VDisk);
+            if (VDiskToReplace) {
+                auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
+                cmd->SetGroupId(VDiskToReplace->GroupID);
+                cmd->SetGroupGeneration(VDiskToReplace->GroupGeneration);
+                cmd->SetFailRealmIdx(VDiskToReplace->FailRealm);
+                cmd->SetFailDomainIdx(VDiskToReplace->FailDomain);
+                cmd->SetVDiskIdx(VDiskToReplace->VDisk);
+            } else {
+                auto *cmd = request->AddCommand()->MutableSanitizeGroup();
+                cmd->SetGroupId(GroupId);
+            }
 
             Send(ControllerId, ev.Release());
         }
@@ -341,12 +346,8 @@ namespace NKikimr::NBsController {
                     Y_VERIFY(!group.LayoutValid);
                     if (group.ReassignerActorId || now < group.NextRetryTimestamp) {
                         // nothing to do
-                    } else if (const auto v = FindVDiskToReplaceByLayout(group, now)) {
-                        group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content, *v));
-                    } else if (group.LayoutValid) {
-                        GroupsWithInvalidLayout.Remove(&group);
                     } else {
-                        ++counter;
+                        group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content, std::nullopt));
                     }
                 }
             }
@@ -401,40 +402,20 @@ namespace NKikimr::NBsController {
                 CheckGroups();
             }
         }
+        
+        using TVDiskInfo = TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo;
+        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks, 
+                const TGroupGeometryInfo& geom) {
+            TGroupMapper::TGroupDefinition groupDefinition;
+            geom.ResizeGroup(groupDefinition);
 
-        std::optional<TVDiskID> FindVDiskToReplaceByLayout(TGroupRecord& group, TInstant now) {
-            THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>> layout;
-            for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
-                Y_VERIFY(HostRecords);
+            for (const auto& [vdiskId, vdisk] : vdisks) {
                 if (!vdisk.Decommitted) {
-                    layout.emplace(vdiskId, std::make_pair(HostRecords->GetLocation(vdisk.Location.NodeId),
-                        vdisk.Location.ComprisingPDiskId()));
-                }
-            }
-            const TLayoutCheckResult checkResult = CheckGroupLayout(*group.Content.Geometry, layout);
-            if (checkResult) { // group is valid
-                group.LayoutValid = true;
-                return std::nullopt;
-            }
-
-            THashSet<TVDiskIdShort> badDisks;
-            for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
-                const auto it = group.VDiskStatus.find(vdiskId);
-                if (it == group.VDiskStatus.end() || it->second.GetStatus(now) != NKikimrBlobStorage::EVDiskStatus::READY || vdisk.Bad) {
-                    badDisks.insert(vdiskId);
-                }
-            }
-            if (badDisks.empty()) {
-                return TVDiskID(group.GroupId, group.Content.Generation, checkResult.Candidates.front());
-            } else if (badDisks.size() == 1) {
-                for (const auto& vdiskId : checkResult.Candidates) {
-                    if (badDisks.contains(vdiskId)) {
-                        return TVDiskID(group.GroupId, group.Content.Generation, vdiskId);
-                    }
+                    groupDefinition[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] = vdisk.Location.ComprisingPDiskId();
                 }
             }
 
-            return std::nullopt;
+            return std::move(groupDefinition);
         }
 
         void HandleWakeup() {

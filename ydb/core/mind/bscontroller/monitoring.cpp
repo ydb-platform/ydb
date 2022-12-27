@@ -445,6 +445,21 @@ public:
                             break;
                         }
 
+                        case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup: {
+                            const auto& cmd = q.GetSanitizeGroup();
+
+                            const ui32 groupId = cmd.GetGroupId();
+                            TStringStream msg;
+                            msg << "Group sanitizing request"
+                                << "<br/>GroupId# " << groupId;
+
+                            Events.emplace_front(timestamp, msg.Str(), std::move(reassign));
+                            auto& j = Events.front().Json;
+                            j["Event"] = "SanitizeGroup";
+                            j["GroupId"] = ToString(groupId);
+                            break;
+                        }
+
                         case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateDriveStatus: {
                             const auto& cmd = q.GetUpdateDriveStatus();
 

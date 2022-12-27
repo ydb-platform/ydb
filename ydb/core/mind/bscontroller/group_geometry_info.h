@@ -80,6 +80,23 @@ namespace NKikimr::NBsController {
             throw TExFitGroupError() << "failed to allocate group: " << error;
         }
 
+        // returns pair of previous VDisk and PDisk id's
+        std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
+                TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
+            TString error;
+            auto misplacedVDisks = mapper.FindMisplacedVDisks(group);
+            for (const bool requireOperational : {true, false}) {
+                for (const auto& replacedDisk : misplacedVDisks.Disks) {
+                    TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
+                    if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace, 
+                            requireOperational, error)) {
+                        return {replacedDisk, pdiskId};
+                    }
+                }
+            }
+            throw TExFitGroupError() << "failed to sanitize group: " << error;
+        }
+
         bool ResizeGroup(TGroupMapper::TGroupDefinition& group) const {
             if (!group) {
                 group.resize(NumFailRealms);
@@ -111,6 +128,28 @@ namespace NKikimr::NBsController {
                     return false;
                 }
             }
+            return true;
+        }
+
+        bool CheckGroupSize(const TGroupMapper::TGroupDefinition& group) const {
+            if (!group) {
+                return false;
+            }
+
+            if (group.size() != NumFailRealms)  {
+                return false;
+            }
+            for (const auto& realm : group) {
+                if (realm.size() != NumFailDomainsPerFailRealm) {
+                    return false;
+                }
+                for (const auto& domain : realm) {
+                    if (domain.size() != NumVDisksPerFailDomain) {
+                        return false;
+                    }
+                }
+            }
+
             return true;
         }
 

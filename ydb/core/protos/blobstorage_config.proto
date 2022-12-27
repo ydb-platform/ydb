@@ -271,6 +271,10 @@ message TReassignGroupDisk {
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
 }
 
+message TSanitizeGroup {
+    uint32 GroupId = 1;
+}
+
 enum EClusterFitAlgorithm {
     QUADRATIC = 0;
     HUNGARIAN = 1;
@@ -515,6 +519,7 @@ message TConfigRequest {
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
+            TSanitizeGroup SanitizeGroup = 42;
         }
     }
 

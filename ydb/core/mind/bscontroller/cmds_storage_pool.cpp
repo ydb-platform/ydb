@@ -584,4 +584,9 @@ namespace NKikimr::NBsController {
         group->CalculateGroupStatus();
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
+        ui32 groupId = cmd.GetGroupId();
+        SanitizingRequests.emplace(groupId);
+    }
+
 } // NKikimr::NBsController

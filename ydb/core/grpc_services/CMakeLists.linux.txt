@@ -88,6 +88,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_drop_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_discovery.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_data_query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_scheme_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_yql_script.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_explain_yql_script.cpp

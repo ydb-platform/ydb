@@ -6,20 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-add_subdirectory(ydb_query)
+add_subdirectory(impl)
 
-add_library(cpp-client-draft)
-target_link_libraries(cpp-client-draft PUBLIC
-  contrib-libs-linux-headers
+add_library(client-draft-ydb_query)
+target_link_libraries(client-draft-ydb_query PUBLIC
   contrib-libs-cxxsupp
   yutil
-  api-grpc-draft
+  draft-ydb_query-impl
+  cpp-client-ydb_common_client
   cpp-client-ydb_table
-  client-ydb_types-operation
-  cpp-client-ydb_value
 )
-target_sources(cpp-client-draft PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_scripting.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_long_tx.cpp
+target_sources(client-draft-ydb_query PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/client.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/query.cpp
 )

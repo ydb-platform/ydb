@@ -19,6 +19,7 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
@@ -338,6 +339,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxyId, true));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId));
             GRpcServer->AddService(new NGRpcService::TGRpcFederatedQueryService(system, counters, grpcRequestProxyId));

@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -51,14 +52,14 @@
     void N(NUnitTest::TTestContext&)
 
 template <bool ForceVersionV1>
-TString Query(const TString& tmpl) {
+TString MakeQuery(const TString& tmpl) {
     return TStringBuilder()
         << (ForceVersionV1 ? "--!syntax_v1\n" : "")
         << tmpl;
 }
 
-#define Q_(expr) Query<false>(expr)
-#define Q1_(expr) Query<true>(expr)
+#define Q_(expr) MakeQuery<false>(expr)
+#define Q1_(expr) MakeQuery<true>(expr)
 
 namespace NKikimr {
 namespace NKqp {
@@ -131,6 +132,10 @@ public:
     NYdb::NTable::TTableClient GetTableClient() const {
         return NYdb::NTable::TTableClient(*Driver, NYdb::NTable::TClientSettings()
             .UseQueryCache(false));
+    }
+
+    NYdb::NQuery::TQueryClient GetQueryClient() const {
+        return NYdb::NQuery::TQueryClient(*Driver);
     }
 
     bool IsUsingSnapshotReads() const {

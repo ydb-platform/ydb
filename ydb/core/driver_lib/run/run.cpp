@@ -100,6 +100,7 @@
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
@@ -577,6 +578,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["logstore"] = &hasLogStore;
         TServiceCfg hasAuth = services.empty();
         names["auth"] = &hasAuth;
+        TServiceCfg hasQueryService = services.empty();
+        names["query_service"] = &hasQueryService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -803,6 +806,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+        }
+
+        if (hasQueryService) {
+            server.AddService(new NGRpcService::TGRpcYdbQueryService(ActorSystem.Get(), Counters,
+                grpcRequestProxyId, hasDataStreams.IsRlAllowed()));
         }
 
         if (hasLogStore) {

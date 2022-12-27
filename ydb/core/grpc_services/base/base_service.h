@@ -1,6 +1,8 @@
 #pragma once
 
+#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/grpc/server/grpc_request_base.h>
+#include <library/cpp/grpc/server/grpc_server.h>
 #include <library/cpp/grpc/server/logger.h>
 
 namespace NKikimr {

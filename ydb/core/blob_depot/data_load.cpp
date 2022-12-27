@@ -6,7 +6,7 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
-    class TData::TTxLoad : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+    class TData::TTxDataLoad : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         template<typename TTable_, typename TInProgressState_, typename TNextState_, bool Initial_>
         struct TItem {
             using TTable = TTable_;
@@ -38,18 +38,20 @@ namespace NKikimr::NBlobDepot {
         bool SuccessorTx = false;
 
     public:
-        TTxLoad(TBlobDepot *self, TLoadState loadState = TLoadDataBegin{})
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DATA_LOAD; }
+
+        TTxDataLoad(TBlobDepot *self, TLoadState loadState = TLoadDataBegin{})
             : TTransactionBase(self)
             , LoadState(std::move(loadState))
         {}
 
-        TTxLoad(TTxLoad& predecessor)
+        TTxDataLoad(TTxDataLoad& predecessor)
             : TTransactionBase(predecessor.Self)
             , LoadState(std::move(predecessor.LoadState))
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxLoad::Execute", (Id, Self->GetLogId()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxDataLoad::Execute", (Id, Self->GetLogId()));
 
             NIceDb::TNiceDb db(txc.DB);
             bool progress = false;
@@ -140,11 +142,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxLoad::Complete", (Id, Self->GetLogId()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxDataLoad::Complete", (Id, Self->GetLogId()),
                 (SuccessorTx, SuccessorTx), (LoadState.index, LoadState.index()));
 
             if (SuccessorTx) {
-                Self->Execute(std::make_unique<TTxLoad>(*this));
+                Self->Execute(std::make_unique<TTxDataLoad>(*this));
             } else {
                 Self->Data->OnLoadComplete();
             }
@@ -152,7 +154,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TData::StartLoad() {
-        Self->Execute(std::make_unique<TTxLoad>(Self));
+        Self->Execute(std::make_unique<TTxDataLoad>(Self));
     }
 
     void TData::OnLoadComplete() {

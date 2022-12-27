@@ -44,6 +44,9 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+        TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+        TTabletCountersBase* const TabletCounters;
+
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
         struct TToken {};
@@ -143,6 +146,7 @@ namespace NKikimr::NBlobDepot {
 
         void OnActivateExecutor(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
+            Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             ExecuteTxInitSchema();
         }
 

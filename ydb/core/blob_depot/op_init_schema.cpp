@@ -7,6 +7,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::ExecuteTxInitSchema() {
         class TTxInitSchema : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_INIT_SCHEMA; }
+
             TTxInitSchema(TBlobDepot *self)
                 : TTransactionBase(self)
             {}

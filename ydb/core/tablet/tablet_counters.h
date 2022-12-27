@@ -707,7 +707,7 @@ private:
 };
 
 
-IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func);
-
 } // end of NKikimr
 
+template<>
+void Out<NKikimr::TTabletLabeledCountersBase::EAggregateFunc>(IOutputStream& out, NKikimr::TTabletLabeledCountersBase::EAggregateFunc func);

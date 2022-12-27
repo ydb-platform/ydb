@@ -13,6 +13,8 @@ namespace NKikimr::NBlobDepot {
         const ui64 Cookie;
 
     public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_ISSUE_GC; }
+
         TTxIssueGC(TBlobDepot *self, ui8 channel, ui32 groupId, TGenStep issuedGenStep,
                 std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage, ui64 cookie)
             : TTransactionBase(self)
@@ -48,6 +50,8 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
 
     public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_CONFIRM_GC; }
+
         TTxConfirmGC(TBlobDepot *self, ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep)
             : TTransactionBase(self)
             , Channel(channel)

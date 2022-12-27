@@ -46,6 +46,8 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
 
+        bool CheckBlock(ui64 tabletId, ui32 generation) const;
+
         template<typename TCallback>
         void Enumerate(TCallback&& callback) const {
             for (const auto& [tabletId, block] : Blocks) {

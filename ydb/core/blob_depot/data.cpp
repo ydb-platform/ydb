@@ -139,9 +139,12 @@ namespace NKikimr::NBlobDepot {
                     return true; // remove this blob from deletion queue, it still has references
                 } else {
                     InFlightTrash.emplace(cookie, id);
+                    InFlightTrashSize += id.BlobSize();
+                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
                     NIceDb::TNiceDb(txc.DB).Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
                     RefCount.erase(it);
                     TotalStoredDataSize -= id.BlobSize();
+                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
                     return false; // keep this blob in deletion queue
                 }
             };
@@ -232,6 +235,8 @@ namespace NKikimr::NBlobDepot {
             std::deque<TKey> KeysMadeCertain;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_CERTAIN_KEYS; }
+
             TTxCommitCertainKeys(TBlobDepot *self, std::deque<TKey> keysMadeCertain)
                 : TTransactionBase(self)
                 , KeysMadeCertain(std::move(keysMadeCertain))
@@ -342,6 +347,8 @@ namespace NKikimr::NBlobDepot {
         auto& record = GetRecordsPerChannelGroup(id);
         record.Trash.insert(id);
         AccountBlob(id, true);
+        TotalStoredTrashSize += id.BlobSize();
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
     }
 
     void TData::AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep) {
@@ -474,6 +481,7 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(inserted);
         AccountBlob(id, true);
         TotalStoredDataSize += id.BlobSize();
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
     }
 
     void TData::AccountBlob(TLogoBlobID id, bool add) {
@@ -504,10 +512,12 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TData::TRecordsPerChannelGroup::MoveToTrash(TLogoBlobID id) {
+    void TData::TRecordsPerChannelGroup::MoveToTrash(TData *self, TLogoBlobID id) {
         const auto usedIt = Used.find(id);
         Y_VERIFY(usedIt != Used.end());
         Trash.insert(Used.extract(usedIt));
+        self->TotalStoredTrashSize += id.BlobSize();
+        self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }
 
     void TData::TRecordsPerChannelGroup::OnSuccessfulCollect(TData *self) {
@@ -517,6 +527,8 @@ namespace NKikimr::NBlobDepot {
             Y_VERIFY(it != Trash.end() && *it == id);
             it = Trash.erase(it);
             self->AccountBlob(id, false);
+            self->TotalStoredTrashSize -= id.BlobSize();
+            self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
         }
         LastConfirmedGenStep = IssuedGenStep;
     }
@@ -578,6 +590,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::ValidateRecords() {
+        return;
+
 #ifndef NDEBUG
         auto now = TActivationContext::Monotonic();
         if (now < LastRecordsValidationTimestamp + TDuration::MilliSeconds(100)) {

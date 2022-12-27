@@ -1,0 +1,61 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimrBlobDepot;
+
+option (NKikimr.TabletTypeName) = "BlobDepot"; // Used as prefix for all counters
+
+enum ESimpleCounters {
+    COUNTER_TOTAL_STORED_DATA_SIZE = 0 [(NKikimr.CounterOpts) = {Name: "TotalStoredDataSize"}];
+    COUNTER_TOTAL_STORED_TRASH_SIZE = 1 [(NKikimr.CounterOpts) = {Name: "TotalStoredTrashSize"}];
+    COUNTER_IN_FLIGHT_TRASH_SIZE = 2 [(NKikimr.CounterOpts) = {Name: "InFlightTrashSize"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_PUTS_INCOMING = 0 [(NKikimr.CounterOpts) = {Name: "Puts/Incoming"}];
+    COUNTER_PUTS_OK = 1 [(NKikimr.CounterOpts) = {Name: "Puts/Ok"}];
+    COUNTER_PUTS_ERROR = 2 [(NKikimr.CounterOpts) = {Name: "Puts/Error"}];
+}
+
+enum EPercentileCounters {
+    option (NKikimr.GlobalCounterOpts) = {
+        Ranges: { Value: 500         Name: "(1) < 500 us"      }
+        Ranges: { Value: 1000        Name: "(2) 0.5-1 ms"      }
+        Ranges: { Value: 2000        Name: "(3) 1-2 ms"        }
+        Ranges: { Value: 4000        Name: "(4) 2-4 ms"        }
+        Ranges: { Value: 8000        Name: "(5) 4-8 ms"        }
+        Ranges: { Value: 16000       Name: "(6) 8-16 ms"       }
+        Ranges: { Value: 32000       Name: "(7) 16-32 ms"      }
+        Ranges: { Value: 64000       Name: "(8) 32-64 ms"      }
+        Ranges: { Value: 128000      Name: "(9) 64-128 ms"     }
+        Ranges: { Value: 256000      Name: "(10) 128-256 ms"   }
+        Ranges: { Value: 512000      Name: "(11) 256-512 ms"   }
+        Ranges: { Value: 1024000     Name: "(12) 512-1024 ms"  }
+        Ranges: { Value: 2000000     Name: "(13) 1024-2000 ms" }
+        Ranges: { Value: 4000000     Name: "(14) 2-4 s"        }
+        Ranges: { Value: 8000000     Name: "(15) 4-8 s"        }
+        Ranges: { Value: 16000000    Name: "(16) 8-16 s"       }
+        Ranges: { Value: 32000000    Name: "(17) 16-32 s"      }
+    };
+
+    COUNTER_PERCENTILE_SELECT_GROUPS = 0 [(NKikimr.CounterOpts) = { Name: "SelectGroups" }];
+}
+
+enum ETxTypes {
+    TXTYPE_PUT_ASSIMILATED_DATA = 0 [(NKikimr.TxTypeOpts) = {Name: "TTxPutAssimilatedData"}];
+    TXTYPE_DROP_BLOB_IF_NODATA = 1 [(NKikimr.TxTypeOpts) = {Name: "TTxDropBlobIfNoData"}];
+    TXTYPE_FINISH_COPYING = 2 [(NKikimr.TxTypeOpts) = {Name: "TTxFinishCopying"}];
+    TXTYPE_FINISH_DECOMMISSION = 3 [(NKikimr.TxTypeOpts) = {Name: "TTxFinishDecommission"}];
+    TXTYPE_MON_DATA = 4 [(NKikimr.TxTypeOpts) = {Name: "TTxMonData"}];
+    TXTYPE_INIT_SCHEMA = 5 [(NKikimr.TxTypeOpts) = {Name: "TTxInitSchema"}];
+    TXTYPE_APPLY_CONFIG = 6 [(NKikimr.TxTypeOpts) = {Name: "TTxApplyConfig"}];
+    TXTYPE_LOAD = 7 [(NKikimr.TxTypeOpts) = {Name: "TTxLoad"}];
+    TXTYPE_ISSUE_GC = 8 [(NKikimr.TxTypeOpts) = {Name: "TTxIssueGC"}];
+    TXTYPE_CONFIRM_GC = 9 [(NKikimr.TxTypeOpts) = {Name: "TTxConfirmGC"}];
+    TXTYPE_COMMIT_CERTAIN_KEYS = 10 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitCertainKeys"}];
+    TXTYPE_RESOLVE = 11 [(NKikimr.TxTypeOpts) = {Name: "TTxResolve"}];
+    TXTYPE_COMMIT_RANGE = 12 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitRange"}];
+    TXTYPE_DATA_LOAD = 13 [(NKikimr.TxTypeOpts) = {Name: "TTxDataLoad"}];
+    TXTYPE_COLLECT_GARBAGE = 14 [(NKikimr.TxTypeOpts) = {Name: "TTxCollectGarbage"}];
+    TXTYPE_COMMIT_BLOB_SEQ = 15 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitBlobSeq"}];
+    TXTYPE_UPDATE_BLOCK = 16 [(NKikimr.TxTypeOpts) = {Name: "TTxUpdateBlock"}];
+}

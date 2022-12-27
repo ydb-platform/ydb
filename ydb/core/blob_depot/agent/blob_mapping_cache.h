@@ -8,21 +8,15 @@ namespace NKikimr::NBlobDepot {
     class TBlobDepotAgent::TBlobMappingCache
         : public TRequestSender
     {
-        struct TQueryWaitingForKey {
-            TQuery* const Query;
-            ui64 Id;
-
-            TQueryWaitingForKey(TQuery *query, ui64 id)
-                : Query(query)
-                , Id(id)
-            {}
-        };
-
         struct TCachedKeyItem : TIntrusiveListItem<TCachedKeyItem> {
             TStringBuf Key;
             TResolvedValueChain Values;
             bool ResolveInFlight = false;
-            std::list<TQueryWaitingForKey> QueriesWaitingForKey;
+            THashSet<ui64> PendingQueries;
+
+            TCachedKeyItem(TStringBuf key)
+                : Key(std::move(key))
+            {}
         };
 
         THashMap<TString, TCachedKeyItem> Cache;
@@ -33,9 +27,9 @@ namespace NKikimr::NBlobDepot {
             : TRequestSender(agent)
         {}
 
-        void HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
+        void HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
         const TResolvedValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
-        void ProcessResponse(ui64 /*tag*/, TRequestContext::TPtr /*context*/, TResponse response) override;
+        void ProcessResponse(ui64 tag, TRequestContext::TPtr /*context*/, TResponse response) override;
     };
 
 } // NKikimr::NBlobDepot

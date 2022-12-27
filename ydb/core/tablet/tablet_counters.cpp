@@ -229,22 +229,21 @@ void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase&
     Drop = Drop || rp.Drop;
 }
 
-IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func) {
+} // end of NKikimr namespace
+
+template<>
+void Out<NKikimr::TTabletLabeledCountersBase::EAggregateFunc>(IOutputStream& out, NKikimr::TTabletLabeledCountersBase::EAggregateFunc func) {
     switch(func) {
-        case TTabletLabeledCountersBase::EAggregateFunc::EAF_MIN:
+        case NKikimr::TTabletLabeledCountersBase::EAggregateFunc::EAF_MIN:
             out << "EAF_MIN";
             break;
-        case TTabletLabeledCountersBase::EAggregateFunc::EAF_MAX:
+        case NKikimr::TTabletLabeledCountersBase::EAggregateFunc::EAF_MAX:
             out << "EAF_MAX";
             break;
-        case TTabletLabeledCountersBase::EAggregateFunc::EAF_SUM:
+        case NKikimr::TTabletLabeledCountersBase::EAggregateFunc::EAF_SUM:
             out << "EAF_SUM";
             break;
         default:
             out << (ui32)func;
     }
-    return out;
 }
-
-} // end of NKikimr namespace
-

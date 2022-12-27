@@ -339,7 +339,7 @@ namespace NKikimr::NBlobDepot {
                 , GroupId(groupId)
             {}
 
-            void MoveToTrash(TLogoBlobID id);
+            void MoveToTrash(TData *self, TLogoBlobID id);
             void OnSuccessfulCollect(TData *self);
             void OnLeastExpectedBlobIdChange(TData *self);
             void ClearInFlight(TData *self);
@@ -354,6 +354,8 @@ namespace NKikimr::NBlobDepot {
         std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         ui64 TotalStoredDataSize = 0;
+        ui64 TotalStoredTrashSize = 0;
+        ui64 InFlightTrashSize = 0;
 
         friend class TGroupAssimilator;
 
@@ -370,7 +372,7 @@ namespace NKikimr::NBlobDepot {
         class TTxIssueGC;
         class TTxConfirmGC;
 
-        class TTxLoad;
+        class TTxDataLoad;
 
         class TTxLoadSpecificKeys;
         class TTxResolve;

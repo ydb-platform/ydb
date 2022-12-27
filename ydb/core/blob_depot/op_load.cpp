@@ -9,6 +9,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::ExecuteTxLoad() {
         class TTxLoad : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_LOAD; }
+
             TTxLoad(TBlobDepot *self)
                 : TTransactionBase(self)
             {}

@@ -42,6 +42,7 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA36, "TBlocksManager::TTabletDisconnected", (VirtualGroupId, Agent.VirtualGroupId),
                 (TabletId, queryBlockContext.TabletId), (RefreshId, block.RefreshId));
             block.RefreshId = 0;
+            IssueOnUpdateBlock(block);
         } else {
             Y_FAIL("unexpected response type");
         }

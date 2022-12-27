@@ -9,10 +9,12 @@ namespace NKikimr::NBlobDepot {
         std::unordered_set<TRecordsPerChannelGroup*> records;
         for (auto it = first; it != last; ++it) {
             auto& record = GetRecordsPerChannelGroup(it->second);
-            record.MoveToTrash(it->second);
+            record.MoveToTrash(this, it->second);
             records.insert(&record);
+            InFlightTrashSize -= it->second.BlobSize();
         }
         InFlightTrash.erase(first, last);
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
 
         for (TRecordsPerChannelGroup *record : records) {
             record->CollectIfPossible(this);

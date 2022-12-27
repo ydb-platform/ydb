@@ -93,6 +93,8 @@ namespace NKikimr::NBlobDepot {
         std::deque<TKey> Uncertainties;
 
     public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_RESOLVE; }
+
         TTxResolve(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr request)
             : TTransactionBase(self)
             , Request(request.Release())
@@ -423,6 +425,8 @@ namespace NKikimr::NBlobDepot {
             TEvBlobStorage::TEvRangeResult::TPtr Ev;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_RANGE; }
+
             TTxCommitRange(TBlobDepot *self, TEvBlobStorage::TEvRangeResult::TPtr ev)
                 : TTransactionBase(self)
                 , Ev(ev)

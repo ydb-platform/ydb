@@ -11,6 +11,8 @@ namespace NKikimr::NBlobDepot {
             TString ConfigProtobuf;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_APPLY_CONFIG; }
+
             TTxApplyConfig(TBlobDepot *self, TEvBlobDepot::TEvApplyConfig& ev, std::unique_ptr<IEventHandle> response,
                     TActorId interconnectSession)
                 : TTransactionBase(self)

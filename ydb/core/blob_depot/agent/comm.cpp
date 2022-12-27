@@ -16,8 +16,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
+        auto& msg = *ev->Get();
         STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA04, "TEvClientDestroyed", (VirtualGroupId, VirtualGroupId),
-            (Msg, ev->Get()->ToString()));
+            (ClientId, msg.ClientId), (ServerId, msg.ServerId));
         PipeId = PipeServerId = {};
         OnDisconnect();
         ConnectToBlobDepot();

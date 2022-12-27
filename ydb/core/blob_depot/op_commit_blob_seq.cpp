@@ -2,6 +2,7 @@
 #include "schema.h"
 #include "data.h"
 #include "garbage_collection.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -14,6 +15,8 @@ namespace NKikimr::NBlobDepot {
             std::vector<TBlobSeqId> BlobSeqIds;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
+
             TTxCommitBlobSeq(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
                 : TTransactionBase(self)
                 , NodeId(agent.Connection->NodeId)
@@ -21,7 +24,9 @@ namespace NKikimr::NBlobDepot {
                 , Request(std::move(request))
             {
                 const ui32 generation = Self->Executor()->Generation();
-                for (const auto& item : Request->Get()->Record.GetItems()) {
+                const auto& items = Request->Get()->Record.GetItems();
+                Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PUTS_INCOMING] += items.size();
+                for (const auto& item : items) {
                     if (TData::TValue::Validate(item) && !item.GetCommitNotify()) {
                         const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
                         if (Self->Data->CanBeCollected(blobSeqId)) {
@@ -68,6 +73,16 @@ namespace NKikimr::NBlobDepot {
                     const bool canBeCollected = Self->Data->CanBeCollected(blobSeqId);
 
                     auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
+                    if (!item.GetCommitNotify()) {
+                        if (const auto& v = key.AsVariant(); const auto *id = std::get_if<TLogoBlobID>(&v)) {
+                            if (!Self->BlocksManager->CheckBlock(id->TabletID(), id->Generation())) {
+                                // FIXME(alexvru): ExtraBlockChecks?
+                                responseItem->SetStatus(NKikimrProto::BLOCKED);
+                                responseItem->SetErrorReason("block race detected");
+                                continue;
+                            }
+                        }
+                    }
 
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT68, "TTxCommitBlobSeq process key", (Id, Self->GetLogId()),
                         (Key, key), (Item, item), (CanBeCollected, canBeCollected), (Generation, generation));
@@ -100,6 +115,14 @@ namespace NKikimr::NBlobDepot {
                     } else {
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
+                }
+
+                for (const auto& item : Response->Get<TEvBlobDepot::TEvCommitBlobSeqResult>()->Record.GetItems()) {
+                    Self->TabletCounters->Cumulative()[
+                        item.GetStatus() == NKikimrProto::OK
+                            ? NKikimrBlobDepot::COUNTER_PUTS_OK
+                            : NKikimrBlobDepot::COUNTER_PUTS_ERROR
+                    ].Increment(1);
                 }
 
                 return true;

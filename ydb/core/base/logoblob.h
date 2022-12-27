@@ -121,7 +121,7 @@ namespace NKikimr {
             return TLogoBlobID(arr);
         }
 
-        static TLogoBlobID FromBinary(const TString& data) {
+        static TLogoBlobID FromBinary(TStringBuf data) {
             Y_VERIFY(data.size() == BinarySize);
             return FromBinary(data.data());
         }

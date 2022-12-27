@@ -109,6 +109,8 @@ namespace NKikimr::NBlobDepot {
             bool MoreData = false;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PUT_ASSIMILATED_DATA; }
+
             TTxPutAssimilatedData(TAssimilator *self, TEvBlobStorage::TEvAssimilateResult::TPtr ev)
                 : TTransactionBase(self->Self)
                 , Self(self)
@@ -292,6 +294,8 @@ namespace NKikimr::NBlobDepot {
             const TActorId AssimilatorId;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DROP_BLOB_IF_NODATA; }
+
             TTxDropBlobIfNoData(TBlobDepot *self, TLogoBlobID id, TActorId assimilatorId)
                 : TTransactionBase(self)
                 , Id(id)
@@ -364,6 +368,8 @@ namespace NKikimr::NBlobDepot {
             TAssimilator* const Self;
 
         public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_FINISH_COPYING; }
+
             TTxFinishCopying(TAssimilator *self)
                 : TTransactionBase(self->Self)
                 , Self(self)
@@ -414,6 +420,8 @@ namespace NKikimr::NBlobDepot {
         if (status == NKikimrProto::OK) {
             class TTxFinishDecommission : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             public:
+                TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_FINISH_DECOMMISSION; }
+
                 TTxFinishDecommission(TAssimilator *self)
                     : TTransactionBase(self->Self)
                 {}

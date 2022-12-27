@@ -42,6 +42,8 @@ namespace NKikimr::NBlobDepot {
         }
 
     public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_MON_DATA; }
+
         TTxMonData(TBlobDepot *self, NMon::TEvRemoteHttpInfo::TPtr ev)
             : TTransactionBase(self)
             , Request(ev.Release())

@@ -150,7 +150,9 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TQuery::DoDestroy() {
         Y_VERIFY(!Destroyed);
         Destroyed = true;
-        Agent.ExecutingQueries.Remove(this);
+        TIntrusiveListItem<TQuery, TExecutingQueries>::Unlink();
+        TIntrusiveListItem<TQuery, TPendingBlockChecks>::Unlink();
+        TIntrusiveListItem<TQuery, TPendingId>::Unlink();
         Agent.DeletePendingQueries.PushBack(this);
         TRequestSender::ClearRequestsInFlight();
     }

@@ -80,7 +80,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (status != NKikimrProto::UNKNOWN) {
                     EndWithError(status, "tablet was deleted");
                 } else if (!--GetBlockedGenerationRetriesRemain) {
-                    EndWithError(status, "too many retries to obtain blocked generation");
+                    EndWithError(NKikimrProto::ERROR, "too many retries to obtain blocked generation");
                 }
             }
 
@@ -88,7 +88,7 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, GetQueryId()), (Msg, msg.Record));
 
-                Agent.BlobMappingCache.HandleResolveResult(msg.Record, nullptr);
+                Agent.BlobMappingCache.HandleResolveResult(id, msg.Record, nullptr);
 
                 const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
                 if (status != NKikimrProto::OK && status != NKikimrProto::OVERRUN) {

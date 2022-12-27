@@ -1,6 +1,7 @@
 #include "garbage_collection.h"
 #include "schema.h"
 #include "data.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -15,6 +16,8 @@ namespace NKikimr::NBlobDepot {
         bool MoreData = false;
 
     public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COLLECT_GARBAGE; }
+
         TTxCollectGarbage(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> request)
             : TTransactionBase(self)
             , Request(std::move(request))
@@ -117,6 +120,15 @@ namespace NKikimr::NBlobDepot {
 
         bool ValidateRequest() {
             const auto& record = Request->Get()->Record;
+
+            const ui64 tabletId = record.GetTabletId();
+            const ui8 channel = record.GetChannel();
+            const ui32 generation = record.GetGeneration();
+            if (!Self->BlocksManager->CheckBlock(tabletId, generation)) {
+                Finish("block race detected", NKikimrProto::BLOCKED);
+                return false;
+            }
+
             if (!record.HasCollectGeneration() && !record.HasCollectStep()) {
                 return true;
             } else if (!record.HasCollectGeneration() || !record.HasCollectStep()) {
@@ -124,7 +136,7 @@ namespace NKikimr::NBlobDepot {
                 return false;
             }
 
-            const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
+            const auto key = std::make_tuple(tabletId, channel);
             auto& barriers = Self->BarrierServer->Barriers;
             if (const auto it = barriers.find(key); it != barriers.end()) {
                 // extract existing barrier record
@@ -153,10 +165,10 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Finish(std::optional<TString> error) {
+        void Finish(std::optional<TString> error, std::optional<NKikimrProto::EReplyStatus> status = {}) {
             Y_VERIFY(!Finished);
-            auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, error ? NKikimrProto::ERROR : NKikimrProto::OK,
-                std::move(error));
+            auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
+                NKikimrProto::OK), std::move(error));
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT82, "TTxCollectGarbage::Finish", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (Error, error));
             TActivationContext::Send(response.release());

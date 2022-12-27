@@ -12,6 +12,8 @@ namespace NKikimr::NBlobDepot {
         std::unique_ptr<IEventHandle> Response;
 
     public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_UPDATE_BLOCK; }
+
         TTxUpdateBlock(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
                 TInstant timestamp, std::unique_ptr<IEventHandle> response)
             : TTransactionBase(self)
@@ -329,6 +331,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         TActivationContext::Send(response.release());
+    }
+
+    bool TBlobDepot::TBlocksManager::CheckBlock(ui64 tabletId, ui32 generation) const {
+        const auto it = Blocks.find(tabletId);
+        return it == Blocks.end() || it->second.BlockedGeneration < generation;
     }
 
 } // NKikimr::NBlobDepot

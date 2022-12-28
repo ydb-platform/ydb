@@ -22,7 +22,7 @@ TShardIterator(const TString& iteratorStr) : Expired{false}, Valid{true} {
 }
 
 TShardIterator(const TString& streamName, const TString& streamArn,
-                ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber,
+                ui32 shardId, ui64 readTimestamp, ui64 sequenceNumber,
                 NKikimrPQ::TYdsShardIterator::ETopicKind kind = NKikimrPQ::TYdsShardIterator::KIND_COMMON)
     : Expired{false}, Valid{true} {
     Proto.SetStreamName(streamName);
@@ -34,13 +34,22 @@ TShardIterator(const TString& streamName, const TString& streamArn,
     Proto.SetKind(kind);
 }
 
+TShardIterator(const TShardIterator& other) : TShardIterator(
+    other.GetStreamName(),
+    other.GetStreamArn(),
+    other.GetShardId(),
+    other.GetReadTimestamp(),
+    other.GetSequenceNumber(),
+    other.GetKind()
+) {}
+
 static TShardIterator Common(const TString& streamName, const TString& streamArn,
-                ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber) {
+                ui32 shardId, ui64 readTimestamp, ui64 sequenceNumber) {
     return TShardIterator(streamName, streamArn, shardId, readTimestamp, sequenceNumber);
 }
 
 static TShardIterator Cdc(const TString& streamName, const TString& streamArn,
-                ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber) {
+                ui32 shardId, ui64 readTimestamp, ui64 sequenceNumber) {
     return TShardIterator(streamName, streamArn, shardId, readTimestamp, sequenceNumber,
             NKikimrPQ::TYdsShardIterator::KIND_CDC);
 }
@@ -70,8 +79,16 @@ ui64 GetReadTimestamp() const {
     return Proto.GetReadTimestampMs();
 }
 
-ui32 GetSequenceNumber() const {
+void SetReadTimestamp(ui64 ts) {
+    Proto.SetReadTimestampMs(ts);
+}
+
+ui64 GetSequenceNumber() const {
     return Proto.GetSequenceNumber();
+}
+
+void SetSequenceNumber(ui64 seqno) {
+    Proto.SetSequenceNumber(seqno);
 }
 
 bool IsAlive(ui64 now) const {

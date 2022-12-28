@@ -8,7 +8,7 @@ namespace NKikimr::NDataStreams::V1 {
 
 class TNextToken {
 public:
-static constexpr ui32 LIFETIME_MS = TDuration::Minutes(5).MilliSeconds();
+static constexpr ui64 LIFETIME_MS = TDuration::Minutes(5).MilliSeconds();
 
 TNextToken(const TString& nextToken): Expired{false}, Valid{true}
 {
@@ -55,13 +55,13 @@ ui32 GetMaxResults() const {
     return Proto.GetMaxResults();
 }
 
-ui32 GetCreationTimestamp() const {
+ui64 GetCreationTimestamp() const {
     return Proto.GetCreationTimestamp();
 }
 
 bool IsAlive(ui64 now) const {
-    return now >= Proto.GetCreationTimestamp() &&
-        (now - Proto.GetCreationTimestamp()) < LIFETIME_MS;
+    return now >= GetCreationTimestamp() &&
+        (now - GetCreationTimestamp()) < LIFETIME_MS;
 }
 
 bool IsExpired() const {
@@ -69,7 +69,7 @@ bool IsExpired() const {
 }
 
 bool IsValid() const {
-    return Valid && Proto.GetStreamArn().size() > 0;
+    return Valid && GetStreamArn().size() > 0;
 }
 
 private:

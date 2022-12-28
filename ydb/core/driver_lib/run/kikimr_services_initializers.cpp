@@ -2343,7 +2343,7 @@ void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const
 {
     TAutoPtr<TLogBackend> fileBackend;
     if (Factories && Factories->AuditLogBackendFactory) {
-        Factories->AuditLogBackendFactory->CreateLogBackend(KikimrRunConfig, appData->Counters);
+        fileBackend = Factories->AuditLogBackendFactory->CreateLogBackend(KikimrRunConfig, appData->Counters);
     }
     if (!fileBackend)
         return;

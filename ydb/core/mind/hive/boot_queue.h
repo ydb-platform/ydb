@@ -22,6 +22,7 @@ struct TBootQueue {
                 break;
             case TTabletTypes::Mediator:
             case TTabletTypes::Coordinator:
+            case TTabletTypes::BlobDepot:
                 priority = 2;
                 break;
             default:

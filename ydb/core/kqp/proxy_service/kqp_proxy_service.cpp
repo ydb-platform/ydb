@@ -523,8 +523,6 @@ public:
         if (sessionInfo) {
             targetId = sessionInfo->WorkerId;
         } else {
-            // No local session. Disable public format due to compatibility.
-            request.SetUsePublicResponseDataFormat(false);
             targetId = TryGetSessionTargetActor(request.GetSessionId(), requestInfo, requestId);
             if (!targetId) {
                 return;

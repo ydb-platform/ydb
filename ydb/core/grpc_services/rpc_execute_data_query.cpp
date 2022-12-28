@@ -32,7 +32,7 @@ void SerializeQueryRequest(std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& in,
     SetDatabase(*dst, *in.get());
 
     dst->MutableRequest()->SetSessionId(req->session_id());
-    dst->MutableRequest()->SetUsePublicResponseDataFormat(false);
+    dst->MutableRequest()->SetUsePublicResponseDataFormat(true);
 
     if (auto traceId = in->GetTraceId()) {
         dst->SetTraceId(traceId.GetRef());

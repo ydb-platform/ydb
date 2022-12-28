@@ -27,6 +27,7 @@ jobs:
     - name: Test
       shell: bash
       run: |
+        rm -rf /mnt/d/tmp/*
         cd ../build/ydb
-        ctest -j28 --timeout 1200 --force-new-ctest-process
+        TMPDIR=/mnt/d/tmp ctest -j28 --timeout 1200 --force-new-ctest-process
       

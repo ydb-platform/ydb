@@ -368,6 +368,7 @@ TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(ui32 index, TExprNode::TP
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
         "Container position mismatch, expected: " << Container->ChildrenSize() <<
         ", actual: " << index);
+    Y_ENSURE(!args || args->IsArguments());
     return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
 }
 
@@ -376,18 +377,21 @@ TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(ui32 index, TExprNode::TP
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
         "Container position mismatch, expected: " << Container->ChildrenSize() <<
         ", actual: " << index);
+    Y_ENSURE(!args || args->IsArguments());
     return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(TExprNode::TPtr args, TExprNode::TPtr body) {
     Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
     Y_ENSURE(!CurrentNode, "Node is already build");
+    Y_ENSURE(!args || args->IsArguments());
     return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
 }
 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(TExprNode::TPtr args, TExprNode::TListType body) {
     Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
     Y_ENSURE(!CurrentNode, "Node is already build");
+    Y_ENSURE(!args || args->IsArguments());
     return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
 }
 

@@ -60,13 +60,15 @@ public:
         // Leave only requested columns
         auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
 
+        NOlap::TPartialReadResult out{
+            .ResultBatch = std::move(resultBatch),
+            .LastReadKey = std::move(lastKey)
+        };
+
         if (ReadMetadata->Program) {
-            auto status = ApplyProgram(batch, ReadMetadata->Program->Steps, NArrow::GetCustomExecContext());
+            auto status = ApplyProgram(out.ResultBatch, ReadMetadata->Program->Steps, NArrow::GetCustomExecContext());
             Y_VERIFY_S(status.ok(), status.message());
         }
-
-        NOlap::TPartialReadResult out{std::move(resultBatch), std::move(lastKey)};
-
         return out;
     }
 

@@ -200,7 +200,8 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " producing result: got ready result"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
-            << " blob (" << numColumns << " columns, " << numRows << " rows)");
+            << " blob (" << numColumns << " columns, " << numRows << " rows)"
+            << " format: " << NKikimrTxDataShard::EScanDataFormat_Name(DataFormat));
 
         switch (DataFormat) {
             case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:

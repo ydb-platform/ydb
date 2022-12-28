@@ -2635,28 +2635,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3);
         }
 
-        // Uncomment when KIKIMR-16655 will be fixed
-        // {
-        //     auto selectQuery = TString(R"(
-        //         SELECT
-        //             PathId,
-        //             SUM(Rows) as rows,
-        //             SUM(Bytes) as bytes,
-        //             SUM(RawBytes) as bytes_raw,
-        //             SUM(Portions) as portions,
-        //             SUM(Blobs) as blobs
-        //         FROM `/Root/olapStore/.sys/store_primary_index_stats`
-        //         WHERE
-        //             PathId == UInt64("3") AND Kind < UInt32("4")
-        //         GROUP BY PathId
-        //         ORDER BY rows DESC
-        //         LIMIT 10
-        //     )");
+        {
+            auto selectQuery = TString(R"(
+                SELECT
+                    PathId,
+                    SUM(Rows) as rows,
+                    SUM(Bytes) as bytes,
+                    SUM(RawBytes) as bytes_raw,
+                    SUM(Portions) as portions,
+                    SUM(Blobs) as blobs
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                WHERE
+                    PathId == UInt64("3") AND Kind < UInt32("4")
+                GROUP BY PathId
+                ORDER BY rows DESC
+                LIMIT 10
+            )");
 
-        //     auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        //     UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1ull);
-        //     UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3);
-        // }
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3);
+        }
 
         {
             auto selectQuery = TString(R"(
@@ -2681,17 +2680,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4);
         }
 
-        // Uncomment when KIKIMR-16655 will be fixed
-        // {
-        //     auto selectQuery = TString(R"(
-        //         SELECT count(*)
-        //         FROM `/Root/olapStore/.sys/store_primary_index_stats`
-        //     )");
+        {
+            auto selectQuery = TString(R"(
+                SELECT count(*)
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+            )");
 
-        //     auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        //     // 3 Tables with 3 Shards each and 4 KindId-s of stats
-        //     UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*numKinds);
-        // }
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            // 3 Tables with 3 Shards each and 4 KindId-s of stats
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*numKinds);
+        }
 
         {
             auto selectQuery = TString(R"(
@@ -2708,22 +2706,21 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull);
         }
 
-        // Uncomment when KIKIMR-16655 will be fixed
-        // {
-        //     auto selectQuery = TString(R"(
-        //         SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes)
-        //         FROM `/Root/olapStore/.sys/store_primary_index_stats`
-        //         GROUP BY PathId
-        //         ORDER BY PathId
-        //     )");
+        {
+            auto selectQuery = TString(R"(
+                SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes)
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId
+                ORDER BY PathId
+            )");
 
-        //     auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        //     UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
-        //     for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) {
-        //         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId);
-        //         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 3*numKinds);
-        //     }
-        // }
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
+            for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) {
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId);
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 3*numKinds);
+            }
+        }
     }
 
     Y_UNIT_TEST(PredicatePushdownWithParameters) {

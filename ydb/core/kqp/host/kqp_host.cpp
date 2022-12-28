@@ -273,66 +273,6 @@ private:
 };
 
 /*
- * Execute prepared Yql/ScanQuery/DataQuery.
- */
-class TAsyncExecutePreparedResult : public TKqpAsyncResultBase<IKqpHost::TQueryResult> {
-public:
-    using TResult = IKqpHost::TQueryResult;
-
-    TAsyncExecutePreparedResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx, const IDataProvider::TFillSettings& fillSettings,
-        TIntrusivePtr<TExecuteContext> executeCtx, std::shared_ptr<const NKikimrKqp::TPreparedQuery> query,
-        TMaybe<TSqlVersion> sqlVersion)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
-        , SessionCtx(sessionCtx)
-        , FillSettings(fillSettings)
-        , ExecuteCtx(executeCtx)
-        , Query(query)
-        , SqlVersion(sqlVersion) {}
-
-    void FillResult(TResult& queryResult) const override {
-        for (const auto& result : SessionCtx->Query().PreparedQuery->GetResults()) {
-            YQL_ENSURE(result.GetKqlIndex() < ExecuteCtx->QueryResults.size());
-            const auto& execResult = ExecuteCtx->QueryResults[result.GetKqlIndex()];
-
-            YQL_ENSURE(result.GetResultIndex() < execResult.Results.size());
-            const auto& resultValue = execResult.Results[result.GetResultIndex()];
-
-            auto fillSettings = FillSettings;
-            if (result.GetRowsLimit()) {
-                fillSettings.RowsLimitPerWrite = result.GetRowsLimit();
-            }
-            TVector<TString> columnHints(result.GetColumnHints().begin(), result.GetColumnHints().end());
-            auto protoResult = KikimrResultToProto(*resultValue, columnHints, fillSettings,
-                queryResult.ProtobufArenaPtr.get());
-
-            queryResult.Results.push_back(protoResult);
-        }
-
-        queryResult.QueryAst = SessionCtx->Query().PreparedQuery->GetPhysicalQuery().GetQueryAst();
-
-        if (Query) {
-            queryResult.PreparedQuery = Query;
-        }
-
-        if (ExecuteCtx->QueryResults.size() == 1) {
-            auto& execResult = ExecuteCtx->QueryResults[0];
-            queryResult.QueryStats.Swap(&execResult.QueryStats);
-            queryResult.QueryPlan = SerializeAnalyzePlan(queryResult.QueryStats);
-        }
-
-        queryResult.SqlVersion = SqlVersion;
-    }
-
-private:
-    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
-    IDataProvider::TFillSettings FillSettings;
-    TIntrusivePtr<TExecuteContext> ExecuteCtx;
-    mutable std::shared_ptr<const NKikimrKqp::TPreparedQuery> Query;
-    TMaybe<TSqlVersion> SqlVersion;
-};
-
-/*
  * Prepare ScanQuery/DataQuery by AST (when called through scripting).
  */
 class TAsyncExecuteKqlResult : public TKqpAsyncResultBase<IKqpHost::TQueryResult> {

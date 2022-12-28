@@ -12,35 +12,57 @@ struct TCompression {
 struct TTierInfo {
     TString Name;
     TInstant EvictBorder;
-    TString Column;
+    TString EvictColumnName;
+    std::shared_ptr<arrow::Field> EvictColumn;
     std::optional<TCompression> Compression;
+    ui32 TtlUnitsInSecond;
 
-    TTierInfo(const TString& tierName, TInstant evictBorder, const TString& column)
+    TTierInfo(const TString& tierName, TInstant evictBorder, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
         , EvictBorder(evictBorder)
-        , Column(column)
+        , EvictColumnName(column)
+        , TtlUnitsInSecond(unitsInSecond)
     {
         Y_VERIFY(!Name.empty());
-        Y_VERIFY(!Column.empty());
+        Y_VERIFY(!EvictColumnName.empty());
     }
 
-    std::shared_ptr<arrow::Scalar> EvictTimestamp() const {
+    std::shared_ptr<arrow::Scalar> EvictScalar() const {
         if (Scalar) {
             return Scalar;
         }
 
-        Scalar = std::make_shared<arrow::TimestampScalar>(
-            EvictBorder.MicroSeconds(), arrow::timestamp(arrow::TimeUnit::MICRO));
+        ui32 multiplier = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
+
+        Y_VERIFY(EvictColumn);
+        switch (EvictColumn->type()->id()) {
+            case arrow::Type::TIMESTAMP:
+                Scalar = std::make_shared<arrow::TimestampScalar>(
+                    EvictBorder.MicroSeconds(), arrow::timestamp(arrow::TimeUnit::MICRO));
+                break;
+            case arrow::Type::UINT16: // YQL Date
+                Scalar = std::make_shared<arrow::UInt16Scalar>(EvictBorder.Days());
+                break;
+            case arrow::Type::UINT32: // YQL Datetime or Uint32
+                Scalar = std::make_shared<arrow::UInt32Scalar>(EvictBorder.Seconds() * multiplier);
+                break;
+            case arrow::Type::UINT64:
+                Scalar = std::make_shared<arrow::UInt64Scalar>(EvictBorder.Seconds() * multiplier);
+                break;
+            default:
+                break;
+        }
+
         return Scalar;
     }
 
-    static std::shared_ptr<TTierInfo> MakeTtl(TInstant ttlBorder, const TString& ttlColumn) {
-        return std::make_shared<TTierInfo>("TTL", ttlBorder, ttlColumn);
+    static std::shared_ptr<TTierInfo> MakeTtl(TInstant ttlBorder, const TString& ttlColumn, ui32 unitsInSecond = 0) {
+        return std::make_shared<TTierInfo>("TTL", ttlBorder, ttlColumn, unitsInSecond);
     }
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << Column << "' "
+        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << EvictColumnName << "' "
             << arrow::util::Codec::GetCodecAsString(Compression ? Compression->Codec : TCompression().Codec)
             << ":" << ((Compression && Compression->Level) ?
                 *Compression->Level : arrow::util::kUseDefaultCompressionLevel);
@@ -85,19 +107,14 @@ struct TTiering {
     TSet<TTierRef> OrderedTiers; // Tiers ordered by border
     std::shared_ptr<TTierInfo> Ttl;
 
-    static TTiering MakeTtl(TInstant ttlBorder, const TString& ttlColumn) {
-        TTiering out;
-        out.Ttl = TTierInfo::MakeTtl(ttlBorder, ttlColumn);
-        return out;
-    }
-
     bool Empty() const {
         return OrderedTiers.empty();
     }
 
     void Add(const std::shared_ptr<TTierInfo>& tier) {
         if (!Empty()) {
-            Y_VERIFY(tier->Column == OrderedTiers.begin()->Get().Column); // TODO: support different ttl columns
+            // TODO: support different ttl columns
+            Y_VERIFY(tier->EvictColumnName == OrderedTiers.begin()->Get().EvictColumnName);
         }
 
         TierByName.emplace(tier->Name, tier);
@@ -111,9 +128,9 @@ struct TTiering {
         return {};
     }
 
-    std::shared_ptr<arrow::Scalar> ExpireTimestamp() const {
-        auto ttlTs = Ttl ? Ttl->EvictTimestamp() : nullptr;
-        auto tierTs = OrderedTiers.empty() ? nullptr : OrderedTiers.begin()->Get().EvictTimestamp();
+    std::shared_ptr<arrow::Scalar> EvictScalar() const {
+        auto ttlTs = Ttl ? Ttl->EvictScalar() : nullptr;
+        auto tierTs = OrderedTiers.empty() ? nullptr : OrderedTiers.begin()->Get().EvictScalar();
         if (!ttlTs) {
             return tierTs;
         } else if (!tierTs) {
@@ -134,10 +151,10 @@ struct TTiering {
     THashSet<TString> GetTtlColumns() const {
         THashSet<TString> out;
         if (Ttl) {
-            out.insert(Ttl->Column);
+            out.insert(Ttl->EvictColumnName);
         }
         for (auto& [tierName, tier] : TierByName) {
-            out.insert(tier->Column);
+            out.insert(tier->EvictColumnName);
         }
         return out;
     }
@@ -145,7 +162,7 @@ struct TTiering {
     TString GetDebugString() const {
         TStringBuilder sb;
         if (Ttl) {
-            sb << "ttl border '" << Ttl->EvictBorder << "' column '" << Ttl->Column << "'; ";
+            sb << Ttl->GetDebugString() << "; ";
         }
         for (auto&& i : OrderedTiers) {
             sb << i.Get().GetDebugString() << "; ";

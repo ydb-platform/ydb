@@ -158,7 +158,6 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
     auto unit = ttl.GetColumnUnit();
 
     switch (GetType(*column)) {
-        case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::DyNumber:
             errStr = "Unsupported column type for TTL in column tables"; // TODO
             return false;
@@ -182,27 +181,6 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
         case TTtlProto::kDisabled:
         default:
             break;
-    }
-
-    return true;
-}
-
-bool ValidateTtlSettingsChange(
-    const NKikimrSchemeOp::TColumnDataLifeCycle& oldTtl,
-    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
-    TString& errStr)
-{
-    if (oldTtl.HasEnabled() && ttl.HasEnabled()) {
-        TString newTtlColName;
-        TString oldTtlColName;
-
-        newTtlColName = ttl.GetEnabled().GetColumnName();
-        oldTtlColName = oldTtl.GetEnabled().GetColumnName();
-
-        if (newTtlColName != oldTtlColName) {
-            errStr = "Changing of TTL column is not supported for column tables";
-            return false;
-        }
     }
 
     return true;

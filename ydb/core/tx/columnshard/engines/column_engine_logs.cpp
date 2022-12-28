@@ -805,7 +805,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
             continue; // It's not an error: allow TTL over multiple shards with different pathIds presented
         }
 
-        auto expireTimestamp = ttl.ExpireTimestamp();
+        auto expireTimestamp = ttl.EvictScalar();
         Y_VERIFY(expireTimestamp);
 
         auto ttlColumnNames = ttl.GetTtlColumns();
@@ -831,10 +831,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
                         TString tierName;
                         for (auto& tierRef : ttl.OrderedTiers) { // TODO: lower/upper_bound + move into TEviction
                             auto& tierInfo = tierRef.Get();
-                            if (!IndexInfo.AllowTtlOverColumn(tierInfo.Column)) {
+                            if (!IndexInfo.AllowTtlOverColumn(tierInfo.EvictColumnName)) {
                                 continue; // Ignore tiers with bad ttl column
                             }
-                            if (NArrow::ScalarLess(tierInfo.EvictTimestamp(), max)) {
+                            if (NArrow::ScalarLess(tierInfo.EvictScalar(), max)) {
                                 tierName = tierInfo.Name;
                             } else {
                                 break;

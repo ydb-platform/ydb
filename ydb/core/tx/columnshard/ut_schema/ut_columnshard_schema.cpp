@@ -34,16 +34,35 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     auto schema = batch->schema();
     int pos = schema->GetFieldIndex(name);
     UNIT_ASSERT(pos >= 0);
-    UNIT_ASSERT(batch->GetColumnByName(name)->type_id() == arrow::Type::TIMESTAMP);
+    auto colType = batch->GetColumnByName(name)->type_id();
 
-    auto scalar = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
-    UNIT_ASSERT_VALUES_EQUAL(scalar.value, seconds * 1000 * 1000);
+    std::shared_ptr<arrow::Array> array;
+    if (colType == arrow::Type::TIMESTAMP) {
+        auto scalar = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
+        UNIT_ASSERT_VALUES_EQUAL(scalar.value, seconds * 1000 * 1000);
 
-    auto res = arrow::MakeArrayFromScalar(scalar, batch->num_rows());
-    UNIT_ASSERT(res.ok());
+        auto res = arrow::MakeArrayFromScalar(scalar, batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    } else if (colType == arrow::Type::UINT16) { // YQL Date
+        TInstant date(TInstant::Seconds(seconds));
+        auto res = arrow::MakeArrayFromScalar(arrow::UInt16Scalar(date.Days()), batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    } else if (colType == arrow::Type::UINT32) { // YQL Datetime or Uint32
+        auto res = arrow::MakeArrayFromScalar(arrow::UInt32Scalar(seconds), batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    } else if (colType == arrow::Type::UINT64) {
+        auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(seconds), batch->num_rows());
+        UNIT_ASSERT(res.ok());
+        array = *res;
+    }
+
+    UNIT_ASSERT(array);
 
     auto columns = batch->columns();
-    columns[pos] = *res;
+    columns[pos] = array;
     return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
@@ -75,35 +94,54 @@ std::shared_ptr<arrow::Array> DeserializeColumn(const TString& blob, const TStri
 
 bool CheckSame(const TString& blob, const TString& strSchema, ui32 expectedSize,
                const std::string& columnName, i64 seconds) {
-    auto expected = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
-    UNIT_ASSERT_VALUES_EQUAL(expected.value, seconds * 1000 * 1000);
-
     auto tsCol = DeserializeColumn(blob, strSchema, columnName);
     UNIT_ASSERT(tsCol);
     UNIT_ASSERT_VALUES_EQUAL(tsCol->length(), expectedSize);
 
+    std::shared_ptr<arrow::Scalar> expected;
+    switch (tsCol->type_id()) {
+        case arrow::Type::TIMESTAMP:
+            expected = std::make_shared<arrow::TimestampScalar>(seconds * 1000 * 1000,
+                                                                arrow::timestamp(arrow::TimeUnit::MICRO));
+            break;
+        case arrow::Type::UINT16:
+            expected = std::make_shared<arrow::UInt16Scalar>(TInstant::Seconds(seconds).Days());
+            break;
+        case arrow::Type::UINT32:
+            expected = std::make_shared<arrow::UInt32Scalar>(seconds);
+            break;
+        case arrow::Type::UINT64:
+            expected = std::make_shared<arrow::UInt64Scalar>(seconds);
+            break;
+        default:
+            break;
+    }
+
+    UNIT_ASSERT(expected);
+
     for (int i = 0; i < tsCol->length(); ++i) {
         auto value = *tsCol->GetScalar(i);
-        if (!value->Equals(expected)) {
-            Cerr << "Unexpected: '" << value->ToString() << "', expected " << expected.value << "\n";
+        if (!value->Equals(*expected)) {
+            Cerr << "Unexpected: '" << value->ToString() << "', expected " << expected->ToString() << "\n";
             return false;
         }
     }
     return true;
 }
 
-std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName) {
+std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
+                              const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
     UNIT_ASSERT(ts.size() == 2);
 
-    TString data1 = MakeTestBlob({0, portionSize}, testYdbSchema);
+    TString data1 = MakeTestBlob({0, portionSize}, ydbSchema);
     UNIT_ASSERT(data1.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(data1.size() < 7 * 1024 * 1024);
 
-    TString data2 = MakeTestBlob({overlapSize, overlapSize + portionSize}, testYdbSchema);
+    TString data2 = MakeTestBlob({overlapSize, overlapSize + portionSize}, ydbSchema);
     UNIT_ASSERT(data2.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(data2.size() < 7 * 1024 * 1024);
 
-    auto schema = NArrow::MakeArrowSchema(testYdbSchema);
+    auto schema = NArrow::MakeArrowSchema(ydbSchema);
     auto batch1 = UpdateColumn(NArrow::DeserializeBatch(data1, schema), ttlColumnName, ts[0]);
     auto batch2 = UpdateColumn(NArrow::DeserializeBatch(data2, schema), ttlColumnName, ts[1]);
 
@@ -135,8 +173,20 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
-             std::vector<ui64> ts = {1600000000, 1620000000})
+             const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
 {
+    std::vector<ui64> ts = {1600000000, 1620000000};
+
+    ui32 ttlIncSeconds = 1;
+    for (auto& [name, typeInfo] : ydbSchema) {
+        if (name == spec.TtlColumn) {
+            if (typeInfo.GetTypeId() == NTypeIds::Date) {
+                ttlIncSeconds = TDuration::Days(1).Seconds();
+            }
+            break;
+        }
+    }
+
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -170,7 +220,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
     bool ok = ProposeSchemaTx(runtime, sender,
-                              TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, spec, "/Root/olapStore"),
+                              TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
                               {++planStep, ++txId});
     UNIT_ASSERT(ok);
     PlanSchemaTx(runtime, sender, {planStep, txId});
@@ -179,7 +229,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
     //
 
-    auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn);
+    auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn, ydbSchema);
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
     for (auto& data : blobs) {
         UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data));
@@ -196,7 +246,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     if (internal) {
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] + 1, spec.TtlColumn);
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -245,7 +295,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     if (internal) {
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[1] + 1, spec.TtlColumn);
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
     }
 
     {
@@ -283,7 +333,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     if (internal) {
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] - 1, spec.TtlColumn);
+        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
     }
 
     {
@@ -929,7 +979,20 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(ExternalTTL) {
-        TestTtl(false, false);
+        TestTtl(false, false); // over NTypeIds::Timestamp ttl column
+    }
+
+    Y_UNIT_TEST(ExternalTTL_Types) {
+        auto ydbSchema = testYdbSchema;
+        for (auto typeId : {NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
+            UNIT_ASSERT_EQUAL(ydbSchema[8].first, "saved_at");
+            ydbSchema[8].second = TTypeInfo(typeId);
+
+            TTestSchema::TTableSpecials specs;
+            specs.SetTtlColumn("saved_at");
+
+            TestTtl(false, false, specs, ydbSchema);
+        }
     }
 
     Y_UNIT_TEST(RebootExternalTTL) {
@@ -938,7 +1001,20 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(InternalTTL) {
-        TestTtl(false, true);
+        TestTtl(false, true); // over NTypeIds::Timestamp ttl column
+    }
+
+    Y_UNIT_TEST(InternalTTL_Types) {
+        auto ydbSchema = testYdbSchema;
+        for (auto typeId : {NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
+            UNIT_ASSERT_EQUAL(ydbSchema[8].first, "saved_at");
+            ydbSchema[8].second = TTypeInfo(typeId);
+
+            TTestSchema::TTableSpecials specs;
+            specs.SetTtlColumn("saved_at");
+
+            TestTtl(false, true, specs, ydbSchema);
+        }
     }
 
     Y_UNIT_TEST(RebootInternalTTL) {

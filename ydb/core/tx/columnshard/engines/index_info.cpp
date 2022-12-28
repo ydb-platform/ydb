@@ -257,4 +257,31 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
     return MinMaxIdxColumnsIds.count(it->second);
 }
 
+void TIndexInfo::UpdatePathTiering(THashMap<ui64, NOlap::TTiering>& pathTiering) const {
+    auto schema = ArrowSchema(); // init Schema if not yet
+
+    for (auto& [pathId, tiering] : pathTiering) {
+        for (auto& [tierName, tierInfo] : tiering.TierByName) {
+            if (!tierInfo->EvictColumn) {
+                tierInfo->EvictColumn = schema->GetFieldByName(tierInfo->EvictColumnName);
+            }
+        }
+        if (tiering.Ttl && !tiering.Ttl->EvictColumn) {
+            tiering.Ttl->EvictColumn = schema->GetFieldByName(tiering.Ttl->EvictColumnName);
+        }
+    }
+}
+
+void TIndexInfo::SetPathTiering(THashMap<ui64, TTiering>&& pathTierings) {
+    PathTiering = std::move(pathTierings);
+}
+
+const TTiering* TIndexInfo::GetTiering(ui64 pathId) const {
+    auto it = PathTiering.find(pathId);
+    if (it != PathTiering.end()) {
+        return &it->second;
+    }
+    return nullptr;
+}
+
 }

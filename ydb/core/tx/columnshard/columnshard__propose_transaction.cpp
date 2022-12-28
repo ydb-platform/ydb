@@ -213,25 +213,45 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
 
                 TString columnName = ttlBody.GetTtlColumnName();
                 if (columnName.empty()) {
-                    statusMessage = "TTL tx wrong TTL column";
+                    statusMessage = "TTL tx wrong TTL column ''";
                     status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
                     break;
                 }
 
-                for (ui64 pathId : ttlBody.GetPathIds()) {
-                    pathTtls.emplace(pathId, NOlap::TTiering::MakeTtl(unixTime, columnName));
+                if (!Self->PrimaryIndex) {
+                    statusMessage = "No primary index for TTL";
+                    status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
+                    break;
+                }
+
+                auto schema = Self->PrimaryIndex->GetIndexInfo().ArrowSchema();
+                auto ttlColumn = schema->GetFieldByName(columnName);
+                if (!ttlColumn) {
+                    statusMessage = "TTL tx wrong TTL column '" + columnName + "'";
+                    status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
+                    break;
+                }
+
+                if (statusMessage.empty()) {
+                    for (ui64 pathId : ttlBody.GetPathIds()) {
+                        NOlap::TTiering tiering;
+                        tiering.Ttl = NOlap::TTierInfo::MakeTtl(unixTime, columnName);
+                        pathTtls.emplace(pathId, std::move(tiering));
+                    }
                 }
             }
 
-            if (auto event = Self->SetupTtl(pathTtls, true)) {
-                if (event->NeedWrites()) {
-                    ctx.Send(Self->EvictionActor, event.release());
+            if (statusMessage.empty()) {
+                if (auto event = Self->SetupTtl(pathTtls, true)) {
+                    if (event->NeedWrites()) {
+                        ctx.Send(Self->EvictionActor, event.release());
+                    } else {
+                        ctx.Send(Self->SelfId(), event->TxEvent.release());
+                    }
+                    status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
                 } else {
-                    ctx.Send(Self->SelfId(), event->TxEvent.release());
+                    statusMessage = "TTL not started";
                 }
-                status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
-            } else {
-                statusMessage = "TTL not started";
             }
 
             break;

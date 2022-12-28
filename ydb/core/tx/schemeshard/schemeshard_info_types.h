@@ -2889,10 +2889,6 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
     const THashMap<ui32, TOlapSchema::TColumn>& columns,
     const THashMap<TString, ui32>& columnsByName,
     TString& errStr);
-bool ValidateTtlSettingsChange(
-    const NKikimrSchemeOp::TColumnDataLifeCycle& oldTtl,
-    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
-    TString& errStr);
 
 }
 }

@@ -181,17 +181,9 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }
 
-    void SetTiering(THashMap<ui64, TTiering>&& pathTierings) {
-        PathTiering = std::move(pathTierings);
-    }
-
-    const TTiering* GetTiering(ui64 pathId) const {
-        auto it = PathTiering.find(pathId);
-        if (it != PathTiering.end()) {
-            return &it->second;
-        }
-        return nullptr;
-    }
+    void UpdatePathTiering(THashMap<ui64, NOlap::TTiering>& pathTiering) const;
+    void SetPathTiering(THashMap<ui64, TTiering>&& pathTierings);
+    const TTiering* GetTiering(ui64 pathId) const;
 
 private:
     ui32 Id;

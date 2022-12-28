@@ -571,6 +571,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     } else {
         Ttl.DropPathTtl(pathId);
     }
+    Ttl.Repeat(); // Atler TTL triggers TTL activity
 
     info.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     Schema::SaveTableInfo(db, table.PathId, tieringUsage);
@@ -798,7 +799,9 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
 
     auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
     if (Tiers) {
-        actualIndexInfo.SetTiering(Tiers->GetTiering()); // TODO: pathIds
+        auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
+        actualIndexInfo.UpdatePathTiering(pathTiering);
+        actualIndexInfo.SetPathTiering(std::move(pathTiering));
     }
 
     ActiveIndexingOrCompaction = true;
@@ -841,7 +844,9 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
 
     auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
     if (Tiers) {
-        actualIndexInfo.SetTiering(Tiers->GetTiering()); // TODO: pathIds
+        auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
+        actualIndexInfo.UpdatePathTiering(pathTiering);
+        actualIndexInfo.SetPathTiering(std::move(pathTiering));
     }
 
     ActiveIndexingOrCompaction = true;
@@ -880,8 +885,13 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
     }
 
+    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
+    actualIndexInfo.UpdatePathTiering(eviction);
+
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
     indexChanges = PrimaryIndex->StartTtl(eviction);
+
+    actualIndexInfo.SetPathTiering(std::move(eviction));
 
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare TTL at tablet " << TabletID());
@@ -892,9 +902,6 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
-
-    auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
-    actualIndexInfo.SetTiering(std::move(eviction));
 
     ActiveTtl = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
@@ -950,7 +957,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
 #if 0 // No need for now
     if (Tiers) {
-        actualIndexInfo.SetTiering(Tiers->GetTiering());
+        ...
     }
 #endif
 

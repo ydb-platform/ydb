@@ -109,10 +109,6 @@ TColumnTableInfo::TPtr ParseParams(
             return nullptr;
         }
 
-        if (!ValidateTtlSettingsChange(tableInfo->Description.GetTtlSettings(), alter.GetAlterTtlSettings(), errStr)) {
-            return nullptr;
-        }
-
         *alterData->Description.MutableTtlSettings() = alter.GetAlterTtlSettings();
         alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
     }

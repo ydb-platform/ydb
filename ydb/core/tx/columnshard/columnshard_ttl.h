@@ -11,6 +11,7 @@ public:
     struct TEviction {
         TDuration EvictAfter;
         TString ColumnName;
+        ui32 UnitsInSecond = 0; // 0 means auto (data type specific)
     };
 
     struct TDescription {
@@ -23,6 +24,24 @@ public:
 
             Eviction = TEviction{expireSec, ttl.GetColumnName()};
             Y_VERIFY(!Eviction->ColumnName.empty());
+
+            switch (ttl.GetColumnUnit()) {
+                case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+                    Eviction->UnitsInSecond = 1;
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+                    Eviction->UnitsInSecond = 1000;
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+                    Eviction->UnitsInSecond = 1000 * 1000;
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+                    Eviction->UnitsInSecond = 1000 * 1000 * 1000;
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
+                default:
+                    break;
+            }
         }
     };
 
@@ -75,11 +94,12 @@ private:
     TDuration RepeatTtlTimeout{TDuration::Seconds(DEFAULT_REPEAT_TTL_TIMEOUT_SEC)};
     TInstant LastRegularTtl;
 
-    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr, TInstant timePoint) const {
+    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr, TInstant timePoint) const
+    {
         if (descr.Eviction) {
             auto& evict = descr.Eviction;
-            auto border = timePoint - evict->EvictAfter;
-            return NOlap::TTierInfo::MakeTtl(border, evict->ColumnName);
+            TInstant border = timePoint - evict->EvictAfter;
+            return NOlap::TTierInfo::MakeTtl(border, evict->ColumnName, evict->UnitsInSecond);
         }
         return {};
     }

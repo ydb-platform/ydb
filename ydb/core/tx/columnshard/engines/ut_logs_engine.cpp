@@ -704,8 +704,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         // TTL
+        std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
         THashMap<ui64, NOlap::TTiering> pathTtls;
-        pathTtls.emplace(pathId, TTiering::MakeTtl(TInstant::MicroSeconds(10000), "timestamp"));
+        NOlap::TTiering tiering;
+        tiering.Ttl = NOlap::TTierInfo::MakeTtl(TInstant::MicroSeconds(10000), "timestamp");
+        tiering.Ttl->EvictColumn = std::make_shared<arrow::Field>("timestamp", ttlColType);
+        pathTtls.emplace(pathId, std::move(tiering));
         Ttl(engine, db, pathTtls, 2);
 
         // read + load + read

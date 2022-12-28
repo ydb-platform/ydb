@@ -476,12 +476,12 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_C(ttlSettings.Empty(), "Table must not have TTL settings");
         }
 
-        // Change TTL column (currently not supported)
+        // Change TTL column
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
-            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(86400)));
+            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(2000)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
         {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log2").GetValueSync();
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto descr = res.GetDescription();
             auto ttlSettings = descr.GetTtlSettings();
             UNIT_ASSERT_C(!ttlSettings.Empty(), "Table must have TTL settings");
-            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "saved_at");
+            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "ingested_at");
             UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetExpireAfter(), TDuration::Seconds(2000));
         }
 

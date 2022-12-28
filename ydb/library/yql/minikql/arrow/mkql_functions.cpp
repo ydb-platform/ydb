@@ -122,36 +122,56 @@ bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std
     }
 }
 
-bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType*& outputType, TTypeEnvironment& env, const IBuiltinFunctionRegistry& registry) {
+bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType* outputType, const IBuiltinFunctionRegistry& registry) {
     bool hasOptionals = false;
     bool many = false;
     std::vector<NUdf::TDataTypeId> argTypes;
     for (const auto& t : inputTypes) {
-        bool isOptional;
         auto asBlockType = AS_TYPE(TBlockType, t);
         if (asBlockType->GetShape() == TBlockType::EShape::Many) {
             many = true;
         }
 
-        auto dataType = UnpackOptionalData(asBlockType->GetItemType(), isOptional);
+        bool isOptional;
+        auto baseType = UnpackOptional(asBlockType->GetItemType(), isOptional);
+        if (!baseType->IsData()) {
+            return false;
+        }
+
         hasOptionals = hasOptionals || isOptional;
-        argTypes.push_back(dataType->GetSchemeType());
+        argTypes.push_back(AS_TYPE(TDataType, baseType)->GetSchemeType());
     }
 
-    auto kernel = registry.FindKernel(name, argTypes.data(), argTypes.size());
+    NUdf::TDataTypeId returnType;
+    bool returnIsOptional;
+    {
+        auto asBlockType = AS_TYPE(TBlockType, outputType);
+        MKQL_ENSURE(many ^ (asBlockType->GetShape() == TBlockType::EShape::Scalar), "Output shape is inconsistent with input shapes");
+        auto baseType = UnpackOptional(asBlockType->GetItemType(), returnIsOptional);
+        if (!baseType->IsData()) {
+            return false;
+        }
+        returnType = AS_TYPE(TDataType, baseType)->GetSchemeType();
+    }
+
+    auto kernel = registry.FindKernel(name, argTypes.data(), argTypes.size(), returnType);
     if (!kernel) {
         return false;
     }
 
-    outputType = TDataType::Create(kernel->ReturnType, env);
-    if (kernel->Family.NullMode != TKernelFamily::ENullMode::AlwaysNotNull) {
-        if (hasOptionals || kernel->Family.NullMode == TKernelFamily::ENullMode::AlwaysNull) {
-            outputType = TOptionalType::Create(outputType, env);
-        }
+    bool match = false;
+    switch (kernel->Family.NullMode) {
+        case TKernelFamily::ENullMode::Default:
+            match = returnIsOptional == hasOptionals;
+            break;
+        case TKernelFamily::ENullMode::AlwaysNull:
+            match = returnIsOptional;
+            break;
+        case TKernelFamily::ENullMode::AlwaysNotNull:
+            match = !returnIsOptional;
+            break;
     }
-
-    outputType = TBlockType::Create(outputType, many ? TBlockType::EShape::Many : TBlockType::EShape::Scalar, env);
-    return true;
+    return match;
 }
 
 bool HasArrowCast(TType* from, TType* to) {

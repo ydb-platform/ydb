@@ -200,7 +200,7 @@ IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TEx
 
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureMinArgsCount(*input, 1U, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -209,34 +209,25 @@ IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     auto name = input->Child(0)->Content();
+    Y_UNUSED(name);
+    if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
 
-    for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-        if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr)) {
+    auto returnType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    const bool allowChunked = true;
+    if (!EnsureBlockOrScalarType(input->Child(1)->Pos(), *returnType, ctx.Expr, allowChunked)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (ui32 i = 2; i < input->ChildrenSize(); ++i) {
+        if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr, allowChunked)) {
             return IGraphTransformer::TStatus::Error;
         }
     }
 
-    if (!ctx.Types.ArrowResolver) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Arrow resolver isn't available"));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    const TTypeAnnotationNode* outType = nullptr;
-    TVector<const TTypeAnnotationNode*> argTypes;
-    for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-        argTypes.push_back(input->Child(i)->GetTypeAnn());
-    }
-
-    if (!ctx.Types.ArrowResolver->LoadFunctionMetadata(ctx.Expr.GetPosition(input->Pos()), name, argTypes, outType, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!outType) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "No such Arrow function: " << name));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    input->SetTypeAnn(outType);
+    // TODO: more validation
+    input->SetTypeAnn(returnType);
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -261,24 +252,24 @@ IGraphTransformer::TStatus BlockBitCastWrapper(const TExprNode::TPtr& input, TEx
 
     bool isScalar;
     auto inputType = GetBlockItemType(*input->Child(0)->GetTypeAnn(), isScalar);
-
     auto outputType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-    bool has = false;
-    if (!ctx.Types.ArrowResolver->HasCast(ctx.Expr.GetPosition(input->Pos()), inputType, outputType, has, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
 
-    if (!has) {
+    auto castStatus = ctx.Types.ArrowResolver->HasCast(ctx.Expr.GetPosition(input->Pos()), inputType, outputType, ctx.Expr);
+    if (castStatus == IArrowResolver::ERROR) {
+        return IGraphTransformer::TStatus::Error;
+    } else if (castStatus == IArrowResolver::NOT_FOUND) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "No such cast"));
         return IGraphTransformer::TStatus::Error;
     }
 
     if (isScalar) {
         input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(outputType));
-    } else {
+    } else if (outputType->HasFixedSizeRepr()) {
         input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(outputType));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TChunkedBlockExprType>(outputType));
     }
-    
+
     return IGraphTransformer::TStatus::Ok;
 }
 

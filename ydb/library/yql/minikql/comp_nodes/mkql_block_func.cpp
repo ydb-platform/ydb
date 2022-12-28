@@ -43,7 +43,7 @@ const arrow::compute::ScalarKernel& ResolveKernel(const arrow::compute::Function
     return *static_cast<const arrow::compute::ScalarKernel*>(kernel);
 }
 
-const TKernel& ResolveKernel(const IBuiltinFunctionRegistry& builtins, const TString& funcName, const TVector<TType*>& inputTypes) {
+const TKernel& ResolveKernel(const IBuiltinFunctionRegistry& builtins, const TString& funcName, const TVector<TType*>& inputTypes, TType* returnType) {
     std::vector<NUdf::TDataTypeId> argTypes;
     for (const auto& t : inputTypes) {
         auto asBlockType = AS_TYPE(TBlockType, t);
@@ -52,7 +52,15 @@ const TKernel& ResolveKernel(const IBuiltinFunctionRegistry& builtins, const TSt
         argTypes.push_back(dataType->GetSchemeType());
     }
 
-    auto kernel = builtins.FindKernel(funcName, argTypes.data(), argTypes.size());
+    NUdf::TDataTypeId returnTypeId;
+    {
+        auto asBlockType = AS_TYPE(TBlockType, returnType);
+        bool isOptional;
+        auto dataType = UnpackOptionalData(asBlockType->GetItemType(), isOptional);
+        returnTypeId = dataType->GetSchemeType();
+    }
+
+    auto kernel = builtins.FindKernel(funcName, argTypes.data(), argTypes.size(), returnTypeId);
     MKQL_ENSURE(kernel, "Can't find kernel for " << funcName);
     return *kernel;
 }
@@ -90,14 +98,15 @@ public:
         const IBuiltinFunctionRegistry& builtins,
         const TString& funcName,
         TVector<IComputationNode*>&& argsNodes,
-        TVector<TType*>&& argsTypes)
+        TVector<TType*>&& argsTypes,
+        TType* returnType)
         : TMutableComputationNode(mutables)
         , StateIndex(mutables.CurValueIndex++)
         , FuncName(funcName)
         , ArgsNodes(std::move(argsNodes))
         , ArgsTypes(std::move(argsTypes))
         , ArgsValuesDescr(ToValueDescr(ArgsTypes))
-        , Kernel(ResolveKernel(builtins, FuncName, ArgsTypes))
+        , Kernel(ResolveKernel(builtins, FuncName, ArgsTypes, returnType))
     {
     }
 
@@ -234,7 +243,8 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
         *ctx.FunctionRegistry.GetBuiltins(),
         funcName,
         std::move(argsNodes),
-        std::move(argsTypes)
+        std::move(argsTypes),
+        callableType->GetReturnType()
     );
 }
 

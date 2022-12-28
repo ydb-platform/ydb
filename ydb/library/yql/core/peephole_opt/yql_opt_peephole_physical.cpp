@@ -4469,9 +4469,9 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         allInputTypes.push_back(i);
     }
 
-    bool supportedInputTypes = false;
-    YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, supportedInputTypes, ctx));
-    if (!supportedInputTypes) {
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allInputTypes, ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    if (resolveStatus != IArrowResolver::OK) {
         return false;
     }
 
@@ -4539,52 +4539,30 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
             ++newNodes;
             return true;
         }
-        if (node->IsCallable("Apply") && node->Head().IsCallable("Udf")) {
+        const bool isUdf = node->IsCallable("Apply") && node->Head().IsCallable("Udf");
+        if (isUdf) {
             auto func = node->Head().Head().Content();
             if (!func.StartsWith("ClickHouse.")) {
                 return true;
             }
+        }
 
+        {
             TVector<const TTypeAnnotationNode*> allTypes;
             allTypes.push_back(node->GetTypeAnn());
-            for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+            for (ui32 i = isUdf ? 1 : 0; i < node->ChildrenSize(); ++i) {
                 allTypes.push_back(node->Child(i)->GetTypeAnn());
             }
 
-            bool supported = false;
-            YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, supported, ctx));
-            if (!supported) {
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Pos()), allTypes, ctx);
+            YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+            if (resolveStatus != IArrowResolver::OK) {
                 return true;
-            }
-
-            funcArgs.push_back(nullptr);
-        } else {
-            auto fit = funcs.find(node->Content());
-            if (fit == funcs.end()) {
-                return true;
-            }
-
-            arrowFunctionName = fit->second.Name;
-            funcArgs.push_back(ctx.NewAtom(node->Pos(), arrowFunctionName));
-        }
-
-        for (ui32 i = arrowFunctionName.empty() ? 1 : 0; i < node->ChildrenSize(); ++i) {
-            auto child = node->Child(i);
-            if (child->IsComplete()) {
-                funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { node->ChildPtr(i) }));
-            } else {
-                auto rit = rewrites.find(child);
-                if (rit == rewrites.end()) {
-                    return true;
-                }
-
-                funcArgs.push_back(rit->second);
             }
         }
 
-        const TTypeAnnotationNode* outType = nullptr;
         TVector<const TTypeAnnotationNode*> argTypes;
-        for (ui32 i = arrowFunctionName.empty() ? 1 : 0; i < node->ChildrenSize(); ++i) {
+        for (ui32 i = isUdf ? 1 : 0; i < node->ChildrenSize(); ++i) {
             auto child = node->Child(i);
             if (child->IsComplete()) {
                 argTypes.push_back(ctx.MakeType<TScalarExprType>(child->GetTypeAnn()));
@@ -4595,20 +4573,15 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
             }
         }
 
-        if (!arrowFunctionName.empty()) {
-            YQL_ENSURE(types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), arrowFunctionName, argTypes, outType, ctx));
-            if (!outType) {
-                return true;
-            }
-
-            bool isScalar;
-            if (!IsSameAnnotation(*node->GetTypeAnn(), *GetBlockItemType(*outType, isScalar))) {
-                return true;
-            }
-
-            rewrites[node.Get()] = ctx.NewCallable(node->Pos(), "BlockFunc", std::move(funcArgs));
+        const TTypeAnnotationNode* outType = node->GetTypeAnn();
+        if (outType->HasFixedSizeRepr()) {
+            outType = ctx.MakeType<TBlockExprType>(outType);
         } else {
-            funcArgs[0] = ctx.Builder(node->Head().Pos())
+            outType = ctx.MakeType<TChunkedBlockExprType>(outType);
+        }
+
+        if (isUdf) {
+            funcArgs.push_back(ctx.Builder(node->Head().Pos())
                 .Callable("Udf")
                     .Add(0, node->Head().ChildPtr(0))
                     .Add(1, node->Head().ChildPtr(1))
@@ -4634,11 +4607,39 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                     .Seal()
                     .Add(3, node->Head().ChildPtr(3))
                 .Seal()
-                .Build();
+                .Build());
+        } else {
+            auto fit = funcs.find(node->Content());
+            if (fit == funcs.end()) {
+                return true;
+            }
 
-            rewrites[node.Get()] = ctx.NewCallable(node->Pos(), "Apply", std::move(funcArgs));
+            arrowFunctionName = fit->second.Name;
+            funcArgs.push_back(ctx.NewAtom(node->Pos(), arrowFunctionName));
+
+            auto resolveStatus = types.ArrowResolver->LoadFunctionMetadata(ctx.GetPosition(node->Pos()), arrowFunctionName, argTypes, outType, ctx);
+            YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+            if (resolveStatus != IArrowResolver::OK) {
+                return true;
+            }
+            funcArgs.push_back(ExpandType(node->Pos(), *outType, ctx));
         }
 
+        for (ui32 i = isUdf ? 1 : 0; i < node->ChildrenSize(); ++i) {
+            auto child = node->Child(i);
+            if (child->IsComplete()) {
+                funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { node->ChildPtr(i) }));
+            } else {
+                auto rit = rewrites.find(child);
+                if (rit == rewrites.end()) {
+                    return true;
+                }
+
+                funcArgs.push_back(rit->second);
+            }
+        }
+
+        rewrites[node.Get()] = ctx.NewCallable(node->Pos(), isUdf ? "Apply" : "BlockFunc", std::move(funcArgs));
         ++newNodes;
         return true;
     });
@@ -4664,9 +4665,9 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         if (lambda->ChildPtr(i)->IsComplete()) {
             TVector<const TTypeAnnotationNode*> allTypes;
             allTypes.push_back(lambda->ChildPtr(i)->GetTypeAnn());
-            bool supported = false;
-            YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allTypes, supported, ctx));
-            if (supported) {
+            auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda->Pos()), allTypes, ctx);
+            YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+            if (resolveStatus == IArrowResolver::OK) {
                 rewrites[lambda->Child(i)] = ctx.NewCallable(lambda->Pos(), "AsScalar", { lambda->ChildPtr(i) });
                 ++newNodes;
             }
@@ -4893,11 +4894,10 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
         return node;
     }
 
-    bool supported = false;
-    YQL_ENSURE(types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Head().Pos()),
-                                                      TVector<const TTypeAnnotationNode*>(allTypes.begin(), allTypes.end()),
-                                                      supported, ctx));
-    if (!supported) {
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Head().Pos()),
+        TVector<const TTypeAnnotationNode*>(allTypes.begin(), allTypes.end()), ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    if (resolveStatus != IArrowResolver::OK) {
         return node;
     }
 

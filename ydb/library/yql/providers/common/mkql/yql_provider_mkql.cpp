@@ -2390,7 +2390,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("BlockFunc", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         TVector<TRuntimeNode> args;
-        for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
+        for (ui32 i = 2; i < node.ChildrenSize(); ++i) {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 

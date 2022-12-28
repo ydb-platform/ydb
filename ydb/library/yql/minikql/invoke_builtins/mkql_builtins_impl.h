@@ -1188,7 +1188,7 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
     k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.KernelMap.emplace(argTypes, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    owner.KernelMap.emplace(std::make_pair(argTypes, returnType), std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
 }
 
 template<typename TInput1, typename TInput2,
@@ -1204,7 +1204,7 @@ void AddBinaryPredicateKernel(TKernelFamilyBase& owner) {
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
     k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.KernelMap.emplace(argTypes, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    owner.KernelMap.emplace(std::make_pair(argTypes, returnType), std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
 }
 
 template<template<typename, typename, typename> class TFunc>

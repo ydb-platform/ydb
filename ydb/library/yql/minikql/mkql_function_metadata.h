@@ -69,7 +69,7 @@ public:
     {}
 
     virtual ~TKernelFamily() = default;
-    virtual const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const = 0;
+    virtual const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const = 0;
 };
 
 class TKernel {
@@ -90,18 +90,20 @@ public:
     virtual ~TKernel() = default;
 };
 
+using TKernelMapKey = std::pair<std::vector<NUdf::TDataTypeId>, NUdf::TDataTypeId>;
 struct TTypeHasher {
-    std::size_t operator()(const std::vector<NUdf::TDataTypeId>& s) const noexcept {
+    std::size_t operator()(const TKernelMapKey& s) const noexcept {
         size_t r = 0;
-        for (const auto& x : s) {
+        for (const auto& x : s.first) {
             r = CombineHashes<size_t>(r, x);
         }
+        r = CombineHashes<size_t>(r, s.second);
 
         return r;
     }
 };
 
-using TKernelMap = std::unordered_map<std::vector<NUdf::TDataTypeId>, std::unique_ptr<TKernel>, TTypeHasher>;
+using TKernelMap = std::unordered_map<TKernelMapKey, std::unique_ptr<TKernel>, TTypeHasher>;
 
 using TKernelFamilyMap = std::unordered_map<TString, std::unique_ptr<TKernelFamily>>;
 
@@ -112,9 +114,9 @@ public:
         : TKernelFamily(nullMode, functionOptions)
     {}
 
-    const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const final {
-        std::vector<NUdf::TDataTypeId> key(argTypes, argTypes + argTypesCount);
-        auto it = KernelMap.find(key);
+    const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final {
+        std::vector<NUdf::TDataTypeId> args(argTypes, argTypes + argTypesCount);
+        auto it = KernelMap.find({args, returnType});
         if (it == KernelMap.end()) {
             return nullptr;
         }
@@ -144,7 +146,7 @@ public:
 
     virtual TFunctionDescriptor GetBuiltin(const std::string_view& name, const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const = 0;
 
-    virtual const TKernel* FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const = 0;
+    virtual const TKernel* FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const = 0;
 
     virtual void RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) = 0;
 };

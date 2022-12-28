@@ -220,7 +220,7 @@ private:
 
     const TDescriptionList& FindCandidates(const std::string_view& name) const;
 
-    const TKernel* FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const final;
+    const TKernel* FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final;
 
     void RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) final;
 
@@ -357,13 +357,13 @@ void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const
     }
 }
 
-const TKernel* TBuiltinFunctionRegistry::FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount) const {
+const TKernel* TBuiltinFunctionRegistry::FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const {
     auto fit = KernelFamilyMap.find(TString(name));
     if (fit == KernelFamilyMap.end()) {
         return nullptr;
     }
 
-    return fit->second->FindKernel(argTypes, argTypesCount);
+    return fit->second->FindKernel(argTypes, argTypesCount, returnType);
 }
 
 void TBuiltinFunctionRegistry::RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) {

@@ -538,9 +538,9 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         extractorRoots.push_back(extractorArgs[*rowIndex]);
     }
 
-    bool supported = false;
-    YQL_ENSURE(TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allKeyTypes, supported, Ctx));
-    if (!supported) {
+    auto resolveStatus = TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allKeyTypes, Ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    if (resolveStatus != IArrowResolver::OK) {
         return nullptr;
     }
 
@@ -563,9 +563,10 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
 
             TVector<const TTypeAnnotationNode*> allTypes;
             allTypes.push_back(root->GetTypeAnn());
-            bool supported = false;
-            YQL_ENSURE(TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allTypes, supported, Ctx));
-            if (!supported) {
+
+            auto resolveStatus = TypesCtx.ArrowResolver->AreTypesSupported(Ctx.GetPosition(Node->Pos()), allKeyTypes, Ctx);
+            YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+            if (resolveStatus != IArrowResolver::OK) {
                 return nullptr;
             }
 

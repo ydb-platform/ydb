@@ -172,7 +172,9 @@ public:
                         allTypes.push_back(x->GetItemType());
                     }
 
-                    YQL_ENSURE(State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, supportedArrowTypes, ctx));
+                    auto resolveStatus = State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, ctx);
+                    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+                    supportedArrowTypes = resolveStatus == IArrowResolver::OK;
                 }
 
                 return Build<TDqSourceWrap>(ctx, read->Pos())

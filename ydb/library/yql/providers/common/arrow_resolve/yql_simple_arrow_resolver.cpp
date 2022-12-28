@@ -19,57 +19,45 @@ public:
     {}
 
 private:
-    bool LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
-        const TTypeAnnotationNode*& returnType, TExprContext& ctx) const override {
+    EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
+        const TTypeAnnotationNode* returnType, TExprContext& ctx) const override
+    {
         try {
-            returnType = nullptr;
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TProgramBuilder pgmBuilder(env, FunctionRegistry_);
-            TType* mkqlOutputType;
+            TNullOutput null;
             TVector<TType*> mkqlInputTypes;
             for (const auto& type : argTypes) {
-                TNullOutput null;
                 auto mkqlType = NCommon::BuildType(*type, pgmBuilder, null);
                 mkqlInputTypes.emplace_back(mkqlType);
             }
-
-            if (!FindArrowFunction(name, mkqlInputTypes, mkqlOutputType, env, *FunctionRegistry_.GetBuiltins())) {
-                return true;
-            }
-
-            returnType = NCommon::ConvertMiniKQLType(pos, mkqlOutputType, ctx);
-            return true;
+            TType* mkqlOutputType = NCommon::BuildType(*returnType, pgmBuilder, null);
+            bool found = FindArrowFunction(name, mkqlInputTypes, mkqlOutputType, *FunctionRegistry_.GetBuiltins());
+            return found ? EStatus::OK : EStatus::NOT_FOUND;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(pos, e.what()));
-            return false;
+            return EStatus::ERROR;
         }
     }
 
-    bool HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, bool& has, TExprContext& ctx) const override {
+    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const override {
         try {
-            has = false;
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TProgramBuilder pgmBuilder(env, FunctionRegistry_);
             TNullOutput null;
             auto mkqlFromType = NCommon::BuildType(*from, pgmBuilder, null);
             auto mkqlToType = NCommon::BuildType(*to, pgmBuilder, null);
-            if (!HasArrowCast(mkqlFromType, mkqlToType)) {
-                return true;
-            }
-
-            has = true;
-            return true;
+            return HasArrowCast(mkqlFromType, mkqlToType) ? EStatus::OK : EStatus::NOT_FOUND;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(pos, e.what()));
-            return false;
+            return EStatus::ERROR;
         }
     }
 
-    bool AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, bool& supported, TExprContext& ctx) const override {
+    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx) const override {
         try {
-            supported = false;
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
             TProgramBuilder pgmBuilder(env, FunctionRegistry_);
@@ -79,15 +67,13 @@ private:
                 bool isOptional;
                 std::shared_ptr<arrow::DataType> arrowType;
                 if (!ConvertArrowType(mkqlType, isOptional, arrowType)) {
-                    return true;
+                    return EStatus::NOT_FOUND;
                 }
             }
-
-            supported = true;
-            return true;
+            return EStatus::OK;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(pos, e.what()));
-            return false;
+            return EStatus::ERROR;
         }
     }
 

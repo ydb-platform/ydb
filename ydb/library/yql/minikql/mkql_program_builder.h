@@ -264,6 +264,8 @@ public:
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
+        const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
     // udfs
     TRuntimeNode Udf(

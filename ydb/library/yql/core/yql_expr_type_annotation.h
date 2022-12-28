@@ -118,7 +118,8 @@ bool EnsureFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowChunked = false);
+bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx,
+     bool allowChunked = false, bool allowScalar = true);
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureType(const TExprNode& node, TExprContext& ctx);

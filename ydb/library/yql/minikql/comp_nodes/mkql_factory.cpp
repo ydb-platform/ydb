@@ -285,6 +285,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockCombineAll", &WrapBlockCombineAll},
         {"BlockCombineHashed", &WrapBlockCombineHashed},
         {"BlockMergeFinalizeHashed", &WrapBlockMergeFinalizeHashed},
+        {"BlockMergeManyFinalizeHashed", &WrapBlockMergeManyFinalizeHashed},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},

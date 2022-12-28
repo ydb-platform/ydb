@@ -500,7 +500,7 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
 }
 
 TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& streamArg, TExprNode::TListType& keyIdxs,
-    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many) {
+    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn) {
     auto flow = Ctx.NewCallable(Node->Pos(), "ToFlow", { streamArg });
     TVector<TString> inputColumns;
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
@@ -526,6 +526,16 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         allKeyTypes.push_back(type);
         keyIdxs.push_back(Ctx.NewAtom(Node->Pos(), ToString(index)));
         outputColumns.push_back(TString(keyName));
+    }
+
+    if (many) {
+        auto rowIndex = RowType->FindItem("_yql_group_stream_index");
+        YQL_ENSURE(rowIndex, "Unknown column: _yql_group_stream_index");
+        if (streamIdxColumn) {
+            *streamIdxColumn = extractorRoots.size();
+        }
+
+        extractorRoots.push_back(extractorArgs[*rowIndex]);
     }
 
     bool supported = false;
@@ -1989,6 +1999,21 @@ TExprNode::TPtr TAggregateExpander::GenerateJustOverStates(const TExprNode::TPtr
         .Build();
 }
 
+TExprNode::TPtr TAggregateExpander::SerializeIdxSet(const TIdxSet& indicies) {
+    return Ctx.Builder(Node->Pos())
+        .List()
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                ui32 pos = 0;
+                for (ui32 i : indicies) {
+                    parent.Atom(pos++, ToString(i));
+                }
+
+                return parent;
+            })
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     const bool many = HaveDistinct;
     YQL_CLOG(DEBUG, Core) << "Aggregate: generate " << (many ? "phases with distinct" : "simple phases");
@@ -2125,6 +2150,8 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     // UnionAll
     // MergeManyFinalize
     TExprNode::TListType unionAllInputs;
+    TExprNode::TListType streams;
+
     if (!NonDistinctColumns.empty()) {
         TExprNode::TListType combineColumns;
         for (ui32 i : NonDistinctColumns) {
@@ -2146,6 +2173,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Build();
 
         unionAllInputs.push_back(GenerateJustOverStates(combine, NonDistinctColumns));
+        streams.push_back(SerializeIdxSet(NonDistinctColumns));
     }
 
     for (ui32 index = 0; index < DistinctFields.size(); ++index) {
@@ -2299,6 +2327,32 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Build();
 
         unionAllInputs.push_back(GenerateJustOverStates(combine, indicies));
+        streams.push_back(SerializeIdxSet(indicies));
+    }
+
+    if (TypesCtx.UseBlocks) {
+        for (ui32 i = 0; i < unionAllInputs.size(); ++i) {
+            unionAllInputs[i] = Ctx.Builder(Node->Pos())
+                .Callable("Map")
+                    .Add(0, unionAllInputs[i])
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("AddMember")
+                            .Arg(0, "row")
+                            .Atom(1, "_yql_group_stream_index")
+                            .Callable(2, "Uint32")
+                                .Atom(0, ToString(i))
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    }
+
+    auto settings = Node->ChildPtr(3);
+    if (TypesCtx.UseBlocks) {
+        settings = AddSetting(*settings, Node->Pos(), "many_streams", Ctx.NewList(Node->Pos(), std::move(streams)), Ctx);
     }
 
     auto unionAll = Ctx.NewCallable(Node->Pos(), "UnionAll", std::move(unionAllInputs));
@@ -2307,7 +2361,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Add(0, unionAll)
             .Add(1, KeyColumns)
             .Add(2, Ctx.NewList(Node->Pos(), std::move(finalizeColumns)))
-            .Add(3, Node->ChildPtr(3))
+            .Add(3, settings)
         .Seal()
         .Build();
 
@@ -2357,25 +2411,42 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
         return nullptr;
     }
 
+    bool isMany = Suffix == "MergeManyFinalize";
     auto streamArg = Ctx.NewArgument(Node->Pos(), "stream");
     TExprNode::TListType keyIdxs;
     TVector<TString> outputColumns;
     TExprNode::TListType aggs;
-    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, Suffix == "MergeManyFinalize");
+    ui32 streamIdxColumn;
+    auto blocks = MakeInputBlocks(streamArg, keyIdxs, outputColumns, aggs, true, isMany, &streamIdxColumn);
     if (!blocks) {
         return nullptr;
     }
 
-    auto aggWideFlow = Ctx.Builder(Node->Pos())
-            .Callable("WideFromBlocks")
-                .Callable(0, TStringBuilder() << "Block" << Suffix << "Hashed")
-                    .Add(0, blocks)
-                    .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
-                .Seal()
+    TExprNode::TPtr aggBlocks;
+    if (!isMany) {
+        aggBlocks = Ctx.Builder(Node->Pos())
+            .Callable("BlockMergeFinalizeHashed")
+                .Add(0, blocks)
+                .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
             .Seal()
             .Build();
+    } else {
+        auto manyStreamsSetting = GetSetting(*Node->Child(3), "many_streams");
+        YQL_ENSURE(manyStreamsSetting, "Missing many_streams setting");
 
+        aggBlocks = Ctx.Builder(Node->Pos())
+            .Callable("BlockMergeManyFinalizeHashed")
+                .Add(0, blocks)
+                .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                .Atom(3, ToString(streamIdxColumn))
+                .Add(4, manyStreamsSetting->TailPtr())
+            .Seal()
+            .Build();
+    }
+
+    auto aggWideFlow = Ctx.NewCallable(Node->Pos(), "WideFromBlocks", { aggBlocks });
     auto finalFlow = MakeNarrowMap(Node->Pos(), outputColumns, aggWideFlow, Ctx);
     auto root = Ctx.NewCallable(Node->Pos(), "FromFlow", { finalFlow });
     auto lambdaStream = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), { streamArg }), std::move(root));

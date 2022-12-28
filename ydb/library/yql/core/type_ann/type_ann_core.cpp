@@ -11591,13 +11591,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CastStruct"] = &CastStructWrapper;
         Functions["AggregationTraits"] = &AggregationTraitsWrapper;
         Functions["MultiAggregate"] = &MultiAggregateWrapper;
-        Functions["Aggregate"] = &AggregateWrapper;
-        Functions["AggregateCombine"] = &AggregateWrapper;
-        Functions["AggregateCombineState"] = &AggregateWrapper;
-        Functions["AggregateMergeState"] = &AggregateWrapper;
-        Functions["AggregateFinalize"] = &AggregateWrapper;
-        Functions["AggregateMergeFinalize"] = &AggregateWrapper;
-        Functions["AggregateMergeManyFinalize"] = &AggregateWrapper;
         Functions["AggOverState"] = &AggOverStateWrapper;
         Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
         Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;
@@ -11884,6 +11877,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
+
+        ExtFunctions["Aggregate"] = &AggregateWrapper;
+        ExtFunctions["AggregateCombine"] = &AggregateWrapper;
+        ExtFunctions["AggregateCombineState"] = &AggregateWrapper;
+        ExtFunctions["AggregateMergeState"] = &AggregateWrapper;
+        ExtFunctions["AggregateFinalize"] = &AggregateWrapper;
+        ExtFunctions["AggregateMergeFinalize"] = &AggregateWrapper;
+        ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;

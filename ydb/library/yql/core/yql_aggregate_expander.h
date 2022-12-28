@@ -76,12 +76,13 @@ private:
     TExprNode::TPtr GeneratePhases();
     void GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField);
     TExprNode::TPtr GenerateJustOverStates(const TExprNode::TPtr& input, const TIdxSet& indicies);
+    TExprNode::TPtr SerializeIdxSet(const TIdxSet& indicies);
     TExprNode::TPtr TryGenerateBlockCombineAllOrHashed();
     TExprNode::TPtr TryGenerateBlockMergeFinalizeHashed();
     TExprNode::TPtr TryGenerateBlockCombine();
     TExprNode::TPtr TryGenerateBlockMergeFinalize();
     TExprNode::TPtr MakeInputBlocks(const TExprNode::TPtr& streamArg, TExprNode::TListType& keyIdxs,
-        TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many);
+        TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn = nullptr);
 
 private:
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";

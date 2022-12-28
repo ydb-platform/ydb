@@ -10,6 +10,7 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
+#include <ydb/library/yql/minikql/arrow/arrow_util.h>
 
 #include <arrow/scalar.h>
 #include <arrow/array/array_primitive.h>
@@ -302,6 +303,8 @@ namespace {
 template <typename T>
 struct TAggParams {
     std::unique_ptr<IPreparedBlockAggregator<T>> Prepared_;
+    ui32 Column_ = 0;
+    TType* StateType_ = nullptr;
 };
 
 struct TKeyParams {
@@ -673,10 +676,10 @@ TStringBuf GetKeyView(const TSSOKey& key) {
     return key.AsView();
 }
 
-template <typename TKey, typename TAggregator, typename TFixedAggState, bool UseSet, bool UseFilter, bool Finalize, typename TDerived>
+template <typename TKey, typename TAggregator, typename TFixedAggState, bool UseSet, bool UseFilter, bool Finalize, bool Many, typename TDerived>
 class THashedWrapperBase : public TStatefulWideFlowComputationNode<TDerived> {
 public:
-    using TSelf = THashedWrapperBase<TKey, TAggregator, TFixedAggState, UseSet, UseFilter, Finalize, TDerived>;
+    using TSelf = THashedWrapperBase<TKey, TAggregator, TFixedAggState, UseSet, UseFilter, Finalize, Many, TDerived>;
     using TBase = TStatefulWideFlowComputationNode<TDerived>;
 
     static constexpr bool UseArena = !InlineAggState && std::is_same<TFixedAggState, TStateArena>::value;
@@ -687,7 +690,9 @@ public:
         size_t width,
         const std::vector<TKeyParams>& keys,
         std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
-        TVector<TAggParams<TAggregator>>&& aggsParams)
+        TVector<TAggParams<TAggregator>>&& aggsParams,
+        ui32 streamIndex,
+        TVector<TVector<ui32>>&& streams)
         : TBase(mutables, flow, EValueRepresentation::Any)
         , Flow_(flow)
         , FilterColumn_(filterColumn)
@@ -696,6 +701,8 @@ public:
         , Keys_(keys)
         , KeySerializers_(std::move(keySerializers))
         , AggsParams_(std::move(aggsParams))
+        , StreamIndex_(streamIndex)
+        , Streams_(std::move(streams))
     {
         MKQL_ENSURE(Width_ > 0, "Missing block length column");
         if constexpr (UseFilter) {
@@ -742,6 +749,19 @@ public:
                     }
                 }
 
+                const ui32* streamIndexData = nullptr;
+                if constexpr (Many) {
+                    auto streamIndexDatum = TArrowBlock::From(s.Values_[StreamIndex_]).GetDatum();
+                    MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
+                    streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
+                    s.UnwrappedValues_ = s.Values_;
+                    for (const auto& p : AggsParams_) {
+                        const auto& columnDatum = TArrowBlock::From(s.UnwrappedValues_[p.Column_]).GetDatum();
+                        MKQL_ENSURE(columnDatum.is_array(), "Expected array");
+                        s.UnwrappedValues_[p.Column_] = ctx.HolderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
+                    }
+                }
+
                 s.HasValues_ = true;
                 TVector<arrow::Datum> keysDatum;
                 keysDatum.reserve(Keys_.size());
@@ -778,9 +798,9 @@ public:
                         }
                     } else {
                         if (!InlineAggState) {
-                            Insert(*s.HashFixedMap_, key, row, output, s);
+                            Insert(*s.HashFixedMap_, key, row, streamIndexData, output, s);
                         } else {
-                            Insert(*s.HashMap_, key, row, output, s);
+                            Insert(*s.HashMap_, key, row, streamIndexData, output, s);
                         }
                     }
                 }
@@ -862,6 +882,8 @@ private:
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         TVector<std::unique_ptr<TAggregator>> Aggs_;
+        TVector<ui32> AggStateOffsets_;
+        TVector<NUdf::TUnboxedValue> UnwrappedValues_;
         bool IsFinished_ = false;
         bool HasValues_ = false;
         ui32 TotalStateSize_ = 0;
@@ -870,19 +892,26 @@ private:
         std::unique_ptr<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>> HashFixedMap_;
         TPagedArena Arena_;
 
-        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams<TAggregator>>& params, TComputationContext& ctx)
+        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams<TAggregator>>& params,
+            const TVector<TVector<ui32>>& streams, TComputationContext& ctx)
             : TBase(memInfo)
             , Values_(width)
             , ValuePointers_(width)
+            , UnwrappedValues_(width)
             , Arena_(TlsAllocState)
         {
             for (size_t i = 0; i < width; ++i) {
                 ValuePointers_[i] = &Values_[i];
             }
 
+            if constexpr (Many) {
+                TotalStateSize_ += streams.size();
+            } 
+
             for (const auto& p : params) {
                 Aggs_.emplace_back(p.Prepared_->Make(ctx));
                 MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
+                AggStateOffsets_.emplace_back(TotalStateSize_);
                 TotalStateSize_ += Aggs_.back()->StateSize;
             }
 
@@ -906,13 +935,13 @@ private:
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx);
+            state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, Streams_, ctx);
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
     template <typename THash>
-    void Insert(THash& hash, const TKey& key, ui64 row, NUdf::TUnboxedValue*const* output, TState& s) const {
+    void Insert(THash& hash, const TKey& key, ui64 row, const ui32* streamIndexData, NUdf::TUnboxedValue*const* output, TState& s) const {
         bool isNew;
         auto iter = hash.Insert(key, isNew);
         char* payload = (char*)hash.GetMutablePayload(iter);
@@ -926,16 +955,30 @@ private:
                 ptr = payload;
             }
 
-            for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                if (output[Keys_.size() + i]) {
-                    if constexpr (Finalize) {
-                        s.Aggs_[i]->LoadState(ptr, s.Values_.data(), row);
-                    } else {
-                        s.Aggs_[i]->InitKey(ptr, s.Values_.data(), row);
+            if constexpr (Many) {
+                static_assert(Finalize);
+                ui32 currentStreamIndex = streamIndexData[row];
+                MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+                memset(ptr, 0, Streams_.size());
+                ptr[currentStreamIndex] = 1;
+
+                for (auto i : Streams_[currentStreamIndex]) {
+                    if (output[Keys_.size() + i]) {
+                        s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.UnwrappedValues_.data(), row);
                     }
                 }
+            } else {
+                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
+                    if (output[Keys_.size() + i]) {
+                        if constexpr (Finalize) {
+                            s.Aggs_[i]->LoadState(ptr, s.Values_.data(), row);
+                        } else {
+                            s.Aggs_[i]->InitKey(ptr, s.Values_.data(), row);
+                        }
+                    }
 
-                ptr += s.Aggs_[i]->StateSize;
+                    ptr += s.Aggs_[i]->StateSize;
+                }
             }
 
             if constexpr (std::is_same<TKey, TSSOKey>::value) {
@@ -950,16 +993,35 @@ private:
                 ptr = payload;
             }
 
-            for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                if (output[Keys_.size() + i]) {
-                    if constexpr (Finalize) {
-                        s.Aggs_[i]->UpdateState(ptr, s.Values_.data(), row);
-                    } else {
-                        s.Aggs_[i]->UpdateKey(ptr, s.Values_.data(), row);
+            if constexpr (Many) {
+                static_assert(Finalize);
+                ui32 currentStreamIndex = streamIndexData[row];
+                MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+
+                bool isNewStream = !ptr[currentStreamIndex];
+                ptr[currentStreamIndex] = 1;
+
+                for (auto i : Streams_[currentStreamIndex]) {
+                    if (output[Keys_.size() + i]) {
+                        if (isNewStream) {
+                            s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.UnwrappedValues_.data(), row);
+                        } else {
+                            s.Aggs_[i]->UpdateState(ptr + s.AggStateOffsets_[i], s.UnwrappedValues_.data(), row);
+                        }
                     }
                 }
+            } else {
+                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
+                    if (output[Keys_.size() + i]) {
+                        if constexpr (Finalize) {
+                            s.Aggs_[i]->UpdateState(ptr, s.Values_.data(), row);
+                        } else {
+                            s.Aggs_[i]->UpdateKey(ptr, s.Values_.data(), row);
+                        }
+                    }
 
-                ptr += s.Aggs_[i]->StateSize;
+                    ptr += s.Aggs_[i]->StateSize;
+                }
             }
         }
     }
@@ -987,6 +1049,14 @@ private:
                 kb->Add(in);
             }
 
+            if constexpr (Many) {
+                for (ui32 i = 0; i < Streams_.size(); ++i) {
+                    MKQL_ENSURE(ptr[i], "Missing partial aggregation state");
+                }
+
+                ptr += Streams_.size();
+            }
+
             for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                 if (output[Keys_.size() + i]) {
                     aggBuilders[i]->Add(ptr);
@@ -1009,13 +1079,15 @@ private:
     const std::vector<TKeyParams> Keys_;
     const TVector<TAggParams<TAggregator>> AggsParams_;
     std::vector<std::unique_ptr<IKeySerializer>> KeySerializers_;
+    const ui32 StreamIndex_;
+    const TVector<TVector<ui32>> Streams_;
 };
 
 template <typename TKey, typename TFixedAggState, bool UseSet, bool UseFilter>
-class TBlockCombineHashedWrapper : public THashedWrapperBase<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter>> {
+class TBlockCombineHashedWrapper : public THashedWrapperBase<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter>> {
 public:
     using TSelf = TBlockCombineHashedWrapper<TKey, TFixedAggState, UseSet, UseFilter>;
-    using TBase = THashedWrapperBase<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, TSelf>;
+    using TBase = THashedWrapperBase<TKey, IBlockAggregatorCombineKeys, TFixedAggState, UseSet, UseFilter, false, false, TSelf>;
 
     TBlockCombineHashedWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
@@ -1024,15 +1096,15 @@ public:
         const std::vector<TKeyParams>& keys,
         std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
         TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams)
-        : TBase(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams))
+        : TBase(mutables, flow, filterColumn, width, keys, std::move(keySerializers), std::move(aggsParams), 0, {})
     {}
 };
 
 template <typename TKey, typename TFixedAggState, bool UseSet>
-class TBlockMergeFinalizeHashedWrapper : public THashedWrapperBase<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, UseSet, false, true, TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet>> {
+class TBlockMergeFinalizeHashedWrapper : public THashedWrapperBase<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, UseSet, false, true, false, TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet>> {
 public:
     using TSelf = TBlockMergeFinalizeHashedWrapper<TKey, TFixedAggState, UseSet>;
-    using TBase = THashedWrapperBase<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, UseSet, false, true, TSelf>;
+    using TBase = THashedWrapperBase<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, UseSet, false, true, false, TSelf>;
 
     TBlockMergeFinalizeHashedWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
@@ -1040,7 +1112,24 @@ public:
         const std::vector<TKeyParams>& keys,
         std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
         TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams)
-        : TBase(mutables, flow, {}, width, keys, std::move(keySerializers), std::move(aggsParams))
+        : TBase(mutables, flow, {}, width, keys, std::move(keySerializers), std::move(aggsParams), 0, {})
+    {}
+};
+
+template <typename TKey, typename TFixedAggState>
+class TBlockMergeManyFinalizeHashedWrapper : public THashedWrapperBase<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, false, false, true, true, TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState>> {
+public:
+    using TSelf = TBlockMergeManyFinalizeHashedWrapper<TKey, TFixedAggState>;
+    using TBase = THashedWrapperBase<TKey, IBlockAggregatorFinalizeKeys, TFixedAggState, false, false, true, true, TSelf>;
+
+    TBlockMergeManyFinalizeHashedWrapper(TComputationMutables& mutables,
+        IComputationWideFlowNode* flow,
+        size_t width,
+        const std::vector<TKeyParams>& keys,
+        std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+        TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
+        ui32 streamIndex, TVector<TVector<ui32>>&& streams)
+        : TBase(mutables, flow, {}, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams))
     {}
 };
 
@@ -1080,7 +1169,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareB
 }
 
 template <typename TAggregator>
-ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams<TAggregator>>& aggsParams, const TTypeEnvironment& env) {
+ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams<TAggregator>>& aggsParams, const TTypeEnvironment& env, bool overState) {
     ui32 totalStateSize = 0;
     for (ui32 i = 0; i < aggsVal->GetValuesCount(); ++i) {
         auto aggVal = AS_VALUE(TTupleLiteral, aggsVal->GetValue(i));
@@ -1093,6 +1182,12 @@ ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<
 
         TAggParams<TAggregator> p;
         p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), tupleType, filterColumn, argColumns, env);
+        if (overState) {
+            MKQL_ENSURE(argColumns.size() == 1, "Expected exactly one column");
+            p.Column_ = argColumns[0];
+            p.StateType_ = AS_TYPE(TBlockType, tupleType->GetElementType(p.Column_))->GetItemType();
+        }
+
         totalStateSize += p.Prepared_->StateSize;
         aggsParams.emplace_back(std::move(p));
     }
@@ -1183,6 +1278,51 @@ IComputationNode* MakeBlockMergeFinalizeHashedWrapper(
     }
 
     return MakeBlockMergeFinalizeHashedWrapper<TSSOKey, UseSet>(totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams));
+}
+
+template <typename TKey>
+IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
+    ui32 totalStateSize,
+    TComputationMutables& mutables,
+    IComputationWideFlowNode* flow,
+    size_t width,
+    const std::vector<TKeyParams>& keys,
+    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
+    ui32 streamIndex,
+    TVector<TVector<ui32>>&& streams) {
+
+    if (totalStateSize <= sizeof(TState8)) {
+        return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState8>(mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+    }
+
+    if (totalStateSize <= sizeof(TState16)) {
+        return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState16>(mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+    }
+
+    return new TBlockMergeManyFinalizeHashedWrapper<TKey, TStateArena>(mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+}
+
+IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
+    ui32 totalKeysSize,
+    ui32 totalStateSize,
+    TComputationMutables& mutables,
+    IComputationWideFlowNode* flow,
+    size_t width,
+    const std::vector<TKeyParams>& keys,
+    std::vector<std::unique_ptr<IKeySerializer>>&& keySerializers,
+    TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
+    ui32 streamIndex,
+    TVector<TVector<ui32>>&& streams) {
+    if (totalKeysSize <= sizeof(ui32)) {
+        return MakeBlockMergeManyFinalizeHashedWrapper<ui32>(totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+    }
+
+    if (totalKeysSize <= sizeof(ui64)) {
+        return MakeBlockMergeManyFinalizeHashedWrapper<ui64>(totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
+    }
+
+    return MakeBlockMergeManyFinalizeHashedWrapper<TSSOKey>(totalStateSize, mutables, flow, width, keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
 }
 
 void PrepareKeys(const std::vector<TKeyParams>& keys, ui32& totalKeysSize, std::vector<std::unique_ptr<IKeySerializer>>& keySerializers) {
@@ -1280,6 +1420,19 @@ void PrepareKeys(const std::vector<TKeyParams>& keys, ui32& totalKeysSize, std::
     }
 }
 
+void FillAggStreams(TRuntimeNode streamsNode, TVector<TVector<ui32>>& streams) {
+    auto streamsVal = AS_VALUE(TTupleLiteral, streamsNode);
+    for (ui32 i = 0; i < streamsVal->GetValuesCount(); ++i) {
+        streams.emplace_back();
+        auto& stream = streams.back();
+        auto streamVal = AS_VALUE(TTupleLiteral, streamsVal->GetValue(i));
+        for (ui32 j = 0; j < streamVal->GetValuesCount(); ++j) {
+            ui32 index = AS_VALUE(TDataLiteral, streamVal->GetValue(j))->AsValue().Get<ui32>();
+            stream.emplace_back(index);
+        }
+    }
+}
+
 }
 
 IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -1298,7 +1451,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false);
     return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
 
@@ -1325,7 +1478,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TAggParams<IBlockAggregatorCombineKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false);
 
     ui32 totalKeysSize = 0;
     std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
@@ -1363,7 +1516,7 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true);
 
     ui32 totalKeysSize = 0;
     std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
@@ -1373,6 +1526,43 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
         return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
     } else {
         return MakeBlockMergeFinalizeHashedWrapper<false>(totalKeysSize, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, std::move(keySerializers), std::move(aggsParams));
+    }
+}
+
+IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
+    const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
+
+    auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+
+    auto keysVal = AS_VALUE(TTupleLiteral, callable.GetInput(1));
+    std::vector<TKeyParams> keys;
+    for (ui32 i = 0; i < keysVal->GetValuesCount(); ++i) {
+        ui32 index = AS_VALUE(TDataLiteral, keysVal->GetValue(i))->AsValue().Get<ui32>();
+        keys.emplace_back(TKeyParams{ index, tupleType->GetElementType(index) });
+    }
+
+    auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
+    TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true);
+
+    ui32 totalKeysSize = 0;
+    std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
+    PrepareKeys(keys, totalKeysSize, keySerializers);
+
+    ui32 streamIndex = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
+    TVector<TVector<ui32>> streams;
+    FillAggStreams(callable.GetInput(4), streams);
+    totalStateSize += streams.size();
+
+    if (aggsParams.size() == 0) {
+        return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(),
+            keys, std::move(keySerializers), std::move(aggsParams));
+    } else {
+        return MakeBlockMergeManyFinalizeHashedWrapper(totalKeysSize, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(),
+            keys, std::move(keySerializers), std::move(aggsParams), streamIndex, std::move(streams));
     }
 }
 

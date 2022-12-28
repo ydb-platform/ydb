@@ -2697,7 +2697,7 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
     return true;
 }
 
-bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowChunked) {
+bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowChunked, bool allowScalar) {
     if (!EnsureWideFlowType(node, ctx)) {
         return false;
     }
@@ -2709,12 +2709,17 @@ bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListTy
     }
 
     bool isScalar;
-    for (const auto& type : items) {
+    for (ui32 i = 0; i < items.size(); ++i) {
+        const auto& type = items[i];
         if (!EnsureBlockOrScalarType(node.Pos(), *type, ctx, allowChunked)) {
             return false;
         }
 
         blockItemTypes.push_back(GetBlockItemType(*type, isScalar));
+        if (!allowScalar && isScalar && (i + 1 != items.size())) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Scalars are not allowed"));
+            return false;
+        }
     }
 
     if (!isScalar) {

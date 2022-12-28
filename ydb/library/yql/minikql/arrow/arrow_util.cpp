@@ -1,4 +1,5 @@
 #include "arrow_util.h"
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
 
 #include <util/system/yassert.h>
 
@@ -34,6 +35,21 @@ std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, 
     auto first = DeepSlice(data, 0, len);
     data = DeepSlice(data, len, data->length - len);
     return first;
+}
+
+std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType) {
+    bool isOptional;
+    auto unpacked = UnpackOptional(itemType, isOptional);
+    MKQL_ENSURE(isOptional, "Expected optional");
+    if (unpacked->IsOptional() || unpacked->IsVariant()) {
+        MKQL_ENSURE(data.child_data.size() == 1, "Expected struct with one element");
+        return data.child_data[0];
+    } else {
+        auto buffers = data.buffers;
+        MKQL_ENSURE(buffers.size() >= 1, "Missing nullable bitmap");
+        buffers[0] = nullptr;
+        return arrow::ArrayData::Make(data.type, data.length, buffers, data.child_data, data.dictionary, 0, data.offset);
+    }
 }
 
 

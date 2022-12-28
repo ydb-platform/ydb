@@ -1,4 +1,5 @@
 #include "type_ann_blocks.h"
+#include "type_ann_list.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -315,6 +316,12 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             return false;
         }
 
+        if (overState) {
+            if (!EnsureTupleSize(*agg, 2, ctx)) {
+                return false;
+            }
+        }
+
         auto expectedCallable = overState ? "AggBlockApplyState" : "AggBlockApply";
         if (!agg->Head().IsCallable(expectedCallable)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected: " << expectedCallable));
@@ -445,12 +452,12 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
 IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     const bool many = input->Content().EndsWith("ManyFinalizeHashed");
-    if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
+    if (!EnsureArgsCount(*input, many ? 5U : 3U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr, false, !many)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -465,6 +472,26 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
 
     for (auto& t : retMultiType) {
         t = ctx.Expr.MakeType<TBlockExprType>(t);
+    }
+
+    if (many) {
+        if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ui32 streamIndex;
+        if (!TryFromString(input->Child(3)->Content(), streamIndex) || streamIndex >= blockItemTypes.size()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), "Bad stream index"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(input->Child(3)->Pos(), *blockItemTypes[streamIndex], EDataSlot::Uint32, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!ValidateAggManyStreams(*input->Child(4), input->Child(2)->ChildrenSize(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));

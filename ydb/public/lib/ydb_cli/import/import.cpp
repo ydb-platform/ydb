@@ -77,10 +77,12 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
         }
     }
 
-    auto result = NDump::DescribePath(*SchemeClient, dbPath).GetStatus();
-    if (result != EStatus::SUCCESS) {
+    auto result = NDump::DescribePath(*SchemeClient, dbPath);
+    auto resultStatus = result.GetStatus();
+
+    if (resultStatus != EStatus::SUCCESS) {
         return MakeStatus(EStatus::SCHEME_ERROR,
-            TStringBuilder() <<  "Table does not exist: " << dbPath);
+            TStringBuilder() <<  result.GetIssues().ToString() << dbPath);
     }
 
     // If the filename passed is empty, read from stdin, else from the file.

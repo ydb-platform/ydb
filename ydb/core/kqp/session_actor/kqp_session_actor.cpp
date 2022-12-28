@@ -253,7 +253,8 @@ public:
     TString LogPrefix() const {
         TStringBuilder result = TStringBuilder()
             << "SessionId: " << SessionId << ", "
-            << "ActorId: " << SelfId() << ", ";
+            << "ActorId: " << SelfId() << ", "
+            << "ActorState: " << CurrentStateFuncName() << ", ";
         if (Y_LIKELY(QueryState)) {
             result << "TraceId: " << QueryState->TraceId << ", ";
         }
@@ -392,6 +393,14 @@ public:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
         switch ((EWakeupTag) ev->Get()->Tag) {
             case EWakeupTag::ClientLost:
+                LOG_D("Got TEvWakeup ClientLost event, send AbortExecution to executor: "
+                     << ExecuterId);
+
+                if (ExecuterId) {
+                    auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
+
+                    Send(ExecuterId, abortEv.Release());
+                }
                 Cleanup();
                 break;
             default:
@@ -1278,6 +1287,21 @@ public:
     void HandleNoop(T&) {
     }
 
+    void HandleTxResponse(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        if (ev->Sender == ExecuterId) {
+            auto& response = ev->Get()->Record.GetResponse();
+            TIssues issues;
+            IssuesFromMessage(response.GetIssues(), issues);
+
+            auto err = TStringBuilder() << "Got response from our executor: " << ev->Sender
+            << ", Status: " << ev->Get()->Record.GetResponse().GetStatus()
+            << ", Issues: " << issues.ToString()
+            <<  " while we are in " << CurrentStateFuncName();
+            LOG_E(err);
+            YQL_ENSURE(false, "" << err);
+        }
+    }
+
     void HandleExecute(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ReplyBusy(ev);
     }
@@ -2014,6 +2038,7 @@ public:
             StartIdleTimer();
             Become(&TKqpSessionActor::ReadyState);
         }
+        ExecuterId = TActorId{};
     }
 
     template<class T>
@@ -2070,6 +2095,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
+                hFunc(TEvKqpExecuter::TEvTxResponse, HandleTxResponse);
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
@@ -2091,6 +2117,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
+                hFunc(TEvKqpExecuter::TEvTxResponse, HandleTxResponse);
                 hFunc(TEvents::TEvWakeup, HandleWakeup);
             default:
                 UnexpectedEvent("CompileState", ev);
@@ -2183,6 +2210,24 @@ public:
     }
 
 private:
+
+    TString CurrentStateFuncName() const {
+        const auto& func = CurrentStateFunc();
+        if (func == &TThis::ReadyState) {
+            return "ReadyState";
+        } else if (func == &TThis::ExecuteState) {
+            return "ExecuteState";
+        } else if (func == &TThis::TopicOpsState) {
+            return "TopicOpsState";
+        } else if (func == &TThis::CompileState) {
+            return "CompileState";
+        } else if (func == &TThis::CleanupState) {
+            return "CleanupState";
+        } else {
+            return "unknown state";
+        }
+    }
+
     void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
         InternalError(TStringBuilder() << "TKqpSessionActor in state " << state << " recieve unexpected event " <<
                 TypeName(*ev.Get()->GetBase()) << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));

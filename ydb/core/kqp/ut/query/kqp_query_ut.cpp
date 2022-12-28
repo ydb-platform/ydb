@@ -17,6 +17,22 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+static void CheckStatusAfterTimeout(TSession& session, const TString& query, const TTxControl& txControl) {
+    const TInstant start = TInstant::Now();
+    while (true) {
+        auto result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
+        Cerr << "STATUS: " << result.GetStatus() << " " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
+        if (result.GetStatus() == EStatus::SUCCESS) {
+            break;
+        }
+
+        UNIT_ASSERT_C(TInstant::Now() - start < TDuration::Seconds(30), "Unable to cancel processing after client lost");
+        // Do not fire too much CPU
+        Sleep(TDuration::MilliSeconds(10));
+    }
+}
+
 Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(PreparedQueryInvalidate) {
         TKikimrRunner kikimr;
@@ -285,71 +301,70 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryClientTimeout) {
-        TStringStream logStream;
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        {
-            TKikimrRunner kikimr(
-                TKikimrSettings()
-                    .SetLogStream(&logStream));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
-            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        auto query = Q_(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )");
 
-            auto query = Q_(R"(
-                SELECT * FROM `/Root/TwoShard`;
-            )");
+        auto txControl = TTxControl::BeginTx().CommitTx();
 
-            auto txControl = TTxControl::BeginTx().CommitTx();
+        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
 
-            NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+        auto result = session.ExecuteDataQuery(
+            query,
+            txControl,
+            TExecDataQuerySettings()
+                .UseClientTimeoutForOperation(false)
+                .ClientTimeout(TDuration::Seconds(3))
+        ).ExtractValueSync();
 
-            auto result = session.ExecuteDataQuery(
-                query,
-                txControl,
-                TExecDataQuerySettings()
-                    .UseClientTimeoutForOperation(false)
-                    .ClientTimeout(TDuration::Seconds(3))
-            ).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
 
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
+        NDataShard::gSkipRepliesFailPoint.Disable();
 
-            NDataShard::gSkipRepliesFailPoint.Disable();
+        CheckStatusAfterTimeout(session, query, txControl);
+    }
 
-            const TInstant start = TInstant::Now();
-            while (true) {
-                result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-                UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
-                if (result.GetStatus() == EStatus::SUCCESS) {
-                    break;
-                }
+    Y_UNIT_TEST(QueryClientTimeoutPrecompiled) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-                UNIT_ASSERT_C(TInstant::Now() - start < TDuration::Seconds(30), "Unable to cancel processing after client lost");
-                // Do not fire too much CPU
-                Sleep(TDuration::MilliSeconds(10));
-            }
-        }
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
-        TString line;
-        int v = 0;
-        while (logStream.ReadLine(line)) {
-            if (line.find("ExecuteDataQuery") == line.npos)
-                continue;
-            const TString pattern("timeout# ");
-            auto start = line.find(pattern);
-            if (start == line.npos)
-                continue;
-            // We just want integer part
-            auto end = line.find('.', start + pattern.size());
-            UNIT_ASSERT(end > start + pattern.size()); //something wrong with string
-            UNIT_ASSERT(end != line.npos);
-            TString val = line.substr(start + pattern.size(), end - start - pattern.size());
-            v = std::stoi(val);
-        }
+        auto query = Q_(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )");
 
-        UNIT_ASSERT(v);
-        UNIT_ASSERT_C(v <= 3, "got " << v);
+        auto prepareResult = session.PrepareDataQuery(
+            query
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(prepareResult.GetStatus(), EStatus::SUCCESS);
+
+        auto txControl = TTxControl::BeginTx().CommitTx();
+
+        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+
+        auto result = prepareResult.GetQuery().Execute(
+            txControl,
+            TExecDataQuerySettings()
+                .UseClientTimeoutForOperation(false)
+                .ClientTimeout(TDuration::Seconds(3))
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
+
+        NDataShard::gSkipRepliesFailPoint.Disable();
+
+        CheckStatusAfterTimeout(session, query, txControl);
     }
 
     Y_UNIT_TEST(QueryCancel) {

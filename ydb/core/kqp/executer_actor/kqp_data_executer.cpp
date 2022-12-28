@@ -152,13 +152,13 @@ public:
 
     void CheckExecutionComplete() {
         ui32 notFinished = 0;
-        for (auto& x : ShardStates) {
+        for (const auto& x : ShardStates) {
             if (x.second.State != TShardState::EState::Finished) {
                 notFinished++;
                 LOG_D("Datashard " << x.first << " not finished yet: " << ToString(x.second.State));
             }
         }
-        for (auto& x : TopicTabletStates) {
+        for (const auto& x : TopicTabletStates) {
             if (x.second.State != TShardState::EState::Finished) {
                 ++notFinished;
                 LOG_D("TopicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
@@ -171,15 +171,15 @@ public:
         if (IsDebugLogEnabled()) {
             auto sb = TStringBuilder() << "Waiting for " << PendingComputeActors.size() << " compute actor(s) and "
                 << notFinished << " datashard(s): ";
-            for (auto shardId : PendingComputeActors) {
+            for (const auto& shardId : PendingComputeActors) {
                 sb << "CA " << shardId.first << ", ";
             }
-            for (auto& [shardId, shardState] : ShardStates) {
+            for (const auto& [shardId, shardState] : ShardStates) {
                 if (shardState.State != TShardState::EState::Finished) {
                     sb << "DS " << shardId << " (" << ToString(shardState.State) << "), ";
                 }
             }
-            for (auto& [tabletId, tabletState] : TopicTabletStates) {
+            for (const auto& [tabletId, tabletState] : TopicTabletStates) {
                 if (tabletState.State != TShardState::EState::Finished) {
                     sb << "PQ " << tabletId << " (" << ToString(tabletState.State) << "), ";
                 }
@@ -642,7 +642,7 @@ private:
     }
 
     void CheckPrepareCompleted() {
-        for (auto& [_, state] : ShardStates) {
+        for (const auto& [_, state] : ShardStates) {
             if (state.State != TShardState::EState::Prepared) {
                 LOG_D("Not all shards are prepared, waiting...");
                 return;

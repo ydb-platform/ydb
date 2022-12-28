@@ -544,7 +544,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestInFlight && !Trash.empty()) {
+        if (!CollectGarbageRequestInFlight && !Trash.empty() && self->Loaded) {
             self->HandleTrash(*this);
         }
     }

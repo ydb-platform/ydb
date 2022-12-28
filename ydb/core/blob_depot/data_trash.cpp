@@ -27,6 +27,7 @@ namespace NKikimr::NBlobDepot {
 
         Y_VERIFY(!record.CollectGarbageRequestInFlight);
         Y_VERIFY(!record.Trash.empty());
+        Y_VERIFY(Loaded); // we must have correct Trash and Used values
 
         Y_VERIFY(record.Channel < Self->Channels.size());
         auto& channel = Self->Channels[record.Channel];

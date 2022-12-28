@@ -80,6 +80,25 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
+                // GC
+                {
+                    auto table = db.Table<Schema::GC>().Select();
+                    if (!table.IsReady()) {
+                        return false;
+                    }
+                    while (table.IsValid()) {
+                        Self->Data->AddGenStepOnLoad(
+                            table.GetValue<Schema::GC::Channel>(),
+                            table.GetValue<Schema::GC::GroupId>(),
+                            TGenStep(table.GetValueOrDefault<Schema::GC::IssuedGenStep>()),
+                            TGenStep(table.GetValueOrDefault<Schema::GC::ConfirmedGenStep>())
+                        );
+                        if (!table.Next()) {
+                            return false;
+                        }
+                    }
+                }
+
                 return true;
             }
 
@@ -88,7 +107,8 @@ namespace NKikimr::NBlobDepot {
 #pragma clang diagnostic ignored "-Wbitwise-instead-of-logical"
                 return db.Table<Schema::Config>().Precharge()
                     & db.Table<Schema::Blocks>().Precharge()
-                    & db.Table<Schema::Barriers>().Precharge();
+                    & db.Table<Schema::Barriers>().Precharge()
+                    & db.Table<Schema::GC>().Precharge();
 #pragma clang diagnostic pop
             }
 

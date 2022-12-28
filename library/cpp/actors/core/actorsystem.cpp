@@ -123,8 +123,8 @@ namespace NActors {
         return this->GenericSend<&IExecutorPool::SendWithContinuousExecution>(ev);
     }
 
-    bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags) const {
-        return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags));
+    bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie) const {
+        return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags, cookie));
     }
 
     void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {

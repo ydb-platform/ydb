@@ -1129,7 +1129,9 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
             if (requiredVersion != actualVersion) {
                 errStr = TStringBuilder()
                     << "fail user constraint in ApplyIf section:"
-                    << " path version mismatch, path with id " << pathEl->PathId
+                    //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
+                    // Dependency on text should be replaced by introducing special error code.
+                    << " path version mistmach, path with id " << pathEl->PathId
                     << " has actual version " << actualVersion
                     << " but version " << requiredVersion << " was required";
                 return false;

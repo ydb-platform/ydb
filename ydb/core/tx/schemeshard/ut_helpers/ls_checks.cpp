@@ -524,7 +524,9 @@ TCheckFunc PathVersionEqual(ui64 version) {
         const auto& curVersion = self.GetPathVersion();
 
         UNIT_ASSERT_EQUAL_C(curVersion, version,
-                            "path version mismatch, path with id " << self.GetPathId() <<
+                            //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
+                            // Dependency on text should be replaced by introducing special error code.
+                            "path version mistmach, path with id " << self.GetPathId() <<
                                 " has version " << curVersion <<
                                 " but expected " << version);
     };
@@ -538,7 +540,9 @@ TCheckFunc PathVersionOneOf(TSet<ui64> versions) {
         const auto& curVersion = self.GetPathVersion();
 
         UNIT_ASSERT_C(versions.count(curVersion) > 0,
-                      "path version mismatch, path with id " << self.GetPathId() <<
+                      //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
+                      // Dependency on text should be replaced by introducing special error code.
+                      "path version mistmach, path with id " << self.GetPathId() <<
                           " has version " << curVersion <<
                           " but expected one of set");
     };

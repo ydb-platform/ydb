@@ -20,6 +20,56 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+std::tuple<TMaybe<NACLib::TUserToken>, bool> ParseUserToken(const TString& tokenStr) {
+    TMaybe<NACLib::TUserToken> result;
+    bool parseError = false;
+
+    if (!tokenStr.empty()) {
+        NACLibProto::TUserToken tokenPb;
+        if (tokenPb.ParseFromString(tokenStr)) {
+            result = NACLib::TUserToken(tokenPb);
+        } else {
+            parseError = true;
+        }
+    }
+
+    return std::make_tuple(result, parseError);
+}
+
+TString RenderPaths(const TVector<TString>& paths) {
+    auto result = TStringBuilder();
+    result << "[" << JoinStrings(paths.begin(), paths.end(), ", ") << "]";
+    return result;
+}
+
+void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
+    // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
+    // (even if it was packed into a single TxProxy transaction with some other operations).
+
+    //NOTE: UserSIDNone couldn't be an empty string as "subject" field is a required one,
+    // but AUDIT_PART() skips any part with an empty value
+    static const TString EmptyValue = "{none}";
+
+    for (const auto& operation : request.GetTransaction()) {
+        auto logEntry = MakeAuditLogFragment(operation);
+
+        auto databasePath = TPath::Resolve(operation.GetWorkingDir(), SS);
+        if (!databasePath.IsResolved()) {
+            databasePath.RiseUntilFirstResolvedParent();
+        }
+
+        AUDIT_LOG(
+            AUDIT_PART("txId", std::to_string(request.GetTxId()))
+            AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
+            AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
+            AUDIT_PART("operation", logEntry.Operation)
+            AUDIT_PART("paths", RenderPaths(logEntry.Paths), !logEntry.Paths.empty())
+            AUDIT_PART("status", NKikimrScheme::EStatus_Name(response.GetStatus()))
+            AUDIT_PART("reason", response.GetReason(), response.HasReason())
+        );
+    }
+}
+
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvCancelTx::TPtr Ev;
 
@@ -71,32 +121,6 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
-void MakeAuditLog(const TTxId& txId, const THolder<TProposeResponse>& response, TOperationContext& context) {
-    auto fragPath = TPath::Resolve(context.AuditLogFragments.front().GetAnyPath(), context.SS);
-    if (!fragPath.IsResolved()) {
-        fragPath.RiseUntilFirstResolvedParent();
-    }
-
-    auto operations = TStringBuilder();
-    for (auto it = context.AuditLogFragments.begin(); it != context.AuditLogFragments.end(); it++) {
-        AUDIT_LOG(
-            AUDIT_PART("txId", std::to_string(txId.GetValue()))
-            AUDIT_PART("database", fragPath.GetDomainPathString(), !fragPath.IsEmpty())
-            AUDIT_PART("subject", context.GetSubject())
-            AUDIT_PART("status", NKikimrScheme::EStatus_Name(response->Record.GetStatus()))
-            AUDIT_PART("reason", response->Record.GetReason(), response->Record.HasReason())
-            AUDIT_PART("operation", it->GetOperation())
-            AUDIT_PART("path", it->GetPath())
-            AUDIT_PART("src path", it->GetSrcPath())
-            AUDIT_PART("dst path", it->GetDstPath())
-            AUDIT_PART("set owner", it->GetSetOwner())
-            AUDIT_PART("add access", it->GetAddAccess())
-            AUDIT_PART("remove access", it->GetRemoveAccess())
-            AUDIT_PART("protobuf request", it->GetProtoRequest())
-        );
-    }
-}
-
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
     THolder<TProposeResponse> response = nullptr;
 
@@ -116,28 +140,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     TOperation::TPtr operation = new TOperation(txId);
     Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
 
-    if (record.GetUserToken()) {
-         NACLibProto::TUserToken tokenPb;
-         if (!tokenPb.ParseFromString(record.GetUserToken())) {
-             response.Reset(new TProposeResponse(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
-             response->SetError(NKikimrScheme::StatusInvalidParameter, "Failed to parse user token");
-             return std::move(response);
-         }
-         context.UserToken.Reset(new NACLib::TUserToken(tokenPb));
-    }
-
-    for (const auto& transaction : record.GetTransaction()) {
-        context.AddAuditLogFragment(transaction);
-    }
-
     for (const auto& transaction : record.GetTransaction()) {
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
             Operations.erase(txId);
-
-            MakeAuditLog(txId, response, context);
             return std::move(response);
         }
     }
@@ -158,8 +166,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
             Operations.erase(txId);
-
-            MakeAuditLog(txId, response, context);
             return std::move(response);
         }
 
@@ -167,7 +173,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
-    context.ClearAuditLogFragments();
 
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
@@ -176,8 +181,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             // les't allow altering impl index tables as part of consistent operation
             context.IsAllowedPrivateTables = true;
         }
-
-        context.AddAuditLogFragment(transaction);
 
         for (auto& part : parts) {
             TString errStr;
@@ -240,13 +243,11 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
                 Operations.erase(txId);
 
-                MakeAuditLog(txId, response, context);
                 return std::move(response);
             }
         }
     }
 
-    MakeAuditLog(txId, response, context);
     return std::move(response);
 }
 
@@ -255,6 +256,8 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
     TProposeRequest::TPtr Request;
     THolder<TProposeResponse> Response = nullptr;
+
+    TString UserSID;
 
     TSideEffects OnComplete;
 
@@ -275,9 +278,19 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         txc.DB.NoMoreReadsForTx();
 
+        auto [userToken, tokenParseError] = ParseUserToken(Request->Get()->Record.GetUserToken());
+        if (tokenParseError) {
+            auto txId = Request->Get()->Record.GetTxId();
+            Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
+            return true;
+        }
+        if (userToken) {
+            UserSID = userToken->GetUserSID();
+        }
+
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
-        auto context = TOperationContext{Self, txc, ctx, OnComplete, memChanges, dbChanges};
+        TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
 
         Response = Self->IgniteOperation(*Request->Get(), context);
 
@@ -297,6 +310,8 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", txId: " << txId
                         << ", response: " << Response->Record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
+
+        AuditLogModifySchemeTransaction(record, Response->Record, Self, UserSID);
 
         const TActorId sender = Request->Sender;
         const ui64 cookie = Request->Cookie;

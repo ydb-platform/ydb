@@ -4,7 +4,6 @@
 #include "schemeshard_private.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
-#include "schemeshard_audit_log_fragment.h"
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_db_changes.h"
@@ -89,10 +88,8 @@ public:
     TMemoryChanges& MemChanges;
     TStorageChanges& DbChanges;
 
-    TAutoPtr<NACLib::TUserToken> UserToken = nullptr;
+    TMaybe<NACLib::TUserToken> UserToken;
     bool IsAllowedPrivateTables = false;
-
-    TVector<TAuditLogFragment> AuditLogFragments;
 
 private:
     NTabletFlatExecutor::TTransactionContext& Txc;
@@ -103,29 +100,22 @@ public:
     TOperationContext(
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
+            TMaybe<NACLib::TUserToken>&& userToken)
         : SS(ss)
         , Ctx(ctx)
         , OnComplete(onComplete)
         , MemChanges(memChanges)
         , DbChanges(dbChange)
+        , UserToken(userToken)
         , Txc(txc)
     {}
-
-    void AddAuditLogFragment(TAuditLogFragment&& op) {
-        AuditLogFragments.push_back(std::move(op));
-    }
-
-    void ClearAuditLogFragments() {
-        AuditLogFragments.clear();
-    }
-
-    TString GetSubject() const {
-        if (UserToken) {
-            return UserToken->GetUserSID();
-        }
-        return "no subject";
-    }
+    TOperationContext(
+            TSchemeShard* ss,
+            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
+        : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
+    {}
 
     NTable::TDatabase& GetDB() {
         Y_VERIFY_S(ProtectDB == false,

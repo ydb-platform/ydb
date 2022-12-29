@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
             setup->Executors.Reset(new TAutoPtr<IExecutorPool>[2]);
             setup->Executors[0].Reset(new TBasicExecutorPool(0, 4, 20));
             setup->Executors[1].Reset(new TIOExecutorPool(1, 10));
-            
+
             setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
 
             ActorSystem.reset(new TActorSystem{ setup });
@@ -65,8 +65,8 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
         ui32 Counter = 0;
         ui32 CounterLimit = 10000000;
         const TInstant Start = Now();
-        TDuration Duration;
-        bool Ready = false;
+        std::atomic<TDuration> Duration;
+        std::atomic<bool> Ready = false;
     public:
         bool MakeStep() {
             if (++Counter >= CounterLimit) {
@@ -79,11 +79,12 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
             return Now() - Start;
         }
         double GetOperationDuration() const {
-            return 1.0 * Duration.MicroSeconds() / Counter * 1000;
+            return 1.0 * Duration.load().MicroSeconds() / Counter * 1000;
         }
         void Finish() {
-            Ready = true;
-            Duration = GetDurationInProgress();
+            if (!Ready.exchange(true)) {
+                Duration = GetDurationInProgress();
+            }
         }
         bool IsFinished() const {
             return Ready;

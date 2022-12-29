@@ -1284,7 +1284,7 @@ namespace NActors {
                         ElapsedTs += cpuStats.ElapsedTicks;
                         ParkedTs += cpuStats.ParkedTicks;
                         worstActivationTimeUs = Max(worstActivationTimeUs, cpuStats.WorstActivationTimeUs);
-                        cpuStats.WorstActivationTimeUs = 0;
+                        AtomicStore<decltype(cpuStats.WorstActivationTimeUs)>(&cpuStats.WorstActivationTimeUs, 0ul);
                         logs.push_back(&cpu->LoadLog);
                     }
                     ui64 minPeriodTs = Min(ui64(Us2Ts(Balancer->GetPeriodUs())), ui64((1024ull-2ull)*64ull*128ull*1024ull));

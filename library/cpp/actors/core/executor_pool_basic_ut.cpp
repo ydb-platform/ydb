@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         const size_t N = 6;
         const size_t threadsCounts[N] = { 1, 3, 2, 3, 1, 4 };
         for (ui32 idx = 0; idx < 4 * N; ++idx) {
-            size_t currentThreadCount = threadsCounts[idx];
+            size_t currentThreadCount = threadsCounts[idx % N];
             ctx.ExecutorPool->SetThreadCount(currentThreadCount);
             AtomicSet(ctx.State.ExpectedMaximum, currentThreadCount);
 

@@ -244,7 +244,7 @@ namespace NActors {
             if (x == oldX) {
                 break;
             }
-        } while (!StopFlag);
+        } while (!RelaxedLoad(&StopFlag));
 
         if (needToWait) {
             if (GoToWaiting(threadCtx, timers, needToBlock)) { // interrupted

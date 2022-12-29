@@ -12,7 +12,7 @@ Supported compilers:
 
 * g++ 4.8 or later with `-std=c++11` or above
 * clang++ 3.9 or later with `-std=c++11` or above
-* Visual Studio 2015, 2017, 2019
+* Visual Studio 2015 or later
 
 Tested on [Github Actions](https://github.com/boostorg/variant2/actions) and
 [Appveyor](https://ci.appveyor.com/project/pdimov/variant2-fkab9).

@@ -52,7 +52,6 @@ add_subdirectory(multi_array)
 add_subdirectory(multi_index)
 add_subdirectory(numeric_conversion)
 add_subdirectory(optional)
-add_subdirectory(parameter)
 add_subdirectory(phoenix)
 add_subdirectory(pool)
 add_subdirectory(predef)
@@ -82,13 +81,11 @@ add_subdirectory(utility)
 add_subdirectory(variant)
 add_subdirectory(variant2)
 add_subdirectory(winapi)
-add_subdirectory(xpressive)
 
 add_library(contrib-restricted-boost INTERFACE)
 target_link_libraries(contrib-restricted-boost INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  restricted-boost-algorithm
   restricted-boost-array
   restricted-boost-assert
   restricted-boost-bind
@@ -101,7 +98,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-detail
   restricted-boost-endian
   restricted-boost-exception
-  restricted-boost-foreach
   restricted-boost-function
   restricted-boost-function_types
   restricted-boost-fusion
@@ -109,19 +105,13 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-intrusive
   restricted-boost-iterator
   restricted-boost-lambda
-  restricted-boost-lexical_cast
-  restricted-boost-math
   restricted-boost-move
   restricted-boost-mpl
   restricted-boost-multi_array
   restricted-boost-numeric_conversion
   restricted-boost-optional
-  restricted-boost-parameter
-  restricted-boost-phoenix
   restricted-boost-predef
   restricted-boost-preprocessor
-  restricted-boost-proto
-  restricted-boost-random
   restricted-boost-range
   restricted-boost-smart_ptr
   restricted-boost-static_assert
@@ -136,5 +126,4 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-utility
   restricted-boost-variant
   restricted-boost-winapi
-  restricted-boost-xpressive
 )

@@ -1,6 +1,8 @@
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/ssa_runtime_version.h>
+
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NKikimr {
@@ -11,8 +13,6 @@ using namespace NYql::NNodes;
 using namespace NKikimrSSA;
 
 using EAggFunctionType = TProgram::TAggregateAssignment::EAggregateFunction;
-
-constexpr ui32 OLAP_PROGRAM_VERSION = 1;
 
 namespace {
 
@@ -38,7 +38,7 @@ public:
             MaxColumnId = std::max(MaxColumnId, columnMeta.Id);
         }
 
-        Program.SetVersion(OLAP_PROGRAM_VERSION);
+        Program.SetVersion(NKikimr::NSsa::RuntimeVersion);
     }
 
     ui32 GetColumnId(const std::string& name) const {
@@ -453,7 +453,9 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
 
 void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
     auto resultColNames = ctx.GetResultColNames();
-    YQL_ENSURE(!resultColNames.empty());
+    if (resultColNames.empty()) {
+        return;
+    }
 
     auto* projection = ctx.CreateProjection();
     for (auto colName : resultColNames) {
@@ -493,9 +495,7 @@ void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tab
     TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames);
 
     CompileOlapProgramImpl(lambda.Body(), ctx);
-    if (!ctx.IsEmptyProgram()) {
-        CompileFinalProjection(ctx);
-    }
+    CompileFinalProjection(ctx);
 
     ctx.SerializeToProto();
 }

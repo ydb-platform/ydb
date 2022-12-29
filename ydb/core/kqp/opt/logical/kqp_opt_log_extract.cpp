@@ -136,8 +136,6 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
         return node;
     }
 
-    // When process is set it may use columns in read.Columns() but those columns may not be present
-    // in the results. Thus do not apply extract members if process is not empty lambda
     if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
         auto extractMembers = Build<TKqpOlapExtractMembers>(ctx, node.Pos())
             .Input(read.Process().Args().Arg(0))

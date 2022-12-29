@@ -8,6 +8,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/core/formats/ssa_runtime_version.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
@@ -412,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cerr << ast << Endl;
         for (auto planNode : planNodes) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
-                TStringBuilder() << planNode << " was not pushed down. Query: " << query);
+                TStringBuilder() << planNode << " was not found. Query: " << query);
         }
 
         if (!readNodeType.empty()) {
@@ -1206,7 +1207,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
+#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+#else
+            CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
+#endif
         }
     }
 
@@ -1247,7 +1252,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
+#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+#else
+            CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
+#endif
         }
     }
 
@@ -1288,7 +1297,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
+#if SSA_RUNTIME_VERSION >= 2U
             CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+#else
+            CheckPlanForAggregatePushdown(query, tableClient, { "Condense" }, "");
+#endif
         }
     }
 
@@ -1583,9 +1596,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     WHERE level = 2
                 )")
             .SetExpectedReply("[[4600u;]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .MutableLimitChecker().SetExpectedResultCount(1)
+#else
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("Condense")
+#endif
             ;
 
         TestAggregations({ testCase });
@@ -1600,9 +1618,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .MutableLimitChecker().SetExpectedResultCount(1)
+#else
+            .AddExpectedPlanOptions("CombineCore")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+#endif
             ;
 
         TestAggregations({ testCase });
@@ -1617,9 +1640,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .MutableLimitChecker().SetExpectedResultCount(1)
+#else
+            .AddExpectedPlanOptions("CombineCore")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+#endif
             ;
 
         TestAggregations({ testCase });
@@ -1739,7 +1767,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
+#else
+            .AddExpectedPlanOptions("CombineCore")
+#endif
             .AddExpectedPlanOptions("KqpOlapFilter");
 
         TestAggregations({ testCase });
@@ -1753,7 +1785,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[46000;]]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -1768,7 +1804,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )")
             .SetExpectedReply("[[[0];[0]];[[1];[4600]];[[2];[9200]];[[3];[13800]];[[4];[18400]]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -1781,7 +1821,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[0]]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -1794,7 +1838,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 FROM `/Root/olapStore/olapTable`
             )")
             .SetExpectedReply("[[[4]]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -1809,7 +1857,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )")
             .SetExpectedReply("[[[0];[\"10000\"]];[[1];[\"10001\"]];[[2];[\"10002\"]];[[3];[\"10003\"]];[[4];[\"10004\"]]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -1824,7 +1876,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )")
             .SetExpectedReply("[[[0];[\"40995\"]];[[1];[\"40996\"]];[[2];[\"40997\"]];[[3];[\"40998\"]];[[4];[\"40999\"]]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -1839,8 +1895,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY c, resource_id DESC LIMIT 3
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
+#if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .SetExpectedReadNodeType("TableFullScan");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
 
         TestAggregations({ testCase });
     }
@@ -2955,6 +3015,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     auto parameter = parameters.find(checkType);
 
                     UNIT_ASSERT_C(parameter != parameters.end(), "No type " << checkType << " in parameters");
+
+                    Cerr << "Test query:\n" << query + predicate << Endl;
 
                     auto it = tableClient.StreamExecuteScanQuery(query + predicate, parameter->second).GetValueSync();
                     // Check for successful execution

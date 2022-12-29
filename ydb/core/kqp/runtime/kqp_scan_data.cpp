@@ -287,7 +287,8 @@ TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTrans
         }
     }
 
-    if (meta.GetResultColumns().empty()) {
+    if (meta.GetResultColumns().empty() && !meta.HasOlapProgram()) {
+        // Currently we define ResultColumns just for Olap tables in TKqpQueryCompiler
         ResultColumns = Columns;
     } else {
         ResultColumns.reserve(meta.GetResultColumns().size());

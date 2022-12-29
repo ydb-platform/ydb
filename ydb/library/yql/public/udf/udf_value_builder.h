@@ -158,7 +158,11 @@ public:
     virtual TUnboxedValue ToIndexDict(const TUnboxedValuePod& list) const = 0;
 
     /// Default representation for Tuple, Struct or List with a known size.
-    virtual TUnboxedValue NewArray(ui32 count, TUnboxedValue*& itemsPtr) const = 0;
+    TUnboxedValue NewArray(ui32 count, TUnboxedValue*& itemsPtr) const {
+        return NewArray32(count, itemsPtr);
+    }
+
+    virtual TUnboxedValue NewArray32(ui32 count, TUnboxedValue*& itemsPtr) const = 0;
 
     virtual TUnboxedValue NewVariant(ui32 index, TUnboxedValue&& value) const = 0;
 
@@ -211,7 +215,20 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
+class IValueBuilder7: public IValueBuilder6 {
+public:
+    virtual TUnboxedValue NewArray64(ui64 count, TUnboxedValue*& itemsPtr) const = 0;
+
+    TUnboxedValue NewArray(ui64 count, TUnboxedValue*& itemsPtr) const {
+        return NewArray64(count, itemsPtr);
+    }
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
+class IValueBuilder: public IValueBuilder7 {};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class IValueBuilder: public IValueBuilder6 {};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IValueBuilder: public IValueBuilder5 {};

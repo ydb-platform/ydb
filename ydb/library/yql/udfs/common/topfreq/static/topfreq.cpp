@@ -95,7 +95,7 @@ void TTopFreqBase<THash, TEquals>::Update(const TUnboxedValuePod& value, ui64 fr
 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::TryCompress() {
-    ui32 freqSize = Freqs_.size();
+    auto freqSize = Freqs_.size();
     if (freqSize > MaxSize_) {
         Compress(MinSize_);
     }

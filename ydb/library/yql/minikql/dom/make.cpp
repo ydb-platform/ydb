@@ -46,7 +46,7 @@ TUnboxedValuePod MakeList(const ITypeInfoHelper::TPtr typeHelper, const TType* i
             return SetNodeType<ENodeType::List>(res.Release());
         }
     } else {
-        TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator> items;
+        TSmallVec<TUnboxedValue> items;
         if (value.HasFastListLength()) {
             items.reserve(value.GetListLength());
         }

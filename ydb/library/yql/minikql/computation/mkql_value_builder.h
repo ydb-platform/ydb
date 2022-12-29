@@ -48,7 +48,7 @@ public:
     NUdf::TUnboxedValue TakeList(const NUdf::TUnboxedValuePod& list, ui64 count) const final;
     NUdf::TUnboxedValue ToIndexDict(const NUdf::TUnboxedValuePod& list) const final;
 
-    NUdf::TUnboxedValue NewArray(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const final;
+    NUdf::TUnboxedValue NewArray32(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const final;
     NUdf::TUnboxedValue NewVariant(ui32 index, NUdf::TUnboxedValue&& value) const final;
     const NUdf::IDateBuilder& GetDateBuilder() const final {
         return *this;
@@ -88,6 +88,8 @@ public:
     const NUdf::IPgBuilder& GetPgBuilder() const final {
         return *PgBuilder_;
     }
+
+    NUdf::TUnboxedValue NewArray64(ui64 count, NUdf::TUnboxedValue*& itemsPtr) const final;
 
 private:
     const THolderFactory& HolderFactory_;

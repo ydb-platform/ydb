@@ -125,7 +125,11 @@ NUdf::TUnboxedValue TDefaultValueBuilder::ToIndexDict(const NUdf::TUnboxedValueP
     return HolderFactory_.ToIndexDict(this, list);
 }
 
-NUdf::TUnboxedValue TDefaultValueBuilder::NewArray(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const {
+NUdf::TUnboxedValue TDefaultValueBuilder::NewArray32(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const {
+    return HolderFactory_.CreateDirectArrayHolder(count, itemsPtr);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::NewArray64(ui64 count, NUdf::TUnboxedValue*& itemsPtr) const {
     return HolderFactory_.CreateDirectArrayHolder(count, itemsPtr);
 }
 

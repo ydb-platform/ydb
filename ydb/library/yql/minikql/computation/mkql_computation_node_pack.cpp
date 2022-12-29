@@ -451,12 +451,21 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         auto listType = static_cast<const TListType*>(type);
         auto itemType = listType->GetItemType();
         const auto len = NDetails::UnpackUInt64(buf);
+        if (!len) {
+            return holderFactory.GetEmptyContainer();
+        }
+
+        TTemporaryUnboxedValueVector tmp;
+        for (ui64 i = 0; i < len; ++i) {
+            tmp.emplace_back(UnpackImpl(itemType, buf, topLength, holderFactory));
+        }
+
         NUdf::TUnboxedValue *items = nullptr;
-        MKQL_ENSURE(len <= Max<ui32>(), "Bad list length: " << len);
         auto list = holderFactory.CreateDirectArrayHolder(len, items);
         for (ui64 i = 0; i < len; ++i) {
-            *items++ = UnpackImpl(itemType, buf, topLength, holderFactory);
+            items[i] = std::move(tmp[i]);
         }
+
         return std::move(list);
     }
 

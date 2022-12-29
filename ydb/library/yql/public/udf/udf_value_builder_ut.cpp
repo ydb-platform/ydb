@@ -1,3 +1,4 @@
+#define HIDE_DELETED_ABI_FUNCTIONS
 #include "udf_value_builder.h"
 #include "udf_ut_helpers.h"
 
@@ -19,7 +20,7 @@ Y_UNIT_TEST_SUITE(TUdfValueBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(11, GetMethodIndex(&IValueBuilder::SkipList));
         UNIT_ASSERT_VALUES_EQUAL(12, GetMethodIndex(&IValueBuilder::TakeList));
         UNIT_ASSERT_VALUES_EQUAL(13, GetMethodIndex(&IValueBuilder::ToIndexDict));
-        UNIT_ASSERT_VALUES_EQUAL(14, GetMethodIndex(&IValueBuilder::NewArray));
+        UNIT_ASSERT_VALUES_EQUAL(14, GetMethodIndex(&IValueBuilder::NewArray32));
         UNIT_ASSERT_VALUES_EQUAL(15, GetMethodIndex(&IValueBuilder::NewVariant));
         UNIT_ASSERT_VALUES_EQUAL(16, GetMethodIndex(&IValueBuilder::GetDateBuilder));
         UNIT_ASSERT_VALUES_EQUAL(17, GetMethodIndex(&IValueBuilder::GetSecureParam));
@@ -29,5 +30,6 @@ Y_UNIT_TEST_SUITE(TUdfValueBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(21, GetMethodIndex(&IValueBuilder::ImportArrowBlock));
         UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::Unused3));
         UNIT_ASSERT_VALUES_EQUAL(23, GetMethodIndex(&IValueBuilder::GetPgBuilder));
+        UNIT_ASSERT_VALUES_EQUAL(24, GetMethodIndex(&IValueBuilder::NewArray64));
     }
 }

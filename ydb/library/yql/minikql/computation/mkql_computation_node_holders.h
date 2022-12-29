@@ -403,7 +403,7 @@ public:
 
     NUdf::TUnboxedValuePod CreateDirectListHolder(TDefaultListRepresentation&& items) const;
 
-    NUdf::TUnboxedValuePod CreateDirectArrayHolder(ui32 size, NUdf::TUnboxedValue*& itemsPtr) const;
+    NUdf::TUnboxedValuePod CreateDirectArrayHolder(ui64 size, NUdf::TUnboxedValue*& itemsPtr) const;
 
     NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum) const;
 
@@ -620,9 +620,9 @@ void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool
 struct TContainerCacheOnContext : private TNonCopyable {
     TContainerCacheOnContext(TComputationMutables& mutables);
 
-    NUdf::TUnboxedValuePod NewArray(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue*& items) const;
+    NUdf::TUnboxedValuePod NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const;
 #ifndef MKQL_DISABLE_CODEGEN
-    llvm::Value* GenNewArray(ui32 sz, llvm::Value* items, const TCodegenContext& ctx, llvm::BasicBlock*& block) const;
+    llvm::Value* GenNewArray(ui64 sz, llvm::Value* items, const TCodegenContext& ctx, llvm::BasicBlock*& block) const;
 #endif
     const ui32 Index;
 };
@@ -636,7 +636,7 @@ public:
 
     void Clear();
 
-    NUdf::TUnboxedValuePod NewArray(const THolderFactory& factory, ui32 size, NUdf::TUnboxedValue*& items);
+    NUdf::TUnboxedValuePod NewArray(const THolderFactory& factory, ui64 size, NUdf::TUnboxedValue*& items);
 
 private:
     std::array<NUdf::TUnboxedValue, 2> Cached;

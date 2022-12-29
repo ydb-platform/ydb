@@ -255,12 +255,12 @@ public:
     void* operator new[](size_t sz) = delete;
     void operator delete(void *mem, std::size_t sz) {
         const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + offsetof(TDirectArrayHolderInplace, Size));
-        FreeWithSize(mem, sz + *static_cast<ui32*>(pSize) * sizeof(NUdf::TUnboxedValue));
+        FreeWithSize(mem, sz + *static_cast<ui64*>(pSize) * sizeof(NUdf::TUnboxedValue));
     }
 
     void operator delete[](void *mem, std::size_t sz) = delete;
 
-    TDirectArrayHolderInplace(TMemoryUsageInfo* memInfo, ui32 size)
+    TDirectArrayHolderInplace(TMemoryUsageInfo* memInfo, ui64 size)
         : TComputationValue(memInfo)
         , Size(size)
     {
@@ -270,13 +270,13 @@ public:
     }
 
     ~TDirectArrayHolderInplace() {
-        for (ui32 i = 0U; i < Size; ++i) {
+        for (ui64 i = 0U; i < Size; ++i) {
             (GetPtr() + i)->~TUnboxedValue();
         }
         MKQL_MEM_RETURN(GetMemInfo(), GetPtr(), Size * sizeof(NUdf::TUnboxedValue));
     }
 
-    ui32 GetSize() const {
+    ui64 GetSize() const {
         return Size;
     }
 
@@ -311,7 +311,7 @@ private:
         }
 
         const NUdf::TRefCountedPtr<TDirectArrayHolderInplace> Parent;
-        ui32 Current = ~0U;
+        ui64 Current = Max<ui64>();
     };
 
     class TKeysIterator : public TTemporaryComputationValue<TKeysIterator> {
@@ -332,7 +332,7 @@ private:
         }
 
         const ui64 Size;
-        ui64 Current = ~0ULL;
+        ui64 Current = Max<ui64>();
     };
 
     bool HasListItems() const final {
@@ -392,7 +392,7 @@ private:
         if (count >= Size)
             return builder.NewEmptyList().Release().AsBoxed();
 
-        const auto newSize = Size - ui32(count);
+        const auto newSize = Size - count;
         NUdf::TUnboxedValue* items = nullptr;
         auto result = builder.NewArray(newSize, items);
         std::copy_n(GetPtr() + count, newSize, items);
@@ -406,7 +406,7 @@ private:
         if (count >= Size)
             return const_cast<TDirectArrayHolderInplace*>(this);
 
-        const auto newSize = ui32(count);
+        const auto newSize = count;
         NUdf::TUnboxedValue* items = nullptr;
         auto result = builder.NewArray(newSize, items);
         std::copy_n(GetPtr(), newSize, items);
@@ -439,7 +439,7 @@ private:
         return true;
     }
 
-    const ui32 Size;
+    const ui64 Size;
 };
 
 template <class TBaseVector>
@@ -3331,7 +3331,7 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectListHolder(TDefaultListRepres
     return NUdf::TUnboxedValuePod(AllocateOn<TDirectListHolder>(CurrentAllocState, &MemInfo, std::move(items)));
 }
 
-NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui32 size, NUdf::TUnboxedValue*& itemsPtr) const {
+NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui64 size, NUdf::TUnboxedValue*& itemsPtr) const {
     if (!size) {
         itemsPtr = nullptr;
         return GetEmptyContainer();
@@ -3969,7 +3969,7 @@ TContainerCacheOnContext::TContainerCacheOnContext(TComputationMutables& mutable
     ++++mutables.CurValueIndex;
 }
 
-NUdf::TUnboxedValuePod TContainerCacheOnContext::NewArray(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue*& items) const {
+NUdf::TUnboxedValuePod TContainerCacheOnContext::NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const {
     if (!size)
         return ctx.HolderFactory.GetEmptyContainer();
 
@@ -4023,7 +4023,7 @@ Value* GenerateCheckNotUniqueBoxed(Value* value, LLVMContext& context, Function*
 
 }
 
-Value* TContainerCacheOnContext::GenNewArray(ui32 sz, Value* items, const TCodegenContext& ctx, BasicBlock*& block) const {
+Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodegenContext& ctx, BasicBlock*& block) const {
     auto& context = ctx.Codegen->GetContext();
     const auto valueType = Type::getInt128Ty(context);
     const auto arrayType = ArrayType::get(valueType, sz);
@@ -4080,7 +4080,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui32 sz, Value* items, const TCodeg
         const auto fact = ctx.GetFactory();
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
-        const auto size = ConstantInt::get(Type::getInt32Ty(context), sz);
+        const auto size = ConstantInt::get(Type::getInt64Ty(context), sz);
 
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
@@ -4110,7 +4110,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui32 sz, Value* items, const TCodeg
 
         const auto itemsPtr = CastInst::Create(Instruction::IntToPtr, offs, pointerType, "items_ptr", block);
 
-        for (ui32 i = 0; i < sz; ++i) {
+        for (ui64 i = 0; i < sz; ++i) {
             const auto itemp = GetElementPtrInst::CreateInBounds(itemsPtr, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i)}, "itemp", block);
             ValueUnRef(EValueRepresentation::Any, itemp, ctx, block);
         }
@@ -4136,7 +4136,7 @@ void TPlainContainerCache::Clear() {
     CachedItems.fill(nullptr);
 }
 
-NUdf::TUnboxedValuePod TPlainContainerCache::NewArray(const THolderFactory& factory, ui32 size, NUdf::TUnboxedValue*& items) {
+NUdf::TUnboxedValuePod TPlainContainerCache::NewArray(const THolderFactory& factory, ui64 size, NUdf::TUnboxedValue*& items) {
     if (!CachedItems[CacheIndex] || !Cached[CacheIndex].UniqueBoxed()) {
         CacheIndex ^= 1U;
         if (!CachedItems[CacheIndex] || !Cached[CacheIndex].UniqueBoxed()) {

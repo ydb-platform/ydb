@@ -19,7 +19,7 @@ target_link_libraries(pire_udf INTERFACE
 add_global_library_for(pire_udf.global pire_udf)
 target_compile_options(pire_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=23
+  -DUDF_ABI_VERSION_MINOR=27
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(pire_udf.global PUBLIC

@@ -12,7 +12,7 @@ add_library(yql-minikql-jsonpath)
 target_compile_options(yql-minikql-jsonpath PRIVATE
   -DYDB_REWRAPPER_LIB_ID=kRe2
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=18
+  -DUDF_ABI_VERSION_MINOR=27
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(yql-minikql-jsonpath PUBLIC

@@ -417,7 +417,7 @@ namespace {
             auto histogram = static_cast<THistogramResource*>(args[0].AsBoxed().Get())->Get();
             histogram->ToProto(proto);
 
-            ui32 size = proto.FreqSize();
+            auto size = proto.FreqSize();
             TUnboxedValue* fields = nullptr;
             auto result = valueBuilder->NewArray(HistogramIndexes.ResultFieldsCount, fields);
             fields[HistogramIndexes.Kind] = valueBuilder->NewString(TStringBuf(ResourceName).Skip(10));
@@ -427,7 +427,7 @@ namespace {
                 fields[HistogramIndexes.Min] = TUnboxedValuePod(static_cast<double>(histogram->GetMinValue()));
                 fields[HistogramIndexes.Max] = TUnboxedValuePod(static_cast<double>(histogram->GetMaxValue()));
                 fields[HistogramIndexes.WeightsSum] = TUnboxedValuePod(static_cast<double>(histogram->GetSum()));
-                for (ui32 i = 0; i < size; ++i) {
+                for (ui64 i = 0; i < size; ++i) {
                     TUnboxedValue* binFields = nullptr;
                     *items++ = valueBuilder->NewArray(HistogramIndexes.BinFieldsCount, binFields);
                     binFields[HistogramIndexes.Frequency] = TUnboxedValuePod(static_cast<double>(proto.GetFreq(i)));

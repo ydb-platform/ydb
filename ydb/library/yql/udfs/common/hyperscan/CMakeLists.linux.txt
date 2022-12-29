@@ -21,7 +21,7 @@ target_link_libraries(hyperscan_udf INTERFACE
 add_global_library_for(hyperscan_udf.global hyperscan_udf)
 target_compile_options(hyperscan_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=23
+  -DUDF_ABI_VERSION_MINOR=27
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(hyperscan_udf.global PUBLIC

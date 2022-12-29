@@ -2384,6 +2384,11 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ctx.ChangeChild(node->Head(), 0, ctx.NewCallable(node->Pos(), "ToFlow", { node->Head().HeadPtr() }));
     }
 
+    if (node->Head().IsCallable("ToList") && node->Head().Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+        return ctx.ChangeChildren(*node, node->Head().ChildrenList());
+    }
+
     return node;
 }
 
@@ -3962,6 +3967,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("ToFlow")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.WrapByCallableIf(ETypeAnnotationKind::Stream == node->Head().Head().GetTypeAnn()->GetKind(), node->Content(), node->Head().HeadPtr());
+        }
+
+        if (node->Head().IsCallable("ToStream") && node->Head().Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.NewCallable(node->Pos(), "ToList", {node->Head().HeadPtr()});
         }
 
         return node;

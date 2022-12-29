@@ -82,10 +82,6 @@ void TestAllLossesDifferentSizes(TRopeErasureType &groupType, ui32 maxParts,
         //printf("k=%u, n=%u,  variants=%u\n", missingParts, maxParts, maxMissingVariants);
         for (ui32 missingVariant = 0; missingVariant < maxMissingVariants; ++missingVariant) {
             VERBOSE_COUT(PrintArr(missingPartIdx, missingParts));
-            ui32 partMask = ~(ui32)0;
-            for (ui32 i = 0; i < missingParts; ++i) {
-                partMask &= ~(ui32)(1ul << missingPartIdx[i]);
-            }
             for (ui32 dataSize = 1; dataSize < 600; ++dataSize) {
                 VERBOSE_COUT("dataSize# " << dataSize << Endl);
                 for (ui32 type = 0; type < 3; ++type) {

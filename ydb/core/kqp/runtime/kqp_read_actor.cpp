@@ -358,7 +358,6 @@ public:
             CA_LOG_E("Resolve request failed for table '" << Settings.GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
 
             auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
-            auto issueCode = TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
             TString error;
 
             for (const auto& x : request->ResultSet) {
@@ -369,22 +368,18 @@ public:
                     switch (x.Status) {
                         case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' not exists.";
                             break;
                         case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' scheme changed.";
                             break;
                         case NSchemeCache::TSchemeCacheRequest::EStatus::LookupError:
                             statusCode = NDqProto::StatusIds::UNAVAILABLE;
-                            issueCode = TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
                             error = TStringBuilder() << "Failed to resolve table '" << Settings.GetTable().GetTablePath() << "'.";
                             break;
                         default:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Unresolved table '" << Settings.GetTable().GetTablePath() << "'. Status: " << x.Status;
                             break;
                     }

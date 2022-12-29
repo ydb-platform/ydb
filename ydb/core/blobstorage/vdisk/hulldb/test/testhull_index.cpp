@@ -76,7 +76,6 @@ namespace NTest {
         // generate ordered level of LogoBlobs
         TVector<TLogoBlobSstPtr> GenerateOrderedLogoBlobsSsts(const TLogoBlobsPolicy &policy) {
             ui64 logoBlobsTotalBytes = 0;
-            ui64 barriersTotalBytes = 0;
             const ui64 logoBlobsRequiredBytes = policy.SstsNum * ChunkSize;
 
             // accumulate generated commands in LogoBlobs and Barriers buffers
@@ -88,7 +87,6 @@ namespace NTest {
                 }
                 if (cmd.BarriersCmd) {
                     Barriers.push_back(*cmd.BarriersCmd);
-                    barriersTotalBytes += BarrierRecSizeof;
                 }
             }
 

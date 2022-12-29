@@ -291,12 +291,10 @@ int RunListSeries(TDriver& driver, const TString& prefix, int argc, char** argv)
         columns[4].push_back(TStringBuilder() << result.Views);
     }
     size_t widths[5] = { 0 };
-    size_t total_width = 6;
     for (size_t i = 0; i < 5; ++i) {
         for (const auto& value : columns[i]) {
             widths[i] = Max(widths[i], GetNumberOfUTF8Chars(value) + 2);
         }
-        total_width += widths[i];
     }
     auto printLine = [&]() {
         Cout << '+';

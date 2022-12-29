@@ -702,19 +702,18 @@ private:
 
             SerializerCtx.Tables[table].Reads.push_back(readInfo);
 
-            ui32 operatorId;
             if (readInfo.Type == EPlanTableReadType::Scan) {
                 op.Properties["Name"] = "TableRangeScan";
-                operatorId = AddOperator(planNode, "TableRangeScan", std::move(op));
+                AddOperator(planNode, "TableRangeScan", std::move(op));
             } else if (readInfo.Type == EPlanTableReadType::FullScan) {
                 op.Properties["Name"] = "TableFullScan";
-                operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
+                AddOperator(planNode, "TableFullScan", std::move(op));
             } else if (readInfo.Type == EPlanTableReadType::Lookup) {
                 op.Properties["Name"] = "TablePointLookup";
-                operatorId = AddOperator(planNode, "TablePointLookup", std::move(op));
+                AddOperator(planNode, "TablePointLookup", std::move(op));
             } else {
                 op.Properties["Name"] = "TableScan";
-                operatorId = AddOperator(planNode, "TableScan", std::move(op));
+                AddOperator(planNode, "TableScan", std::move(op));
             }
         } else {
             const auto table = TString(sourceSettings.Table().Path());
@@ -808,13 +807,12 @@ private:
                 op.Properties["Reverse"] = true;
             }
 
-            ui32 operatorId;
             if (readInfo.Type == EPlanTableReadType::FullScan) {
                 op.Properties["Name"] = "TableFullScan";
-                operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
+                AddOperator(planNode, "TableFullScan", std::move(op));
             } else {
                 op.Properties["Name"] = "TableRangesScan";
-                operatorId = AddOperator(planNode, "TableRangesScan", std::move(op));
+                AddOperator(planNode, "TableRangesScan", std::move(op));
             }
 
             SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));

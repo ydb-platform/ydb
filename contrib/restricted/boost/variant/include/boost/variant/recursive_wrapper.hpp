@@ -15,7 +15,7 @@
 
 #include <boost/variant/recursive_wrapper_fwd.hpp>
 #include <boost/variant/detail/move.hpp>
-#include <boost/checked_delete.hpp>
+#include <boost/core/checked_delete.hpp>
 
 namespace boost {
 

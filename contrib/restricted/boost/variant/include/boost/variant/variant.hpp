@@ -2131,7 +2131,8 @@ private: // helpers, for modifiers (below)
 
 public: // modifiers
 
-#ifndef BOOST_NO_CXX11_RVALUE_REFERENCES
+#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES) && \
+    (!BOOST_WORKAROUND(BOOST_CLANG_VERSION, BOOST_TESTED_AT(150000)) || BOOST_CXX_VERSION <= 202002L)
     template <class T>
     typename boost::enable_if<
         boost::mpl::and_<

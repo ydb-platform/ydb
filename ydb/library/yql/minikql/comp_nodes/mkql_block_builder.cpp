@@ -19,7 +19,7 @@ namespace {
 
 bool AlwaysUseChunks(const TType* type) {
     if (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
+        return AlwaysUseChunks(AS_TYPE(TOptionalType, type)->GetItemType());
     }
 
     if (type->IsTuple()) {
@@ -42,8 +42,7 @@ bool AlwaysUseChunks(const TType* type) {
 
 std::shared_ptr<arrow::DataType> GetArrowType(TType* type) {
     std::shared_ptr<arrow::DataType> result;
-    bool isOptional;
-    Y_VERIFY(ConvertArrowType(type, isOptional, result));
+    Y_VERIFY(ConvertArrowType(type, result));
     return result;
 }
 
@@ -629,6 +628,79 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
 };
 
+class TExternalOptionalBlockBuilder : public TBlockBuilderBase {
+public:
+    TExternalOptionalBlockBuilder(TType* type, arrow::MemoryPool& pool, size_t maxLen, std::unique_ptr<TBlockBuilderBase>&& inner)
+        : TBlockBuilderBase(type, pool, maxLen)
+        , Inner(std::move(inner))
+    {
+        Reserve();
+    }
+
+    void DoAdd(NUdf::TUnboxedValuePod value) final {
+        if (!value) {
+            NullBuilder->UnsafeAppend(0);
+            Inner->AddDefault();
+            return;
+        }
+
+        NullBuilder->UnsafeAppend(1);
+        Inner->Add(value.GetOptionalValue());
+    }
+
+    void DoAddDefault() final {
+        NullBuilder->UnsafeAppend(1);
+        Inner->AddDefault();
+    }
+
+    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+        Y_VERIFY(!array.buffers.empty());
+        Y_VERIFY(array.child_data.size() == 1);
+
+        if (array.buffers.front()) {
+            ui8* dstBitmap = NullBuilder->End();
+            CompressAsSparseBitmap(array.GetValues<ui8>(0, 0), array.offset, sparseBitmap, dstBitmap, array.length);
+            NullBuilder->UnsafeAdvance(popCount);
+        } else {
+            NullBuilder->UnsafeAppend(popCount, 1);
+        }
+
+        Inner->AddMany(*array.child_data[0], popCount, sparseBitmap, array.length);
+    }
+
+    TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
+        TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
+
+        std::shared_ptr<arrow::Buffer> nullBitmap;
+        const size_t length = GetCurrLen();
+        MKQL_ENSURE(length == NullBuilder->Length(), "Unexpected NullBuilder length");
+        nullBitmap = NullBuilder->Finish();
+        nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool);
+
+        Y_VERIFY(length);
+        result->Payload.push_back(arrow::ArrayData::Make(GetArrowType(Type), length, { nullBitmap }));
+        result->Children.emplace_back(Inner->BuildTree(finish));
+
+        if (!finish) {
+            Reserve();
+        }
+
+        return result;
+    }
+
+private:
+    void Reserve() {
+        NullBuilder = std::make_unique<TTypedBufferBuilder<ui8>>(Pool);
+        NullBuilder->Reserve(MaxLen + 1);
+    }
+
+private:
+    std::unique_ptr<TBlockBuilderBase> Inner;
+    std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
+};
+
+std::unique_ptr<TBlockBuilderBase> MakeBlockBuilderBase(TType* type, arrow::MemoryPool& pool, size_t maxBlockLength);
+
 template<bool Nullable>
 std::unique_ptr<TBlockBuilderBase> MakeBlockBuilderImpl(TType* type, arrow::MemoryPool& pool, size_t maxLen) {
     if constexpr (Nullable) {
@@ -640,9 +712,7 @@ std::unique_ptr<TBlockBuilderBase> MakeBlockBuilderImpl(TType* type, arrow::Memo
         TVector<std::unique_ptr<TBlockBuilderBase>> children;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             TType* childType = tupleType->GetElementType(i);
-            auto childBuilder = childType->IsOptional() ?
-                MakeBlockBuilderImpl<true>(childType, pool, maxLen) :
-                MakeBlockBuilderImpl<false>(childType, pool, maxLen);
+            auto childBuilder = MakeBlockBuilderBase(childType, pool, maxLen);
             children.push_back(std::move(childBuilder));
         }
 
@@ -689,12 +759,46 @@ std::unique_ptr<TBlockBuilderBase> MakeBlockBuilderImpl(TType* type, arrow::Memo
     MKQL_ENSURE(false, "Unsupported type");
 }
 
+std::unique_ptr<TBlockBuilderBase> MakeBlockBuilderBase(TType* type, arrow::MemoryPool& pool, size_t maxBlockLength) {
+    TType* unpacked = type;
+    if (type->IsOptional()) {
+        unpacked = AS_TYPE(TOptionalType, type)->GetItemType();
+    }
+
+    if (unpacked->IsOptional()) {
+        // at least 2 levels of optionals
+        ui32 nestLevel = 0;
+        auto currentType = type;
+        auto previousType = type;
+        TVector<TType*> types;
+        do {
+            ++nestLevel;
+            types.push_back(currentType);
+            previousType = currentType;
+            currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
+        } while (currentType->IsOptional());
+
+        auto builder = MakeBlockBuilderBase(previousType, pool, maxBlockLength);
+        for (ui32 i = 1; i < nestLevel; ++i) {
+            builder = std::make_unique<TExternalOptionalBlockBuilder>(types[nestLevel - 1 - i], pool, maxBlockLength, std::move(builder));
+        }
+
+        return builder;
+    } else {
+        if (type->IsOptional()) {
+            return MakeBlockBuilderImpl<true>(type, pool, maxBlockLength);
+        } else {
+            return MakeBlockBuilderImpl<false>(type, pool, maxBlockLength);
+        }
+    }
+}
+
 } // namespace
 
 size_t CalcMaxBlockItemSize(const TType* type) {
     // we do not count block bitmap size
     if (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
+        return CalcMaxBlockItemSize(AS_TYPE(TOptionalType, type)->GetItemType());
     }
 
     if (type->IsTuple()) {
@@ -743,10 +847,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
 }
 
 std::unique_ptr<IBlockBuilder> MakeBlockBuilder(TType* type, arrow::MemoryPool& pool, size_t maxBlockLength) {
-    if (type->IsOptional()) {
-        return MakeBlockBuilderImpl<true>(type, pool, maxBlockLength);
-    }
-    return MakeBlockBuilderImpl<false>(type, pool, maxBlockLength);
+    return MakeBlockBuilderBase(type, pool, maxBlockLength);
 }
 
 } // namespace NMiniKQL

@@ -150,9 +150,58 @@ private:
     TPlainContainerCache Cache;
 };
 
+class TExternalOptionalBlockReader : public TBlockReaderBase {
+public:
+    TExternalOptionalBlockReader(std::unique_ptr<TBlockReaderBase>&& inner)
+        : Inner(std::move(inner))
+    {}
+
+    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
+        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
+            return {};
+        }
+
+        return Inner->Get(*data.child_data[0], index).MakeOptional();
+    }
+
+    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+        if (!scalar.is_valid) {
+            return {};
+        }
+
+        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+        return Inner->GetScalar(*structScalar.value[0]).MakeOptional();
+    }
+
+private:
+    std::unique_ptr<TBlockReaderBase> Inner;
+};
+
 std::unique_ptr<TBlockReaderBase> MakeBlockReaderBase(TType* type, const THolderFactory& holderFactory) {
+    TType* unpacked = type;
     if (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
+        unpacked = AS_TYPE(TOptionalType, type)->GetItemType();
+    }
+
+    if (unpacked->IsOptional()) {
+        // at least 2 levels of optionals
+        ui32 nestLevel = 0;
+        auto currentType = type;
+        auto previousType = type;
+        do {
+            ++nestLevel;
+            previousType = currentType;
+            currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
+        } while (currentType->IsOptional());
+
+        std::unique_ptr<TBlockReaderBase> reader = MakeBlockReaderBase(previousType, holderFactory);
+        for (ui32 i = 1; i < nestLevel; ++i) {
+            reader = std::make_unique<TExternalOptionalBlockReader>(std::move(reader));
+        }
+
+        return reader;
+    } else {
+        type = unpacked;
     }
 
     if (type->IsTuple()) {

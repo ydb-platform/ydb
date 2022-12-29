@@ -22,9 +22,8 @@ namespace NMiniKQL {
 namespace {
 
 arrow::ValueDescr ToValueDescr(TType* type) {
-    bool isOptional;
     arrow::ValueDescr ret;
-    MKQL_ENSURE(ConvertInputArrowType(type, isOptional, ret), "can't get arrow type");
+    MKQL_ENSURE(ConvertInputArrowType(type, ret), "can't get arrow type");
     return ret;
 }
 
@@ -197,9 +196,8 @@ private:
     }
 
     static const arrow::compute::Function& ResolveFunction(TType* to) {
-        bool isOptional;
         std::shared_ptr<arrow::DataType> type;
-        MKQL_ENSURE(ConvertArrowType(to, isOptional, type), "can't get arrow type");
+        MKQL_ENSURE(ConvertArrowType(to, type), "can't get arrow type");
 
         auto function = ARROW_RESULT(arrow::compute::GetCastFunction(type));
         MKQL_ENSURE(function != nullptr, "missing function");

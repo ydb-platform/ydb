@@ -12,10 +12,10 @@
 
 namespace NKikimr::NMiniKQL {
 
-bool ConvertInputArrowType(TType* blockType, bool& isOptional, arrow::ValueDescr& descr) {
+bool ConvertInputArrowType(TType* blockType, arrow::ValueDescr& descr) {
     auto asBlockType = AS_TYPE(TBlockType, blockType);
     descr.shape = asBlockType->GetShape() == TBlockType::EShape::Scalar ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
-    return ConvertArrowType(asBlockType->GetItemType(), isOptional, descr.type);
+    return ConvertArrowType(asBlockType->GetItemType(), descr.type);
 }
 
 class TOutputTypeVisitor : public arrow::TypeVisitor
@@ -175,13 +175,12 @@ bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TTy
 }
 
 bool HasArrowCast(TType* from, TType* to) {
-    bool isOptional;
     std::shared_ptr<arrow::DataType> fromArrowType, toArrowType;
-    if (!ConvertArrowType(from, isOptional, fromArrowType)) {
+    if (!ConvertArrowType(from, fromArrowType)) {
         return false;
     }
 
-    if (!ConvertArrowType(to, isOptional, toArrowType)) {
+    if (!ConvertArrowType(to, toArrowType)) {
         return false;
     }
 

@@ -878,10 +878,10 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleTy
     TVector<TType*> tupleElements = { doubleType, ui64Type };
     auto avgRetType = TTupleType::Create(2, tupleElements.data(), env);
     std::shared_ptr<arrow::DataType> builderDataType;
-    bool isOptional;
-    MKQL_ENSURE(ConvertArrowType(avgRetType, isOptional, builderDataType), "Unsupported builder type");
+    MKQL_ENSURE(ConvertArrowType(avgRetType, builderDataType), "Unsupported builder type");
 
     auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argColumn))->GetItemType();
+    bool isOptional;
     auto dataType = UnpackOptionalData(argType, isOptional);
     switch (*dataType->GetDataSlot()) {
     case NUdf::EDataSlot::Int8:

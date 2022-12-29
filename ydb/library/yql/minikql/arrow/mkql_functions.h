@@ -8,6 +8,6 @@ namespace NKikimr::NMiniKQL {
 class IBuiltinFunctionRegistry;
 
 bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType* outputType, const IBuiltinFunctionRegistry& registry);
-bool ConvertInputArrowType(TType* blockType, bool& isOptional, arrow::ValueDescr& descr);
+bool ConvertInputArrowType(TType* blockType, arrow::ValueDescr& descr);
 bool HasArrowCast(TType* from, TType* to);
 }

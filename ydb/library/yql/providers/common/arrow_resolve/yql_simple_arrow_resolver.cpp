@@ -65,9 +65,8 @@ private:
             for (const auto& type : types) {
                 TNullOutput null;
                 auto mkqlType = NCommon::BuildType(*type, pgmBuilder, null);
-                bool isOptional;
                 std::shared_ptr<arrow::DataType> arrowType;
-                if (!ConvertArrowType(mkqlType, isOptional, arrowType)) {
+                if (!ConvertArrowType(mkqlType, arrowType)) {
                     return EStatus::NOT_FOUND;
                 }
             }

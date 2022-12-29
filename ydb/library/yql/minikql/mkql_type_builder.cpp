@@ -1361,19 +1361,48 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     }
 }
 
-bool ConvertArrowType(TType* itemType, bool& isOptional, std::shared_ptr<arrow::DataType>& type) {
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
+    bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
+    if (unpacked->IsOptional()) {
+        // at least 2 levels of optionals
+        ui32 nestLevel = 0;
+        auto currentType = itemType;
+        auto previousType = itemType;
+        do {
+            ++nestLevel;
+            previousType = currentType;
+            currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
+        } while (currentType->IsOptional());
+
+        // previousType is always Optional
+        std::shared_ptr<arrow::DataType> innerArrowType;
+        if (!ConvertArrowType(previousType, innerArrowType)) {
+            return false;
+        }
+
+        for (ui32 i = 1; i < nestLevel; ++i) {
+            // wrap as one nullable field in struct
+            std::vector<std::shared_ptr<arrow::Field>> fields;
+            fields.emplace_back(std::make_shared<arrow::Field>("opt", innerArrowType, true));
+            innerArrowType = std::make_shared<arrow::StructType>(fields);
+        }
+
+        type = innerArrowType;
+        return true;
+    }
+
     if (unpacked->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, unpacked);
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
-            bool isChildOptional;
-            if (!ConvertArrowType(tupleType->GetElementType(i), isChildOptional, childType)) {
+            auto elementType = tupleType->GetElementType(i);
+            if (!ConvertArrowType(elementType, childType)) {
                 return false;
             }
 
-            fields.emplace_back(std::make_shared<arrow::Field>("field" + ToString(i), childType, isChildOptional));
+            fields.emplace_back(std::make_shared<arrow::Field>("field" + ToString(i), childType, elementType->IsOptional()));
         }
 
         type = std::make_shared<arrow::StructType>(fields);
@@ -1805,9 +1834,8 @@ const NYql::NUdf::TPgTypeDescription* TTypeInfoHelper::FindPgTypeDescription(ui3
 }
 
 NUdf::IArrowType::TPtr TTypeInfoHelper::MakeArrowType(const NUdf::TType* type) const {
-    bool isOptional;
     std::shared_ptr<arrow::DataType> arrowType;
-    if (!ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), isOptional, arrowType)) {
+    if (!ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), arrowType)) {
         return nullptr;
     }
 

@@ -321,9 +321,8 @@ public:
         , Arg_(arg)
         , Type_(type)
     {
-        bool isOptional;
         std::shared_ptr<arrow::DataType> arrowType;
-        MKQL_ENSURE(ConvertArrowType(Type_, isOptional, arrowType), "Unsupported type of scalar");
+        MKQL_ENSURE(ConvertArrowType(Type_, arrowType), "Unsupported type of scalar");
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -339,9 +338,8 @@ private:
 
     arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, TComputationContext& ctx) const {
         if (!value) {
-            bool isOptional;
             std::shared_ptr<arrow::DataType> arrowType;
-            MKQL_ENSURE(ConvertArrowType(type, isOptional, arrowType), "Unsupported type of scalar");
+            MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
             return arrow::MakeNullScalar(arrowType);
         }
 
@@ -351,9 +349,8 @@ private:
 
         if (type->IsTuple()) {
             auto tupleType = AS_TYPE(TTupleType, type);
-            bool isOptional;
             std::shared_ptr<arrow::DataType> arrowType;
-            MKQL_ENSURE(ConvertArrowType(type, isOptional, arrowType), "Unsupported type of scalar");
+            MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
 
             std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {

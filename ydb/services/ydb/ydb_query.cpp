@@ -3,7 +3,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/service_query.h>
+#include <ydb/core/grpc_services/query/service_query.h>
 
 namespace NKikimr::NGRpcService {
 

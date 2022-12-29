@@ -1124,34 +1124,30 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
         struct TNodeAndIndexRange {
             TExprNode::TPtr Node;
             TIndexRange IndexRange;
+            size_t OriginalPosition = 0;
         };
 
         TVector<TNodeAndIndexRange> toRebuild;
+        size_t pos = 0;
         for (const auto& child : range->ChildrenList()) {
             toRebuild.emplace_back();
             TNodeAndIndexRange& curr = toRebuild.back();
             curr.Node = DoRebuildRangeForIndexKeys(rowType, child, indexKeysOrder, curr.IndexRange, ctx);
+            curr.OriginalPosition = pos++;
         }
 
-        std::stable_sort(toRebuild.begin(), toRebuild.end(), [&](const TNodeAndIndexRange& a, const TNodeAndIndexRange& b) {
-            // sort children by key order
-            // move RangeRest/RangeConst to the end while preserving their relative order
-            return a.IndexRange < b.IndexRange;
-        });
-
-
-        TExprNodeList rests;
-        TMap<TIndexRange, TExprNodeList> children;
+        TVector<TNodeAndIndexRange> rests;
+        TMap<TIndexRange, TVector<TNodeAndIndexRange>> children;
         for (auto& current : toRebuild) {
             if (current.IndexRange.IsEmpty()) {
                 YQL_ENSURE(current.Node->IsCallable("RangeRest"));
-                rests.emplace_back(std::move(current.Node));
+                rests.emplace_back(std::move(current));
             } else {
-                children[current.IndexRange].push_back(current.Node);
+                children[current.IndexRange].push_back(std::move(current));
             }
         }
 
-        TVector<TExprNodeList> childrenChains;
+        TVector<TVector<TNodeAndIndexRange>> childrenChains;
         for (auto it = children.begin(); it != children.end(); ++it) {
             if (!commonIndexRange) {
                 commonIndexRange = it->first;
@@ -1161,7 +1157,7 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
             if (commonIndexRange->Begin == it->first.Begin) {
                 YQL_ENSURE(it->first.End > commonIndexRange->End);
                 for (auto& asRest : childrenChains) {
-                    rests.push_back(RebuildAsRangeRest(rowType, *MakeRangeAnd(range->Pos(), std::move(asRest), ctx), ctx));
+                    rests.insert(rests.end(), asRest.begin(), asRest.end());
                 }
                 childrenChains.clear();
                 childrenChains.push_back(std::move(it->second));
@@ -1173,16 +1169,28 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
                 commonIndexRange->End = it->first.End;
                 childrenChains.push_back(std::move(it->second));
             } else {
-                rests.push_back(RebuildAsRangeRest(rowType, *MakeRangeAnd(range->Pos(), std::move(it->second), ctx), ctx));
+                rests.insert(rests.end(), it->second.begin(), it->second.end());
             }
         }
 
         for (auto& chain : childrenChains) {
-            rebuilt.push_back(MakeRangeAnd(range->Pos(), std::move(chain), ctx));
+            TExprNodeList chainNodes;
+            for (auto& entry : chain) {
+                chainNodes.push_back(entry.Node);
+            }
+            rebuilt.push_back(MakeRangeAnd(range->Pos(), std::move(chainNodes), ctx));
         }
 
         if (!rests.empty()) {
-            rebuilt.push_back(RebuildAsRangeRest(rowType, *MakeRangeAnd(range->Pos(), std::move(rests), ctx), ctx));
+            // restore original order in rests
+            std::sort(rests.begin(), rests.end(), [&](const TNodeAndIndexRange& a, const TNodeAndIndexRange& b) {
+                return a.OriginalPosition < b.OriginalPosition;
+            });
+            TExprNodeList restsNodes;
+            for (auto& item : rests) {
+                restsNodes.push_back(RebuildAsRangeRest(rowType, *item.Node, ctx));
+            }
+            rebuilt.push_back(RebuildAsRangeRest(rowType, *MakeRangeAnd(range->Pos(), std::move(restsNodes), ctx), ctx));
         }
     }
 

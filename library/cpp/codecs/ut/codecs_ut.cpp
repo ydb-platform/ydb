@@ -919,15 +919,9 @@ private:
             }
 
             {
-                size_t insz = 0;
-                size_t outsz = buff.Size();
-
                 for (ui32 i = 0; i < inlearn.size(); ++i) {
                     out.emplace_back();
                     c->Encode(AsStrBuf(inlearn[i]), out[i]);
-
-                    insz += inlearn[i].Size();
-                    outsz += out[i].Size();
                 }
 
                 TBuffer vecl;
@@ -948,16 +942,11 @@ private:
                 c = ICodec::Restore(&bin);
             }
 
-            size_t insz = 0;
-            size_t outsz = buff.Size();
-
             TBuffer out, in1;
             for (ui32 i = 0; i < in.size(); ++i) {
                 out.Clear();
                 in1.Clear();
                 c->Encode(AsStrBuf(in[i]), out);
-                insz += in[i].Size();
-                outsz += out.Size();
                 c->Decode(AsStrBuf(out), in1);
                 UNIT_ASSERT_EQUAL_C(AsStrBuf(in[i]), AsStrBuf(in1),
                                     PrintError(TStringBuf(in[i].data(), in[i].size()),

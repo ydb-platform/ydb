@@ -72,6 +72,7 @@ ydb-dstool --endpoint https://ydbd.endpoint:8765 pdisk list
 ```
 
 The endpoint's protocol from the above command is ```https```, host is ```ydbd.endpoint```, port is ```8765```.
+The default protocol is ```http```, the default port is ```8765```.
 
 ### Set authentication token
 

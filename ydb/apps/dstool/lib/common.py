@@ -37,7 +37,7 @@ class EndpointInfo:
 
 
 class ConnectionParams:
-    ENDPOINT_HELP = 'Default protocol is https, default port is 8765'
+    ENDPOINT_HELP = 'Default protocol is http, default port is 8765'
 
     def __init__(self):
         self.hosts = set()

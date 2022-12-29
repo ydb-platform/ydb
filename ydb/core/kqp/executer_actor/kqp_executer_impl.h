@@ -58,23 +58,11 @@ enum class EExecType {
 
 const ui64 MaxTaskSize = 48_MB;
 
-struct TKqpExecuterTxResult {
-    NKikimrMiniKQL::TType ItemType;
-    TMaybe<NKikimrMiniKQL::TType> ResultItemType;
-    TVector<NYql::NDqProto::TData> Data; // used in KqpDataExecuter
-    NMiniKQL::TUnboxedValueVector Rows;  // used in KqpLiteralExecuter
-    bool IsStream = true;
-};
-
-void BuildKqpExecuterResult(const NKqpProto::TKqpPhyResult& txResult, TKqpExecuterTxResult& result);
-void BuildKqpExecuterResults(const NKqpProto::TKqpPhyTx& tx, TVector<TKqpExecuterTxResult>& results);
-
 void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const TTask& task,
     NYql::NDqProto::TDqTask& dqTask, const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const NKqpProto::TKqpPhyStage& stage,
-    const TStageInfo& stageInfo, const TTask& task, const NMiniKQL::THolderFactory& holderFactory,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
+    const TStageInfo& stageInfo, const TTask& task);
 
 inline bool IsDebugLogEnabled() {
     return TlsActivationContext->LoggerSettings() &&
@@ -95,7 +83,7 @@ public:
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
@@ -123,6 +111,14 @@ public:
     }
 
 protected:
+    const NMiniKQL::TTypeEnvironment& TypeEnv() {
+        return Request.TxAlloc->TypeEnv;
+    }
+
+    const NMiniKQL::THolderFactory& HolderFactory() {
+        return Request.TxAlloc->HolderFactory;
+    }
+
     [[nodiscard]]
     bool HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
@@ -476,16 +472,7 @@ protected:
         if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
-
-            if (ExecuterSpan) {
-                ExecuterSpan.EndError("timeout");
-            }
-
-            this->Send(Target, abortEv.Release());
-
-            TerminateComputeActors(Ydb::StatusIds::TIMEOUT, "timeout");
-            this->PassAway();
+            AbortExecutionAndDie(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
@@ -494,29 +481,13 @@ protected:
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         bool cancel = ev->Get()->Tag == 1;
         LOG_I((cancel ? "CancelAt" : "Timeout") << " exceeded. Send timeout event to the rpc actor " << Target);
-
         if (cancel) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request timeout exceeded");
-
-            if (ExecuterSpan) {
-                ExecuterSpan.EndError("timeout");
-            }
-
-            this->Send(Target, abortEv.Release());
             CancelAtActor = {};
+            AbortExecutionAndDie(NYql::NDqProto::StatusIds::CANCELLED, "Request timeout exceeded");
         } else {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
-
-            if (ExecuterSpan) {
-                ExecuterSpan.EndError("timeout");
-            }
-
-            this->Send(Target, abortEv.Release());
             DeadlineActor = {};
+            AbortExecutionAndDie(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
         }
-
-        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, "timeout");
-        this->PassAway();
     }
 
 protected:
@@ -633,9 +604,7 @@ protected:
 
 
 protected:
-    void BuildSysViewScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
+    void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_VERIFY_DEBUG(stageInfo.Meta.IsSysView());
 
         auto& stage = GetStage(stageInfo);
@@ -657,11 +626,11 @@ protected:
                     );
                     keyRanges.Add(MakeKeyRange(
                         keyTypes, op.GetReadRange().GetKeyRange(),
-                        stageInfo, holderFactory, typeEnv)
+                        stageInfo, HolderFactory(), TypeEnv())
                     );
                     break;
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                    keyRanges.CopyFrom(FillReadRanges(keyTypes, op.GetReadRanges(), stageInfo, holderFactory, typeEnv));
+                    keyRanges.CopyFrom(FillReadRanges(keyTypes, op.GetReadRanges(), stageInfo, TypeEnv()));
                     break;
                 default:
                     YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
@@ -680,9 +649,7 @@ protected:
         }
     }
 
-    void BuildScanTasksFromSource(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
+    void BuildScanTasksFromSource(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -699,7 +666,7 @@ protected:
         YQL_ENSURE(table.TableKind != NKikimr::NKqp::ETableKind::Olap);
 
         auto columns = BuildKqpColumns(source, table);
-        THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, source, stageInfo, holderFactory, typeEnv);
+        auto partitions = PrunePartitions(TableKeys, source, stageInfo, HolderFactory(), TypeEnv());
 
         bool reverse = false;
         ui64 itemsLimit = 0;
@@ -723,10 +690,6 @@ protected:
             for (auto& [name, value] : shardInfo.Params) {
                 auto ret = task.Meta.Params.emplace(name, std::move(value));
                 YQL_ENSURE(ret.second);
-                auto typeIterator = shardInfo.ParamTypes.find(name);
-                YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
-                auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
-                YQL_ENSURE(retType.second);
             }
 
             NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
@@ -765,8 +728,8 @@ protected:
 
             settings.SetShardIdHint(shardId);
 
-            ExtractItemsLimit(stageInfo, source.GetItemsLimit(), holderFactory,
-                typeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+            ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
+                Request.TxAlloc->TypeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
             settings.SetItemsLimit(itemsLimit);
 
             const auto& stageSource = stage.GetSources(0);
@@ -955,6 +918,19 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
+    void AbortExecutionAndDie(NYql::NDqProto::StatusIds::StatusCode status, const TString& message) {
+        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << "," << message);
+        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Request timeout exceeded");
+        if (ExecuterSpan) {
+            ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
+        }
+
+        this->Send(Target, abortEv.Release());
+        Request.Transactions.crop(0);
+        TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
+        this->PassAway();
+    }
+
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
@@ -986,6 +962,7 @@ protected:
             ExecuterSpan.EndError(response.DebugString());
         }
 
+        Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
         this->PassAway();
     }

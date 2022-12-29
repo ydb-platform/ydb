@@ -57,7 +57,8 @@ class TKqpRunner : public IKqpRunner {
 public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         TIntrusivePtr<TTypeAnnotationContext> typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        const NMiniKQL::IFunctionRegistry& funcRegistry)
+        const NMiniKQL::IFunctionRegistry& funcRegistry,
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
@@ -72,7 +73,8 @@ public:
         auto logComp = NYql::NLog::EComponent::ProviderKqp;
 
         PreparedExplainTransformer = TTransformationPipeline(typesCtx)
-            .Add(CreateKqpExplainPreparedTransformer(Gateway, Cluster, TransformCtx), "ExplainQuery")
+            .Add(CreateKqpExplainPreparedTransformer(
+                Gateway, Cluster, TransformCtx, &funcRegistry, timeProvider, randomProvider), "ExplainQuery")
             .Build(false);
 
         PhysicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
@@ -327,9 +329,10 @@ private:
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     TIntrusivePtr<TTypeAnnotationContext> typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    const NMiniKQL::IFunctionRegistry& funcRegistry)
+    const NMiniKQL::IFunctionRegistry& funcRegistry,
+    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
 {
-    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, funcRegistry);
+    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, funcRegistry, timeProvider, randomProvider);
 }
 
 } // namespace NKqp

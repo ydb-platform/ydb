@@ -124,6 +124,7 @@ public:
     {}
 };
 
+
 struct TKqpQueryState {
     TActorId Sender;
     ui64 ProxyRequestId = 0;
@@ -133,7 +134,7 @@ struct TKqpQueryState {
     TKqpCompileResult::TConstPtr CompileResult;
     NKqpProto::TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
-    NYql::TKikimrParamsMap Parameters;
+    TQueryData::TPtr Parameters;
     TVector<TVector<NKikimrMiniKQL::TResult>> TxResults;
 
     TActorId RequestActorId;
@@ -274,13 +275,34 @@ public:
         return res;
     }
 
-    void MakeNewQueryState() {
+    void MakeNewQueryState(NKikimrKqp::TQueryRequest* request) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
         QueryState = std::make_shared<TKqpQueryState>();
+        QueryState->Request.Swap(request);
+    }
+
+    bool ConvertParameters(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ui64 proxyRequestId = ev->Cookie;
+        auto& event = ev->Get()->Record;
+
+        if (!event.GetRequest().HasParameters() && event.GetRequest().YdbParametersSize()) {
+            try {
+                ConvertYdbParamsToMiniKQLParams(event.GetRequest().GetYdbParameters(), *event.MutableRequest()->MutableParameters());
+            } catch (const std::exception& ex) {
+                TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
+                ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);
+                return false;
+            }
+        }
+
+        return true;
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        if (!ConvertParameters(ev))
+            return;
+
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
                 ModuleResolverState, Counters));
@@ -358,6 +380,7 @@ public:
             return;
         }
         QueryState->TxCtx = std::move(txCtx);
+        QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxId = txId;
         QueryState->TxId_Human = txControl.tx_id();
         if (!CheckTransacionLocks()) {
@@ -438,18 +461,8 @@ public:
             return;
         }
 
-        if (!event.GetRequest().HasParameters() && event.GetRequest().YdbParametersSize()) {
-            try {
-                ConvertYdbParamsToMiniKQLParams(event.GetRequest().GetYdbParameters(), *event.MutableRequest()->MutableParameters());
-            } catch (const std::exception& ex) {
-                TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
-                return ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);
-            }
-        }
-
-        MakeNewQueryState();
+        MakeNewQueryState(event.MutableRequest());
         TTimerGuard timer(this);
-        QueryState->Request.Swap(event.MutableRequest());
         auto& queryRequest = QueryState->Request;
 
         YQL_ENSURE(queryRequest.GetDatabase() == Settings.Database,
@@ -794,7 +807,8 @@ public:
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId = UlidGen.Next();
         QueryState->TxId_Human = QueryState->TxId.ToString();
-        QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);
+        QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+        QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
         CreateNewTx();
 
@@ -832,6 +846,7 @@ public:
                         return false;
                     }
                     QueryState->TxCtx = *it;
+                    QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
                     QueryState->TxId = txId;
                     QueryState->TxId_Human = txControl.tx_id();
                     break;
@@ -846,7 +861,9 @@ public:
                     break;
             }
         } else {
-            QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);
+            QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
+                AppData()->TimeProvider, AppData()->RandomProvider);
+            QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         }
 
@@ -858,10 +875,6 @@ public:
         if (!PrepareQueryTransaction()) {
             return false;
         }
-
-        auto& txCtx = QueryState->TxCtx;
-        txCtx->TimeProvider = TAppData::TimeProvider;
-        txCtx->RandomProvider = TAppData::RandomProvider;
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         auto [success, issues] = ApplyTableOperations(QueryState->TxCtx.Get(), phyQuery);
@@ -887,28 +900,38 @@ public:
             || action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED && type == NKikimrKqp::QUERY_TYPE_PREPARED_DML,
             "Unexpected query action: " << action << " and type: " << type);
 
-        ParseParameters(std::move(*QueryState->Request.MutableParameters()), QueryState->Parameters);
+        ParseParameters(QueryState->Request.GetParameters());
+        ParseParameters(QueryState->Request.GetYdbParameters());
         return true;
     }
 
-    static void ParseParameters(NKikimrMiniKQL::TParams&& parameters, TKikimrParamsMap& map) {
+    void ParseParameters(const google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>& params) {
+        if (!params.size()){
+            return;
+        }
+
+        for(const auto& [name, param] : params) {
+            try {
+                auto success = QueryState->Parameters->AddTypedValueParam(name, param);
+                YQL_ENSURE(success, "Duplicate parameter: " << name);
+            } catch(const yexception& ex) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+            }
+        }
+    }
+
+    void ParseParameters(const NKikimrMiniKQL::TParams& parameters) {
         if (!parameters.HasType()) {
             return;
         }
 
         YQL_ENSURE(parameters.GetType().GetKind() == NKikimrMiniKQL::Struct, "Expected struct as query parameters type");
-        auto& structType = *parameters.MutableType()->MutableStruct();
-
+        auto& structType = parameters.GetType().GetStruct();
         for (ui32 i = 0; i < structType.MemberSize(); ++i) {
             const auto& memberName = structType.GetMember(i).GetName();
             YQL_ENSURE(i < parameters.GetValue().StructSize(), "Missing value for parameter: " << memberName);
-
-            NKikimrMiniKQL::TParams param;
-            param.MutableType()->Swap(structType.MutableMember(i)->MutableType());
-            param.MutableValue()->Swap(parameters.MutableValue()->MutableStruct(i));
-
-            auto result = map.emplace(memberName, std::move(param));
-            YQL_ENSURE(result.second, "Duplicate parameter: " << memberName);
+            auto success = QueryState->Parameters->AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
+            YQL_ENSURE(success, "Duplicate parameter: " << memberName);
         }
     }
 
@@ -923,8 +946,8 @@ public:
         Cleanup(IsFatalError(record.GetYdbStatus()));
     }
 
-    IKqpGateway::TExecPhysicalRequest PrepareRequest(TKqpQueryState *queryState) {
-        IKqpGateway::TExecPhysicalRequest request;
+    IKqpGateway::TExecPhysicalRequest PrepareRequest(TKqpQueryState *queryState, TTxAllocatorState::TPtr alloc) {
+        IKqpGateway::TExecPhysicalRequest request(alloc);
 
         if (queryState) {
             auto now = TAppData::TimeProvider->Now();
@@ -946,13 +969,13 @@ public:
 
 
     IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
-        auto request = PrepareRequest(queryState);
+        auto request = PrepareRequest(queryState, queryState->TxCtx->TxAlloc);
         request.NeedTxId = false;
         return request;
     }
 
-    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState) {
-        auto request = PrepareRequest(queryState);
+    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState, TTxAllocatorState::TPtr alloc) {
+        auto request = PrepareRequest(queryState, alloc);
 
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
@@ -965,7 +988,7 @@ public:
     }
 
     IKqpGateway::TExecPhysicalRequest PrepareScanRequest(TKqpQueryState *queryState) {
-        auto request = PrepareRequest(queryState);
+        auto request = PrepareRequest(queryState, queryState->TxCtx->TxAlloc);
 
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
@@ -976,49 +999,40 @@ public:
         return request;
     }
 
-    NKikimrMiniKQL::TParams* ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
+    void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
         auto& txCtx = QueryState->TxCtx;
         YQL_ENSURE(txCtx);
-        auto parameter = QueryState->Parameters.FindPtr(name);
-        if (!parameter) {
+        auto parameterType = QueryState->Parameters->GetParameterType(name);
+        if (!parameterType) {
             if (type.GetKind() == NKikimrMiniKQL::ETypeKind::Optional) {
-                auto& newParameter = QueryState->Parameters[name];
-                newParameter.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Optional);
-                *newParameter.MutableType()->MutableOptional()->MutableItem() = type.GetOptional().GetItem();
-
-                return &newParameter;
+                NKikimrMiniKQL::TValue value;
+                QueryState->Parameters->AddMkqlParam(name, type, value);
+                return;
             }
 
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << "Missing value for parameter: " << name;
-            return nullptr;
         }
 
-        if (!IsSameProtoType(parameter->GetType(), type)) {
+        auto pType = ImportTypeFromProto(type, txCtx->TxAlloc->TypeEnv);
+        if (pType == nullptr || !parameterType->IsSameType(*pType)) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << "Parameter " << name
-                << " type mismatch, expected: " << type << ", actual: " << parameter->GetType();
+                << " type mismatch, expected: " << type << ", actual: " << *parameterType;
         }
-
-        return parameter;
     }
 
-    TKqpParamsMap PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
+    TQueryData::TPtr PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
         for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
             ValidateParameter(paramDesc.GetName(), paramDesc.GetType());
         }
 
-        TKqpParamsMap paramsMap(QueryState);
-
-        for (const auto& paramBinding : tx.GetParamBindings()) {
-            try {
-                auto& txCtx = QueryState->TxCtx;
-                auto it = paramsMap.Values.emplace(paramBinding.GetName(),
-                    *GetParamValue(/*ensure*/ true, *txCtx, QueryState->Parameters, QueryState->TxResults, paramBinding));
-                YQL_ENSURE(it.second);
-            } catch (const yexception& ex) {
-                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        try {
+            for(const auto& paramBinding: tx.GetParamBindings()) {
+                QueryState->Parameters->MaterializeParamValue(true, paramBinding);
             }
+        } catch (const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
-        return paramsMap;
+        return QueryState->Parameters;
     }
 
     bool ShouldAcquireLocks(const NKqpProto::TKqpPhyQuery* query) {
@@ -1054,30 +1068,11 @@ public:
         return true;
     }
 
-    TKqpParamsMap GetParamsRefMap(const TParamValueMap& map) {
-        TKqpParamsMap paramsMap(QueryState);
-        for (auto& [k, v] : map) {
-            auto res = paramsMap.Values.emplace(k, NYql::NDq::TMkqlValueRef(v));
-            YQL_ENSURE(res.second);
-        }
-
-        return paramsMap;
-    }
-
-    TParamValueMap CreateKqpValueMap(const NKqpProto::TKqpPhyTx& tx) {
-        TParamValueMap paramsMap;
+    TQueryData::TPtr CreateKqpValueMap(const NKqpProto::TKqpPhyTx& tx) {
         for (const auto& paramBinding : tx.GetParamBindings()) {
-            auto& txCtx = QueryState->TxCtx;
-            auto paramValueRef = *GetParamValue(/*ensure*/ true, *txCtx, QueryState->Parameters, QueryState->TxResults, paramBinding);
-
-            NKikimrMiniKQL::TParams param;
-            param.MutableType()->CopyFrom(paramValueRef.GetType());
-            param.MutableValue()->CopyFrom(paramValueRef.GetValue());
-
-            auto [it, success] = paramsMap.emplace(paramBinding.GetName(), std::move(param));
-            YQL_ENSURE(success);
+            QueryState->Parameters->MaterializeParamValue(true, paramBinding);
         }
-        return paramsMap;
+        return QueryState->Parameters;
     }
 
     bool CheckTransacionLocks() {
@@ -1185,7 +1180,7 @@ public:
             ? PreparePureRequest(QueryState.get())
             : (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCAN)
                 ? PrepareScanRequest(QueryState.get())
-                : PreparePhysicalRequest(QueryState.get())
+                : PreparePhysicalRequest(QueryState.get(), QueryState->TxCtx->TxAlloc);
             ;
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
@@ -1224,7 +1219,7 @@ public:
 
             for (const auto& effect : txCtx.DeferredEffects) {
                 YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
-                request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
+                request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
 
                 LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
                        << " current Transactions.size(): " << request.Transactions.size());
@@ -1264,7 +1259,7 @@ public:
         return false;
     }
 
-    void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request) {
+    void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
         }
@@ -1275,11 +1270,18 @@ public:
                 (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
                 RequestCounters);
 
-        ExecuterId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
-        LOG_D("Created new KQP executer: " << ExecuterId);
-
-        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(ExecuterId);
-        Send(MakeTxProxyID(), ev.release());
+        if (!isRollback) {
+            Y_VERIFY(!ExecuterId);
+            ExecuterId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
+            LOG_D("Created new KQP executer: " << ExecuterId);
+            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(ExecuterId);
+            Send(MakeTxProxyID(), ev.release());
+        } else {
+            auto exId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
+            LOG_D("Created new KQP executer: " << exId);
+            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
+            Send(MakeTxProxyID(), ev.release());
+        }
     }
 
 
@@ -1304,15 +1306,6 @@ public:
 
     void HandleExecute(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ReplyBusy(ev);
-    }
-
-    TVector<NKikimrMiniKQL::TResult> ExtractTxResults(NKikimrKqp::TExecuterTxResult& result) {
-        TVector<NKikimrMiniKQL::TResult> txResults;
-        txResults.resize(result.ResultsSize());
-        for (ui32 i = 0; i < result.ResultsSize(); ++i) {
-            txResults[i].Swap(result.MutableResults(i));
-        }
-        return txResults;
     }
 
     bool MergeLocksWithTxResult(const NKikimrKqp::TExecuterTxResult& result) {
@@ -1353,14 +1346,12 @@ public:
 
         LOG_D("TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
             << "/" << (QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0)
-            << " response.status: " << response->GetStatus()
-            << " results.size: " << (response->HasResult() ? std::to_string(response->GetResult().ResultsSize()) : " <no result>"));
+            << " response.status: " << response->GetStatus());
 
         ExecuterId = TActorId{};
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
-            LOG_I("TEvTxResponse has non-success status, CurrentTx: "
-                << QueryState->CurrentTx << " response->ShortDebugString(): " << response->ShortDebugString());
+            LOG_I("TEvTxResponse has non-success status, CurrentTx: " << QueryState->CurrentTx);
 
             auto status = response->GetStatus();
             TIssues issues;
@@ -1391,22 +1382,28 @@ public:
         }
 
         YQL_ENSURE(QueryState);
-        LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, response->GetResult().ResultsSize());
+        LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->Get()->ResultRowsCount);
 
-        auto& txResult = *response->MutableResult();
-        QueryState->TxResults.emplace_back(ExtractTxResults(txResult));
+        auto& executerResults = *response->MutableResult();
+        {
+            auto g = QueryState->Parameters->TypeEnv().BindAllocator();
+            auto unboxed = ev->Get()->GetUnboxedValueResults();
+            QueryState->Parameters->AddTxResults(std::move(unboxed));
+        }
+        auto& txResult = ev->Get()->GetMkqlResults();
+        QueryState->TxResults.emplace_back(std::move(txResult));
 
         if (ev->Get()->LockHandle) {
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->Get()->LockHandle);
         }
 
-        if (!MergeLocksWithTxResult(txResult)) {
+        if (!MergeLocksWithTxResult(executerResults)) {
             return;
         }
 
-        if (txResult.HasStats()) {
+        if (executerResults.HasStats()) {
             auto* exec = QueryState->Stats.AddExecutions();
-            exec->Swap(txResult.MutableStats());
+            exec->Swap(executerResults.MutableStats());
         }
 
         ExecuteOrDefer();
@@ -1429,6 +1426,8 @@ public:
 
     void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
+
+        ExecuterId = TActorId{};
 
         const auto& issues = ev->Get()->GetIssues();
         LOG_I("Got TEvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()));
@@ -1892,7 +1891,9 @@ public:
             LWTRACK(KqpSessionSendRollback, QueryState->Orbit, QueryState->CurrentTx);
         }
 
-        auto request = PreparePhysicalRequest(nullptr);
+        auto allocPtr = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry,
+            AppData()->TimeProvider, AppData()->RandomProvider);
+        auto request = PreparePhysicalRequest(nullptr, allocPtr);
 
         request.EraseLocks = true;
         request.ValidateLocks = false;
@@ -1901,7 +1902,7 @@ public:
         for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {
             request.Locks.emplace_back(lock.GetValueRef(txCtx->Locks.LockType));
         }
-        SendToExecuter(std::move(request));
+        SendToExecuter(std::move(request), true);
     }
 
     void ResetTxState() {

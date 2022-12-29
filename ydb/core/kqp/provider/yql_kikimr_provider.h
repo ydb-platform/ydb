@@ -7,6 +7,8 @@
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
+#include <ydb/core/kqp/gateway/kqp_query_data.h>
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/cache/cache.h>
 
@@ -67,66 +69,13 @@ enum class EKikimrQueryType {
     YqlScriptStreaming,
 };
 
-struct TTimeAndRandomProvider {
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-
-    std::optional<ui64> CachedNow;
-    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
-
-    ui64 GetCachedNow() {
-        if (!CachedNow) {
-            CachedNow = TimeProvider->Now().GetValue();
-        }
-
-        return *CachedNow;
+struct TKikimrQueryContext : TThrRefBase {
+    TKikimrQueryContext(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
+    {
+        QueryData = std::make_shared<NKikimr::NKqp::TQueryData>(functionRegistry, timeProvider, randomProvider);
     }
 
-    ui64 GetCachedDate() {
-        return std::min<ui64>(NUdf::MAX_DATE - 1u, GetCachedNow() / 86400000000ul);
-    }
-
-    ui64 GetCachedDatetime() {
-        return std::min<ui64>(NUdf::MAX_DATETIME - 1u, GetCachedNow() / 1000000ul);
-    }
-
-    ui64 GetCachedTimestamp() {
-        return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1u, GetCachedNow());
-    }
-
-    template <typename T>
-    T GetRandom() const {
-        if constexpr (std::is_same_v<T, double>) {
-            return RandomProvider->GenRandReal2();
-        }
-        if constexpr (std::is_same_v<T, ui64>) {
-            return RandomProvider->GenRand64();
-        }
-        if constexpr (std::is_same_v<T, TGUID>) {
-            return RandomProvider->GenUuid4();
-        }
-    }
-
-    template <typename T>
-    T GetCachedRandom() {
-        auto& cached = std::get<std::optional<T>>(CachedRandom);
-        if (!cached) {
-            cached = GetRandom<T>();
-        }
-
-        return *cached;
-    }
-
-    void Reset() {
-        CachedNow.reset();
-        std::get<0>(CachedRandom).reset();
-        std::get<1>(CachedRandom).reset();
-        std::get<2>(CachedRandom).reset();
-    }
-};
-
-struct TKikimrQueryContext : TThrRefBase, TTimeAndRandomProvider {
-    TKikimrQueryContext() {}
     TKikimrQueryContext(const TKikimrQueryContext&) = delete;
     TKikimrQueryContext& operator=(const TKikimrQueryContext&) = delete;
 
@@ -148,7 +97,7 @@ struct TKikimrQueryContext : TThrRefBase, TTimeAndRandomProvider {
 
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
-    TKikimrParamsMap Parameters;
+    NKikimr::NKqp::TQueryData::TPtr QueryData;
 
     THashMap<ui64, IKikimrQueryExecutor::TQueryResult> Results;
     THashMap<ui64, TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult>> InProgress;
@@ -167,15 +116,13 @@ struct TKikimrQueryContext : TThrRefBase, TTimeAndRandomProvider {
 
         PreparingQuery.reset();
         PreparedQuery.reset();
-        Parameters.clear();
+        QueryData->Clear();
 
         Results.clear();
         InProgress.clear();
         ExecutionOrder.clear();
 
         RlPath.Clear();
-
-        TTimeAndRandomProvider::Reset();
     }
 };
 
@@ -419,10 +366,14 @@ public:
 
 class TKikimrSessionContext : public TThrRefBase {
 public:
-    TKikimrSessionContext(TKikimrConfiguration::TPtr config, TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr)
+    TKikimrSessionContext(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        TKikimrConfiguration::TPtr config,
+        TIntrusivePtr<ITimeProvider> timeProvider,
+        TIntrusivePtr<IRandomProvider> randomProvider,
+        TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr)
         : Configuration(config)
         , TablesData(MakeIntrusive<TKikimrTablesData>())
-        , QueryCtx(MakeIntrusive<TKikimrQueryContext>())
+        , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
         , TxCtx(txCtx) {}
 
     TKikimrSessionContext(const TKikimrSessionContext&) = delete;

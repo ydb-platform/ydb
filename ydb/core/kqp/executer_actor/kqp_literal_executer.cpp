@@ -19,18 +19,18 @@ using namespace NYql::NDq;
 
 namespace {
 
-TDqTaskRunnerContext CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* computeCtx, NMiniKQL::TScopedAlloc* alloc,
+std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* computeCtx, NMiniKQL::TScopedAlloc* alloc,
     NMiniKQL::TTypeEnvironment* typeEnv)
 {
-    TDqTaskRunnerContext context;
-    context.FuncRegistry = AppData()->FunctionRegistry;
-    context.RandomProvider = TAppData::RandomProvider.Get();
-    context.TimeProvider = TAppData::TimeProvider.Get();
-    context.ComputeCtx = computeCtx;
-    context.ComputationFactory = NMiniKQL::GetKqpBaseComputeFactory(computeCtx);
-    context.Alloc = alloc;
-    context.TypeEnv = typeEnv;
-    context.ApplyCtx = nullptr;
+    std::unique_ptr<TDqTaskRunnerContext> context = std::make_unique<TDqTaskRunnerContext>();
+    context->FuncRegistry = AppData()->FunctionRegistry;
+    context->RandomProvider = TAppData::RandomProvider.Get();
+    context->TimeProvider = TAppData::TimeProvider.Get();
+    context->ComputeCtx = computeCtx;
+    context->ComputationFactory = NMiniKQL::GetKqpBaseComputeFactory(computeCtx);
+    context->Alloc = alloc;
+    context->TypeEnv = typeEnv;
+    context->ApplyCtx = nullptr;
     return context;
 }
 
@@ -70,7 +70,7 @@ public:
         , Counters(counters)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
@@ -129,10 +129,11 @@ private:
 
         LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
 
-        FillKqpTasksGraphStages(TasksGraph, Request.Transactions);
+        auto& transactions = Request.Transactions;
+        FillKqpTasksGraphStages(TasksGraph, transactions);
 
-        for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
-            auto& tx = Request.Transactions[txIdx];
+        for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
+            auto& tx = transactions[txIdx];
 
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
@@ -145,7 +146,7 @@ private:
                 TasksGraph.AddTask(stageInfo);
             }
 
-            BuildKqpExecuterResults(*tx.Body, Results);
+            ResponseEv->InitTxResult(*tx.Body);
             BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, txIdx);
         }
 
@@ -153,17 +154,11 @@ private:
             return;
         }
 
-        auto funcRegistry = AppData()->FunctionRegistry;
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry->SupportsSizedAllocators());
-        NMiniKQL::TTypeEnvironment typeEnv(alloc);
-        NMiniKQL::TMemoryUsageInfo memInfo("KqpLocalExecuter");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, funcRegistry);
-        auto unguard = Unguard(alloc);
-
         ui64 mkqlMemoryLimit = Request.MkqlMemoryLimit > 0
             ? Request.MkqlMemoryLimit
             : 1_GB;
 
+        auto& alloc = Request.TxAlloc->Alloc;
         auto rmConfig = GetKqpResourceManager()->GetConfig();
         ui64 mkqlInitialLimit = std::min(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
         alloc.SetLimit(mkqlInitialLimit);
@@ -183,20 +178,13 @@ private:
         NWilson::TSpan runTasksSpan(TWilsonKqp::LiteralExecuterRunTasks, LiteralExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
 
         // task runner settings
-        NMiniKQL::TKqpComputeContextBase computeCtx;
-        TDqTaskRunnerContext context = CreateTaskRunnerContext(&computeCtx, &alloc, &typeEnv);
-        context.PatternCache = GetKqpResourceManager()->GetPatternCache();
+        ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();
+        RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->Alloc, &Request.TxAlloc->TypeEnv);
+        RunnerContext->PatternCache = GetKqpResourceManager()->GetPatternCache();
         TDqTaskRunnerSettings settings = CreateTaskRunnerSettings(Request.StatsMode);
 
-        Y_DEFER {
-            // clear allocator state
-            TGuard<NMiniKQL::TScopedAlloc> guard(alloc);
-            Results.crop(0);
-            TaskRunners.crop(0);
-        };
-
         for (auto& task : TasksGraph.GetTasks()) {
-            RunTask(task, context, settings);
+            RunTask(task, *RunnerContext, settings);
 
             if (TerminateIfTimeout()) {
                 return;
@@ -207,7 +195,7 @@ private:
             runTasksSpan.End();
         }
 
-        Finalize(context, holderFactory);
+        Finalize();
         PassAway();
     }
 
@@ -241,25 +229,19 @@ private:
             YQL_ENSURE(resultChannel.DstTask == 0);
         }
 
-        auto parameterProvider = [&task, &stageInfo](std::string_view name, NMiniKQL::TType* type,
+        TQueryData::TPtr params = stageInfo.Meta.Tx.Params;
+        auto parameterProvider = [&params, &task, &stageInfo](std::string_view name, NMiniKQL::TType* type,
             const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
             NUdf::TUnboxedValue& value)
         {
+            Y_UNUSED(typeEnv);
             if (auto* data = task.Meta.Params.FindPtr(name)) {
                 TDqDataSerializer::DeserializeParam(*data, type, holderFactory, value);
                 return true;
             }
 
-            if (auto* param = stageInfo.Meta.Tx.Params.Values.FindPtr(name)) {
-                NMiniKQL::TType* typeFromProto;
-                with_lock (typeEnv.GetAllocator()) {
-                    std::tie(typeFromProto, value) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory);
-                }
-#ifndef NDEBUG
-                YQL_ENSURE(ToString(*type) == ToString(*typeFromProto), "" << *type << " != " << *typeFromProto);
-#else
-                Y_UNUSED(typeFromProto);
-#endif
+            if (auto* param = params->GetParameterType(TString(name))) {
+                std::tie(type, value) = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(TString(name));
                 return true;
             }
 
@@ -285,36 +267,20 @@ private:
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
                     auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
-
-                    outputChannel->PopAll(Results[channelDesc.DstInputIndex].Rows);
+                    NKikimr::NMiniKQL::TUnboxedValueVector outputRows;
+                    outputChannel->PopAll(outputRows);
+                    ResponseEv->TakeResult(channelDesc.DstInputIndex, outputRows);
                     YQL_ENSURE(outputChannel->IsFinished());
                 }
             }
         }
     }
 
-    void Finalize(const TDqTaskRunnerContext& context, NMiniKQL::THolderFactory& holderFactory) {
+    void Finalize() {
         auto& response = *ResponseEv->Record.MutableResponse();
 
         response.SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
-
-        ui64 rows = 0;
-        ui64 bytes = 0;
-
-        with_lock (*context.Alloc) {
-            TKqpProtoBuilder protoBuilder(context.Alloc, context.TypeEnv, &holderFactory);
-            for (auto& result : Results) {
-                rows += result.Rows.size();
-                auto* protoResult = response.MutableResult()->AddResults();
-                if (result.IsStream) {
-                    protoBuilder.BuildStream(result.Rows, result.ItemType, result.ResultItemType.Get(), protoResult);
-                } else {
-                    protoBuilder.BuildValue(result.Rows, result.ItemType, protoResult);
-                }
-                bytes += protoResult->ByteSizeLong();
-            }
-        }
 
         if (Stats) {
             ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
@@ -337,8 +303,8 @@ private:
 
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
-            Stats->ResultRows = rows;
-            Stats->ResultBytes = bytes;
+            Stats->ResultRows = ResponseEv->GetResultRowsCount();
+            Stats->ResultBytes = ResponseEv->GetByteSize();
 
             Stats->Finish();
 
@@ -352,16 +318,24 @@ private:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-
         if (LiteralExecuterSpan) {
             LiteralExecuterSpan.EndOk();
         }
-
-        LOG_D("Sending response to: " << Target << ", results: " << Results.size());
+        CleanupCtx();
+        LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
         Send(Target, ResponseEv.release());
     }
 
 private:
+    void CleanupCtx() {
+        with_lock(Request.TxAlloc->Alloc) {
+            TaskRunners.erase(TaskRunners.begin(), TaskRunners.end());
+            Request.Transactions.erase(Request.Transactions.begin(), Request.Transactions.end());
+            ComputeCtx.reset();
+            RunnerContext.reset();
+        }
+    }
+
     bool TerminateIfTimeout() {
         auto now = AppData()->TimeProvider->Now();
 
@@ -425,6 +399,7 @@ private:
             LiteralExecuterSpan.EndError(response.DebugString());
         }
 
+        CleanupCtx();
         Send(Target, ResponseEv.release());
         PassAway();
     }
@@ -446,10 +421,12 @@ private:
     TActorId Target;
     ui64 TxId = 0;
     TKqpTasksGraph TasksGraph;
-    TVector<TKqpExecuterTxResult> Results;
-    TVector<TIntrusivePtr<IDqTaskRunner>> TaskRunners;
     std::unordered_map<ui64, ui32> TaskId2StageId;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+
+    TVector<TIntrusivePtr<NYql::NDq::IDqTaskRunner>> TaskRunners;
+    std::unique_ptr<NKikimr::NMiniKQL::TKqpComputeContextBase> ComputeCtx;
+    std::unique_ptr<NYql::NDq::TDqTaskRunnerContext> RunnerContext;
     NWilson::TSpan LiteralExecuterSpan;
 };
 

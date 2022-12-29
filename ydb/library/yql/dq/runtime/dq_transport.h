@@ -55,8 +55,6 @@ public:
     ui64 CalcSerializedSize(NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type);
     static ui64 EstimateSize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type, bool* fixed = nullptr);
 
-    static NDqProto::TData SerializeParam(const TMkqlValueRef& param, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory);
     static void DeserializeParam(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* type,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value);
 

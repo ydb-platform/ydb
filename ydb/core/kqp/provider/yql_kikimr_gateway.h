@@ -4,6 +4,12 @@
 #include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
@@ -16,11 +22,15 @@
 
 #include <util/string/join.h>
 
+namespace NKikimr {
+    namespace NMiniKQL {
+        class IFunctionRegistry;
+    }
+}
+
 namespace NYql {
 
 using NUdf::EDataSlot;
-
-using TKikimrParamsMap = TMap<TString, NKikimrMiniKQL::TParams>;
 
 struct TKikimrQueryPhaseLimits {
     ui32 AffectedShardsLimit = 0;

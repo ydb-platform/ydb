@@ -4,7 +4,8 @@
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/core/base/table_index.h>
 
 #include <util/string/split.h>
@@ -12,6 +13,8 @@
 namespace NYql {
 
 using namespace NThreading;
+using namespace NKikimr::NMiniKQL;
+using namespace NUdf;
 
 static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index,
     TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir)

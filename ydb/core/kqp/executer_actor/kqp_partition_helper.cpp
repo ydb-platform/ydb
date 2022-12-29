@@ -30,17 +30,18 @@ struct TShardParamValuesAndRanges {
     THashMap<TString, TShardInfo::TColumnWriteInfo> ColumnWrites;
 };
 
-THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlValueRef& param, const TTableId& tableId,
+THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
+    const NUdf::TUnboxedValue& value, NKikimr::NMiniKQL::TType* type,
+    const TTableId& tableId,
     const TKqpTableKeys& tableKeys, const TKeyDesc& key, const NMiniKQL::THolderFactory& holderFactory,
     const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    auto guard = typeEnv.BindAllocator();
     YQL_ENSURE(tableId.HasSamePath(key.TableId));
     auto& table = tableKeys.GetTable(tableId);
 
     THashMap<ui64, TShardParamValuesAndRanges> ret;
     THashMap<ui64, NMiniKQL::TUnboxedValueVector> shardParamValues;
-
-    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory);
 
     YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::List);
     auto* itemType = static_cast<NMiniKQL::TListType*>(type)->GetItemType();
@@ -105,7 +106,8 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlV
     return ret;
 }
 
-THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::TMkqlValueRef& param,
+THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(
+    const NUdf::TUnboxedValue& value, NKikimr::NMiniKQL::TType* type,
     const TTableId& tableId, const TKqpTableKeys& tableKeys, const TKeyDesc& key,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
@@ -115,8 +117,6 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
 
     THashMap<ui64, TShardParamValuesAndRanges> ret;
     THashMap<ui64, NMiniKQL::TUnboxedValueVector> shardParamValues;
-
-    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory);
 
     YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::List);
     auto itemType = static_cast<NMiniKQL::TListType&>(*type).GetItemType();
@@ -225,20 +225,14 @@ TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, 
             }
         }
 
-        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
-        YQL_ENSURE(param, "Param not found: " << paramName);
-
-        const auto* protoType = &param->GetType();
-        const auto* protoValue = &param->GetValue();
+        auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
         if (paramIndex) {
-            YQL_ENSURE(protoType->GetKind() == NKikimrMiniKQL::Tuple);
-            YQL_ENSURE(*paramIndex < protoType->GetTuple().ElementSize());
-            YQL_ENSURE(*paramIndex < protoValue->TupleSize());
-            protoType = &protoType->GetTuple().GetElement(*paramIndex);
-            protoValue = &protoValue->GetTuple(*paramIndex);
+            YQL_ENSURE(type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple);
+            auto actual = static_cast<NKikimr::NMiniKQL::TStructType*>(type);
+            YQL_ENSURE(*paramIndex < actual->GetMembersCount());
+            type = actual->GetMemberType(*paramIndex);
+            value = value.GetElement(*paramIndex);
         }
-
-        auto [type, value] = ImportValueFromProto(*protoType, *protoValue, typeEnv, holderFactory);
 
         keyValues.emplace_back(NMiniKQL::MakeCell(keyColumnTypes[i], value, typeEnv, /* copy */ true));
     }
@@ -362,19 +356,12 @@ TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NScheme::TTypeInfo
 }
 
 TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     auto guard = typeEnv.BindAllocator();
     TString paramName = rangesParam.GetParamName();
-
-    auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
-    YQL_ENSURE(param, "Param not found: " << paramName);
-
-    const auto* protoType = &param->GetType();
-    const auto* protoValue = &param->GetValue();
-
-    auto [type, value] = ImportValueFromProto(*protoType, *protoValue, typeEnv, holderFactory);
+    auto [_, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
+    YQL_ENSURE(value, "Param not found: " << paramName);
 
     // First element is Flow wrapping Ranges List
     YQL_ENSURE(value.IsBoxed());
@@ -403,14 +390,10 @@ TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::
 
 template <typename PhyOpReadRanges>
 TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const PhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const PhyOpReadRanges& readRanges, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    auto guard = typeEnv.BindAllocator();
     if (readRanges.HasKeyRanges()) {
-        return FillRangesFromParameter(
-            keyColumnTypes, readRanges.GetKeyRanges(), stageInfo, holderFactory, typeEnv
-        );
+        return FillRangesFromParameter(keyColumnTypes, readRanges.GetKeyRanges(), stageInfo, typeEnv);
     }
 
     return BuildFullRange(keyColumnTypes);
@@ -419,17 +402,15 @@ TVector<TSerializedPointOrRange> FillReadRangesInternal(const TVector<NScheme::T
 } // anonymous namespace
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    return FillReadRangesInternal(keyColumnTypes, readRange, stageInfo, holderFactory, typeEnv);
+    return FillReadRangesInternal(keyColumnTypes, readRange, stageInfo, typeEnv);
 }
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const NKqpProto::TKqpPhyOpReadRanges& readRange, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NKqpProto::TKqpPhyOpReadRanges& readRange, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    return FillReadRangesInternal(keyColumnTypes, readRange, stageInfo, holderFactory, typeEnv);
+    return FillReadRangesInternal(keyColumnTypes, readRange, stageInfo, typeEnv);
 }
 
 TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
@@ -550,12 +531,12 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    auto guard = typeEnv.BindAllocator();
+    Y_UNUSED(holderFactory);
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
 
     const auto& keyColumnTypes = table->KeyColumnTypes;
-    auto ranges = FillReadRangesInternal(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
+    auto ranges = FillReadRangesInternal(keyColumnTypes, readRanges, stageInfo, typeEnv);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
 
@@ -600,7 +581,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
 
     if (source.HasRanges()) {
         ranges = FillRangesFromParameter(
-            keyColumnTypes, source.GetRanges(), stageInfo, holderFactory, typeEnv
+            keyColumnTypes, source.GetRanges(), stageInfo, typeEnv
         );
     } else if (source.HasKeyRange()) {
         ranges.push_back(MakeKeyRange(keyColumnTypes, source.GetKeyRange(), stageInfo, holderFactory, typeEnv));
@@ -643,6 +624,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    Y_UNUSED(holderFactory);
     auto guard = typeEnv.BindAllocator();
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
@@ -650,7 +632,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
 
     const auto& keyColumnTypes = table->KeyColumnTypes;
-    auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
+    auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, typeEnv);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
 
@@ -697,10 +679,8 @@ THashMap<ui64, TShardInfo> PartitionLookupByParameterValue(const NKqpProto::TKqp
     const TTypeEnvironment& typeEnv)
 {
     const auto& name = proto.GetParamName();
-    auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(name);
-    YQL_ENSURE(param);
-
-    auto shardsMap = PartitionParamByKeyPrefix(*param, stageInfo.Meta.TableId, tableKeys, *stageInfo.Meta.ShardKey,
+    auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
+    auto shardsMap = PartitionParamByKeyPrefix(value, type, stageInfo.Meta.TableId, tableKeys, *stageInfo.Meta.ShardKey,
         holderFactory, typeEnv);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
@@ -714,8 +694,6 @@ THashMap<ui64, TShardInfo> PartitionLookupByParameterValue(const NKqpProto::TKqp
 
         auto ret = shardInfo.Params.emplace(name, std::move(shardData.ParamValues));
         Y_VERIFY_DEBUG(ret.second);
-        auto retType = shardInfo.ParamTypes.emplace(name, std::move(shardData.ParamType));
-        Y_VERIFY_DEBUG(retType.second);
 
         if (shardData.FullRange) {
             shardInfo.KeyReadRanges->MakeFullRange(std::move(*shardData.FullRange));
@@ -735,13 +713,6 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
 {
     const auto& table = tableKeys.GetTable(stageInfo.Meta.ShardKey->TableId);
 
-    struct TParamDesc {
-        const NDq::TMkqlValueRef* MkqlValueRef = nullptr;
-        NMiniKQL::TType* MkqlType = nullptr;
-        NUdf::TUnboxedValue MkqlValue;
-    };
-
-    std::unordered_map<std::string_view, TParamDesc> params; // already known parameters
     std::unordered_map<ui64, THashSet<TString>> shardParams; // shardId -> paramNames
     std::unordered_map<ui64, TShardParamValuesAndRanges> ret;
 
@@ -751,40 +722,22 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
         TVector<TCell> keyFrom, keyTo;
         keyFrom.resize(table.KeyColumns.size());
         keyTo.resize(row.GetColumns().size());
-
-        NMiniKQL::TType* mkqlType = nullptr;
         NUdf::TUnboxedValue mkqlValue;
 
+        NMiniKQL::TType* mkqlType = nullptr;
         for (const auto& [columnName, columnValue]: row.GetColumns()) {
             switch (columnValue.GetKindCase()) {
                 case NKqpProto::TKqpPhyRowsList_TValue::kParamValue: {
                     const auto& paramName = columnValue.GetParamValue().GetParamName();
-
-                    TParamDesc* paramDesc;
-                    if (auto it = params.find(paramName); it != params.end()) {
-                        paramDesc = &it->second;
-                    } else {
-                        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
-                        YQL_ENSURE(param);
-
-                        auto iter = params.emplace(paramName, TParamDesc());
-                        paramDesc = &iter.first->second;
-
-                        paramDesc->MkqlValueRef = param;
-                        std::tie(paramDesc->MkqlType, paramDesc->MkqlValue) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory);
-                    }
-
-                    mkqlType = paramDesc->MkqlType;
-                    mkqlValue = paramDesc->MkqlValue;
-
+                    std::tie(mkqlType, mkqlValue) = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(
+                        paramName);
                     break;
                 }
 
                 case NKqpProto::TKqpPhyRowsList_TValue::kLiteralValue: {
                     const auto& literal = columnValue.GetLiteralValue();
-
-                    std::tie(mkqlType, mkqlValue) = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
-
+                    std::tie(mkqlType, mkqlValue) = ImportValueFromProto(
+                        literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
                     break;
                 }
 
@@ -832,13 +785,10 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
         }
 
         for (const auto& paramName : shardParams[shardId]) {
-            auto it = params.find(paramName);
-            YQL_ENSURE(it != params.end());
             shardInfo.Params.emplace(
                 paramName,
-                NDq::TDqDataSerializer::SerializeParamValue(it->second.MkqlType, it->second.MkqlValue)
+                stageInfo.Meta.Tx.Params->SerializeParamValue(paramName)
             );
-            shardInfo.ParamTypes.emplace(paramName, it->second.MkqlType);
         }
 
         if (shardData.FullRange) {
@@ -896,10 +846,8 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableK
         effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue)
     {
         const auto& name = effect.GetRowsValue().GetParamValue().GetParamName();
-        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(name);
-        YQL_ENSURE(param);
-
-        auto shardsMap = PartitionParamByKey(*param, stageInfo.Meta.TableId, tableKeys, *stageInfo.Meta.ShardKey,
+        auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
+        auto shardsMap = PartitionParamByKey(value, type, stageInfo.Meta.TableId, tableKeys, *stageInfo.Meta.ShardKey,
              holderFactory, typeEnv);
 
         for (auto& [shardId, shardData] : shardsMap) {
@@ -907,8 +855,6 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableK
 
             auto ret = shardInfo.Params.emplace(name, std::move(shardData.ParamValues));
             YQL_ENSURE(ret.second);
-            auto retType = shardInfo.ParamTypes.emplace(name, std::move(shardData.ParamType));
-            YQL_ENSURE(retType.second);
 
             if (!shardInfo.KeyWriteRanges) {
                 shardInfo.KeyWriteRanges.ConstructInPlace();
@@ -984,12 +930,7 @@ void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValu
                 return;
             }
 
-            auto* itemsLimitParam = stageInfo.Meta.Tx.Params.Values.FindPtr(itemsLimitParamName);
-            YQL_ENSURE(itemsLimitParam);
-
-            auto [type, value] = NMiniKQL::ImportValueFromProto(
-                itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory);
-
+            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(itemsLimitParamName);
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
             itemsLimit = value.Get<ui64>();
 

@@ -108,14 +108,6 @@ void DeserializeBufferArrowV1(const NDqProto::TData& data, const TType* itemType
     }
 }
 
-NDqProto::TData SerializeParamV1(const TMkqlValueRef& param, const TTypeEnvironment& typeEnv,
-    const THolderFactory& holderFactory)
-{
-    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory);
-
-    return SerializeValuePickleV1(type, value);
-}
-
 void DeserializeParamV1(const NDqProto::TData& data, const TType* type, const THolderFactory& holderFactory,
     NUdf::TUnboxedValue& value)
 {
@@ -186,13 +178,6 @@ void TDqDataSerializer::Deserialize(const NDqProto::TData& data, const TType* it
         default:
             YQL_ENSURE(false, "Unsupported TransportVersion");
     }
-}
-
-
-NDqProto::TData TDqDataSerializer::SerializeParam(const TMkqlValueRef& param, const TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory)
-{
-    return SerializeParamV1(param, typeEnv, holderFactory);
 }
 
 void TDqDataSerializer::DeserializeParam(const NDqProto::TData& data, const TType* type,

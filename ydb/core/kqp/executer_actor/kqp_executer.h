@@ -2,6 +2,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
+#include <ydb/core/kqp/gateway/kqp_query_data.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
@@ -11,20 +12,53 @@
 namespace NKikimr {
 namespace NKqp {
 
+struct TKqpExecuterTxResult {
+    NKikimrMiniKQL::TType ItemType;
+    NKikimr::NMiniKQL::TType* MkqlItemType;
+    TVector<ui32> ColumnOrder;
+    std::optional<NKikimrMiniKQL::TType> ResultItemType;
+    NKikimr::NMiniKQL::TUnboxedValueVector Rows;
+    bool IsStream = true;
+};
+
 struct TEvKqpExecuter {
     struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
         TKqpExecuterEvents::EvTxRequest> {};
 
-    struct TEvTxResponse : public TEventPB<TEvTxResponse, NKikimrKqp::TEvExecuterTxResponse,
-        TKqpExecuterEvents::EvTxResponse>
-    {
+    struct TEvTxResponse : public TEventLocal<TEvTxResponse, TKqpExecuterEvents::EvTxResponse> {
+        NKikimrKqp::TEvExecuterTxResponse Record;
+        TTxAllocatorState::TPtr AllocState;
         NLongTxService::TLockHandle LockHandle;
+        TVector<NKikimrMiniKQL::TResult> MkqlResults_;
+        TVector<TKqpExecuterTxResult> TxResults;
 
         NLWTrace::TOrbit Orbit;
+        ui64 ResultRowsCount = 0;
+        ui64 ResultRowsBytes = 0;
 
-        bool IsSerializable() const override {
-            // We cannot serialize LockHandle, should always send locally
-            return false;
+        explicit TEvTxResponse(TTxAllocatorState::TPtr allocState)
+            : AllocState(std::move(allocState))
+        {}
+
+        ~TEvTxResponse();
+
+        TTypedUnboxedValueVector GetUnboxedValueResults();
+        TVector<NKikimrMiniKQL::TResult>& GetMkqlResults();
+        void InitTxResult(const NKqpProto::TKqpPhyTx& tx);
+        TTypedUnboxedValueVector Finalize();
+        void TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector& rows);
+        void TakeResult(ui32 idx, const NYql::NDqProto::TData& rows);
+
+        ui64 GetResultRowsCount() const {
+            return ResultRowsCount;
+        }
+
+        ui64 GetByteSize() {
+            return Record.MutableResponse()->ByteSizeLong() + ResultRowsBytes;
+        }
+
+        size_t ResultsSize() const {
+            return TxResults.size();
         }
     };
 

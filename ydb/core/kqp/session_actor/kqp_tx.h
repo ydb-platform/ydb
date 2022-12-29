@@ -67,11 +67,9 @@ struct TKqpTxLocks {
     }
 };
 
-using TParamValueMap = THashMap<TString, NKikimrMiniKQL::TParams>;
-
 struct TDeferredEffect {
     std::shared_ptr<const NKqpProto::TKqpPhyTx> PhysicalTx;
-    TParamValueMap Params;
+    TQueryData::TPtr Params;
 
     explicit TDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx)
         : PhysicalTx(std::move(physicalTx)) {}
@@ -100,7 +98,7 @@ public:
 
 private:
     [[nodiscard]]
-    bool Add(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TParamValueMap&& params) {
+    bool Add(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TQueryData::TPtr params) {
         DeferredEffects.emplace_back(std::move(physicalTx));
         DeferredEffects.back().Params = std::move(params);
         return true;
@@ -116,13 +114,15 @@ private:
     friend class TKqpTransactionContext;
 };
 
-class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase, public NYql::TTimeAndRandomProvider {
+class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
-    explicit TKqpTransactionContext(bool implicit)
+    explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
         : Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
     {
         CreationTime = TInstant::Now();
+        TxAlloc = std::make_shared<TTxAllocatorState>(funcRegistry, timeProvider, randomProvider);
         Touch();
     }
 
@@ -135,7 +135,7 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> physicalTx, TParamValueMap&& params) {
+    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> physicalTx, TQueryData::TPtr params) {
         return DeferredEffects.Add(std::move(physicalTx), std::move(params));
     }
 
@@ -175,7 +175,6 @@ public:
 
     void Reset() {
         TKikimrTransactionContextBase::Reset();
-        TTimeAndRandomProvider::Reset();
 
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
@@ -218,7 +217,6 @@ public:
 
 public:
     struct TParamsState : public TThrRefBase {
-        TParamValueMap Values;
         ui32 LastIndex = 0;
     };
 
@@ -238,6 +236,7 @@ public:
     bool HasImmediateEffects = false;
     NTopic::TTopicOperations TopicOperations;
     TIntrusivePtr<TParamsState> ParamsState;
+    TTxAllocatorState::TPtr TxAlloc;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
 };

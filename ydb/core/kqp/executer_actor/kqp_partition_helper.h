@@ -18,7 +18,6 @@ struct TShardInfo {
     };
 
     TMap<TString, NYql::NDqProto::TData> Params;
-    TMap<TString, NKikimr::NMiniKQL::TType*> ParamTypes;
 
     TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
     TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
@@ -43,11 +42,11 @@ TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnT
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+    const NMiniKQL::TTypeEnvironment& typeEnv);
 
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadRanges& readRange, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+    const NMiniKQL::TTypeEnvironment& typeEnv);
 
 THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,

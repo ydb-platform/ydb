@@ -355,11 +355,11 @@ message TEvExecuterTxRequest {
 };
 
 message TExecuterTxResult {
-    repeated NKikimrMiniKQL.TResult Results = 3;
+    reserved 3;
     optional NKikimrMiniKQL.TResult Locks = 4;
     reserved 5; // (deprecated) Stats
     optional NYql.NDqProto.TDqExecutionStats Stats = 6;
-    repeated Ydb.ResultSet YdbResults = 7;
+    reserved 7;
 };
 
 message TExecuterTxResponse {

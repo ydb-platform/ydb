@@ -20,9 +20,9 @@ namespace NKqp {
 
 struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
-    TKqpParamsMap Params;
+    TQueryData::TPtr Params;
 
-    inline TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TKqpParamsMap&& params)
+    inline TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TQueryData::TPtr params)
         : Node(node)
         , Params(std::move(params)) {}
 };
@@ -103,7 +103,6 @@ struct TTaskMeta {
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
 
     TMap<TString, NYql::NDqProto::TData> Params;
-    TMap<TString, NKikimr::NMiniKQL::TType*> ParamTypes;
 
     struct TColumn {
         ui32 Id = 0;

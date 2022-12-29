@@ -21,6 +21,7 @@ public:
         , TransformCtx(transformCtx)
         , CurrentTxIndex(0)
     {
+        TxAlloc = TransformCtx->QueryCtx->QueryData->GetAllocState();
     }
 
     TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override {
@@ -44,14 +45,14 @@ public:
         TxResults.resize(query.TransactionsSize());
         while (CurrentTxIndex < query.TransactionsSize()) {
             auto tx = std::make_shared<NKqpProto::TKqpPhyTx>(query.GetTransactions(CurrentTxIndex));
-            auto params = PrepareParameters(*tx);
+            bool prepared = PrepareParameters(*tx);
 
-            if (pure(*tx) && params) {
-                IKqpGateway::TExecPhysicalRequest request;
-                request.Transactions.emplace_back(std::move(tx), std::move(*params));
+            if (pure(*tx) && prepared) {
+                IKqpGateway::TExecPhysicalRequest request(TxAlloc);
+                request.Transactions.emplace_back(std::move(tx), TransformCtx->QueryCtx->QueryData);
                 request.NeedTxId = false;
 
-                ExecuteFuture = Gateway->ExecutePure(std::move(request));
+                ExecuteFuture = Gateway->ExecutePure(std::move(request), TransformCtx->QueryCtx->QueryData);
 
                 Promise = NewPromise();
                 ExecuteFuture.Apply([promise = Promise](const TFuture<IKqpGateway::TExecPhysicalResult> future) mutable {
@@ -87,7 +88,7 @@ public:
             return TStatus::Error;
         }
 
-        auto& txResults = result.ExecuterResult.GetResults();
+        auto& txResults = result.Results;
         TxResults[CurrentTxIndex] = {txResults.begin(), txResults.end()};
 
         ++CurrentTxIndex;
@@ -100,19 +101,16 @@ public:
     }
 
 private:
-    TMaybe<TKqpParamsMap> PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
-        TKqpParamsMap params;
+    bool PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
         for (const auto& paramBinding : tx.GetParamBindings()) {
-            if (auto paramValue = GetParamValue(/*ensure*/ false, *TransformCtx->QueryCtx,
-                    TransformCtx->QueryCtx->Parameters, TxResults, paramBinding))
-            {
-                params.Values.emplace(std::make_pair(paramBinding.GetName(), *paramValue));
-            } else {
-                return {};
+            bool res = TransformCtx->QueryCtx->QueryData->MaterializeParamValue(/*ensure*/ false,
+                paramBinding);
+            if (!res) {
+                return false;
             }
         }
 
-        return TMaybe<TKqpParamsMap>(params);
+        return true;
     }
 
     TIntrusivePtr<IKqpGateway> Gateway;
@@ -122,12 +120,17 @@ private:
     ui32 CurrentTxIndex;
     NThreading::TFuture<IKqpGateway::TExecPhysicalResult> ExecuteFuture;
     NThreading::TPromise<void> Promise;
+    TTxAllocatorState::TPtr TxAlloc;
 };
 
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx)
+    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
+    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
 {
+    Y_UNUSED(randomProvider);
+    Y_UNUSED(timeProvider);
+    Y_UNUSED(funcRegistry);
     return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx);
 }
 

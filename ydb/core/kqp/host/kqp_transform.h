@@ -68,8 +68,5 @@ private:
     NYql::NLog::ELevel Level;
 };
 
-TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TTimeAndRandomProvider& randomCtx, NYql::TKikimrParamsMap& parameters,
-    const TVector<TVector<NKikimrMiniKQL::TResult>>& txResults, const NKqpProto::TKqpPhyParamBinding& paramBinding);
-
 } // namespace NKqp
 } // namespace NKikimr

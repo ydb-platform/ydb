@@ -120,7 +120,7 @@ private:
         }
 
         // Forward only for stream results, data results acks event theirselves.
-        YQL_ENSURE(!Results.empty() && Results[0].IsStream);
+        YQL_ENSURE(!ResponseEv->TxResults.empty() && ResponseEv->TxResults[0].IsStream);
 
         auto channelIt = ResultChannelProxies.begin();
         auto handle = ev->Forward(channelIt->second->SelfId());
@@ -224,9 +224,7 @@ private:
         }
     }
 
-    void BuildScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
+    void BuildScanTasks(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -239,9 +237,9 @@ private:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
+            auto partitions = PrunePartitions(TableKeys, op, stageInfo, HolderFactory(), TypeEnv());
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
-            auto readSettings = ExtractReadSettings(op, stageInfo, holderFactory, typeEnv);
+            auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
             if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
@@ -258,10 +256,6 @@ private:
                 for (auto& [name, value] : shardInfo.Params) {
                     auto ret = task.Meta.Params.emplace(name, std::move(value));
                     YQL_ENSURE(ret.second);
-                    auto typeIterator = shardInfo.ParamTypes.find(name);
-                    YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
-                    auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
-                    YQL_ENSURE(retType.second);
                 }
 
                 TTaskMeta::TShardReadInfo readInfo = {
@@ -272,7 +266,6 @@ private:
 
                 if (readSettings.ItemsLimitParamName && !task.Meta.Params.contains(readSettings.ItemsLimitParamName)) {
                     task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
-                    task.Meta.ParamTypes.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitType);
                 }
 
                 if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
@@ -413,13 +406,6 @@ private:
 
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
-        auto& funcRegistry = *AppData()->FunctionRegistry;
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
-        NMiniKQL::TTypeEnvironment typeEnv(alloc);
-        NMiniKQL::TMemoryUsageInfo memInfo("KqpScanExecuter");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, &funcRegistry);
-        auto unguard = Unguard(alloc);
-
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::ScanExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
 
         auto& tx = Request.Transactions[0];
@@ -434,7 +420,7 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo, holderFactory, typeEnv);
+                        BuildScanTasksFromSource(stageInfo);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
@@ -442,9 +428,9 @@ private:
             } else if (stageInfo.Meta.ShardOperations.empty()) {
                 BuildComputeTasks(stageInfo);
             } else if (stageInfo.Meta.IsSysView()) {
-                BuildSysViewScanTasks(stageInfo, holderFactory, typeEnv);
+                BuildSysViewScanTasks(stageInfo);
             } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
-                BuildScanTasks(stageInfo, holderFactory, typeEnv);
+                BuildScanTasks(stageInfo);
             } else {
                 YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
             }
@@ -452,7 +438,7 @@ private:
             BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
-        BuildKqpExecuterResults(*tx.Body, Results);
+        ResponseEv->InitTxResult(*tx.Body);
         BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, 0);
 
         TIssue validateIssue;
@@ -487,7 +473,7 @@ private:
             taskDesc.MutableProgram()->CopyFrom(stage.GetProgram());
             taskDesc.SetStageId(task.StageId.StageId);
 
-            PrepareKqpTaskParameters(stage, stageInfo, task, taskDesc, typeEnv, holderFactory);
+            PrepareKqpTaskParameters(stage, stageInfo, task, taskDesc, TypeEnv(), HolderFactory());
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
@@ -558,9 +544,7 @@ private:
                         auto* olapProgram = protoTaskMeta.MutableOlapProgram();
                         olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
 
-                        auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stage, stageInfo, task,
-                            holderFactory, typeEnv);
-
+                        auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stage, stageInfo, task);
                         olapProgram->SetParametersSchema(schema);
                         olapProgram->SetParameters(parameters);
                     } else {
@@ -653,21 +637,6 @@ public:
 
         response.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        TKqpProtoBuilder protoBuilder(*AppData()->FunctionRegistry);
-
-        for (auto& result : Results) {
-            auto* protoResult = response.MutableResult()->AddResults();
-
-            if (result.IsStream) {
-                // There is no support for multiple streaming results currently
-                YQL_ENSURE(Results.size() == 1);
-                protoBuilder.BuildStream(result.Data, result.ItemType, result.ResultItemType.Get(), protoResult);
-                continue;
-            }
-
-            protoBuilder.BuildValue(result.Data, result.ItemType, protoResult);
-        }
-
         if (Stats) {
             ReportEventElapsedTime();
 
@@ -681,7 +650,7 @@ public:
             }
         }
 
-        LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, Results.size());
+        LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 
         if (ExecuterSpan) {
             ExecuterSpan.EndOk();
@@ -759,15 +728,18 @@ public:
     IActor* GetOrCreateChannelProxy(const TChannel& channel) {
         IActor* proxy;
 
-        if (Results[0].IsStream) {
+        if (ResponseEv->TxResults[0].IsStream) {
             if (!ResultChannelProxies.empty()) {
                 return ResultChannelProxies.begin()->second;
             }
 
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, Results[0].ItemType,
-                Results[0].ResultItemType.Get(), Target, Stats.get(), SelfId());
+            auto resultType = ResponseEv->TxResults[0].ResultItemType ?
+                &ResponseEv->TxResults[0].ResultItemType.value() : nullptr;
+
+            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].ItemType,
+                resultType, Target, Stats.get(), SelfId());
         } else {
-            YQL_ENSURE(channel.DstInputIndex < Results.size());
+            YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
 
             auto channelIt = ResultChannelProxies.find(channel.Id);
 
@@ -775,8 +747,7 @@ public:
                 return channelIt->second;
             }
 
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), SelfId(),
-                &Results[channel.DstInputIndex].Data);
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), SelfId(), channel.DstInputIndex, ResponseEv.get());
         }
 
         RegisterWithSameMailbox(proxy);
@@ -805,7 +776,6 @@ public:
     }
 
 private:
-    TVector<TKqpExecuterTxResult> Results;
     std::unordered_map<ui64, IActor*> ResultChannelProxies;
 };
 

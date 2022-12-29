@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_query_data.h"
+
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 
@@ -52,23 +54,13 @@ struct TModuleResolverState : public TThrRefBase {
 
 void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
 
-struct TKqpParamsMap {
-    TKqpParamsMap() {}
-
-    TKqpParamsMap(std::shared_ptr<void> owner)
-        : Owner(owner) {}
-
-    std::shared_ptr<void> Owner;
-    TMap<TString, NYql::NDq::TMkqlValueRef> Values;
-};
-
 class IKqpGateway : public NYql::IKikimrGateway {
 public:
     struct TPhysicalTxData : private TMoveOnly {
         std::shared_ptr<const NKqpProto::TKqpPhyTx> Body;
-        TKqpParamsMap Params;
+        NKikimr::NKqp::TQueryData::TPtr Params;
 
-        TPhysicalTxData(std::shared_ptr<const NKqpProto::TKqpPhyTx> body, TKqpParamsMap&& params)
+        TPhysicalTxData(std::shared_ptr<const NKqpProto::TKqpPhyTx> body, TQueryData::TPtr params)
             : Body(std::move(body))
             , Params(std::move(params)) {}
     };
@@ -110,8 +102,14 @@ public:
     };
 
     struct TExecPhysicalRequest : private TMoveOnly {
+
+        TExecPhysicalRequest(NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc)
+            : TxAlloc(txAlloc)
+        {}
+
         TVector<TPhysicalTxData> Transactions;
         TVector<NYql::NDq::TMkqlValueRef> Locks;
+        NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
         bool ValidateLocks = false;
         bool EraseLocks = false;
         TMaybe<ui64> AcquireLocksTxId;
@@ -139,6 +137,7 @@ public:
     struct TExecPhysicalResult : public TGenericResult {
         NKikimrKqp::TExecuterTxResult ExecuterResult;
         NLongTxService::TLockHandle LockHandle;
+        TVector<NKikimrMiniKQL::TResult> Results;
     };
 
     struct TAstQuerySettings {
@@ -147,26 +146,26 @@ public:
 
 public:
     /* Compute */
-    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request) = 0;
+    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, TQueryData::TPtr params) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;
 
     virtual NThreading::TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings,
+        TQueryData::TPtr params, const TAstQuerySettings& settings,
         const Ydb::Table::TransactionSettings& txSettings) = 0;
 
     virtual NThreading::TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) = 0;
 
     virtual NThreading::TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings, ui64 rowsLimit) = 0;
+         TQueryData::TPtr params, const TAstQuerySettings& settings, ui64 rowsLimit) = 0;
 
     virtual NThreading::TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings,
+         TQueryData::TPtr, const TAstQuerySettings& settings,
         const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
 
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
+         TQueryData::TPtr, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
 };
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,

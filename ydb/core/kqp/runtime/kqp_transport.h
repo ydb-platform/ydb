@@ -19,21 +19,6 @@ public:
 
     ~TKqpProtoBuilder();
 
-    static NKikimrMiniKQL::TType ApplyColumnHints(const NKikimrMiniKQL::TType& srcRowType,
-        const TVector<TString>& columnHints);
-
-    void BuildValue(const TVector<NYql::NDqProto::TData>& data, const NKikimrMiniKQL::TType& type,
-        NKikimrMiniKQL::TResult* result);
-
-    void BuildValue(NMiniKQL::TUnboxedValueVector& rows, const NKikimrMiniKQL::TType& type,
-        NKikimrMiniKQL::TResult* result);
-
-    void BuildStream(const TVector<NYql::NDqProto::TData>& data, const NKikimrMiniKQL::TType& srcRowType,
-        const NKikimrMiniKQL::TType* dstRowType, NKikimrMiniKQL::TResult* result);
-
-    void BuildStream(NMiniKQL::TUnboxedValueVector& rows, const NKikimrMiniKQL::TType& srcRowType,
-        const NKikimrMiniKQL::TType* dstRowType, NKikimrMiniKQL::TResult* result);
-
     Ydb::ResultSet BuildYdbResultSet(const TVector<NYql::NDqProto::TData>& data,
         const NKikimrMiniKQL::TType& srcRowType, const NKikimrMiniKQL::TType* dstRowType = nullptr);
 

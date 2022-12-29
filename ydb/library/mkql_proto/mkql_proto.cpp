@@ -8,7 +8,11 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
-
+#include <ydb/library/yql/minikql/dom/json.h>
+#include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/binary_json/write.h>
+#include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/yql/minikql/dom/yson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr::NMiniKQL {
@@ -922,10 +926,15 @@ public:
     TProtoImporter(const TTypeEnvironment& env);
     ~TProtoImporter();
     TType* ImportTypeFromProto(const NKikimrMiniKQL::TType& type);
+    TType* ImportTypeFromProto(const Ydb::Type& type);
     TNode* ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TValue& value);
+    NUdf::TUnboxedValue ImportValueFromProto(const TType* type, const Ydb::Value& value,
+        const THolderFactory& factory);
     NUdf::TUnboxedValue ImportValueFromProto(const TType* type, const NKikimrMiniKQL::TValue& value,
         const THolderFactory& factory);
 private:
+    TTupleType* ImportTupleTypeFromProto(const Ydb::TupleType& protoTupleType);
+    TStructType* ImportStructTypeFromProto(const Ydb::StructType& protoStructType);
     TTupleType* ImportTupleTypeFromProto(const NKikimrMiniKQL::TTupleType& protoTupleType);
     TStructType* ImportStructTypeFromProto(const NKikimrMiniKQL::TStructType& protoStructType);
     const TTypeEnvironment& env;
@@ -1266,6 +1275,360 @@ void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, NKikim
     ExportValueToProtoImpl(type, value, res, columnOrder);
 }
 
+TTupleType* TProtoImporter::ImportTupleTypeFromProto(const Ydb::TupleType& input) {
+    const ui32 elementsCount = input.elementsSize();
+    TSmallVec<TType*> elementTypes;
+    for(ui32 idx = 0; idx < elementsCount; ++idx) {
+        elementTypes.emplace_back(ImportTypeFromProto(input.elements(idx)));
+    }
+    return TTupleType::Create(elementsCount, elementTypes.data(), env);
+}
+
+TStructType* TProtoImporter::ImportStructTypeFromProto(const Ydb::StructType& protoStructType) {
+    ui32 membersCount = static_cast<ui32>(protoStructType.membersSize());
+    TStackVec<std::pair<TString, TType*>, 16> members;
+    TRemapArray remap = TRemapArray::Create(membersCount, env);
+    members.reserve(membersCount);
+    for (ui32 memberNum = 0; memberNum < membersCount; ++memberNum) {
+        const Ydb::StructMember& protoMember = protoStructType.members(memberNum);
+        TType* child = ImportTypeFromProto(protoMember.type());
+        members.emplace_back(protoMember.name(), child);
+        remap.emplace_back(memberNum);
+    }
+    Sort(remap, [&members](ui32 a, ui32 b) -> bool { return members[a].first < members[b].first; });
+    TStackVec<std::pair<TString, TType*>, 16> sortedMembers(membersCount);
+    bool resorted = false;
+    for (ui32 pos = 0; pos < membersCount; ++pos) {
+        sortedMembers[pos] = members[remap[pos]];
+        if (remap[pos] != pos)
+            resorted = true;
+    }
+    TStructType* structType = TStructType::Create(sortedMembers.data(), sortedMembers.size(), env);
+    if (resorted) {
+        structType->SetCookie(remap.ToCookie());
+        SortedStructs.emplace_back(structType);
+    }
+    return structType;
+}
+
+TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
+    switch (input.type_case()) {
+        case Ydb::Type::kVoidType:
+            return env.GetTypeOfVoid();
+        case Ydb::Type::kNullType:
+            return env.GetTypeOfNull();
+        case Ydb::Type::kEmptyListType:
+            return env.GetTypeOfEmptyList();
+        case Ydb::Type::kEmptyDictType:
+            return env.GetTypeOfEmptyDict();
+        case Ydb::Type::kPgType:
+            return TPgType::Create(input.pg_type().oid(), env);
+        case Ydb::Type::kTypeId: {
+            MKQL_ENSURE(NUdf::FindDataSlot(input.type_id()), TStringBuilder() << "unknown type id: " << ui32(input.type_id()));
+            return TDataType::Create(input.type_id(), env);
+        }
+        case Ydb::Type::kDecimalType: {
+            return TDataDecimalType::Create(input.decimal_type().precision(), input.decimal_type().scale(), env);
+        }
+        case Ydb::Type::kOptionalType: {
+            TType* underlying = ImportTypeFromProto(input.optional_type().item());
+            return TOptionalType::Create(underlying, env);
+        }
+        case Ydb::Type::kListType: {
+            TType* itemType = ImportTypeFromProto(input.list_type().item());
+            return TListType::Create(itemType, env);
+        }
+        case Ydb::Type::kTupleType: {
+            return ImportTupleTypeFromProto(input.tuple_type());
+        }
+        case Ydb::Type::kStructType: {
+            return ImportStructTypeFromProto(input.struct_type());
+        }
+        case Ydb::Type::kDictType: {
+            TType* keyType = ImportTypeFromProto(input.dict_type().key());
+            TType* payloadType = ImportTypeFromProto(input.dict_type().payload());
+            return TDictType::Create(keyType, payloadType, env);
+        }
+        case Ydb::Type::kVariantType: {
+            const Ydb::VariantType& protoVariantType = input.variant_type();
+            switch (protoVariantType.type_case()) {
+                case Ydb::VariantType::kTupleItems: {
+                    return TVariantType::Create(ImportTupleTypeFromProto(protoVariantType.tuple_items()), env);
+                }
+                case Ydb::VariantType::kStructItems: {
+                    return TVariantType::Create(ImportStructTypeFromProto(protoVariantType.struct_items()), env);
+                }
+                default:
+                    ythrow yexception() << "Unknown variant type representation: "
+                                        << protoVariantType.DebugString();
+            }
+            break;
+        }
+        default: {
+            ythrow yexception() << "Unknown protobuf type: "
+                                << input.DebugString();
+        }
+    }
+}
+
+Y_FORCE_INLINE void CheckTypeId(i32 id, i32 expected, std::string_view typeName) {
+    if (id != expected) {
+        throw yexception() << "Invalid value representation for type: " << typeName;
+    }
+}
+
+Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::Value& value) {
+    const TDataType* dataType = static_cast<const TDataType*>(type);
+    switch (dataType->GetSchemeType()) {
+        case NUdf::TDataType<bool>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kBoolValue, "Bool");
+            return NUdf::TUnboxedValuePod(value.bool_value());
+        }
+        case NUdf::TDataType<ui8>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint8");
+            return NUdf::TUnboxedValuePod(ui8(value.uint32_value()));
+        }
+        case NUdf::TDataType<i8>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int8");
+            return NUdf::TUnboxedValuePod(i8(value.int32_value()));
+        }
+        case NUdf::TDataType<ui16>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint16");
+            return NUdf::TUnboxedValuePod(ui16(value.uint32_value()));
+        }
+        case NUdf::TDataType<i16>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int16");
+            return NUdf::TUnboxedValuePod(i16(value.int32_value()));
+        }
+        case NUdf::TDataType<i32>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int32");
+            return NUdf::TUnboxedValuePod(value.int32_value());
+        }
+        case NUdf::TDataType<ui32>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint32");
+            return NUdf::TUnboxedValuePod(value.uint32_value());
+        }
+        case NUdf::TDataType<i64>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Int64");
+            return NUdf::TUnboxedValuePod(value.int64_value());
+        }
+        case NUdf::TDataType<ui64>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint64Value, "Uint64");
+            return NUdf::TUnboxedValuePod(value.uint64_value());
+        }
+        case NUdf::TDataType<float>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kFloatValue, "Float");
+            return NUdf::TUnboxedValuePod(value.float_value());
+        }
+        case NUdf::TDataType<double>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kDoubleValue, "Double");
+            return NUdf::TUnboxedValuePod(value.double_value());
+        }
+        case NUdf::TDataType<NUdf::TTzDate>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDate");
+            return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
+        }
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDatetime");
+            return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
+        }
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzTimestamp");
+            return NUdf::TUnboxedValuePod(ValueFromString(NUdf::GetDataSlot(dataType->GetSchemeType()), value.text_value()));
+        }
+        case NUdf::TDataType<NUdf::TJson>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Json");
+            const auto& stringRef = value.text_value();
+            if (!NYql::NDom::IsValidJson(stringRef)) {
+                throw yexception() << "Invalid Json value";
+            }
+            return MakeString(value.text_value());
+        }
+        case NUdf::TDataType<NUdf::TUtf8>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Utf8");
+            const auto& stringRef = value.text_value();
+            if (!NYql::IsUtf8(stringRef)) {
+                throw yexception() << "Invalid Utf8 value";
+            }
+            return MakeString(value.text_value());
+        }
+        case NUdf::TDataType<NUdf::TDate>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date");
+            if (value.uint32_value() >= NUdf::MAX_DATE) {
+                throw yexception() << "Invalid Date value";
+            }
+            return NUdf::TUnboxedValuePod(ui16(value.uint32_value()));
+        }
+        case NUdf::TDataType<NUdf::TDatetime>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Datetime");
+            if (value.uint32_value() >= NUdf::MAX_DATETIME) {
+                throw yexception() << "Invalid Datetime value";
+            }
+            return NUdf::TUnboxedValuePod(value.uint32_value());
+        }
+        case NUdf::TDataType<NUdf::TTimestamp>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kUint64Value, "Timestamp");
+            if (value.uint64_value() >= NUdf::MAX_TIMESTAMP) {
+                throw yexception() << "Invalid Timestamp value";
+            }
+            return NUdf::TUnboxedValuePod(value.uint64_value());
+        }
+        case NUdf::TDataType<NUdf::TInterval>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
+            if ((ui64)std::abs(value.int64_value()) >= NUdf::MAX_TIMESTAMP) {
+                throw yexception() << "Invalid Interval value";
+            }
+            return NUdf::TUnboxedValuePod(value.int64_value());
+        }
+        case NUdf::TDataType<NUdf::TUuid>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kLow128, "Uuid");
+            union {
+                ui64 half[2];
+                char bytes[16];
+            } buf;
+            buf.half[0] = value.low_128();
+            buf.half[1] = value.high_128();
+            return MakeString(NUdf::TStringRef(buf.bytes, 16));
+        }
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
+            if (!binaryJson.Defined()) {
+                throw yexception() << "Invalid JsonDocument value";
+            }
+            return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+        }
+        case NUdf::TDataType<NUdf::TDyNumber>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "DyNumber");
+            const auto dyNumber = NDyNumber::ParseDyNumberString(value.text_value());
+            if (!dyNumber.Defined()) {
+                throw yexception() << "Invalid DyNumber value";
+            }
+            return MakeString(*dyNumber);
+        }
+        case NUdf::TDataType<char*>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "String");
+            return MakeString(value.bytes_value());
+        }
+        case NUdf::TDataType<NUdf::TYson>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "Yson");
+            const auto& stringRef = value.bytes_value();
+            if (!NYql::NDom::IsValidYson(stringRef)) {
+                throw yexception() << "Invalid Yson value";
+            }
+            return MakeString(value.bytes_value());
+        }
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            return NUdf::TUnboxedValuePod(NYql::NDecimal::FromHalfs(value.low_128(), value.high_128()));
+        }
+        default: {
+            throw yexception() << "Unsupported data type: " << dataType->GetSchemeType();
+        }
+    }
+}
+
+NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, const Ydb::Value& value, const THolderFactory& factory) {
+    switch (type->GetKind()) {
+    case TType::EKind::Void:
+        return NUdf::TUnboxedValuePod::Void();
+
+    case TType::EKind::Null:
+    case TType::EKind::EmptyList:
+    case TType::EKind::EmptyDict:
+        return NUdf::TUnboxedValue();
+
+    case TType::EKind::Data:
+        return KindDataImport(type, value);
+
+    case TType::EKind::Optional: {
+        const TOptionalType* optionalType = static_cast<const TOptionalType*>(type);
+        switch (value.value_case()) {
+            case Ydb::Value::kNestedValue:
+                return ImportValueFromProto(optionalType->GetItemType(), value.nested_value(), factory).MakeOptional();
+            case Ydb::Value::kNullFlagValue:
+                return NUdf::TUnboxedValue();
+            default:
+                return ImportValueFromProto(optionalType->GetItemType(), value, factory).MakeOptional();
+        }
+    }
+
+    case TType::EKind::List: {
+        const TListType* listType = static_cast<const TListType*>(type);
+        auto itemType = listType->GetItemType();
+        const auto& list = value.items();
+        NUdf::TUnboxedValue *items = nullptr;
+        auto array = factory.CreateDirectArrayHolder(list.size(), items);
+        for (const auto& x : list) {
+            *items++ = ImportValueFromProto(itemType, x, factory);
+        }
+
+        return std::move(array);
+    }
+
+    case TType::EKind::Struct: {
+        const TStructType* structType = static_cast<const TStructType*>(type);
+        NUdf::TUnboxedValue* itemsPtr = nullptr;
+        auto res = factory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
+        TRemapArray remap = TRemapArray::FromCookie(structType->GetCookie());
+        for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+            ui32 remapped = remap.empty() ? index : remap[index];
+            auto memberType = structType->GetMemberType(index);
+            itemsPtr[index] = ImportValueFromProto(memberType, value.items(remapped), factory);
+        }
+
+        return std::move(res);
+    }
+
+    case TType::EKind::Tuple: {
+        const TTupleType* tupleType = static_cast<const TTupleType*>(type);
+        NUdf::TUnboxedValue* itemsPtr = nullptr;
+        auto res = factory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
+        for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
+            auto elementType = tupleType->GetElementType(index);
+            itemsPtr[index] = ImportValueFromProto(elementType, value.items(index), factory);
+        }
+
+        return std::move(res);
+    }
+
+    case TType::EKind::Dict: {
+        const TDictType* dictType = static_cast<const TDictType*>(type);
+        auto keyType = dictType->GetKeyType();
+        auto payloadType = dictType->GetPayloadType();
+        auto dictBuilder = factory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
+
+        for (const auto& x : value.pairs()) {
+            dictBuilder->Add(
+                ImportValueFromProto(keyType, x.key(), factory),
+                ImportValueFromProto(payloadType, x.payload(), factory)
+            );
+        }
+
+        return std::move(dictBuilder->Build());
+    }
+
+    case TType::EKind::Variant: {
+        const TVariantType* variantType = static_cast<const TVariantType*>(type);
+        auto index = value.variant_index();
+        auto unboxedValue = ImportValueFromProto(variantType->GetAlternativeType(index), value, factory);
+        auto res = factory.CreateVariantHolder(std::move(unboxedValue.Release()), index);
+        return std::move(res);
+    }
+
+    case TType::EKind::Tagged: {
+        const TTaggedType* taggedType = static_cast<const TTaggedType*>(type);
+        auto unboxedValue = ImportValueFromProto(taggedType->GetBaseType(), value, factory);
+        return std::move(unboxedValue);
+    }
+
+    case TType::EKind::Pg:
+        // TODO: support pg types
+        MKQL_ENSURE(false, "pg types are not supported");
+
+    default:
+        MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
+    }
+}
 
 NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, const NKikimrMiniKQL::TValue& value, const THolderFactory& factory) {
     switch (type->GetKind()) {
@@ -1359,6 +1722,15 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
 
 std::pair<TType*, NUdf::TUnboxedValue> ImportValueFromProto(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, const TTypeEnvironment& env, const THolderFactory& factory)
+{
+    TProtoImporter importer(env);
+    TType* nodeType = importer.ImportTypeFromProto(type);
+    auto unboxedValue = importer.ImportValueFromProto(nodeType, value, factory);
+    return {nodeType, unboxedValue};
+}
+
+std::pair<TType*, NUdf::TUnboxedValue> ImportValueFromProto(const Ydb::Type& type,
+    const Ydb::Value& value, const TTypeEnvironment& env, const THolderFactory& factory)
 {
     TProtoImporter importer(env);
     TType* nodeType = importer.ImportTypeFromProto(type);

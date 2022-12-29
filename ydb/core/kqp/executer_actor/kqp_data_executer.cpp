@@ -201,16 +201,6 @@ public:
         response.SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
-        TKqpProtoBuilder protoBuilder(*AppData()->FunctionRegistry);
-        for (auto& result : Results) {
-            auto* protoResult = response.MutableResult()->AddResults();
-            if (result.IsStream) {
-                protoBuilder.BuildStream(result.Data, result.ItemType, result.ResultItemType.Get(), protoResult);
-            } else {
-                protoBuilder.BuildValue(result.Data, result.ItemType, protoResult);
-            }
-        }
-
         if (!Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
@@ -222,7 +212,6 @@ public:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
-            Stats->ResultRows = response.GetResult().ResultsSize();
             Stats->Finish();
 
             if (CollectFullStats(Request.StatsMode)) {
@@ -236,7 +225,7 @@ public:
             Stats.reset();
         }
 
-        auto resultSize = response.ByteSize();
+        auto resultSize = ResponseEv->GetByteSize();
         if (resultSize > (int)ReplySizeLimit) {
             TString message = TStringBuilder() << "Query result size limit exceeded. ("
                 << resultSize << " > " << ReplySizeLimit << ")";
@@ -246,7 +235,7 @@ public:
             return;
         }
 
-        LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, response.GetResult().ResultsSize(), response.ByteSize());
+        LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, ResponseEv->ResultsSize(), ResponseEv->GetByteSize());
 
         if (ExecuterStateSpan) {
             ExecuterStateSpan.End();
@@ -257,7 +246,8 @@ public:
             ExecuterSpan.EndOk();
         }
 
-        LOG_D("Sending response to: " << Target << ", results: " << Results.size());
+        Request.Transactions.crop(0);
+        LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
         Send(Target, ResponseEv.release());
         PassAway();
     }
@@ -1062,11 +1052,7 @@ private:
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
             << ", finished: " << channelData.GetFinished());
 
-        YQL_ENSURE(channel.DstInputIndex < Results.size());
-        if (channelData.GetData().GetRows()) {
-            Results[channel.DstInputIndex].Data.emplace_back(std::move(*record.MutableChannelData()->MutableData()));
-        }
-
+        ResponseEv->TakeResult(channel.DstInputIndex, std::move(*record.MutableChannelData()->MutableData()));
         {
             LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
 
@@ -1091,9 +1077,7 @@ private:
         taskMeta.ReadInfo.Reverse = reverse;
     };
 
-    void BuildDatashardTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
+    void BuildDatashardTasks(TStageInfo& stageInfo) {
         THashMap<ui64, ui64> shardTasks; // shardId -> taskId
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
@@ -1121,8 +1105,8 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
 
-                    THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
-                    auto readSettings = ExtractReadSettings(op, stageInfo, holderFactory, typeEnv);
+                    auto partitions = PrunePartitions(TableKeys, op, stageInfo, HolderFactory(), TypeEnv());
+                    auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
                     for (auto& [shardId, shardInfo] : partitions) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -1130,10 +1114,6 @@ private:
                         auto& task = getShardTask(shardId);
                         for (auto& [name, value] : shardInfo.Params) {
                             task.Meta.Params.emplace(name, std::move(value));
-                            auto typeIterator = shardInfo.ParamTypes.find(name);
-                            YQL_ENSURE(typeIterator != shardInfo.ParamTypes.end());
-                            auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
-                            YQL_ENSURE(retType.second);
                         }
 
                         FillGeneralReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse);
@@ -1144,7 +1124,6 @@ private:
 
                         if (readSettings.ItemsLimitParamName) {
                             task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
-                            task.Meta.ParamTypes.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitType);
                         }
 
                         if (!task.Meta.Reads) {
@@ -1188,7 +1167,7 @@ private:
                             ShardsWithEffects.insert(task.Meta.ShardId);
                         }
                     } else {
-                        auto result = PruneEffectPartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
+                        auto result = PruneEffectPartitions(TableKeys, op, stageInfo, HolderFactory(), TypeEnv());
                         for (auto& [shardId, shardInfo] : result) {
                             YQL_ENSURE(!shardInfo.KeyReadRanges);
                             YQL_ENSURE(shardInfo.KeyWriteRanges);
@@ -1415,14 +1394,6 @@ private:
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
 
         ReadOnlyTx = !Request.TopicOperations.HasOperations();
-
-        auto& funcRegistry = *AppData()->FunctionRegistry;
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
-        NMiniKQL::TTypeEnvironment typeEnv(alloc);
-        NMiniKQL::TMemoryUsageInfo memInfo("KqpDataExecuter");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, &funcRegistry);
-        auto unguard = Unguard(alloc);
-
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
 
@@ -1456,7 +1427,7 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            BuildScanTasksFromSource(stageInfo, holderFactory, typeEnv);
+                            BuildScanTasksFromSource(stageInfo);
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -1464,15 +1435,15 @@ private:
                 } else if (stageInfo.Meta.ShardOperations.empty()) {
                     BuildComputeTasks(stageInfo);
                 } else if (stageInfo.Meta.IsSysView()) {
-                    BuildSysViewScanTasks(stageInfo, holderFactory, typeEnv);
+                    BuildSysViewScanTasks(stageInfo);
                 } else {
-                    BuildDatashardTasks(stageInfo, holderFactory, typeEnv);
+                    BuildDatashardTasks(stageInfo);
                 }
 
                 BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, /* enableSpilling */ false);
             }
 
-            BuildKqpExecuterResults(*tx.Body, Results);
+            ResponseEv->InitTxResult(*tx.Body);
             BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, txIdx);
         }
 
@@ -1505,7 +1476,7 @@ private:
 
             taskDesc.MutableProgram()->CopyFrom(stage.GetProgram());
 
-            PrepareKqpTaskParameters(stage, stageInfo, task, taskDesc, typeEnv, holderFactory);
+            PrepareKqpTaskParameters(stage, stageInfo, task, taskDesc, TypeEnv(), HolderFactory());
 
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
                 NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta protoTaskMeta;
@@ -2260,7 +2231,6 @@ private:
     THashMap<ui64, TShardState> ShardStates;
     THashMap<ui64, TShardState> TopicTabletStates;
     TVector<NKikimrTxDataShard::TLock> Locks;
-    TVector<TKqpExecuterTxResult> Results;
     bool ReadOnlyTx = true;
     bool VolatileTx = false;
     bool ImmediateTx = false;

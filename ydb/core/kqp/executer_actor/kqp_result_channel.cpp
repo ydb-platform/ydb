@@ -155,8 +155,9 @@ private:
 class TResultDataChannelProxy : public TResultCommonChannelProxy {
 public:
     TResultDataChannelProxy(ui64 txId, ui64 channelId, TQueryExecutionStats* stats, TActorId executer,
-        TVector<NYql::NDqProto::TData>* resultReceiver)
+        ui32 inputIndex, TEvKqpExecuter::TEvTxResponse* resultReceiver)
         : TResultCommonChannelProxy(txId, channelId, stats, executer)
+        , InputIndex(inputIndex)
         , ResultReceiver(resultReceiver) {}
 
 private:
@@ -164,11 +165,7 @@ private:
         auto& channelData = computeData.GetChannelData();
         auto channelId = channelData.GetChannelId();
 
-        if (channelData.GetData().GetRows()) {
-            ResultReceiver->emplace_back(
-                std::move(*computeData.MutableChannelData()->MutableData())
-            );
-        }
+        ResultReceiver->TakeResult(InputIndex, channelData.GetData());
 
         auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
 
@@ -180,7 +177,8 @@ private:
     }
 
 private:
-    TVector<NYql::NDqProto::TData>* ResultReceiver = nullptr;
+    ui32 InputIndex;
+    TEvKqpExecuter::TEvTxResponse* ResultReceiver;
 };
 
 } // anonymous namespace end
@@ -198,14 +196,14 @@ NActors::IActor* CreateResultStreamChannelProxy(ui64 txId, ui64 channelId, const
 
 NActors::IActor* CreateResultDataChannelProxy(ui64 txId, ui64 channelId,
     TQueryExecutionStats* stats, TActorId executer,
-    TVector<NYql::NDqProto::TData>* resultsReceiver)
+    ui32 inputIndex, TEvKqpExecuter::TEvTxResponse* resultsReceiver)
 {
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
         "CreateResultDataChannelProxy: TxId: " << txId <<
         ", channelId: " << channelId
     );
 
-    return new TResultDataChannelProxy(txId, channelId, stats, executer, resultsReceiver);
+    return new TResultDataChannelProxy(txId, channelId, stats, executer, inputIndex, resultsReceiver);
 }
 
 } // namespace NKqp

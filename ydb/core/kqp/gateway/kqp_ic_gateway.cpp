@@ -483,9 +483,11 @@ public:
         return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
     }
 
-    TKqpExecPureRequestHandler(const TActorId& executerId, TPromise<TResult> promise)
+    TKqpExecPureRequestHandler(const TActorId& executerId, TPromise<TResult> promise, TQueryData::TPtr params)
         : ExecuterId(executerId)
-        , Promise(promise) {}
+        , Parameters(params)
+        , Promise(promise)
+    {}
 
     void Bootstrap(const TActorContext& ctx) {
         auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
@@ -509,7 +511,12 @@ private:
         }
 
         result.ExecuterResult.Swap(response->MutableResult());
-
+        {
+            auto g = Parameters->TypeEnv().BindAllocator();
+            auto unboxed = ev->Get()->GetUnboxedValueResults();
+            Parameters->AddTxResults(std::move(unboxed));
+        }
+        result.Results = std::move(ev->Get()->GetMkqlResults());
         Promise.SetValue(std::move(result));
         this->PassAway();
     }
@@ -540,6 +547,7 @@ private:
 
 private:
     TActorId ExecuterId;
+    TQueryData::TPtr Parameters;
     TPromise<TResult> Promise;
 };
 
@@ -1669,7 +1677,7 @@ public:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request) override {
+    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.Locks.empty());
         YQL_ENSURE(!request.NeedTxId);
@@ -1700,14 +1708,14 @@ public:
 
         auto promise = NewPromise<TExecPhysicalResult>();
 
-        IActor* requestHandler = new TKqpExecPureRequestHandler(executerId, promise);
+        IActor* requestHandler = new TKqpExecPureRequestHandler(executerId, promise, params);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
     }
 
     TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings, ui64 rowsLimit) override
+        TQueryData::TPtr params, const TAstQuerySettings& settings, ui64 rowsLimit) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -1726,9 +1734,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        if (!params.Values.empty()) {
-            FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
-        }
+        FillParameters(params, *ev->Record.MutableRequest()->MutableParameters());
 
         return SendKqpScanQueryRequest(ev.Release(), rowsLimit,
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
@@ -1740,7 +1746,7 @@ public:
     }
 
     TFuture<TQueryResult> StreamExecDataQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings,
+        TQueryData::TPtr params, const TAstQuerySettings& settings,
         const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
     {
         YQL_ENSURE(cluster == Cluster);
@@ -1760,9 +1766,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        if (!params.Values.empty()) {
-            FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
-        }
+        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
@@ -1778,7 +1782,7 @@ public:
     }
 
     TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
-        TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) override
+        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target) override
     {
         YQL_ENSURE(cluster == Cluster);
 
@@ -1797,9 +1801,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        if (!params.Values.empty()) {
-            FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
-        }
+        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
@@ -1837,7 +1839,7 @@ public:
             });
     }
 
-    TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query, TKqpParamsMap&& params,
+    TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query, TQueryData::TPtr params,
         const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
     {
         YQL_ENSURE(cluster == Cluster);
@@ -1857,9 +1859,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        if (!params.Values.empty()) {
-            FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
-        }
+        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
@@ -2185,11 +2185,19 @@ private:
         return status;
     }
 
-    static void FillParameters(TKqpParamsMap&& params, NKikimrMiniKQL::TParams& output) {
+    static void FillParameters(TQueryData::TPtr params, NKikimrMiniKQL::TParams& output) {
+        if (!params) {
+            return;
+        }
+
+        if (params->GetParams().empty()) {
+            return;
+        }
+
         output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
         auto type = output.MutableType()->MutableStruct();
         auto value = output.MutableValue();
-        for (auto& pair : params.Values) {
+        for (auto& pair : params->GetParams()) {
             auto typeMember = type->AddMember();
             typeMember->SetName(pair.first);
 

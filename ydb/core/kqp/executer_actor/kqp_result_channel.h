@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_tasks_graph.h"
+#include "kqp_executer.h"
 
 #include <library/cpp/actors/core/actor.h>
 
@@ -29,6 +30,6 @@ NActors::IActor* CreateResultStreamChannelProxy(ui64 txId, ui64 channelId, const
     NActors::TActorId executer);
 
 NActors::IActor* CreateResultDataChannelProxy(ui64 txId, ui64 channelId, TQueryExecutionStats* stats,
-    NActors::TActorId executer, TVector<NYql::NDqProto::TData>* resultReceiver);
+    NActors::TActorId executer, ui32 inputIndex, TEvKqpExecuter::TEvTxResponse* receiver);
 
 } // namespace NKikimr::NKqp

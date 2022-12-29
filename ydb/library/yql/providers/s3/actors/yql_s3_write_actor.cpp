@@ -120,16 +120,14 @@ struct TEvPrivate {
 using namespace NKikimr::NMiniKQL;
 
 class TS3FileWriteActor : public TActorBootstrapped<TS3FileWriteActor> {
-
     friend class TS3WriteActor;
-    using TActorBootstrapped<TS3FileWriteActor>::PassAway;
 
 public:
     TS3FileWriteActor(
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         NYdb::TCredentialsProviderPtr credProvider,
-        const TString& key, const TString& url, size_t sizeLimit, const std::string_view& compression,
+        const TString& key, const TString& url, const std::string_view& compression,
         const IRetryPolicy<long>::TPtr& retryPolicy)
         : TxId(txId)
         , Gateway(std::move(gateway))
@@ -139,7 +137,6 @@ public:
         , Key(key)
         , Url(url)
         , RequestId(CreateGuidAsString())
-        , SizeLimit(sizeLimit)
         , Parts(MakeCompressorQueue(compression))
     {
         YQL_ENSURE(Parts, "Compression '" << compression << "' is not supported.");
@@ -170,13 +167,15 @@ public:
         TActorBootstrapped<TS3FileWriteActor>::PassAway();
     }
 
-    void SendData(TString&& data) {
+    void AddData(TString&& data) {
         Parts->Push(std::move(data));
+    }
 
-        Y_UNUSED(SizeLimit);
-//TODO: if (10000U == Tags.size() + Parts->Size() || SizeLimit <= SentSize + Parts->Volume())
-            Parts->Seal();
+    void Seal() {
+        Parts->Seal();
+    }
 
+    void Go() {
         if (!UploadId.empty())
             StartUploadParts();
     }
@@ -367,7 +366,6 @@ private:
     const TString Key;
     const TString Url;
     const TString RequestId;
-    const size_t SizeLimit;
 
     IOutputQueue::TPtr Parts;
     std::vector<TString> Tags;
@@ -388,8 +386,8 @@ public:
         const TString& extension,
         const std::vector<TString>& keys,
         const size_t memoryLimit,
-        const size_t maxFileSize,
         const TString& compression,
+        bool multipart,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const IRetryPolicy<long>::TPtr& retryPolicy)
         : Gateway(std::move(gateway))
@@ -405,8 +403,8 @@ public:
         , Extension(extension)
         , Keys(keys)
         , MemoryLimit(memoryLimit)
-        , MaxFileSize(maxFileSize)
         , Compression(compression)
+        , Multipart(multipart)
     {
         if (!RandomProvider) {
             DefaultRandomProvider = CreateDefaultRandomProvider();
@@ -456,16 +454,29 @@ private:
     )
 
     void SendData(TUnboxedValueVector&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
+        std::unordered_set<TS3FileWriteActor*> processedActors;
         for (const auto& v : data) {
             const auto& key = MakePartitionKey(v);
-            const auto ins = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
-            if (ins.second || ins.first->second.empty() || ins.first->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName() + Extension, MaxFileSize, Compression, RetryPolicy);
-                ins.first->second.emplace_back(fileWrite.get());
+            const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
+            if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName() + Extension, Compression, RetryPolicy);
+                keyIt->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
 
-            ins.first->second.back()->SendData(TString((Keys.empty() ? v : *v.GetElements()).AsStringRef()));
+            const NUdf::TUnboxedValue& value = Keys.empty() ? v : *v.GetElements();
+            TS3FileWriteActor* actor = keyIt->second.back();
+            if (value) {
+                actor->AddData(TString(value.AsStringRef()));
+            }
+            if (!Multipart || !value) {
+                actor->Seal();
+            }
+            processedActors.insert(actor);
+        }
+
+        for (TS3FileWriteActor* actor : processedActors) {
+            actor->Go();
         }
 
         if (finished) {
@@ -555,8 +566,8 @@ private:
     const std::vector<TString> Keys;
 
     const size_t MemoryLimit;
-    const size_t MaxFileSize;
     const TString Compression;
+    const bool Multipart;
     bool Finished = false;
     ui64 EgressBytes = 0;
 
@@ -592,8 +603,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         params.HasExtension() ? params.GetExtension() : "",
         std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()),
         params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
-        params.HasMaxFileSize() ? params.GetMaxFileSize() : 50_MB,
         params.HasCompression() ? params.GetCompression() : "",
+        params.GetMultipart(),
         callbacks,
         retryPolicy);
     return {actor, actor};

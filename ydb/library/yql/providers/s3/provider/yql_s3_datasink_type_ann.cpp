@@ -278,8 +278,11 @@ private:
         const auto structType = itemType->Cast<TStructExprType>();
         const auto keysCount = input->Child(TS3SinkOutput::idx_KeyColumns)->ChildrenSize();
 
-        if (const auto format = input->Child(TS3SinkOutput::idx_Format); keysCount) {
-            if (format->IsAtom({"raw","json_list"})) {
+        const auto format = input->Child(TS3SinkOutput::idx_Format);
+        const bool isSingleRowPerFileFormat = format->IsAtom({"raw","json_list"}); // One string from ClikhouseUdf ClickHouseClient.SerializeFormat results in one S3 file => no delimiters between files.
+
+        if (keysCount) {
+            if (isSingleRowPerFileFormat) {
                 ctx.AddError(TIssue(ctx.GetPosition(format->Pos()), TStringBuilder() << "Partitioned isn't supporter for " << format->Content() << " output format."));
                 return TStatus::Error;
             }
@@ -295,7 +298,7 @@ private:
                 }
 
                 TTypeAnnotationNode::TListType itemTypes(keysCount + 1U, ctx.MakeType<TDataExprType>(EDataSlot::Utf8));
-                itemTypes.front() = ctx.MakeType<TDataExprType>(EDataSlot::String);
+                itemTypes.front() = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String));
                 input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TTupleExprType>(itemTypes)));
             }
         } else {
@@ -310,7 +313,11 @@ private:
                 }
             }
 
-            input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+            if (isSingleRowPerFileFormat) {
+                input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+            } else {
+                input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String))));
+            }
         }
 
         return TStatus::Ok;

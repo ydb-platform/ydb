@@ -41,6 +41,16 @@ std::string_view GetCompression(const TExprNode& settings) {
     return {};
 }
 
+bool GetMultipart(const TExprNode& settings) {
+    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
+        if (settings.Child(i)->Head().IsAtom("multipart")) {
+            return FromString(settings.Child(i)->Tail().Content());
+        }
+    }
+
+    return false;
+}
+
 using namespace NYql::NS3Details;
 
 class TS3DqIntegration: public TDqIntegrationBase {
@@ -298,8 +308,8 @@ public:
 
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {
         const TDqSink sink(&node);
-        if (const auto maySettings = sink.Settings().Maybe<TS3SinkSettings>()) {
-            const auto settings = maySettings.Cast();
+        if (const auto maybeSettings = sink.Settings().Maybe<TS3SinkSettings>()) {
+            const auto settings = maybeSettings.Cast();
             const auto& cluster = sink.DataSink().Cast<TS3DataSink>().Cluster().StringValue();
             const auto& connect = State_->Configuration->Clusters.at(cluster);
 
@@ -311,14 +321,13 @@ public:
             for (const auto& key : GetKeys(settings.Settings().Ref()))
                 sinkDesc.MutableKeys()->Add(TString(key->Content()));
 
-            if (const auto& maxObjectSize = State_->Configuration->MaxOutputObjectSize.Get())
-                sinkDesc.SetMaxFileSize(*maxObjectSize);
-
             if (const auto& memoryLimit = State_->Configuration->InFlightMemoryLimit.Get())
                 sinkDesc.SetMemoryLimit(*memoryLimit);
 
             if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty())
                 sinkDesc.SetCompression(TString(compression));
+
+            sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

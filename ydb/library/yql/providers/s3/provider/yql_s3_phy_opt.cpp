@@ -8,6 +8,8 @@
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NYql {
 
 namespace {
@@ -163,6 +165,26 @@ public:
             pair.push_back(ctx.NewAtom(targetNode.Pos(), "data.timestamp.formatname"));
             pair.push_back(ctx.NewAtom(targetNode.Pos(), "POSIX"));
             sinkOutputSettingsBuilder.Add(ctx.NewList(targetNode.Pos(), std::move(pair)));
+        }
+
+        const TStringBuf format = targetNode.Format();
+        if (format != "raw" || format != "json_list") { // multipart
+            {
+                TExprNode::TListType pair;
+                pair.push_back(ctx.NewAtom(targetNode.Pos(), "multipart"));
+                pair.push_back(ctx.NewAtom(targetNode.Pos(), "true"));
+                sinkSettingsBuilder.Add(ctx.NewList(targetNode.Pos(), std::move(pair)));
+            }
+            {
+                TExprNode::TListType pair;
+                pair.push_back(ctx.NewAtom(targetNode.Pos(), "file_size_limit"));
+                size_t fileSize = 50_MB;
+                if (const auto& maxObjectSize = State_->Configuration->MaxOutputObjectSize.Get()) {
+                    fileSize = *maxObjectSize;
+                }
+                pair.push_back(ctx.NewAtom(targetNode.Pos(), ToString(fileSize)));
+                sinkOutputSettingsBuilder.Add(ctx.NewList(targetNode.Pos(), std::move(pair)));
+            }
         }
 
         if (!FindNode(write.Input().Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
@@ -346,4 +368,3 @@ THolder<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr
 }
 
 } // namespace NYql
-

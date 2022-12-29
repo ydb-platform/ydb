@@ -129,6 +129,7 @@ object BOOST_PYTHON_DECL exec_file(char const *filename, object global, object l
                 f,
                 Py_file_input,
 		global.ptr(), local.ptr());
+  fclose(fs);
   if (!result) throw_error_already_set();
   return object(detail::new_reference(result));
 }

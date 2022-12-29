@@ -4,11 +4,12 @@ import sys
 import random
 from collections import defaultdict, Counter
 
-description = 'Relocate vdisks from overpopulated pdisks'
+description = 'Move vdisks out from overpopulated pdisks.'
 
 
 def add_options(p):
     p.add_argument('--max-replicating-pdisks', type=int, help='Limit number of maximum replicating PDisks in the cluster')
+    p.add_argument('--only-from-overpopulated-pdisks', action='store_true', help='Move vdisks out only from pdisks with over expected slot count')
     common.add_basic_format_options(p)
 
 
@@ -51,6 +52,12 @@ def do(args):
         if unhealthy_groups:
             common.print_if_verbose(args, 'Skipping vdisks from unhealthy groups: %s' % (unhealthy_groups), file=sys.stdout)
 
+        healty_vslots = [
+            vslot
+            for vslot in base_config.VSlot
+            if vslot.GroupId in healthy_groups
+        ]
+
         overpopulated_pdisks = set()
         for pdisk_id in pdisk_map.keys():
             if pdisk_map[pdisk_id].ExpectedSlotCount and pdisk_usage[pdisk_id] > pdisk_map[pdisk_id].ExpectedSlotCount:
@@ -58,10 +65,11 @@ def do(args):
 
         if not overpopulated_pdisks:
             common.print_if_not_quiet(args, 'No overpopulated pdisks found', sys.stdout)
-            common.print_status(args, success=True, error_reason='')
-            break
+            if args.only_from_overpopulated_pdisks:
+                common.print_status(args, success=True, error_reason='')
+                break
 
-        vslots_from_overpopulated_pdisks = []
+        healty_vslots_from_overpopulated_pdisks = []
         for vslot in base_config.VSlot:
             pdisk_id = common.get_pdisk_id(vslot.VSlotId)
             if pdisk_id not in overpopulated_pdisks:
@@ -69,14 +77,19 @@ def do(args):
             if vslot.GroupId not in healthy_groups:
                 continue
 
-            vslots_from_overpopulated_pdisks.append(vslot)
+            healty_vslots_from_overpopulated_pdisks.append(vslot)
 
-        if not vslots_from_overpopulated_pdisks:
-            common.print_if_not_quiet(args, 'No vdisks suitable for relocation found, waiting...', sys.stdout)
+        candidate_vslots = []
+        if healty_vslots_from_overpopulated_pdisks:
+            common.print_if_not_quiet(args, f'Found {len(healty_vslots_from_overpopulated_pdisks)} vdisks from overpopulated pdisks', sys.stdout)
+            candidate_vslots = healty_vslots_from_overpopulated_pdisks
+        elif healty_vslots and not args.only_from_overpopulated_pdisks:
+            common.print_if_not_quiet(args, f'Found {len(healty_vslots)} vdisks suitable for relocation', sys.stdout)
+            candidate_vslots = healty_vslots
+        else:  # candidate_vslots is empty
+            common.print_if_not_quiet(args, 'No vdisks suitable for relocation found, waiting..', sys.stdout)
             time.sleep(10)
             continue
-
-        common.print_if_not_quiet(args, 'Found %d vdisks suitable for relocation' % len(vslots_from_overpopulated_pdisks), sys.stdout)
 
         histo = Counter(pdisk_usage.values())
         common.print_if_verbose(args, 'Number of used slots -> number pdisks: ' + ' '.join('%d=>%d' % (k, histo[k]) for k in sorted(histo)), file=sys.stdout)
@@ -88,7 +101,7 @@ def do(args):
             common.print_if_verbose(args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d' % (vslot_id, pdisk_id, pdisk_usage[pdisk_id]), file=sys.stdout)
 
             current_usage = pdisk_usage[pdisk_id]
-            if not vslots_from_overpopulated_pdisks:
+            if not healty_vslots_from_overpopulated_pdisks:
                 for i in range(0, current_usage - 1):
                     if histo[i]:
                         break
@@ -119,7 +132,7 @@ def do(args):
             pdisk_from = item.From.NodeId, item.From.PDiskId
             pdisk_to = item.To.NodeId, item.To.PDiskId
             if pdisk_usage[pdisk_to] + 1 > pdisk_usage[pdisk_from] - 1:
-                assert not vslots_from_overpopulated_pdisks
+                assert not healty_vslots_from_overpopulated_pdisks
                 if not try_blocking:
                     return False
                 request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
@@ -155,7 +168,7 @@ def do(args):
         # end of do_reassign()
 
         vslots_by_pdisk_slot_usage = defaultdict(list)
-        for vslot in vslots_from_overpopulated_pdisks:
+        for vslot in candidate_vslots:
             pdisk_id = common.get_pdisk_id(vslot.VSlotId)
             pdisk_slot_usage = pdisk_usage[pdisk_id]
             vslots_by_pdisk_slot_usage[pdisk_slot_usage].append(vslot)

@@ -233,6 +233,17 @@ have to be in donor state.
 
 ## Do things with groups
 
+Group is a collection of vdisks that constitute basic storage unit in YDB. Every read/write operation in distributed storage
+is actually a read/write opeartion within a certain group. Group by design provides the following:
+
+* redundancy
+* persistence
+* availability
+* failover
+* recovery
+
+Group can be thought of as a RAID of vdisks. Any vdisk belongs to a single group.
+
 ### List groups
 
 ```

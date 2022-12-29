@@ -181,16 +181,16 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
     const TString queries = GetQueries(FullTablePath(config.Database, Table));
-    i32 queryN = 0;
     bool allOkay = true;
 
     std::map<ui32, TTestInfo> QueryRuns;
-    for (auto& qtoken : StringSplitter(queries).Split(';')) {
-        if (!NeedRun(++queryN)) {
+    const TVector<TString> qtokens = StringSplitter(queries).Split(';').ToList<TString>();
+    for (ui32 queryN = 0; queryN < qtokens.size(); ++queryN) {
+        if (!NeedRun(queryN)) {
             continue;
         }
 
-        const TString query = PatchQuery(qtoken.Token());
+        const TString query = PatchQuery(qtokens[queryN]);
 
         std::vector<TDuration> timings;
         timings.reserve(IterationsCount);
@@ -225,9 +225,9 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Y_VERIFY(success);
         auto& testInfo = inserted->second;
 
-        report << Sprintf("|   %02u    | %8zu | %7zu | %7.zu | %8.2f | %7.2f |", queryN,
-            testInfo.ColdTime.MilliSeconds(), testInfo.Min.MilliSeconds(), testInfo.Max.MilliSeconds(),
-            testInfo.Mean, testInfo.Std) << Endl;
+        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f |", queryN,
+            testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
+            testInfo.Mean * 0.001, testInfo.Std * 0.001) << Endl;
         if (collectJsonSensors) {
             jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
             jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
@@ -462,7 +462,7 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     };
 
     auto includeOpt = config.Opts->AddLongOption("include",
-        "Run only specified queries (ex.: 1,2,3,5-10,20)")
+        "Run only specified queries (ex.: 0,1,2,3,5-10,20)")
         .Optional()
         .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
             QueriesToRun.clear();
@@ -471,7 +471,7 @@ void TClickBenchCommandRun::Config(TConfig& config) {
             });
         });
     auto excludeOpt = config.Opts->AddLongOption("exclude",
-        "Run all queries except given ones (ex.: 1,2,3,5-10,20)")
+        "Run all queries except given ones (ex.: 0,1,2,3,5-10,20)")
         .Optional()
         .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
             fillTestCases(line, [this](ui32 q) {

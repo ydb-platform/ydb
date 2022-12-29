@@ -471,8 +471,11 @@ public:
         YQL_ENSURE(queryRequest.HasAction());
         auto action = queryRequest.GetAction();
 
-        auto id = NWilson::TTraceId::NewTraceId(TWilsonKqp::KqpSession, Max<ui32>());
-        LOG_I("wilson tracing started, id: " + std::to_string(id.GetTraceId()));
+        NWilson::TTraceId id;
+        if (false) { // change to enable Wilson tracing
+            id = NWilson::TTraceId::NewTraceId(TWilsonKqp::KqpSession, Max<ui32>());
+            LOG_I("wilson tracing started, id: " + std::to_string(id.GetTraceId()));
+        }
         QueryState->KqpSessionSpan = NWilson::TSpan(TWilsonKqp::KqpSession, std::move(id), "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
 
         LWTRACK(KqpSessionQueryRequest,

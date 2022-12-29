@@ -140,6 +140,15 @@ ydb-dstool -e ydbd.endpoint pdisk list --sort-by FQDN
 
 The above command lists pdisks sorted by the ```FQDN``` column.
 
+### Output in a human-readable way
+
+To output sizes in terms of kilobytes, megabytes, etc. and fractions in terms of percents add ```--human-readable```
+or ```-H``` to command options:
+
+```
+ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage -H
+```
+
 ## Do things with pdisks
 
 ### List pdisks
@@ -355,7 +364,14 @@ The above command lists all pools of a cluster along with their space usage in a
 
 ### Show estimated space usage of pools
 
-TODO
+```
+ydb-dstool -e ydbd.endpoint pool list --show-vdisk-estimated-usage
+```
+
+The above command shows:
+
+* ```GroupsForEstimatedUsage@85``` - how many groups are neccessary to make disk usage at about 85 percent.
+* ```EstimatedUsage``` -  TODO
 
 ## Do things with boxes
 

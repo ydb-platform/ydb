@@ -381,7 +381,7 @@ public:
 
         if (mode == "start") {
             TString errorMsg = "ok";
-            auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, content);
+            auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, params.Get("config"));
             LOG_D( "received config: " << params.Get("config").Quote() << "; proto parse success: " << std::to_string(bool{record}));
 
             ui64 tag = 0;
@@ -561,7 +561,11 @@ public:
                         function sendStartRequest(button, run_all) {
                             $.ajax({
                                 url: "",
-                                data: $('#config').val(),
+                                data: {
+                                    mode: "start",
+                                    all_nodes: run_all,
+                                    config: $('#config').val()
+                                },
                                 method: "POST",
                                 contentType: "application/x-protobuf-text",
                                 success: function(result) {

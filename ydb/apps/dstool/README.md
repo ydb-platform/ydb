@@ -513,7 +513,7 @@ ydb-dstool -e ydbd.endpoint cluster set --scrub-periodicity 2d
 ydb-dstool -e ydbd.endpoint cluster set --max-scrubbed-disks-at-once 2
 ```
 
-To above command sets maximum number if simultaneously scrubbed pdisk to two.
+The above command sets maximum number of simultaneously scrubbed pdisk to two.
 
 ### Stress test failure model
 

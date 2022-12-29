@@ -30,6 +30,7 @@ private:
             TVector<TType*> mkqlInputTypes;
             for (const auto& type : argTypes) {
                 auto mkqlType = NCommon::BuildType(*type, pgmBuilder, null);
+                YQL_ENSURE(mkqlType, "Failed to convert type " << *type << " to MKQL type");
                 mkqlInputTypes.emplace_back(mkqlType);
             }
             TType* mkqlOutputType = NCommon::BuildType(*returnType, pgmBuilder, null);

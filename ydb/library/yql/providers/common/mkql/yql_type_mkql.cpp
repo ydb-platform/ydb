@@ -203,9 +203,12 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyDict();
     }
 
+    case ETypeAnnotationKind::ChunkedBlock:
     case ETypeAnnotationKind::Block: {
-        auto block = annotation.Cast<TBlockExprType>();
-        auto itemType = BuildType(*block->GetItemType(), pgmBuilder, err, withTagged);
+        auto blockItem = annotation.GetKind() == ETypeAnnotationKind::Block ?
+            annotation.Cast<TBlockExprType>()->GetItemType() :
+            annotation.Cast<TChunkedBlockExprType>()->GetItemType();
+        auto itemType = BuildType(*blockItem, pgmBuilder, err, withTagged);
         if (!itemType) {
             return nullptr;
         }
@@ -221,7 +224,10 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         return pgmBuilder.NewBlockType(itemType, NKikimr::NMiniKQL::TBlockType::EShape::Scalar);
     }
 
-    default:
+    case ETypeAnnotationKind::Item:
+    case ETypeAnnotationKind::World:
+    case ETypeAnnotationKind::Error:
+    case ETypeAnnotationKind::LastType:
         return nullptr;
     }
 }

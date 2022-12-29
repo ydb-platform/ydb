@@ -293,6 +293,8 @@ public:
     dynamic_bitset& flip(size_type n, size_type len);
     dynamic_bitset& flip(size_type n);
     dynamic_bitset& flip();
+    reference at(size_type n);
+    bool at(size_type n) const;
     bool test(size_type n) const;
     bool test_set(size_type n, bool val = true);
     bool all() const;
@@ -1112,6 +1114,25 @@ template <typename Block, typename Allocator>
 bool dynamic_bitset<Block, Allocator>::m_unchecked_test(size_type pos) const
 {
     return (m_bits[block_index(pos)] & bit_mask(pos)) != 0;
+}
+
+template <typename Block, typename Allocator>
+typename dynamic_bitset<Block, Allocator>::reference
+dynamic_bitset<Block, Allocator>::at(size_type pos)
+{
+    if (pos >= m_num_bits)
+        BOOST_THROW_EXCEPTION(std::out_of_range("boost::dynamic_bitset::at out_of_range"));
+
+    return (*this)[pos];
+}
+
+template <typename Block, typename Allocator>
+bool dynamic_bitset<Block, Allocator>::at(size_type pos) const
+{
+    if (pos >= m_num_bits)
+        BOOST_THROW_EXCEPTION(std::out_of_range("boost::dynamic_bitset::at out_of_range"));
+
+    return (*this)[pos];
 }
 
 template <typename Block, typename Allocator>

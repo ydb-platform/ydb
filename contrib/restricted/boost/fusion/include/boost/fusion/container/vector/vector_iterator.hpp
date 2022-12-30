@@ -19,6 +19,11 @@
 #include <boost/type_traits/add_const.hpp>
 #include <boost/mpl/int.hpp>
 
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable: 4512) // assignment operator could not be generated.
+#endif
+
 namespace boost { namespace fusion
 {
     struct vector_iterator_tag;
@@ -41,16 +46,13 @@ namespace boost { namespace fusion
         vector_iterator(Vector& in_vec)
             : vec(in_vec) {}
 
-        BOOST_CONSTEXPR BOOST_FUSION_GPU_ENABLED
-        vector_iterator(vector_iterator const& rhs)
-            : vec(rhs.vec) {}
-
         Vector& vec;
-
-        // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(vector_iterator& operator= (vector_iterator const&))
     };
 }}
+
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 
 #ifdef BOOST_FUSION_WORKAROUND_FOR_LWG_2408
 namespace std

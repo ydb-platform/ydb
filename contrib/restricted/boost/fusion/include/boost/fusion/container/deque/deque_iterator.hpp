@@ -20,6 +20,11 @@
 #include <boost/type_traits/add_const.hpp>
 #include <boost/type_traits/add_reference.hpp>
 
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable: 4512) // assignment operator could not be generated.
+#endif
+
 namespace boost { namespace fusion {
 
     struct bidirectional_traversal_tag;
@@ -110,13 +115,13 @@ namespace boost { namespace fusion {
         {};
 
         Seq& seq_;
-
-        // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(deque_iterator& operator= (deque_iterator const&))
-        deque_iterator(const deque_iterator&) = default;
     };
 
 }}
+
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 
 #ifdef BOOST_FUSION_WORKAROUND_FOR_LWG_2408
 namespace std

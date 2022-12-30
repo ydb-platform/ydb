@@ -1,3 +1,33 @@
+# How to run ydb-dstool
+
+## Clone ydb
+
+```bash
+~$ mkdir github
+~$ cd github
+~$ git clone https://github.com/ydb-platform/ydb.git
+```
+
+## Install python grpc_tools
+
+Have a look at https://grpc.io/docs/languages/python/quickstart.
+
+## Compile proto files
+
+```bash
+~$ cd ~/github/ydb
+~/github/ydb$ ydb_root=$(pwd)
+~/github/ydb$ python3 -m grpc_tools.protoc -I=${ydb_root} --python_out=. --grpc_python_out=. ${ydb_root}/ydb/core/protos/*.proto
+```
+
+## Run
+
+```bash
+~/github/ydb$ export PYTHONPATH=$PYTHONPATH:${ydb_root}
+~/github/ydb$ chmod +x ./ydb/apps/dstool/ydb-dstool.py
+~/github/ydb$ ./ydb/apps/dstool/ydb-dstool.py -e ydb.endpoint cluster list
+```
+
 # How to do things with ydb-dstool
 
 ### Get available commands

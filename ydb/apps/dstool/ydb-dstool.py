@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from ydb.apps.dstool.lib.arg_parser import ArgumentParser
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.commands as commands
@@ -15,3 +17,7 @@ def main():
     args = parser.parse_args()
     common.apply_args(args)
     commands.run_command(command_map, args)
+
+
+if __name__ == '__main__':
+    main()

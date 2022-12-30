@@ -42,7 +42,7 @@ enum EPercentileCounters {
 
 enum ETxTypes {
     TXTYPE_PUT_ASSIMILATED_DATA = 0 [(NKikimr.TxTypeOpts) = {Name: "TTxPutAssimilatedData"}];
-    TXTYPE_DROP_BLOB_IF_NODATA = 1 [(NKikimr.TxTypeOpts) = {Name: "TTxDropBlobIfNoData"}];
+    TXTYPE_COMMIT_ASSIMILATED_BLOB = 1 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitAssimilatedBlob"}];
     TXTYPE_FINISH_COPYING = 2 [(NKikimr.TxTypeOpts) = {Name: "TTxFinishCopying"}];
     TXTYPE_FINISH_DECOMMISSION = 3 [(NKikimr.TxTypeOpts) = {Name: "TTxFinishDecommission"}];
     TXTYPE_MON_DATA = 4 [(NKikimr.TxTypeOpts) = {Name: "TTxMonData"}];
@@ -53,9 +53,8 @@ enum ETxTypes {
     TXTYPE_CONFIRM_GC = 9 [(NKikimr.TxTypeOpts) = {Name: "TTxConfirmGC"}];
     TXTYPE_COMMIT_CERTAIN_KEYS = 10 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitCertainKeys"}];
     TXTYPE_RESOLVE = 11 [(NKikimr.TxTypeOpts) = {Name: "TTxResolve"}];
-    TXTYPE_COMMIT_RANGE = 12 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitRange"}];
-    TXTYPE_DATA_LOAD = 13 [(NKikimr.TxTypeOpts) = {Name: "TTxDataLoad"}];
-    TXTYPE_COLLECT_GARBAGE = 14 [(NKikimr.TxTypeOpts) = {Name: "TTxCollectGarbage"}];
-    TXTYPE_COMMIT_BLOB_SEQ = 15 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitBlobSeq"}];
-    TXTYPE_UPDATE_BLOCK = 16 [(NKikimr.TxTypeOpts) = {Name: "TTxUpdateBlock"}];
+    TXTYPE_DATA_LOAD = 12 [(NKikimr.TxTypeOpts) = {Name: "TTxDataLoad"}];
+    TXTYPE_COLLECT_GARBAGE = 13 [(NKikimr.TxTypeOpts) = {Name: "TTxCollectGarbage"}];
+    TXTYPE_COMMIT_BLOB_SEQ = 14 [(NKikimr.TxTypeOpts) = {Name: "TTxCommitBlobSeq"}];
+    TXTYPE_UPDATE_BLOCK = 15 [(NKikimr.TxTypeOpts) = {Name: "TTxUpdateBlock"}];
 }

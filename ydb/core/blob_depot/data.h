@@ -223,7 +223,6 @@ namespace NKikimr::NBlobDepot {
             TValueChain ValueChain;
             EKeepState KeepState = EKeepState::Default;
             bool Public = false;
-            std::optional<TLogoBlobID> OriginalBlobId;
             bool UncertainWrite = false;
 
             TValue() = default;
@@ -238,9 +237,6 @@ namespace NKikimr::NBlobDepot {
                 , ValueChain(std::move(*proto.MutableValueChain()))
                 , KeepState(proto.GetKeepState())
                 , Public(proto.GetPublic())
-                , OriginalBlobId(proto.HasOriginalBlobId()
-                    ? std::make_optional(LogoBlobIDFromLogoBlobID(proto.GetOriginalBlobId()))
-                    : std::nullopt)
                 , UncertainWrite(uncertainWrite)
             {}
 
@@ -277,9 +273,6 @@ namespace NKikimr::NBlobDepot {
                 if (Public != proto->GetPublic()) {
                     proto->SetPublic(Public);
                 }
-                if (OriginalBlobId) {
-                    LogoBlobIDFromLogoBlobID(*OriginalBlobId, proto->MutableOriginalBlobId());
-                }
             }
 
             static bool Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item);
@@ -305,7 +298,6 @@ namespace NKikimr::NBlobDepot {
                     << " ValueChain# " << FormatList(ValueChain)
                     << " KeepState# " << EKeepState_Name(KeepState)
                     << " Public# " << (Public ? "true" : "false")
-                    << " OriginalBlobId# " << (OriginalBlobId ? OriginalBlobId->ToString() : "<none>")
                     << " UncertainWrite# " << (UncertainWrite ? "true" : "false")
                     << "}";
             }
@@ -363,8 +355,9 @@ namespace NKikimr::NBlobDepot {
 
         struct TResolveDecommitContext {
             TEvBlobDepot::TEvResolve::TPtr Ev; // original resolve request
-            ui32 NumRangesInFlight = 0;
-            bool Errors = false;
+            ui32 NumRangesInFlight;
+            std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs = {};
+            TIntervalMap<TLogoBlobID> Errors = {};
         };
         ui64 LastRangeId = 0;
         THashMap<ui64, TResolveDecommitContext> ResolveDecommitContexts;
@@ -446,6 +439,8 @@ namespace NKikimr::NBlobDepot {
         void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
+        void BindToBlob(const TKey& key, TBlobSeqId blobSeqId, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
         void MakeKeyCertain(const TKey& key);
         void HandleCommitCertainKeys();
 
@@ -454,7 +449,7 @@ namespace NKikimr::NBlobDepot {
 
         void AddLoadSkip(TKey key);
         void AddDataOnLoad(TKey key, TString value, bool uncertainWrite, bool skip);
-        void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
+        bool AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);

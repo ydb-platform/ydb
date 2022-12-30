@@ -25,6 +25,7 @@ namespace NKikimr::NBlobDepot {
                 EvCommitCertainKeys,
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
+                EvProcessRegisterAgentQ,
             };
         };
 
@@ -81,28 +82,35 @@ namespace NKikimr::NBlobDepot {
             std::optional<ui32> NodeId; // as reported by RegisterAgent
             ui64 NextExpectedMsgId = 1;
             std::deque<std::unique_ptr<IEventHandle>> PostponeQ;
-            bool PostponeFromAgent = false;
+            bool ProcessThroughQueue = false;
         };
 
         THashMap<TActorId, TPipeServerContext> PipeServers;
         THashMap<ui32, TAgent> Agents; // NodeId -> Agent
 
+        struct TChannelKind : NBlobDepot::TChannelKind {
+            std::vector<std::tuple<ui32, ui64>> GroupAccumWeights; // last one is the total weight
+        };
+
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
 
         struct TChannelInfo {
             ui8 Index;
+            ui32 GroupId;
             NKikimrBlobDepot::TChannelKind::E ChannelKind;
             TChannelKind *KindPtr;
             TGivenIdRange GivenIdRanges; // accumulated through all agents
             ui64 NextBlobSeqId = 0;
             std::set<ui64> SequenceNumbersInFlight; // of blobs being committed
+            std::set<ui64> AssimilatedBlobsInFlight;
             std::optional<TBlobSeqId> LastReportedLeastId;
 
             // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
             TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
                 const auto result = TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
                     GivenIdRanges.IsEmpty() ? Max<ui64>() : GivenIdRanges.GetMinimumValue(),
-                    SequenceNumbersInFlight.empty() ? Max<ui64>() : *SequenceNumbersInFlight.begin()));
+                    SequenceNumbersInFlight.empty() ? Max<ui64>() : *SequenceNumbersInFlight.begin(),
+                    AssimilatedBlobsInFlight.empty() ? Max<ui64>() : *AssimilatedBlobsInFlight.begin()));
                 // this value can't decrease, because it may lead to data loss
                 Y_VERIFY_S(!LastReportedLeastId || *LastReportedLeastId <= result,
                     "decreasing LeastExpectedBlobId"
@@ -110,7 +118,8 @@ namespace NKikimr::NBlobDepot {
                     << " result# " << result.ToString()
                     << " NextBlobSeqId# " << NextBlobSeqId
                     << " GivenIdRanges# " << GivenIdRanges.ToString()
-                    << " SequenceNumbersInFlight# " << FormatList(SequenceNumbersInFlight));
+                    << " SequenceNumbersInFlight# " << FormatList(SequenceNumbersInFlight)
+                    << " AssimilatedBlobsInFlight# " << FormatList(AssimilatedBlobsInFlight));
                 LastReportedLeastId.emplace(result);
                 return result;
             }
@@ -118,6 +127,7 @@ namespace NKikimr::NBlobDepot {
         std::vector<TChannelInfo> Channels;
 
         struct TGroupInfo {
+            THashMap<NKikimrBlobDepot::TChannelKind::E, std::vector<ui8>> Channels;
             ui64 AllocatedBytes = 0;
         };
         THashMap<ui32, TGroupInfo> Groups;
@@ -135,6 +145,10 @@ namespace NKikimr::NBlobDepot {
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
         void ProcessRegisterAgentQ();
+
+        bool ReadyForAgentQueries() const {
+            return Configured && (!Config.GetIsDecommittingGroup() || DecommitState >= EDecommitState::BlocksFinished);
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -182,6 +196,8 @@ namespace NKikimr::NBlobDepot {
         void PassAway() override;
 
         void InitChannelKinds();
+        void InvalidateGroupForAllocation(ui32 groupId);
+        void PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels);
 
         TString GetLogId() const {
             const auto *executor = Executor();

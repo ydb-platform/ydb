@@ -16,6 +16,51 @@ namespace NKikimr::NBlobDepot {
         };
     };
 
+    class TAssimilator::TTxCommitAssimilatedBlob : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const TActorId AssimilatorId;
+        const NKikimrProto::EReplyStatus Status;
+        const TBlobSeqId BlobSeqId;
+        const TData::TKey Key;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_ASSIMILATED_BLOB; }
+
+        TTxCommitAssimilatedBlob(TAssimilator *self, NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key)
+            : TTransactionBase(self->Self)
+            , AssimilatorId(self->SelfId())
+            , Status(status)
+            , BlobSeqId(blobSeqId)
+            , Key(std::move(key))
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            if (Status == NKikimrProto::OK) {
+                Y_VERIFY(!Self->Data->CanBeCollected(BlobSeqId));
+                Self->Data->BindToBlob(Key, BlobSeqId, txc, this);
+            } else if (Status == NKikimrProto::NODATA) {
+                if (const TData::TValue *value = Self->Data->FindKey(Key); value && value->ValueChain.empty()) {
+                    Self->Data->DeleteKey(Key, txc, this);
+                }
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            if (BlobSeqId) {
+                TChannelInfo& channel = Self->Channels[BlobSeqId.Channel];
+                const ui32 generation = Self->Executor()->Generation();
+                const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+                const size_t numErased = channel.AssimilatedBlobsInFlight.erase(BlobSeqId.ToSequentialNumber());
+                Y_VERIFY(numErased == 1);
+                if (leastExpectedBlobIdBefore != channel.GetLeastExpectedBlobId(generation)) {
+                    Self->Data->OnLeastExpectedBlobIdChange(channel.Index); // allow garbage collection
+                }
+            }
+            Self->Data->CommitTrash(this);
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, AssimilatorId, {}, nullptr, 0));
+        }
+    };
+
     void TAssimilator::Bootstrap() {
         if (Token.expired()) {
             return PassAway();
@@ -42,7 +87,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::PassAway() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT52, "TAssimilator::PassAway", (Id, Self->GetLogId()));
+        if (!Token.expired()) {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT52, "TAssimilator::PassAway", (Id, Self->GetLogId()));
+        }
         TActorBootstrapped::PassAway();
     }
 
@@ -56,7 +103,6 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
-            hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
@@ -222,16 +268,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT54, "TAssimilator::ScanDataForCopying", (Id, Self->GetLogId()),
             (LastScannedKey, LastScannedKey));
 
-        TData::TKey lastScannedKey;
-        if (LastScannedKey) {
-            lastScannedKey = TData::TKey(*LastScannedKey);
-        }
-
-        struct TScanQueueItem {
-            TLogoBlobID Key;
-            TLogoBlobID OriginalBlobId;
-        };
-        std::deque<TScanQueueItem> scanQ;
+        std::deque<TLogoBlobID> scanQ;
         ui32 totalSize = 0;
         THPTimer timer;
         ui32 numItems = 0;
@@ -243,13 +280,13 @@ namespace NKikimr::NBlobDepot {
                     return false;
                 }
             }
-            if (!value.OriginalBlobId) {
-                LastScannedKey.emplace(key.GetBlobId());
+            const TLogoBlobID& id = key.GetBlobId();
+            if (!value.ValueChain.empty()) {
+                LastScannedKey.emplace(id);
                 return true; // keep scanning
-            } else if (const TLogoBlobID& id = *value.OriginalBlobId; scanQ.empty() ||
-                    scanQ.front().OriginalBlobId.TabletID() == id.TabletID()) {
-                LastScannedKey.emplace(key.GetBlobId());
-                scanQ.push_back({.Key = *LastScannedKey, .OriginalBlobId = id});
+            } else if (scanQ.empty() || scanQ.front().TabletID() == id.TabletID()) {
+                LastScannedKey.emplace(id);
+                scanQ.push_back(id);
                 totalSize += id.BlobSize();
                 EntriesToProcess = true;
                 return totalSize < MaxSizeToQuery;
@@ -259,6 +296,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         // FIXME: reentrable as it shares mailbox with the BlobDepot tablet itself
+        TData::TKey lastScannedKey = LastScannedKey ? TData::TKey(*LastScannedKey) : TData::TKey();
         const bool finished = Self->Data->ScanRange(LastScannedKey ? &lastScannedKey : nullptr, nullptr, {}, callback);
 
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT56, "ScanDataForCopying done", (Id, Self->GetLogId()),
@@ -270,8 +308,8 @@ namespace NKikimr::NBlobDepot {
             const ui32 sz = scanQ.size();
             TArrayHolder<TQuery> queries(new TQuery[sz]);
             TQuery *query = queries.Get();
-            for (const TScanQueueItem& item : scanQ) {
-                query->Set(item.OriginalBlobId);
+            for (const TLogoBlobID& id : scanQ) {
+                query->Set(id);
                 ++query;
             }
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, sz, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
@@ -289,46 +327,28 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
-        class TTxDropBlobIfNoData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-            const TLogoBlobID Id;
-            const TActorId AssimilatorId;
-
-        public:
-            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DROP_BLOB_IF_NODATA; }
-
-            TTxDropBlobIfNoData(TBlobDepot *self, TLogoBlobID id, TActorId assimilatorId)
-                : TTransactionBase(self)
-                , Id(id)
-                , AssimilatorId(assimilatorId)
-            {}
-
-            bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                const TData::TKey key(Id);
-                if (const TData::TValue *v = Self->Data->FindKey(key); v && v->OriginalBlobId &&
-                        v->KeepState != NKikimrBlobDepot::EKeepState::Keep) {
-                    Self->Data->DeleteKey(key, txc, this);
-                }
-                return true;
-            }
-
-            void Complete(const TActorContext&) override {
-                Self->Data->CommitTrash(this);
-                TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, AssimilatorId, {}, nullptr, 0));
-            }
-        };
-
         auto& msg = *ev->Get();
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& resp = msg.Responses[i];
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT34, "got TEvGetResult", (Id, Self->GetLogId()), (BlobId, resp.Id),
                 (Status, resp.Status), (NumPutsInFlight, NumPutsInFlight));
             if (resp.Status == NKikimrProto::OK) {
-                auto ev = std::make_unique<TEvBlobStorage::TEvPut>(resp.Id, resp.Buffer, TInstant::Max());
-                ev->Decommission = true;
-                SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release());
+                std::vector<ui8> channels(1);
+                Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels);
+                TChannelInfo& channel = Self->Channels[channels.front()];
+                const ui64 value = channel.NextBlobSeqId++;
+                const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
+                const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
+                const ui64 putId = NextPutId++;
+                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, resp.Buffer, TInstant::Max()), putId);
+                const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
+                Y_VERIFY(inserted);
+                const bool inserted1 = PutIdToKey.emplace(putId, TData::TKey(resp.Id)).second;
+                Y_VERIFY(inserted1);
                 ++NumPutsInFlight;
             } else if (resp.Status == NKikimrProto::NODATA) {
-                Self->Execute(std::make_unique<TTxDropBlobIfNoData>(Self, resp.Id, SelfId()));
+                Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(this, NKikimrProto::NODATA, TBlobSeqId(),
+                    TData::TKey(resp.Id)));
                 ++NumPutsInFlight;
             }
         }
@@ -345,20 +365,13 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
+        const auto it = PutIdToKey.find(ev->Cookie);
+        Y_VERIFY(it != PutIdToKey.end());
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg),
-            (NumPutsInFlight, NumPutsInFlight));
-        if (!--NumPutsInFlight) {
-            IssueCollects();
-        }
-    }
-
-    void TAssimilator::IssueCollects() {
-        // FIXME: do it
-        Action();
-    }
-
-    void TAssimilator::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-        (void)ev;
+            (NumPutsInFlight, NumPutsInFlight), (Key, it->second));
+        Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(this, msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id),
+            std::move(it->second)));
+        PutIdToKey.erase(it);
     }
 
     void TAssimilator::OnCopyDone() {
@@ -472,6 +485,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::StartGroupAssimilator() {
         if (Config.GetIsDecommittingGroup()) {
            Y_VERIFY(!GroupAssimilatorId);
+           Y_VERIFY(Data->IsLoaded());
            GroupAssimilatorId = RegisterWithSameMailbox(new TGroupAssimilator(this));
         }
     }

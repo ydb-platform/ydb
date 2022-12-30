@@ -200,6 +200,9 @@ public:
                                                    std::get<2>(geom));
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
+                if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+                    group.VDisksInGroup.clear();
+                }
 
 #define OPTIONAL(NAME) \
                 if (groups.HaveValue<T::NAME>()) { \

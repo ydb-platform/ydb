@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blob_depot_tablet.h"
+#include "data.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -29,6 +30,11 @@ namespace NKikimr::NBlobDepot {
 
         TActorId PipeId;
 
+        ui64 NextPutId = 1;
+        THashMap<ui64, TData::TKey> PutIdToKey;
+
+        class TTxCommitAssimilatedBlob;
+
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BLOB_DEPOT_ASSIMILATOR_ACTOR;
@@ -54,8 +60,6 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         void HandleTxComplete();
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
-        void IssueCollects();
-        void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void OnCopyDone();
         void CreatePipe();
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);

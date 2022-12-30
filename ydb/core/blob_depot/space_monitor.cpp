@@ -22,6 +22,7 @@ namespace NKikimr::NBlobDepot {
         if (msg.Status == NKikimrProto::OK) {
             group.StatusFlags = msg.StatusFlags;
             group.ApproximateFreeSpaceShare = msg.ApproximateFreeSpaceShare;
+            Self->InvalidateGroupForAllocation(groupId);
         }
     }
 

@@ -69,6 +69,15 @@ namespace NKikimr::NBlobDepot {
             };
         }
 
+        static TBlobSeqId FromLogoBlobId(TLogoBlobID id) {
+            return TBlobSeqId{
+                id.Channel(),
+                id.Generation(),
+                id.Step(),
+                IndexFromCookie(id.Cookie())
+            };
+        }
+
         void ToProto(NKikimrBlobDepot::TBlobSeqId *proto) const {
             proto->SetChannel(Channel);
             proto->SetGeneration(Generation);
@@ -93,6 +102,14 @@ namespace NKikimr::NBlobDepot {
             }
 
             Y_FAIL();
+        }
+
+        static ui32 IndexFromCookie(ui32 cookie) {
+            static constexpr ui32 typeBits = 24 - IndexBits;
+            const auto type = static_cast<EBlobType>(cookie & ((1 << typeBits) - 1));
+            Y_VERIFY(type == EBlobType::VG_COMPOSITE_BLOB || type == EBlobType::VG_DATA_BLOB ||
+                type == EBlobType::VG_FOOTER_BLOB || type == EBlobType::VG_GC_BLOB);
+            return cookie >> typeBits;
         }
     };
 

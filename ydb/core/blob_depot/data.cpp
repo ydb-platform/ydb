@@ -194,6 +194,7 @@ namespace NKikimr::NBlobDepot {
     void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Item, item));
+        Y_VERIFY(Loaded || IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "UpdateKey", [&](TValue& value, bool inserted) {
             if (!inserted) { // update value items
                 value.Meta = item.GetMeta();
@@ -205,13 +206,28 @@ namespace NKikimr::NBlobDepot {
                 auto *chain = value.ValueChain.Add();
                 auto *locator = chain->MutableLocator();
                 locator->CopyFrom(item.GetBlobLocator());
-
-                // reset original blob id, if any
-                value.OriginalBlobId.reset();
             }
 
             return EUpdateOutcome::CHANGE;
         }, item);
+    }
+
+    void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId));
+        Y_VERIFY(Loaded || IsKeyLoaded(key));
+        UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool inserted) {
+            if (!value.ValueChain.empty()) {
+                return EUpdateOutcome::NO_CHANGE;
+            } else {
+                auto *chain = value.ValueChain.Add();
+                auto *locator = chain->MutableLocator();
+                locator->SetGroupId(Self->Info()->GroupFor(blobSeqId.Channel, blobSeqId.Generation));
+                blobSeqId.ToProto(locator->MutableBlobSeqId());
+                locator->SetTotalDataLen(key.GetBlobId().BlobSize());
+                locator->SetFooterLen(0);
+                return inserted ? EUpdateOutcome::DROP : EUpdateOutcome::CHANGE;
+            }
+        });
     }
 
     void TData::MakeKeyCertain(const TKey& key) {
@@ -321,25 +337,23 @@ namespace NKikimr::NBlobDepot {
         ValidateRecords();
     }
 
-    void TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
+    bool TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        UpdateKey(TKey(blob.Id), txc, cookie, "AddDataOnDecommit", [&](TValue& value, bool inserted) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "AddDataOnDecommit", (Id, Self->GetLogId()), (Blob, blob),
-                (Value, value), (Inserted, inserted));
+        Y_VERIFY(Loaded || IsKeyLoaded(TKey(blob.Id)));
+
+        return UpdateKey(TKey(blob.Id), txc, cookie, "AddDataOnDecommit", [&](TValue& value, bool inserted) {
+            bool change = inserted;
 
             // update keep state if necessary
             if (blob.DoNotKeep && value.KeepState < EKeepState::DoNotKeep) {
                 value.KeepState = EKeepState::DoNotKeep;
+                change = true;
             } else if (blob.Keep && value.KeepState < EKeepState::Keep) {
                 value.KeepState = EKeepState::Keep;
+                change = true;
             }
 
-            // if there is not value chain for this blob, map it to the original blob id
-            if (value.ValueChain.empty()) {
-                value.OriginalBlobId = blob.Id;
-            }
-
-            return EUpdateOutcome::CHANGE;
+            return change ? EUpdateOutcome::CHANGE : EUpdateOutcome::NO_CHANGE;
         });
     }
 
@@ -359,8 +373,8 @@ namespace NKikimr::NBlobDepot {
         record.LastConfirmedGenStep = confirmedGenStep;
     }
 
-    bool TData::UpdateKeepState(TKey key, EKeepState keepState,
-            NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+    bool TData::UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        Y_VERIFY(Loaded || IsKeyLoaded(key));
         return UpdateKey(std::move(key), txc, cookie, "UpdateKeepState", [&](TValue& value, bool inserted) {
              STLOG(PRI_DEBUG, BLOB_DEPOT, BDT51, "UpdateKeepState", (Id, Self->GetLogId()), (Key, key),
                 (KeepState, keepState), (Value, value));

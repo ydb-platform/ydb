@@ -33,14 +33,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
-        if (!Configured || (Config.GetIsDecommittingGroup() && DecommitState < EDecommitState::BlocksFinished)) {
-            const auto it = PipeServers.find(ev->Recipient);
-            Y_VERIFY(it != PipeServers.end());
-            it->second.PostponeFromAgent = true;
-            it->second.PostponeQ.emplace_back(ev.Release());
-            return;
-        }
-
         const ui32 nodeId = ev->Sender.NodeId();
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
@@ -142,66 +134,35 @@ namespace NKikimr::NBlobDepot {
         const ui32 generation = Executor()->Generation();
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
 
-        if (const auto it = ChannelKinds.find(record->GetChannelKind()); it != ChannelKinds.end()) {
-            auto& kind = it->second;
-            auto *givenIdRange = record->MutableGivenIdRange();
+        auto *givenIdRange = record->MutableGivenIdRange();
 
-            struct TGroupInfo {
-                std::vector<TChannelInfo*> Channels;
-            };
-            std::unordered_map<ui32, TGroupInfo> groups;
+        std::vector<ui8> channels(ev->Get()->Record.GetCount());
+        PickChannels(record->GetChannelKind(), channels);
 
-            for (const auto& [channel, groupId] : kind.ChannelGroups) {
-                Y_VERIFY_DEBUG(channel < Channels.size() && Channels[channel].ChannelKind == it->first);
-                groups[groupId].Channels.push_back(&Channels[channel]);
+        THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
+        for (ui8 channelIndex : channels) {
+            TChannelInfo& channel = Channels[channelIndex];
+            const ui64 value = channel.NextBlobSeqId++;
+
+            // fill in range item
+            auto& range = issuedRanges[channelIndex];
+            if (!range || range->GetEnd() != value) {
+                range = givenIdRange->AddChannelRanges();
+                range->SetChannel(channelIndex);
+                range->SetBegin(value);
             }
+            range->SetEnd(value + 1);
+        }
 
-            std::vector<std::tuple<ui64, const TGroupInfo*>> options;
+        // register issued ranges in agent and global records
+        TAgent& agent = GetAgent(ev->Recipient);
+        for (const auto& range : givenIdRange->GetChannelRanges()) {
+            agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
+            Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
 
-            ui64 accum = 0;
-            for (const auto& [groupId, group] : groups) {
-                if (const ui64 w = SpaceMonitor->GetGroupAllocationWeight(groupId)) {
-                    accum += w;
-                    options.emplace_back(accum, &group);
-                }
-            }
-
-            if (accum) {
-                THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
-                for (ui32 i = 0, count = ev->Get()->Record.GetCount(); i < count; ++i) {
-                    const ui64 selection = RandomNumber(accum);
-                    const auto it = std::upper_bound(options.begin(), options.end(), selection,
-                        [](ui64 x, const auto& y) { return x < std::get<0>(y); });
-                    const auto& [_, group] = *it;
-
-                    const size_t channelIndex = RandomNumber(group->Channels.size());
-                    TChannelInfo* const channel = group->Channels[channelIndex];
-
-                    const ui64 value = channel->NextBlobSeqId++;
-
-                    // fill in range item
-                    auto& range = issuedRanges[channel->Index];
-                    if (!range || range->GetEnd() != value) {
-                        range = givenIdRange->AddChannelRanges();
-                        range->SetChannel(channel->Index);
-                        range->SetBegin(value);
-                    }
-                    range->SetEnd(value + 1);
-                }
-            } else {
-                Y_VERIFY_DEBUG(false); // TODO(alexvru): handle this situation somehow -- agent needs to retry this query?
-            }
-
-            // register issued ranges in agent and global records
-            TAgent& agent = GetAgent(ev->Recipient);
-            for (const auto& range : givenIdRange->GetChannelRanges()) {
-                agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
-                Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
-
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (Id, GetLogId()),
-                    (AgentId, agent.Connection->NodeId), (Channel, range.GetChannel()),
-                    (Begin, range.GetBegin()), (End, range.GetEnd()));
-            }
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (Id, GetLogId()),
+                (AgentId, agent.Connection->NodeId), (Channel, range.GetChannel()),
+                (Begin, range.GetBegin()), (End, range.GetEnd()));
         }
 
         TActivationContext::Send(response.release());
@@ -246,46 +207,6 @@ namespace NKikimr::NBlobDepot {
         agent.InvalidatedStepInFlight.clear();
     }
 
-    void TBlobDepot::InitChannelKinds() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (Id, GetLogId()));
-
-        TTabletStorageInfo *info = Info();
-        const ui32 generation = Executor()->Generation();
-
-        Y_VERIFY(Channels.empty());
-
-        ui32 channel = 0;
-        for (const auto& profile : Config.GetChannelProfiles()) {
-            for (ui32 i = 0, count = profile.GetCount(); i < count; ++i, ++channel) {
-                if (channel >= 2) {
-                    const auto kind = profile.GetChannelKind();
-                    auto& p = ChannelKinds[kind];
-                    p.ChannelToIndex[channel] = p.ChannelGroups.size();
-                    p.ChannelGroups.emplace_back(channel, info->GroupFor(channel, generation));
-                    Channels.push_back({
-                        ui8(channel),
-                        kind,
-                        &p,
-                        {},
-                        TBlobSeqId{channel, generation, 1, 0}.ToSequentialNumber(),
-                        {},
-                        {},
-                    });
-                } else {
-                    Channels.push_back({
-                        ui8(channel),
-                        NKikimrBlobDepot::TChannelKind::System,
-                        nullptr,
-                        {},
-                        0,
-                        {},
-                        {},
-                    });
-                }
-            }
-        }
-    }
-
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
         TAgent& agent = GetAgent(ev->Recipient);
         if (const auto it = agent.PushCallbacks.find(ev->Get()->Record.GetId()); it != agent.PushCallbacks.end()) {
@@ -296,19 +217,19 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::ProcessRegisterAgentQ() {
-        if (!Configured || (Config.GetIsDecommittingGroup() && DecommitState < EDecommitState::BlocksFinished)) {
+        if (!ReadyForAgentQueries()) {
             return;
         }
 
         for (auto& [pipeServerId, info] : PipeServers) {
-            if (info.PostponeFromAgent) {
-                info.PostponeFromAgent = false;
-                for (auto& ev : std::exchange(info.PostponeQ, {})) {
-                    Y_VERIFY(ev->Cookie == info.NextExpectedMsgId);
-                    ++info.NextExpectedMsgId;
-
-                    TAutoPtr<IEventHandle> tmp(ev.release());
-                    HandleFromAgent(tmp);
+            if (info.ProcessThroughQueue) {
+                if (info.PostponeQ.empty()) {
+                    info.ProcessThroughQueue = false;
+                } else {
+                    for (auto& ev : std::exchange(info.PostponeQ, {})) {
+                        TActivationContext::Send(ev.release());
+                    }
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessRegisterAgentQ, 0, SelfId(), {}, nullptr, 0));
                 }
             }
         }

@@ -49,21 +49,24 @@ namespace NKikimr::NBlobDepot {
             auto handleFromAgentPipe = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 Y_VERIFY(it != PipeServers.end());
+                auto& info = it->second;
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT69, "HandleFromAgentPipe", (Id, GetLogId()), (RequestId, ev->Cookie),
-                    (Postpone, it->second.PostponeFromAgent), (Sender, ev->Sender), (PipeServerId, ev->Recipient));
+                    (Sender, ev->Sender), (PipeServerId, ev->Recipient), (ProcessThroughQueue, info.ProcessThroughQueue),
+                    (NextExpectedMsgId, info.NextExpectedMsgId), (PostponeQ.size, info.PostponeQ.size()));
 
-                if (it->second.PostponeFromAgent) {
-                    it->second.PostponeQ.emplace_back(ev.Release());
-                    return;
+                if (info.ProcessThroughQueue || !ReadyForAgentQueries()) {
+                    info.PostponeQ.emplace_back(ev.Release());
+                    info.ProcessThroughQueue = true;
+                } else {
+                    // ensure correct ordering of incoming messages
+                    Y_VERIFY_S(ev->Cookie == info.NextExpectedMsgId, "message reordering detected Cookie# " << ev->Cookie
+                        << " NextExpectedMsgId# " << info.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
+                        ev->GetTypeRewrite()) << " Id# " << GetLogId());
+                    ++info.NextExpectedMsgId;
+
+                    HandleFromAgent(ev);
                 }
-
-                Y_VERIFY_S(ev->Cookie == it->second.NextExpectedMsgId, "pipe reordering detected Cookie# " << ev->Cookie
-                    << " NextExpectedMsgId# " << it->second.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
-                    ev->GetTypeRewrite()) << " Id# " << GetLogId());
-
-                ++it->second.NextExpectedMsgId;
-                HandleFromAgent(ev);
             };
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
@@ -80,6 +83,8 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobDepot::EvQueryBlocks, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
+
+                cFunc(TEvPrivate::EvProcessRegisterAgentQ, ProcessRegisterAgentQ);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Data->Handle);
@@ -114,6 +119,103 @@ namespace NKikimr::NBlobDepot {
         }
 
         TActor::PassAway();
+    }
+
+    void TBlobDepot::InitChannelKinds() {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (Id, GetLogId()));
+
+        TTabletStorageInfo *info = Info();
+        const ui32 generation = Executor()->Generation();
+
+        Y_VERIFY(Channels.empty());
+
+        ui32 channel = 0;
+        for (const auto& profile : Config.GetChannelProfiles()) {
+            for (ui32 i = 0, count = profile.GetCount(); i < count; ++i, ++channel) {
+                const ui32 groupId = info->GroupFor(channel, generation);
+                if (channel >= 2) {
+                    const auto kind = profile.GetChannelKind();
+                    auto& p = ChannelKinds[kind];
+                    p.ChannelToIndex[channel] = p.ChannelGroups.size();
+                    p.ChannelGroups.emplace_back(channel, groupId);
+                    Channels.push_back({
+                        ui8(channel),
+                        groupId,
+                        kind,
+                        &p,
+                        {},
+                        TBlobSeqId{channel, generation, 1, 0}.ToSequentialNumber(),
+                        {},
+                        {},
+                        {},
+                    });
+                    Groups[groupId].Channels[kind].push_back(channel);
+                } else {
+                    Channels.push_back({
+                        ui8(channel),
+                        groupId,
+                        NKikimrBlobDepot::TChannelKind::System,
+                        nullptr,
+                        {},
+                        0,
+                        {},
+                        {},
+                        {},
+                    });
+                }
+            }
+        }
+    }
+
+    void TBlobDepot::InvalidateGroupForAllocation(ui32 groupId) {
+        const auto groupIt = Groups.find(groupId);
+        Y_VERIFY(groupIt != Groups.end());
+        const auto& group = groupIt->second;
+        for (const auto& [kind, channels] : group.Channels) {
+            const auto kindIt = ChannelKinds.find(kind);
+            Y_VERIFY(kindIt != ChannelKinds.end());
+            auto& kindv = kindIt->second;
+            kindv.GroupAccumWeights.clear(); // invalidate
+        }
+    }
+
+    void TBlobDepot::PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels) {
+        const auto kindIt = ChannelKinds.find(kind);
+        Y_VERIFY(kindIt != ChannelKinds.end());
+        auto& kindv = kindIt->second;
+
+        if (kindv.GroupAccumWeights.empty()) {
+            // recalculate group weights
+            ui64 accum = 0;
+            THashSet<ui32> seenGroups;
+            for (const auto& [channel, groupId] : kindv.ChannelGroups) {
+                if (const auto& [_, inserted] = seenGroups.insert(groupId); inserted) {
+                    accum += SpaceMonitor->GetGroupAllocationWeight(groupId);
+                    kindv.GroupAccumWeights.emplace_back(groupId, accum);
+                }
+            }
+            Y_VERIFY(!kindv.GroupAccumWeights.empty());
+        }
+
+        const auto [_, accum] = kindv.GroupAccumWeights.back();
+        for (ui8& channel : channels) {
+            const ui64 random = RandomNumber(accum);
+            const auto comp = [](ui64 x, const auto& y) { return x < std::get<1>(y); };
+            const auto it = std::upper_bound(kindv.GroupAccumWeights.begin(), kindv.GroupAccumWeights.end(), random, comp);
+            Y_VERIFY(it != kindv.GroupAccumWeights.end());
+            const auto [groupId, _] = *it;
+
+            const auto groupIt = Groups.find(groupId);
+            Y_VERIFY(groupIt != Groups.end());
+            auto& group = groupIt->second;
+
+            const auto channelsIt = group.Channels.find(kind);
+            Y_VERIFY(channelsIt != group.Channels.end());
+            const auto& channels = channelsIt->second;
+
+            const size_t channelIndex = RandomNumber(channels.size());
+            channel = channels[channelIndex];
+        }
     }
 
     IActor *CreateBlobDepot(const TActorId& tablet, TTabletStorageInfo *info) {

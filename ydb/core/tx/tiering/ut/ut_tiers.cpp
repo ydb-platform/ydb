@@ -39,21 +39,10 @@ public:
              SchemaPresets {
                  Name: "default"
                  Schema {
-                     Columns { Name: "timestamp" Type: "Timestamp" }
-                     #Columns { Name: "resource_type" Type: "Utf8" }
-                     Columns { Name: "resource_id" Type: "Utf8" }
-                     Columns { Name: "uid" Type: "Utf8" }
-                     Columns { Name: "level" Type: "Int32" }
-                     Columns { Name: "message" Type: "Utf8" }
-                     #Columns { Name: "json_payload" Type: "Json" }
-                     #Columns { Name: "ingested_at" Type: "Timestamp" }
-                     #Columns { Name: "saved_at" Type: "Timestamp" }
-                     #Columns { Name: "request_id" Type: "Utf8" }
-                     KeyColumnNames: "timestamp"
-                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                     %s
                  }
              }
-        )", storeName.c_str(), storeShardsCount));
+        )", storeName.c_str(), storeShardsCount, PROTO_SCHEMA));
 
         TString shardingColumns = "[\"timestamp\", \"uid\"]";
         if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {

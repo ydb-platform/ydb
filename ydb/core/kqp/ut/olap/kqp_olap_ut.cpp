@@ -49,8 +49,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
-        //runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
@@ -69,26 +68,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString shardingFunction = "HASH_FUNCTION_CLOUD_LOGS") {
             TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
             CreateTestOlapStore(sender, Sprintf(R"(
-             Name: "%s"
-             ColumnShardCount: %d
-             SchemaPresets {
-                 Name: "default"
-                 Schema {
-                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                     #Columns { Name: "resource_type" Type: "Utf8" }
-                     Columns { Name: "resource_id" Type: "Utf8" }
-                     Columns { Name: "uid" Type: "Utf8" }
-                     Columns { Name: "level" Type: "Int32" }
-                     Columns { Name: "message" Type: "Utf8" }
-                     #Columns { Name: "json_payload" Type: "Json" }
-                     #Columns { Name: "ingested_at" Type: "Timestamp" }
-                     #Columns { Name: "saved_at" Type: "Timestamp" }
-                     #Columns { Name: "request_id" Type: "Utf8" }
-                     KeyColumnNames: "timestamp"
-                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                 }
-             }
-        )", storeName.c_str(), storeShardsCount));
+                Name: "%s"
+                ColumnShardCount: %d
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        %s
+                    }
+                }
+            )", storeName.c_str(), storeShardsCount, PROTO_SCHEMA));
 
             TString shardingColumns = "[\"timestamp\", \"uid\"]";
             if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {
@@ -113,18 +101,37 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    std::shared_ptr<arrow::Schema> GetArrowSchema() {
-        return std::make_shared<arrow::Schema>(
-            std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-                arrow::field("resource_id", arrow::utf8()),
-                arrow::field("uid", arrow::utf8()),
-                arrow::field("level", arrow::int32()),
-                arrow::field("message", arrow::utf8())
-            });
-    }
+    class TClickHelper : public Tests::NCS::TCickBenchHelper {
+    private:
+        using TBase = Tests::NCS::TCickBenchHelper;
+    public:
+        using TBase::TBase;
+
+        TClickHelper(TKikimrRunner& runner)
+            : TBase(runner.GetTestServer())
+        {}
+
+        void CreateClickBenchTable(TString tableName = "benchTable", ui32 shardsCount = 4) {
+            TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+
+            TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+                Name: "%s"
+                ColumnShardCount: %d
+                Schema {
+                    %s
+                }
+                Sharding {
+                    HashSharding {
+                        Function: HASH_FUNCTION_MODULO_N
+                        Columns: "EventTime"
+                    }
+                })", tableName.c_str(), shardsCount, PROTO_SCHEMA));
+        }
+    };
 
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+        UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
+
         TLocalHelper lHelper(kikimr.GetTestServer());
         NYdb::NLongTx::TClient client(kikimr.GetDriver());
 
@@ -132,7 +139,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
 
         auto txId = resBeginTx.GetResult().tx_id();
-        TString data = lHelper.TestBlob(pathIdBegin, tsBegin, rowCount);
+        auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
+        TString data = NArrow::SerializeBatchNoCompression(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -1571,6 +1579,66 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregationsInternal(cases);
     }
 
+    void TestClickBench(const std::vector<TAggregationTestCase>& cases) {
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetNodeCount(2);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        EnableDebugLogging(runtime);
+
+        TClickHelper(*server).CreateClickBenchTable();
+
+        // write data
+
+        ui32 numIterations = 10;
+        const ui32 iterationPackSize = 2000;
+        for (ui64 i = 0; i < numIterations; ++i) {
+            TClickHelper(*server).SendDataViaActorSystem("/Root/benchTable", 0, 1000000 + i * 1000000,
+                                                         iterationPackSize);
+        }
+
+        TAggregationTestCase currentTest;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TKqpComputeEvents::EvScanData:
+                {
+                    auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
+                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_rows() : 0));
+                    Y_VERIFY(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
+                    break;
+                }
+                case TEvDataShard::EvKqpScan:
+                {
+                    auto* msg = ev->Get<TEvDataShard::TEvKqpScan>();
+                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime->SetObserverFunc(captureEvents);
+
+        // selects
+
+        for (auto&& i : cases) {
+            const TString queryFixed = i.GetFixedQuery();
+            currentTest = i;
+            auto streamSender = runtime->AllocateEdgeActor();
+            SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, queryFixed, false));
+            auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(streamSender, TDuration::Seconds(10));
+            Y_VERIFY(currentTest.CheckFinished());
+        }
+    }
+
     Y_UNIT_TEST(Aggregation_ResultDistinctCountRI_GroupByL) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
@@ -1903,6 +1971,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
 
         TestAggregations({ testCase });
+    }
+
+    Y_UNIT_TEST(ClickBenchSmoke) {
+        TAggregationTestCase q7;
+        q7.SetQuery(R"(
+                SELECT
+                    AdvEngineID, COUNT(*) as c
+                FROM `/Root/benchTable`
+                WHERE AdvEngineID != 0
+                GROUP BY AdvEngineID
+                ORDER BY c DESC
+            )")
+            //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .SetExpectedReadNodeType("TableFullScan");
+
+        TAggregationTestCase q9;
+        q9.SetQuery(R"(
+                SELECT
+                    RegionID, SUM(AdvEngineID), COUNT(*) AS c, avg(ResolutionWidth), COUNT(DISTINCT UserID)
+                FROM `/Root/benchTable`
+                GROUP BY RegionID
+                ORDER BY c DESC
+                LIMIT 10
+            )")
+            //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .SetExpectedReadNodeType("TableFullScan");
+
+        TAggregationTestCase q12;
+        q12.SetQuery(R"(
+                SELECT
+                    SearchPhrase, count(*) AS c
+                FROM `/Root/benchTable`
+                WHERE SearchPhrase != ''
+                GROUP BY SearchPhrase
+                ORDER BY c DESC
+                LIMIT 10;
+            )")
+            //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .SetExpectedReadNodeType("TableFullScan");
+
+        TAggregationTestCase q14;
+        q14.SetQuery(R"(
+                SELECT
+                    SearchEngineID, SearchPhrase, count(*) AS c
+                FROM `/Root/benchTable`
+                WHERE SearchPhrase != ''
+                GROUP BY SearchEngineID, SearchPhrase
+                ORDER BY c DESC
+                LIMIT 10;
+            )")
+            //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
+            .SetExpectedReadNodeType("TableFullScan");
+
+        TestClickBench({ q7, q9, q12, q14 });
     }
 
     Y_UNIT_TEST(StatsSysView) {

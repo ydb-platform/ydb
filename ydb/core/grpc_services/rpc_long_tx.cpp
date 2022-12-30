@@ -68,12 +68,14 @@ class TFullSplitData {
 private:
     ui32 ShardsCount = 0;
     THashMap<ui64, TShardInfo> ShardsInfo;
-public:
-    TFullSplitData(const ui32 shardsCount)
-        : ShardsCount(shardsCount)
-    {
 
-    }
+public:
+    TString ErrorString;
+
+    TFullSplitData(const ui32 shardsCount, TString errString = {})
+        : ShardsCount(shardsCount)
+        , ErrorString(errString)
+    {}
 
     const THashMap<ui64, TShardInfo>& GetShardsInfo() const {
         return ShardsInfo;
@@ -123,6 +125,14 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     }
 
     if (rowSharding.empty()) {
+        result.ErrorString = "empty "
+            + NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(hashSharding.GetFunction())
+            + " sharding";
+        for (auto& column : shardingColumns) {
+            if (batch->schema()->GetFieldIndex(column) < 0) {
+                result.ErrorString += ", no column '" + column + "'";
+            }
+        }
         return result;
     }
 
@@ -149,8 +159,13 @@ TFullSplitData SplitData(const TString& data, const NKikimrSchemeOp::TColumnTabl
 
     std::shared_ptr<arrow::Schema> schema = ExtractArrowSchema(olapSchema);
     std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(data, schema);
-    if (!batch || !batch->ValidateFull().ok()) {
-        return TFullSplitData(0);
+    if (!batch) {
+        return TFullSplitData(0, TString("cannot deserialize batch with schema ") + schema->ToString());
+    }
+
+    auto res = batch->ValidateFull();
+    if (!res.ok()) {
+        return TFullSplitData(0, TString("deserialize batch is not valid: ") + res.ToString());
     }
     return SplitData(batch, description);
 }
@@ -465,7 +480,7 @@ protected:
                 SplitData(GetDeserializedBatch(), description) :
                 SplitData(GetSerializedData(), description);
             if (batches.GetShardsInfo().empty()) {
-                return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Cannot deserialize or split input data");
+                return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Input data sharding error: " + batches.ErrorString);
             }
             ui32 sumBytes = 0;
             ui32 rowsCount = 0;

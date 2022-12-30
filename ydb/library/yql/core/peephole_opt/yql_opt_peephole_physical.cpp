@@ -4418,6 +4418,9 @@ struct TBlockRules {
         {"<=", { "LessOrEqual" } },
         {">",  { "Greater" } },
         {">=", { "GreaterOrEqual" } },
+
+        // size kernel
+        {"Size", { "Size" } },
     };
 
     TBlockRules()

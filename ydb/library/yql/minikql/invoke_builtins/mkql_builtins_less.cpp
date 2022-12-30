@@ -1,6 +1,7 @@
 #include "mkql_builtins_compare.h"
 #include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h"
+#include "mkql_builtins_string_kernels.h"
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
@@ -287,7 +288,12 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterLess(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Less"] = std::make_unique<TBinaryNumericPredicateKernelFamily<TLessOp>>();
+    auto family = std::make_unique<TKernelFamilyBase>();
+
+    AddBinaryIntegralPredicateKernels<TLessOp>(*family);
+    RegisterStringKernelLess(*family);
+
+    kernelFamilyMap["Less"] = std::move(family);
 }
 
 } // namespace NMiniKQL

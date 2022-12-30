@@ -59,6 +59,7 @@ target_sources(yql-minikql-invoke_builtins PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_rotright.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_shiftleft.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_shiftright.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_string_kernels.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_sub.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_substring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_with.cpp

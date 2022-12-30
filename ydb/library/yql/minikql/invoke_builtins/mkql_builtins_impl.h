@@ -858,6 +858,74 @@ inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui64>() {
     return arrow::uint64();
 }
 
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<char*>() {
+    return arrow::binary();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<NYql::NUdf::TUtf8>() {
+    return arrow::utf8();
+}
+
+template<typename T>
+struct TPrimitiveDataType;
+
+template<>
+struct TPrimitiveDataType<bool> {
+    using TResult = arrow::UInt8Type;
+};
+
+template<>
+struct TPrimitiveDataType<i8> {
+    using TResult = arrow::Int8Type;
+};
+
+template<>
+struct TPrimitiveDataType<ui8> {
+    using TResult = arrow::UInt8Type;
+};
+
+template<>
+struct TPrimitiveDataType<i16> {
+    using TResult = arrow::Int16Type;
+};
+
+template<>
+struct TPrimitiveDataType<ui16> {
+    using TResult = arrow::UInt16Type;
+};
+
+template<>
+struct TPrimitiveDataType<i32> {
+    using TResult = arrow::Int32Type;
+};
+
+template<>
+struct TPrimitiveDataType<ui32> {
+    using TResult = arrow::UInt32Type;
+};
+
+template<>
+struct TPrimitiveDataType<i64> {
+    using TResult = arrow::Int64Type;
+};
+
+template<>
+struct TPrimitiveDataType<ui64> {
+    using TResult = arrow::UInt64Type;
+};
+
+template<>
+struct TPrimitiveDataType<char*> {
+    using TResult = arrow::BinaryType;
+};
+
+template<>
+struct TPrimitiveDataType<NYql::NUdf::TUtf8> {
+    using TResult = arrow::StringType;
+};
+
 template <typename T>
 arrow::compute::InputType GetPrimitiveInputArrowType() {
     return arrow::compute::InputType(GetPrimitiveDataType<T>(), arrow::ValueDescr::ANY);
@@ -871,6 +939,11 @@ arrow::compute::OutputType GetPrimitiveOutputArrowType() {
 template <typename T>
 T GetPrimitiveScalarValue(const arrow::Scalar& scalar) {
     return *static_cast<const T*>(dynamic_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data());
+}
+
+inline std::string_view GetStringScalarValue(const arrow::Scalar& scalar) {
+    const auto& base = dynamic_cast<const arrow::BaseBinaryScalar&>(scalar);
+    return std::string_view{reinterpret_cast<const char*>(base.value->data()), static_cast<size_t>(base.value->size())};
 }
 
 template <typename T>
@@ -921,9 +994,18 @@ inline arrow::Datum MakeScalarDatum<ui64>(ui64 value) {
     return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(value));
 }
 
-template<typename TInput1, typename TInput2, typename TOutput,
-    template<typename, typename, typename> class TFunc, bool DefaultNulls>
-struct TBinaryKernelExecs;
+template<typename TDerived>
+struct TUnaryKernelExecsBase {
+    static arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        MKQL_ENSURE(batch.values.size() == 1, "Expected single argument");
+        const auto& arg = batch.values[0];
+        if (arg.is_scalar()) {
+            return TDerived::ExecScalar(ctx, batch, res);
+        } else {
+            return TDerived::ExecArray(ctx, batch, res);
+        }
+    }
+};
 
 template<typename TDerived>
 struct TBinaryKernelExecsBase {
@@ -946,6 +1028,10 @@ struct TBinaryKernelExecsBase {
         }
     }
 };
+
+template<typename TInput1, typename TInput2, typename TOutput,
+         template<typename, typename, typename> class TFunc, bool DefaultNulls>
+struct TBinaryKernelExecs;
 
 template<typename TInput1, typename TInput2, typename TOutput,
         template<typename, typename, typename> class TFunc>
@@ -1188,7 +1274,7 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
     k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.KernelMap.emplace(std::make_pair(argTypes, returnType), std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
 }
 
 template<typename TInput1, typename TInput2,
@@ -1204,7 +1290,7 @@ void AddBinaryPredicateKernel(TKernelFamilyBase& owner) {
 
     arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
     k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.KernelMap.emplace(std::make_pair(argTypes, returnType), std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
 }
 
 template<template<typename, typename, typename> class TFunc>
@@ -1366,15 +1452,6 @@ void AddBinaryIntegralPredicateKernels(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernel<i64, ui64, TPred>(owner);
     AddBinaryPredicateKernel<i64, i64, TPred>(owner);
 }
-
-template<template<typename, typename, typename> class TPred>
-class TBinaryNumericPredicateKernelFamily : public TKernelFamilyBase {
-public:
-    TBinaryNumericPredicateKernelFamily()
-    {
-        AddBinaryIntegralPredicateKernels<TPred>(*this);
-    }
-};
 
 }
 }

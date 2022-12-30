@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <util/digest/numeric.h>
 
@@ -124,6 +125,10 @@ public:
         return it->second.get();
     }
 
+    void Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, std::unique_ptr<TKernel>&& kernel) {
+        KernelMap.emplace(std::make_pair(argTypes, returnType), std::move(kernel));
+    }
+private:
     TKernelMap KernelMap;
 };
 

@@ -1,6 +1,7 @@
 #include "mkql_builtins.h"
 #include "mkql_builtins_impl.h"
 #include "mkql_builtins_compare.h"
+#include "mkql_builtins_string_kernels.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 
@@ -59,7 +60,7 @@ void RegisterUnary(const arrow::compute::FunctionRegistry& registry, std::string
     NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
 
     auto family = std::make_unique<TKernelFamilyBase>();
-    family->KernelMap.emplace(argTypes, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
+    family->Adopt(argTypes, returnType, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
 
     Y_ENSURE(kernelFamilyMap.emplace(TString(name), std::move(family)).second);
 }
@@ -72,7 +73,7 @@ void RegisterBinary(const arrow::compute::FunctionRegistry& registry, std::strin
     NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
 
     auto family = std::make_unique<TKernelFamilyBase>();
-    family->KernelMap.emplace(argTypes, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
+    family->Adopt(argTypes, returnType, std::make_unique<TForeignKernel>(*family, argTypes, returnType, func));
 
     Y_ENSURE(kernelFamilyMap.emplace(TString(name), std::move(family)).second);
 }
@@ -128,6 +129,8 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamily
     RegisterGreater(kernelFamilyMap);
     RegisterGreaterOrEqual(registry);
     RegisterGreaterOrEqual(kernelFamilyMap);
+    // Size is missing in registry
+    RegisterSizeBuiltin(kernelFamilyMap);
 }
 
 void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out)

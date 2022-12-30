@@ -203,5 +203,20 @@ void TSchemeShard::WaitForTableProfiles(ui64 importId, ui32 itemIdx) {
     TableProfilesWaiters.insert(std::make_pair(importId, itemIdx));
 }
 
+void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx) {
+    if (config) {
+        LOG_N("Load table profiles");
+        TableProfiles.Load(*config);
+    } else {
+        LOG_W("Table profiles were not loaded");
+    }
+
+    TableProfilesLoaded = true;
+    auto waiters = std::move(TableProfilesWaiters);
+    for (const auto& [importId, itemIdx] : waiters) {
+        Execute(CreateTxProgressImport(importId, itemIdx), ctx);
+    }
+}
+
 } // NSchemeShard
 } // NKikimr

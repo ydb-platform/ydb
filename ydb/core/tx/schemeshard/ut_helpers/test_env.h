@@ -32,6 +32,7 @@ namespace NSchemeShardUT_Private {
 
         OPTION(ui32, NChannels, 4);
         OPTION(bool, EnablePipeRetries, true);
+        OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(std::optional<bool>, EnableSystemViews, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);

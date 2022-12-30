@@ -6313,12 +6313,7 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
 
 void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot subscribe to console configs");
-    TableProfilesLoaded = true;
-
-    auto waiters = std::move(TableProfilesWaiters);
-    for (const auto& [importId, itemIdx] : waiters) {
-        Execute(CreateTxProgressImport(importId, itemIdx), ctx);
-    }
+    LoadTableProfiles(nullptr, ctx);
 }
 
 void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx) {
@@ -6338,13 +6333,9 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasTableProfilesConfig()) {
-        TableProfiles.Load(appConfig.GetTableProfilesConfig());
-        TableProfilesLoaded = true;
-
-        auto waiters = std::move(TableProfilesWaiters);
-        for (const auto& [importId, itemIdx] : waiters) {
-            Execute(CreateTxProgressImport(importId, itemIdx), ctx);
-        }
+        LoadTableProfiles(&appConfig.GetTableProfilesConfig(), ctx);
+    } else {
+        LoadTableProfiles(nullptr, ctx);
     }
 
     if (IsSchemeShardConfigured()) {

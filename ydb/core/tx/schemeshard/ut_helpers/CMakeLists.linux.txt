@@ -18,6 +18,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   cpp-testing-unittest
   ydb-core-base
   core-blockstore-core
+  core-cms-console
   ydb-core-engine
   core-engine-minikql
   core-filestore-core

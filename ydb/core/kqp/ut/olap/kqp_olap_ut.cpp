@@ -1536,11 +1536,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui32 numShards = 1;
         ui32 numIterations = 10;
         TLocalHelper(*server).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
-        ui32 insertRows = 0;
         const ui32 iterationPackSize = 2000;
         for (ui64 i = 0; i < numIterations; ++i) {
             TLocalHelper(*server).SendDataViaActorSystem("/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
-            insertRows += iterationPackSize;
         }
 
         TAggregationTestCase currentTest;
@@ -2152,10 +2150,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const ui32 numShards = 10;
         const ui32 numIterations = 10;
         TLocalHelper(*server).CreateTestOlapTable("selectTable", "selectStore", numShards, numShards);
-        ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
             TLocalHelper(*server).SendDataViaActorSystem("/Root/selectStore/selectTable", 0, 1000000 + i*1000000, 2000);
-            insertRows += 2000;
         }
 
         ui64 result = 0;
@@ -2307,10 +2303,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const ui32 numShards = 10;
         const ui32 numIterations = 50;
         TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
-        ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
             TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
-            insertRows += 2000;
         }
 
         bool hasResult = false;

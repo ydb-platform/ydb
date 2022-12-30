@@ -17,12 +17,14 @@ Have a look at https://grpc.io/docs/languages/python/quickstart.
 ```bash
 ~$ cd ~/github/ydb
 ~/github/ydb$ ydb_root=$(pwd)
-~/github/ydb$ python3 -m grpc_tools.protoc -I=${ydb_root} --python_out=. --grpc_python_out=. ${ydb_root}/ydb/core/protos/*.proto
+~/github/ydb$ chmod +x ydb/apps/dstool/compile_protos.py
+~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
 ```
 
 ## Run
 
 ```bash
+~$ cd ~/github/ydb
 ~/github/ydb$ export PYTHONPATH=$PYTHONPATH:${ydb_root}
 ~/github/ydb$ chmod +x ./ydb/apps/dstool/ydb-dstool.py
 ~/github/ydb$ ./ydb/apps/dstool/ydb-dstool.py -e ydb.endpoint cluster list

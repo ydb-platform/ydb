@@ -560,7 +560,7 @@ private:
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() {
-                            str << "Window";
+                            str << "Passed/Total, sec";
                         }
                         TABLEH() {
                             str << "Txs";
@@ -587,7 +587,13 @@ private:
                 }
                 TABLEBODY() {
                     TABLER() {
-                        TABLED() { str << "total"; };
+                        TABLED() {
+                            if (Start) {
+                                str << (TInstant::Now() - Start).Seconds() << " / " << DurationSeconds;
+                            } else {
+                                str << -1 << " / " << DurationSeconds;
+                            }
+                        };
                         TABLED() { str << Total->LatencyHist.GetTotalCount(); };
                         TABLED() { str << Total->LatencyHist.GetTotalCount() / static_cast<double>(DurationSeconds); };
                         TABLED() { str << Total->Errors; };

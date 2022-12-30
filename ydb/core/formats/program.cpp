@@ -383,12 +383,8 @@ arrow::Result<arrow::Datum> CallHouseFunctionByAssign(
     TProgramStep::TDatumBatch& batch,
     arrow::compute::ExecContext* ctx)
 {
-    try {
-        return CallFunctionById<true>(assign.GetOperation(), assign.GetArguments(), &assign.GetAggregateOptions(),
-                                      batch, ctx);
-    } catch (const std::exception& ex) {
-        Y_VERIFY_S(false, ex.what());
-    }
+    return CallFunctionById<true>(assign.GetOperation(), assign.GetArguments(), &assign.GetAggregateOptions(),
+                                  batch, ctx);
 }
 
 CH::GroupByOptions::Assign GetGroupByAssign(const TAggregateAssign& assign) {

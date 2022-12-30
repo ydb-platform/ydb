@@ -66,7 +66,7 @@ public:
         };
 
         if (ReadMetadata->Program) {
-            auto status = ApplyProgram(out.ResultBatch, ReadMetadata->Program->Steps, NArrow::GetCustomExecContext());
+            auto status = ApplyProgram(out.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
             Y_VERIFY_S(status.ok(), status.message());
         }
         return out;

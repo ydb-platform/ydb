@@ -204,23 +204,37 @@ struct TProgramStep {
     arrow::Status ApplyProjection(TDatumBatch& batch) const;
 };
 
-inline arrow::Status ApplyProgram(
-    std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::vector<std::shared_ptr<TProgramStep>>& program,
-    arrow::compute::ExecContext* ctx = nullptr)
-{
-    for (auto& step : program) {
-        auto status = step->Apply(batch, ctx);
-        if (!status.ok()) {
-            return status;
-        }
-    }
-    return arrow::Status::OK();
-}
-
 struct TProgram {
     std::vector<std::shared_ptr<TProgramStep>> Steps;
     THashMap<ui32, TString> SourceColumns;
+
+    TProgram() = default;
+
+    TProgram(std::vector<std::shared_ptr<TProgramStep>>&& steps)
+        : Steps(std::move(steps))
+    {}
+
+    arrow::Status ApplyTo(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
+        try {
+            for (auto& step : Steps) {
+                auto status = step->Apply(batch, ctx);
+                if (!status.ok()) {
+                    return status;
+                }
+            }
+        } catch (const std::exception& ex) {
+            return arrow::Status::Invalid(ex.what());
+        }
+        return arrow::Status::OK();
+    }
 };
+
+inline arrow::Status ApplyProgram(
+    std::shared_ptr<arrow::RecordBatch>& batch,
+    const TProgram& program,
+    arrow::compute::ExecContext* ctx = nullptr)
+{
+    return program.ApplyTo(batch, ctx);
+}
 
 }

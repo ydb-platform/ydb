@@ -29,7 +29,7 @@ size_t FilterTest(std::vector<std::shared_ptr<arrow::Array>> args, EOperation op
     step->Assignes = {TAssign("res1", op1, {"x", "y"}), TAssign("res2", op2, {"res1", "z"})};
     step->Filters = {"res2"};
     step->Projection = {"res1", "res2"};
-    UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+    UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
     UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
     return batch->num_rows();
@@ -46,7 +46,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     step->Assignes = {TAssign("res1", op1, {"x"}), TAssign("res2", op2, {"res1", "z"})};
     step->Filters = {"res2"};
     step->Projection = {"res1", "res2"};
-    UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+    UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
     UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
     return batch->num_rows();
@@ -75,7 +75,7 @@ void SumGroupBy(bool nullable, ui32 numKeys = 1) {
         step->GroupByKeys.push_back("y");
     }
 
-    UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+    UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
     UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), numKeys + 2);
     UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         step->Assignes = {TAssign("y", 56), TAssign("res", EOperation::Add, {"x", "y"})};
         step->Filters = {"filter"};
         step->Projection = {"res", "filter"};
-        UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+        UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         auto step = std::make_shared<TProgramStep>();
         step->Projection = {"x"};
-        UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+        UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 4);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             TAggregateAssign("min_x", EAggregate::Min, {"x"}),
             TAggregateAssign("max_y", EAggregate::Max, {"y"})
         };
-        UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+        UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             TAggregateAssign("sum_x", EAggregate::Sum, {"x"}),
             TAggregateAssign("sum_y", EAggregate::Sum, {"y"})
         };
-        UNIT_ASSERT(ApplyProgram(batch, {step}, GetCustomExecContext()).ok());
+        UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);

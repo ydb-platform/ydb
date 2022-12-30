@@ -1,4 +1,5 @@
 #include "arrow_util.h"
+#include "mkql_bit_utils.h"
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 
 #include <util/system/yassert.h>
@@ -52,5 +53,18 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
     }
 }
 
+std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool) {
+    // align up to 64 bit
+    bitCount = (bitCount + 63u) & ~size_t(63u);
+    // this simplifies code compression code - we can write single 64 bit word after array boundaries
+    bitCount += 64;
+    return ARROW_RESULT(arrow::AllocateBitmap(bitCount, pool));
+}
+
+std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool) {
+    auto bitmap = AllocateBitmapWithReserve(len, pool);
+    CompressSparseBitmap(bitmap->mutable_data(), srcSparse, len);
+    return bitmap;
+}
 
 }

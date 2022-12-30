@@ -1,8 +1,8 @@
 #include "mkql_block_builder.h"
-#include "mkql_bit_utils.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
+#include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -45,79 +45,6 @@ std::shared_ptr<arrow::DataType> GetArrowType(TType* type) {
     Y_VERIFY(ConvertArrowType(type, result));
     return result;
 }
-
-std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool) {
-    // align up to 64 bit
-    bitCount = (bitCount + 63u) & ~size_t(63u);
-    // this simplifies code compression code - we can write single 64 bit word after array boundaries
-    bitCount += 64;
-    return ARROW_RESULT(arrow::AllocateBitmap(bitCount, pool));
-}
-
-std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool) {
-    auto bitmap = AllocateBitmapWithReserve(len, pool);
-    CompressSparseBitmap(bitmap->mutable_data(), srcSparse, len);
-    return bitmap;
-}
-
-// similar to arrow::TypedBufferBuilder, but with UnsafeAdvance() method
-template<typename T>
-class TTypedBufferBuilder {
-    static_assert(std::is_pod_v<T>);
-    static_assert(!std::is_same_v<T, bool>);
-public:
-    explicit TTypedBufferBuilder(arrow::MemoryPool* pool)
-        : Builder(pool)
-    {
-    }
-
-    inline void Reserve(size_t size) {
-        ARROW_OK(Builder.Reserve(size * sizeof(T)));
-    }
-
-    inline size_t Length() const {
-        return Builder.length() / sizeof(T);
-    }
-
-    inline T* MutableData() {
-        return reinterpret_cast<T*>(Builder.mutable_data());
-    }
-
-    inline T* End() {
-        return MutableData() + Length();
-    }
-
-    inline const T* Data() const {
-        return reinterpret_cast<const T*>(Builder.data());
-    }
-
-    inline void UnsafeAppend(const T* values, size_t count) {
-        std::memcpy(End(), values, count * sizeof(T));
-        UnsafeAdvance(count);
-    }
-
-    inline void UnsafeAppend(size_t count, const T& value) {
-        T* target = End();
-        std::fill(target, target + count, value);
-        UnsafeAdvance(count);
-    }
-
-    inline void UnsafeAppend(T&& value) {
-        *End() = std::move(value);
-        UnsafeAdvance(1);
-    }
-
-    inline void UnsafeAdvance(size_t count) {
-        Builder.UnsafeAdvance(count * sizeof(T));
-    }
-
-    inline std::shared_ptr<arrow::Buffer> Finish() {
-        bool shrinkToFit = false;
-        return ARROW_RESULT(Builder.Finish(shrinkToFit));
-    }
-private:
-    arrow::BufferBuilder Builder;
-};
 
 class TBlockBuilderBase : public IBlockBuilder {
 public:
@@ -362,7 +289,6 @@ public:
                 AppendCurrentOffset();
                 return;
             }
-            NullBuilder->UnsafeAppend(1);
         }
 
         const TStringBuf str = value.AsStringRef();
@@ -380,6 +306,9 @@ public:
 
         AppendCurrentOffset();
         DataBuilder->UnsafeAppend((const ui8*)str.data(), str.size());
+        if (Nullable) {
+            NullBuilder->UnsafeAppend(1);
+        }
     }
 
     void DoAddDefault() final {

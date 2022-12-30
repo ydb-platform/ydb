@@ -5433,7 +5433,13 @@ Value {
 
         auto merge = pgmBuilder.CombineByKeyMerge(agg);
 
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", merge)));
+        auto sorted = pgmBuilder.Sort(merge,
+            pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true),
+            [&pgmBuilder](TRuntimeNode item) {
+                return pgmBuilder.Member(item, "Key");
+            });
+
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", sorted)));
 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
             Y_UNUSED(shard);
@@ -5545,7 +5551,13 @@ Value {
 
         auto merge = pgmBuilder.CombineByKeyMerge(agg);
 
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", merge)));
+        auto sorted = pgmBuilder.Sort(merge,
+            pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true),
+            [&pgmBuilder](TRuntimeNode item) {
+                return pgmBuilder.Member(item, "Key");
+            });
+
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", sorted)));
 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
             Y_UNUSED(shard);

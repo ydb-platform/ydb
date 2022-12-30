@@ -1069,7 +1069,9 @@ actions {
                         select 1 as k, 'a' as v
                         union all select 2 as k, 'b' as v
                         union all select 2 as k, 'c' as v
-                    ) group by k""",
+                    ) group by k
+                    ORDER BY k
+                """,
                 [{'k': 1, 'v': b'a'}, {'k': 2, 'v': b'c'}]
             ),
             wrap(
@@ -1079,7 +1081,9 @@ actions {
                         union all select 2 as k, 'b' as v
                         union all select 2 as k, 'c' as v
                     )
-                    group by k""",
+                    group by k
+                    ORDER BY k
+                """,
                 [{'k': 1, 'v': 1}, {'k': 2, 'v': 2}]
             ),
             wrap(
@@ -1089,7 +1093,9 @@ actions {
             wrap(
                 """select a.k as k, a.v as av, b.v as bv from (
                    select 1 as k, 1 as v union all select 2 as k, 2 as v) as a
-                   left join ( select 1 as k, 1 as v union all select 2 as k, 2 as v) as b on a.k = b.k""",
+                   left join ( select 1 as k, 1 as v union all select 2 as k, 2 as v) as b on a.k = b.k
+                    ORDER BY k
+                """,
                 [
                     {'k': 1, 'av': 1, 'bv': 1},
                     {'k': 2, 'av': 2, 'bv': 2},

@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 == t2.Key1
-            WHERE t1.Value == "Value3";
+            WHERE t1.Value == "Value3" ORDER BY t2.Value;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -282,14 +282,15 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             DECLARE $in AS List<Struct<k: Int32>>;
             SELECT * FROM AS_TABLE($in) AS t1
             INNER JOIN `/Root/Join1_2` AS t2
-            ON t1.k == t2.Key1;
+            ON t1.k == t2.Key1
+            ORDER BY k, Value;
         )");
 
         const TString expected = R"(
             [
                 [["Name1"];[101];["One"];["Value21"];101];
+                [["Name1"];[101];["Two"];["Value22"];101];
                 [["Name3"];[101];["Three"];["Value23"];101];
-                [["Name1"];[101];["Two"];["Value22"];101]
             ]
         )";
 
@@ -490,6 +491,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 DECLARE $in AS List<Struct<k: Int32?>>;
                 SELECT *
                 FROM AS_TABLE($in) AS k RIGHT SEMI JOIN `/Root/RSJ_SimpleKey_1` AS t ON k.k = t.Key
+                ORDER BY Value
             )");
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
@@ -509,6 +511,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             const TString query = Q_(R"(
                 SELECT *
                 FROM `/Root/RSJ_SimpleKey_1` AS l RIGHT SEMI JOIN `/Root/RSJ_SimpleKey_2` AS r ON l.Key = r.Key
+                ORDER BY Key;
             )");
 
             auto result = ExecQuery(session, query, NoParams, R"([[[1];["2.One"]];[[2];["2.Two"]]])");
@@ -532,6 +535,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     SELECT *
                     FROM AS_TABLE($in) AS k RIGHT SEMI JOIN `/Root/RSJ_CompositeKey_1` AS t
                          ON k.k1 = t.Key1 AND k.k2 = t.Key2
+                    ORDER BY Value
                 )");
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
@@ -561,6 +565,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     SELECT *
                     FROM `/Root/RSJ_CompositeKey_1` AS l RIGHT SEMI JOIN `/Root/RSJ_CompositeKey_2` AS r
                          ON l.Key1 = r.Key1 AND l.Key2 = r.Key2
+                    ORDER BY Value;
                 )");
 
             auto result = ExecQuery(session, query, NoParams, R"([[[1];["One"];["2.1.One"]];[[6];["Six"];["2.6.Six"]]])");
@@ -584,6 +589,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 SELECT *
                 FROM AS_TABLE($in) AS l RIGHT SEMI JOIN `/Root/RSJ_CompositeKey_1` AS r
                      ON l.k = r.Key1
+                ORDER BY Value
             )");
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
@@ -605,6 +611,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                         SELECT *
                         FROM `/Root/RSJ_SimpleKey_1` AS l RIGHT SEMI JOIN `/Root/RSJ_CompositeKey_1` AS r
                              ON l.Key = r.Key1
+                        ORDER BY Value;
                     )");
 
             auto result = ExecQuery(session, query, NoParams, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]];[[3];["Three"];["1.3.Three"]]])");

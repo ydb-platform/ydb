@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 << Q_(R"(
                     DECLARE $in AS List<Struct<k: Uint64>>;
                     SELECT Key, Value
-                    FROM `/Root/KeyValue` WHERE Key IN (SELECT k FROM AS_TABLE($in))
+                    FROM `/Root/KeyValue` WHERE Key IN (SELECT k FROM AS_TABLE($in)) ORDER BY Key
                 )");
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
@@ -198,6 +198,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     SELECT Group, Name, Amount, Comment
                     FROM `/Root/Test`
                     WHERE Group = 1 AND Name IN $in
+                    ORDER BY Name
                 )", FormatPragma(disableOpt), (optionalParam ? "?" : "")));
 
             auto params = TParamsBuilder();

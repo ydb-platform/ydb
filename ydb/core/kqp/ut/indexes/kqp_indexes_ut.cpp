@@ -2646,7 +2646,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         {
             const TString query(Q1_(R"(
                 SELECT `/Root/TestTable1`.Key FROM `/Root/TestTable1`
-                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value;
+                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value
+                ORDER BY `/Root/TestTable1`.Key;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2708,7 +2709,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         {
             const TString query(Q1_(R"(
                 SELECT `/Root/TestTable1`.Key FROM `/Root/TestTable1`
-                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value;
+                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value
+                ORDER BY `/Root/TestTable1`.Key;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2829,8 +2831,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         {
             const TString query(Q1_(R"(
                 SELECT t1.Key, t2.Value2 FROM `/Root/TestTable1` as t1
-                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t1.Value = t2.Value;
-            )"));
+                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t1.Value = t2.Value
+                ORDER BY t1.Key;
+        )"));
 
             auto result = session.ExecuteDataQuery(
                 query,
@@ -2866,7 +2869,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         {
             const TString query(Q1_(R"(
                 SELECT t1.Key, t2.Value2 FROM `/Root/TestTable1` as t1
-                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t1.Value = t2.Value;
+                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t1.Value = t2.Value
+                ORDER BY t1.Key;
             )"));
 
             auto result = session.ExecuteDataQuery(

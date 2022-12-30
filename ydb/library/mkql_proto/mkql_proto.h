@@ -9,12 +9,12 @@ namespace NKikimr::NMiniKQL {
 
 class THolderFactory;
 
-void ExportTypeToProto(TType* type, NKikimrMiniKQL::TType& res);
+void ExportTypeToProto(TType* type, NKikimrMiniKQL::TType& res, const TVector<ui32>* columnOrder = nullptr);
 void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder = nullptr);
 
 void ExportPrimitiveTypeToProto(ui32 schemeType, Ydb::Type& output);
 
-void ExportTypeToProto(TType* type, Ydb::Type& res);
+void ExportTypeToProto(TType* type, Ydb::Type& res, const TVector<ui32>* columnOrder = nullptr);
 void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder = nullptr);
 
 

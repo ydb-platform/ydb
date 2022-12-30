@@ -13,6 +13,53 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
 
+TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::THolderFactory& factory)
+{
+    if (IsStream) {
+        auto* listOfItemType = NKikimr::NMiniKQL::TListType::Create(MkqlItemType, typeEnv);
+        NUdf::TUnboxedValue value = factory.VectorAsArray(Rows);
+        return {listOfItemType, value};
+    } else {
+        YQL_ENSURE(Rows.size() == 1, "Actual buffer size: " << Rows.size());
+        return {MkqlItemType, Rows[0]};
+    }
+}
+
+NKikimrMiniKQL::TResult* TKqpExecuterTxResult::GetMkql(google::protobuf::Arena* arena) {
+    NKikimrMiniKQL::TResult* mkqlResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena);
+    FillMkql(mkqlResult);
+    return mkqlResult;
+}
+
+NKikimrMiniKQL::TResult TKqpExecuterTxResult::GetMkql() {
+    NKikimrMiniKQL::TResult mkqlResult;
+    FillMkql(&mkqlResult);
+    return mkqlResult;
+}
+
+void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
+    if (IsStream) {
+        mkqlResult->MutableType()->SetKind(NKikimrMiniKQL::List);
+        ExportTypeToProto(
+            MkqlItemType,
+            *mkqlResult->MutableType()->MutableList()->MutableItem(),
+            &ColumnOrder);
+
+        for(auto& row: Rows) {
+            ExportValueToProto(
+                MkqlItemType, row, *mkqlResult->MutableValue()->AddList(),
+                &ColumnOrder);
+        }
+
+    } else {
+        YQL_ENSURE(Rows.size() == 1, "Actual buffer size: " << Rows.size());
+        ExportTypeToProto(MkqlItemType, *mkqlResult->MutableType());
+        ExportValueToProto(MkqlItemType, Rows[0], *mkqlResult->MutableValue());
+    }
+}
+
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
     : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
@@ -84,7 +131,7 @@ TQueryData::TQueryData(TTxAllocatorState::TPtr allocatorState)
 TQueryData::~TQueryData() {
     {
         auto g = TypeEnv().BindAllocator();
-        TTxResultVector emptyVector;
+        TVector<TVector<TKqpExecuterTxResult>> emptyVector;
         TxResults.swap(emptyVector);
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
@@ -106,6 +153,19 @@ NKikimr::NMiniKQL::TType* TQueryData::GetParameterType(const TString& name) {
     }
 
     return it->second.first;
+}
+
+std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TQueryData::GetTxResult(ui32 txIndex, ui32 resultIndex) {
+    return TxResults[txIndex][resultIndex].GetUV(
+        TypeEnv(), AllocState->HolderFactory);
+}
+
+NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(ui32 txIndex, ui32 resultIndex, google::protobuf::Arena* arena) {
+    return TxResults[txIndex][resultIndex].GetMkql(arena);
+}
+
+void TQueryData::AddTxResults(TVector<TKqpExecuterTxResult>&& results) {
+    TxResults.emplace_back(std::move(results));
 }
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
@@ -216,7 +276,7 @@ void TQueryData::Clear() {
         Params.clear();
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
-        TTxResultVector emptyVector;
+        TVector<TVector<TKqpExecuterTxResult>> emptyVector;
         TxResults.swap(emptyVector);
         AllocState->Reset();
     }

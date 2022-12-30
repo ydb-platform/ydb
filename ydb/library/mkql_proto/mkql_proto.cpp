@@ -19,7 +19,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res);
+void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res, const TVector<ui32>* columnOrder = nullptr);
 
 Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res) {
     auto dataType = static_cast<const TDataType*>(type);
@@ -114,11 +114,12 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
 }
 
 template<typename TOut>
-Y_FORCE_INLINE void ExportStructTypeToProto(TStructType* structType, TOut& res) {
+Y_FORCE_INLINE void ExportStructTypeToProto(TStructType* structType, TOut& res, const TVector<ui32>* columnOrder) {
     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
         auto newMember = res.AddMember();
-        newMember->SetName(TString(structType->GetMemberName(index)));
-        ExportTypeToProtoImpl(structType->GetMemberType(index), *newMember->MutableType());
+        ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? index : (*columnOrder)[index];
+        newMember->SetName(TString(structType->GetMemberName(memberIndex)));
+        ExportTypeToProtoImpl(structType->GetMemberType(memberIndex), *newMember->MutableType());
     }
 }
 
@@ -129,7 +130,7 @@ Y_FORCE_INLINE void ExportTupleTypeToProto(TTupleType* tupleType, TOut& res) {
     }
 }
 
-void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
+void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res, const TVector<ui32>* columnOrder) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
             res.SetKind(NKikimrMiniKQL::ETypeKind::Void);
@@ -187,7 +188,7 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
             auto structType = static_cast<TStructType *>(type);
             res.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
             if (structType->GetMembersCount()) {
-                ExportStructTypeToProto(structType, *res.MutableStruct());
+                ExportStructTypeToProto(structType, *res.MutableStruct(), columnOrder);
             }
             break;
         }
@@ -217,7 +218,7 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
                 TStructType *structType = static_cast<TStructType *>(innerType);
                 auto resItems = res.MutableVariant()->MutableStructItems();
                 if (structType->GetMembersCount()) {
-                    ExportStructTypeToProto(structType, *resItems);
+                    ExportStructTypeToProto(structType, *resItems, nullptr);
                 }
             } else if (innerType->IsTuple()) {
                 auto resItems = res.MutableVariant()->MutableTupleItems();
@@ -237,7 +238,7 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
     }
 }
 
-void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
+void ExportTypeToProtoImpl(TType* type, Ydb::Type& res, const TVector<ui32>* columnOrder = nullptr) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
             res.set_void_type(::google::protobuf::NULL_VALUE);
@@ -303,8 +304,9 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
             auto resStruct = res.mutable_struct_type();
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 auto newMember = resStruct->add_members();
-                newMember->set_name(TString(structType->GetMemberName(index)));
-                ExportTypeToProtoImpl(structType->GetMemberType(index), *newMember->mutable_type());
+                ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? index : (*columnOrder)[index];
+                newMember->set_name(TString(structType->GetMemberName(memberIndex)));
+                ExportTypeToProtoImpl(structType->GetMemberType(memberIndex), *newMember->mutable_type());
             }
 
             break;
@@ -803,8 +805,8 @@ void ExportPrimitiveTypeToProto(ui32 schemeType, Ydb::Type& output) {
     }
 }
 
-void ExportTypeToProto(TType* type, Ydb::Type& res) {
-    ExportTypeToProtoImpl(type, res);
+void ExportTypeToProto(TType* type, Ydb::Type& res, const TVector<ui32>* columnOrder) {
+    ExportTypeToProtoImpl(type, res, columnOrder);
 }
 
 void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder) {
@@ -1267,8 +1269,8 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
     MKQL_ENSURE(false, TStringBuilder() << "Unknown protobuf type: " << type->GetKindAsStr());
 }
 
-void ExportTypeToProto(TType* type, NKikimrMiniKQL::TType& res) {
-    ExportTypeToProtoImpl(type, res);
+void ExportTypeToProto(TType* type, NKikimrMiniKQL::TType& res, const TVector<ui32>* columnOrder) {
+    ExportTypeToProtoImpl(type, res, columnOrder);
 }
 
 void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder) {

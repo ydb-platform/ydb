@@ -10,6 +10,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/guid.h>
+#include <google/protobuf/arena.h>
 
 #include <unordered_map>
 #include <vector>
@@ -50,6 +51,19 @@ using TTxResultVector = std::vector<
     TTypedUnboxedValueVector,
     NKikimr::NMiniKQL::TMKQLAllocator<TTypedUnboxedValueVector>
 >;
+
+struct TKqpExecuterTxResult {
+    NKikimr::NMiniKQL::TType* MkqlItemType;
+    TVector<ui32> ColumnOrder;
+    NKikimr::NMiniKQL::TUnboxedValueVector Rows;
+    bool IsStream = true;
+
+    TTypedUnboxedValue GetUV(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& factory);
+    NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
+    NKikimrMiniKQL::TResult GetMkql();
+    void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
+};
 
 struct TTimeAndRandomProvider {
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -136,7 +150,7 @@ private:
 
     TParamMap Params;
     TUnboxedParamsMap UnboxedData;
-    TTxResultVector TxResults;
+    TVector<TVector<TKqpExecuterTxResult>> TxResults;
     TTxAllocatorState::TPtr AllocState;
 
 public:
@@ -158,11 +172,7 @@ public:
     bool AddTypedValueParam(const TString& name, const Ydb::TypedValue& p);
 
     bool MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding);
-
-    void AddTxResults(TTypedUnboxedValueVector&& unboxedResults) {
-        auto g = TypeEnv().BindAllocator();
-        TxResults.emplace_back(unboxedResults);
-    }
+    void AddTxResults(TVector<NKikimr::NKqp::TKqpExecuterTxResult>&& results);
 
     bool HasResult(ui32 txIndex, ui32 resultIndex) {
         if (txIndex >= TxResults.size())
@@ -171,9 +181,8 @@ public:
         return resultIndex < TxResults[txIndex].size();
     }
 
-    std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetTxResult(ui32 txIndex, ui32 resultIndex) {
-        return TxResults[txIndex][resultIndex];
-    }
+    TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
+    NKikimrMiniKQL::TResult* GetMkqlTxResult(ui32 txIndex, ui32 resultIndex, google::protobuf::Arena* arena);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);

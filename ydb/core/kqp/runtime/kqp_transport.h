@@ -20,7 +20,7 @@ public:
     ~TKqpProtoBuilder();
 
     Ydb::ResultSet BuildYdbResultSet(const TVector<NYql::NDqProto::TData>& data,
-        const NKikimrMiniKQL::TType& srcRowType, const NKikimrMiniKQL::TType* dstRowType = nullptr);
+        NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr);
 
 private:
     NMiniKQL::TScopedAlloc* Alloc = nullptr;

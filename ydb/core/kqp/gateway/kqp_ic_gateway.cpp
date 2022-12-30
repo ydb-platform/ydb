@@ -513,10 +513,13 @@ private:
         result.ExecuterResult.Swap(response->MutableResult());
         {
             auto g = Parameters->TypeEnv().BindAllocator();
-            auto unboxed = ev->Get()->GetUnboxedValueResults();
-            Parameters->AddTxResults(std::move(unboxed));
+            auto& txResults = ev->Get()->GetTxResults();
+            result.Results.reserve(txResults.size());
+            for(auto& tx : txResults) {
+                result.Results.emplace_back(std::move(tx.GetMkql()));
+            }
+            Parameters->AddTxResults(std::move(txResults));
         }
-        result.Results = std::move(ev->Get()->GetMkqlResults());
         Promise.SetValue(std::move(result));
         this->PassAway();
     }

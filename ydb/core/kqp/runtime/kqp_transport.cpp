@@ -46,30 +46,21 @@ TKqpProtoBuilder::~TKqpProtoBuilder() {
     }
 }
 
-Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData>& data,
-    const NKikimrMiniKQL::TType& srcRowType, const NKikimrMiniKQL::TType* dstRowType)
+Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
+    const TVector<NDqProto::TData>& data,
+    NKikimr::NMiniKQL::TType* mkqlSrcRowType,
+    const TVector<ui32>* columnOrder)
 {
-    YQL_ENSURE(srcRowType.GetKind() == NKikimrMiniKQL::Struct);
-
-    auto* mkqlSrcRowType = NMiniKQL::ImportTypeFromProto(srcRowType, *TypeEnv);
-    auto* mkqlSrcRowStructType = static_cast<TStructType*>(mkqlSrcRowType);
+    YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
+    const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
 
     Ydb::ResultSet resultSet;
 
-    if (dstRowType) {
-        YQL_ENSURE(dstRowType->GetKind() == NKikimrMiniKQL::Struct);
-
-        for (auto& member : dstRowType->GetStruct().GetMember()) {
-            auto* column = resultSet.add_columns();
-            column->set_name(member.GetName());
-            ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type());
-        }
-    } else {
-        for (auto& member : srcRowType.GetStruct().GetMember()) {
-            auto* column = resultSet.add_columns();
-            column->set_name(member.GetName());
-            ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type());
-        }
+    for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
+        auto* column = resultSet.add_columns();
+        ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
+        column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
     }
 
     THolder<TGuard<TScopedAlloc>> guard;
@@ -79,39 +70,15 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData
 
     auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     if (!data.empty()) {
-        switch (data.front().GetTransportVersion()) {
-            case 10000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-                break;
-            }
-            case 20000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-                break;
-            }
-            case 30000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-                break;
-            }
-            default:
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-        }
+        transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().GetTransportVersion());
     }
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
-
     for (auto& part : data) {
         if (part.GetRows()) {
             TUnboxedValueVector rows;
             dataSerializer.Deserialize(part, mkqlSrcRowType, rows);
-
-            TVector<ui32> columnOrder;
-            if (dstRowType) {
-                for(auto& dstMember: dstRowType->GetStruct().GetMember()) {
-                    columnOrder.push_back(mkqlSrcRowStructType->GetMemberIndex(dstMember.GetName()));
-                }
-            }
-
             for (auto& row : rows) {
-                ExportValueToProto(mkqlSrcRowType, row, *resultSet.add_rows(), &columnOrder);
+                ExportValueToProto(mkqlSrcRowType, row, *resultSet.add_rows(), columnOrder);
             }
         }
     }

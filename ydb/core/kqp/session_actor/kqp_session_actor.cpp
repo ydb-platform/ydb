@@ -134,8 +134,7 @@ struct TKqpQueryState {
     TKqpCompileResult::TConstPtr CompileResult;
     NKqpProto::TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
-    TQueryData::TPtr Parameters;
-    TVector<TVector<NKikimrMiniKQL::TResult>> TxResults;
+    TQueryData::TPtr QueryData;
 
     TActorId RequestActorId;
 
@@ -380,7 +379,7 @@ public:
             return;
         }
         QueryState->TxCtx = std::move(txCtx);
-        QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
+        QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxId = txId;
         QueryState->TxId_Human = txControl.tx_id();
         if (!CheckTransacionLocks()) {
@@ -811,7 +810,7 @@ public:
         QueryState->TxId = UlidGen.Next();
         QueryState->TxId_Human = QueryState->TxId.ToString();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
-        QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
+        QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
         CreateNewTx();
 
@@ -849,7 +848,7 @@ public:
                         return false;
                     }
                     QueryState->TxCtx = *it;
-                    QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
+                    QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
                     QueryState->TxId = txId;
                     QueryState->TxId_Human = txControl.tx_id();
                     break;
@@ -866,7 +865,7 @@ public:
         } else {
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider);
-            QueryState->Parameters = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
+            QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         }
 
@@ -915,7 +914,7 @@ public:
 
         for(const auto& [name, param] : params) {
             try {
-                auto success = QueryState->Parameters->AddTypedValueParam(name, param);
+                auto success = QueryState->QueryData->AddTypedValueParam(name, param);
                 YQL_ENSURE(success, "Duplicate parameter: " << name);
             } catch(const yexception& ex) {
                 ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
@@ -933,7 +932,7 @@ public:
         for (ui32 i = 0; i < structType.MemberSize(); ++i) {
             const auto& memberName = structType.GetMember(i).GetName();
             YQL_ENSURE(i < parameters.GetValue().StructSize(), "Missing value for parameter: " << memberName);
-            auto success = QueryState->Parameters->AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
+            auto success = QueryState->QueryData->AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
             YQL_ENSURE(success, "Duplicate parameter: " << memberName);
         }
     }
@@ -1005,11 +1004,11 @@ public:
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
         auto& txCtx = QueryState->TxCtx;
         YQL_ENSURE(txCtx);
-        auto parameterType = QueryState->Parameters->GetParameterType(name);
+        auto parameterType = QueryState->QueryData->GetParameterType(name);
         if (!parameterType) {
             if (type.GetKind() == NKikimrMiniKQL::ETypeKind::Optional) {
                 NKikimrMiniKQL::TValue value;
-                QueryState->Parameters->AddMkqlParam(name, type, value);
+                QueryState->QueryData->AddMkqlParam(name, type, value);
                 return;
             }
 
@@ -1030,12 +1029,12 @@ public:
 
         try {
             for(const auto& paramBinding: tx.GetParamBindings()) {
-                QueryState->Parameters->MaterializeParamValue(true, paramBinding);
+                QueryState->QueryData->MaterializeParamValue(true, paramBinding);
             }
         } catch (const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
-        return QueryState->Parameters;
+        return QueryState->QueryData;
     }
 
     bool ShouldAcquireLocks(const NKqpProto::TKqpPhyQuery* query) {
@@ -1073,9 +1072,9 @@ public:
 
     TQueryData::TPtr CreateKqpValueMap(const NKqpProto::TKqpPhyTx& tx) {
         for (const auto& paramBinding : tx.GetParamBindings()) {
-            QueryState->Parameters->MaterializeParamValue(true, paramBinding);
+            QueryState->QueryData->MaterializeParamValue(true, paramBinding);
         }
-        return QueryState->Parameters;
+        return QueryState->QueryData;
     }
 
     bool CheckTransacionLocks() {
@@ -1389,12 +1388,9 @@ public:
 
         auto& executerResults = *response->MutableResult();
         {
-            auto g = QueryState->Parameters->TypeEnv().BindAllocator();
-            auto unboxed = ev->Get()->GetUnboxedValueResults();
-            QueryState->Parameters->AddTxResults(std::move(unboxed));
+            auto g = QueryState->QueryData->TypeEnv().BindAllocator();
+            QueryState->QueryData->AddTxResults(std::move(ev->Get()->GetTxResults()));
         }
-        auto& txResult = ev->Get()->GetMkqlResults();
-        QueryState->TxResults.emplace_back(std::move(txResult));
 
         if (ev->Get()->LockHandle) {
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->Get()->LockHandle);
@@ -1646,10 +1642,9 @@ public:
                 auto txIndex = rb.GetTxResultBinding().GetTxIndex();
                 auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
-                auto& txResults = QueryState->TxResults;
-                YQL_ENSURE(txIndex < txResults.size());
-                YQL_ENSURE(resultIndex < txResults[txIndex].size());
-
+                YQL_ENSURE(QueryState->QueryData->HasResult(txIndex, resultIndex));
+                auto g = QueryState->QueryData->TypeEnv().BindAllocator();
+                auto* protoRes = QueryState->QueryData->GetMkqlTxResult(txIndex, resultIndex, arena.get());
                 std::optional<IDataProvider::TFillSettings> fillSettings;
                 if (QueryState->PreparedQuery->ResultsSize()) {
                     YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
@@ -1660,13 +1655,11 @@ public:
                         fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
                     }
                 }
-
-                auto* protoRes = KikimrResultToProto(txResults[txIndex][resultIndex], {},
-                    fillSettings.value_or(FillSettings), arena.get());
+                auto* finalResult = KikimrResultToProto(*protoRes, {}, fillSettings.value_or(FillSettings), arena.get());
                 if (useYdbResponseFormat) {
-                    ConvertKqpQueryResultToDbResult(*protoRes, response->AddYdbResults());
+                    ConvertKqpQueryResultToDbResult(*finalResult, response->AddYdbResults());
                 } else {
-                    response->AddResults()->Swap(protoRes);
+                    response->AddResults()->Swap(finalResult);
                 }
             }
         }

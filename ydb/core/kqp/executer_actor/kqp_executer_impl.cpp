@@ -22,8 +22,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const NKqpProto::TKqpPhyTx& tx)
     for (const auto& txResult : tx.GetResults()) {
         auto& result = TxResults[i++];
         result.IsStream = txResult.GetIsStream();
-        result.ItemType.CopyFrom(txResult.GetItemType());
-        result.MkqlItemType = ImportTypeFromProto(result.ItemType, AllocState->TypeEnv);
+        result.MkqlItemType = ImportTypeFromProto(txResult.GetItemType(), AllocState->TypeEnv);
 
         if (txResult.ColumnHintsSize() > 0) {
             result.ColumnOrder.reserve(txResult.GetColumnHints().size());
@@ -39,12 +38,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const NKqpProto::TKqpPhyTx& tx)
                 auto it = memberIndices.find(name);
                 YQL_ENSURE(it != memberIndices.end(), "undetermined column name: " << name);
                 result.ColumnOrder.push_back(it->second);
-
-                auto* newMember = resultItemType.MutableStruct()->AddMember();
-                newMember->SetName(name);
-                ExportTypeToProto(structType->GetMemberType(it->second), *newMember->MutableType());
             }
-            result.ResultItemType.emplace(std::move(resultItemType));
         }
     }
 }
@@ -80,70 +74,6 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnb
     auto buffer = serializer.Serialize(rows, txResult.MkqlItemType);
     serializer.Deserialize(buffer, txResult.MkqlItemType, txResult.Rows);
 }
-
-TTypedUnboxedValueVector TEvKqpExecuter::TEvTxResponse::GetUnboxedValueResults() {
-    return Finalize();
-}
-
-TVector<NKikimrMiniKQL::TResult>& TEvKqpExecuter::TEvTxResponse::GetMkqlResults() {
-    if (MkqlResults_.empty()) {
-        Finalize();
-    }
-    return MkqlResults_;
-}
-
-TTypedUnboxedValueVector TEvKqpExecuter::TEvTxResponse::Finalize() {
-    auto g = AllocState->TypeEnv.BindAllocator();
-    MkqlResults_.resize(TxResults.size());
-    ui32 idx = 0;
-    for (auto& result : TxResults) {
-        auto& mkqlResult = MkqlResults_[idx++];
-        if (result.IsStream) {
-            mkqlResult.MutableType()->SetKind(NKikimrMiniKQL::List);
-            if (result.ResultItemType) {
-                mkqlResult.MutableType()->MutableList()->MutableItem()->CopyFrom(
-                    *result.ResultItemType);
-            } else {
-                mkqlResult.MutableType()->MutableList()->MutableItem()->CopyFrom(
-                    result.ItemType);
-            }
-
-            for(auto& row: result.Rows) {
-                ExportValueToProto(
-                    result.MkqlItemType, row, *mkqlResult.MutableValue()->AddList(),
-                    &result.ColumnOrder);
-            }
-
-        } else {
-            YQL_ENSURE(result.Rows.size() == 1, "Actual buffer size: " << result.Rows.size());
-            mkqlResult.MutableType()->CopyFrom(result.ItemType);
-            ExportValueToProto(result.MkqlItemType, result.Rows[0], *mkqlResult.MutableValue());
-        }
-    }
-
-    TTypedUnboxedValueVector UnboxedResult_;
-
-    for(auto& txResult: TxResults) {
-        auto* type = txResult.MkqlItemType;
-        if (txResult.IsStream) {
-            auto* listOfItemType = NKikimr::NMiniKQL::TListType::Create(type, AllocState->TypeEnv);
-            NUdf::TUnboxedValue value = AllocState->HolderFactory.VectorAsArray(txResult.Rows);
-            if (txResult.ResultItemType) {
-                auto* type = ImportTypeFromProto(*txResult.ResultItemType, AllocState->TypeEnv);
-                auto* listType = NKikimr::NMiniKQL::TListType::Create(type, AllocState->TypeEnv);
-                UnboxedResult_.push_back(std::make_pair(listType, value));
-            } else {
-                UnboxedResult_.push_back(std::make_pair(listOfItemType, value));
-            }
-        } else {
-            UnboxedResult_.push_back(std::make_pair(type, txResult.Rows[0]));
-        }
-    }
-
-    TxResults.crop(0);
-    return UnboxedResult_;
-}
-
 
 void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const TTask& task,
     NDqProto::TDqTask& dqTask, const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory&)

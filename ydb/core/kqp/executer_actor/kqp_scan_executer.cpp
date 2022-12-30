@@ -733,11 +733,8 @@ public:
                 return ResultChannelProxies.begin()->second;
             }
 
-            auto resultType = ResponseEv->TxResults[0].ResultItemType ?
-                &ResponseEv->TxResults[0].ResultItemType.value() : nullptr;
-
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].ItemType,
-                resultType, Target, Stats.get(), SelfId());
+            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
+                &ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), SelfId());
         } else {
             YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
 

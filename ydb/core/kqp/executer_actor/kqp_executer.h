@@ -12,15 +12,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TKqpExecuterTxResult {
-    NKikimrMiniKQL::TType ItemType;
-    NKikimr::NMiniKQL::TType* MkqlItemType;
-    TVector<ui32> ColumnOrder;
-    std::optional<NKikimrMiniKQL::TType> ResultItemType;
-    NKikimr::NMiniKQL::TUnboxedValueVector Rows;
-    bool IsStream = true;
-};
-
 struct TEvKqpExecuter {
     struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
         TKqpExecuterEvents::EvTxRequest> {};
@@ -42,10 +33,8 @@ struct TEvKqpExecuter {
 
         ~TEvTxResponse();
 
-        TTypedUnboxedValueVector GetUnboxedValueResults();
-        TVector<NKikimrMiniKQL::TResult>& GetMkqlResults();
+        TVector<TKqpExecuterTxResult>& GetTxResults() { return TxResults; }
         void InitTxResult(const NKqpProto::TKqpPhyTx& tx);
-        TTypedUnboxedValueVector Finalize();
         void TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector& rows);
         void TakeResult(ui32 idx, const NYql::NDqProto::TData& rows);
 

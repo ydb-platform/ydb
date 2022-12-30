@@ -227,6 +227,8 @@ private:
 
     void RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) final;
 
+    TVector<std::pair<TString, const TKernelFamily*>> GetAllKernelFamilies() const final;
+
     TFunctionsMap Functions;
     TFunctionParamMetadataList ArgumentsMetadata;
     std::optional<ui64> MetadataEtag;
@@ -371,6 +373,15 @@ const TKernel* TBuiltinFunctionRegistry::FindKernel(const std::string_view& name
 
 void TBuiltinFunctionRegistry::RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) {
     Y_ENSURE(KernelFamilyMap.emplace(TString(name), std::move(family)).second);
+}
+
+TVector<std::pair<TString, const TKernelFamily*>> TBuiltinFunctionRegistry::GetAllKernelFamilies() const {
+    TVector<std::pair<TString, const TKernelFamily*>> ret;
+    for (const auto& f : KernelFamilyMap) {
+        ret.emplace_back(std::make_pair(f.first, f.second.get()));
+    }
+
+    return ret;
 }
 
 } // namespace

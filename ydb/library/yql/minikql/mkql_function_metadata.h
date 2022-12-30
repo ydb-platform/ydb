@@ -3,6 +3,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <util/digest/numeric.h>
+#include <util/generic/vector.h>
 
 #include <arrow/compute/kernel.h>
 
@@ -71,6 +72,7 @@ public:
 
     virtual ~TKernelFamily() = default;
     virtual const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const = 0;
+    virtual TVector<const TKernel*> GetAllKernels() const = 0;
 };
 
 class TKernel {
@@ -111,23 +113,12 @@ using TKernelFamilyMap = std::unordered_map<TString, std::unique_ptr<TKernelFami
 class TKernelFamilyBase : public TKernelFamily
 {
 public:
-    TKernelFamilyBase(ENullMode nullMode = ENullMode::Default, const arrow::compute::FunctionOptions* functionOptions = nullptr)
-        : TKernelFamily(nullMode, functionOptions)
-    {}
+    TKernelFamilyBase(ENullMode nullMode = ENullMode::Default, const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
-    const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final {
-        std::vector<NUdf::TDataTypeId> args(argTypes, argTypes + argTypesCount);
-        auto it = KernelMap.find({args, returnType});
-        if (it == KernelMap.end()) {
-            return nullptr;
-        }
+    const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final;
+    TVector<const TKernel*> GetAllKernels() const final;
 
-        return it->second.get();
-    }
-
-    void Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, std::unique_ptr<TKernel>&& kernel) {
-        KernelMap.emplace(std::make_pair(argTypes, returnType), std::move(kernel));
-    }
+    void Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, std::unique_ptr<TKernel>&& kernel);
 private:
     TKernelMap KernelMap;
 };
@@ -154,6 +145,8 @@ public:
     virtual const TKernel* FindKernel(const std::string_view& name, const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const = 0;
 
     virtual void RegisterKernelFamily(const std::string_view& name, std::unique_ptr<TKernelFamily>&& family) = 0;
+
+    virtual TVector<std::pair<TString, const TKernelFamily*>> GetAllKernelFamilies() const = 0;
 };
 
 }

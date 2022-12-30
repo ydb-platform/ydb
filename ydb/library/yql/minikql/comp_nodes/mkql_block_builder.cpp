@@ -306,7 +306,7 @@ public:
 
         AppendCurrentOffset();
         DataBuilder->UnsafeAppend((const ui8*)str.data(), str.size());
-        if (Nullable) {
+        if constexpr (Nullable) {
             NullBuilder->UnsafeAppend(1);
         }
     }

@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <unordered_map>
+#include <vector>
 #include <util/stream/format.h>
+#include <util/string/builder.h>
 #include <arpa/inet.h>
 
 namespace NPG {
@@ -30,78 +33,20 @@ struct TPGMessage {
     void operator delete(void* p) {
         ::operator delete(p);
     }
+
+    bool Empty() const {
+        return GetDataSize() == 0;
+    }
 };
 
 struct TPGInitial : TPGMessage { // it's not true, because we don't receive message code from a network, but imply it on the start
-    uint32_t Protocol;
-
     TPGInitial() {
         Message = 'i'; // fake code
     }
 
-    const char* GetData() const {
-        return reinterpret_cast<const char*>(this) + sizeof(*this);
-    }
-
-    TString Dump() const {
-        TStringBuilder text;
-        if (Protocol == 773247492) { // 80877102 cancellation message
-            const uint32_t* data = reinterpret_cast<const uint32_t*>(GetData());
-            if (GetDataSize() >= 8) {
-                uint32_t pid = data[0];
-                uint32_t key = data[1];
-                text << "cancellation PID " << pid << " KEY " << key;
-            }
-        } else if (Protocol == 790024708) { // 790024708 SSL handshake
-            text << "SSL handshake";
-        } else {
-            text << "protocol(" << Hex(Protocol) << ") ";
-            const char* begin = GetData();
-            const char* end = GetData() + GetDataSize();
-            for (const char* ptr = begin; ptr < end;) {
-                TStringBuf key;
-                TStringBuf value;
-                size_t size = strnlen(ptr, end - ptr);
-                key = TStringBuf(ptr, size);
-                if (key.empty()) {
-                    break;
-                }
-                ptr += size + 1;
-                if (ptr >= end) {
-                    break;
-                }
-                size = strnlen(ptr, end - ptr);
-                value = TStringBuf(ptr, size);
-                ptr += size + 1;
-                text << key << "=" << value << " ";
-            }
-        }
-        return text;
-    }
-
-    std::unordered_map<TString, TString> GetClientParams() const {
-        std::unordered_map<TString, TString> params;
-        const char* begin = GetData();
-        const char* end = GetData() + GetDataSize();
-        for (const char* ptr = begin; ptr < end;) {
-            TString key;
-            TString value;
-            size_t size = strnlen(ptr, end - ptr);
-            key = TStringBuf(ptr, size);
-            if (key.empty()) {
-                break;
-            }
-            ptr += size + 1;
-            if (ptr >= end) {
-                break;
-            }
-            size = strnlen(ptr, end - ptr);
-            value = TStringBuf(ptr, size);
-            ptr += size + 1;
-            params[key] = value;
-        }
-        return params;
-    }
+    TString Dump() const;
+    std::unordered_map<TString, TString> GetClientParams() const;
+    uint32_t GetProtocol() const;
 };
 
 struct TPGAuth : TPGMessage {
@@ -166,7 +111,11 @@ struct TPGParameterStatus : TPGMessage {
     }
 
     TString Dump() const {
-        return TStringBuilder() << GetName() << "=" << GetValue();
+        if (!Empty()) {
+            return TStringBuilder() << GetName() << "=" << GetValue();
+        } else {
+            return {};
+        }
     }
 };
 
@@ -221,6 +170,8 @@ struct TPGErrorResponse : TPGMessage {
     TPGErrorResponse() {
         Message = 'E';
     }
+
+    TString Dump() const;
 };
 
 struct TPGTerminate : TPGMessage {
@@ -239,6 +190,8 @@ struct TPGDataRow : TPGMessage {
     TPGDataRow() {
         Message = 'D';
     }
+
+    TString Dump() const;
 };
 
 struct TPGEmptyQueryResponse : TPGMessage {
@@ -247,6 +200,81 @@ struct TPGEmptyQueryResponse : TPGMessage {
     }
 };
 
+struct TPGParse : TPGMessage {
+    TPGParse() {
+        Message = 'P';
+    }
+
+    struct TQueryData {
+        TString Name;
+        TString Query;
+        std::vector<int32_t> ParametersTypes; // types
+    };
+
+    TQueryData GetQueryData() const;
+    TString Dump() const;
+};
+
+struct TPGParseComplete : TPGMessage {
+    TPGParseComplete() {
+        Message = '1';
+    }
+};
+
+struct TPGBind : TPGMessage {
+    TPGBind() {
+        Message = 'B';
+    }
+
+    struct TBindData {
+        TString PortalName;
+        TString StatementName;
+        std::vector<int16_t> ParametersFormat; // format codes 0=text, 1=binary
+        std::vector<std::vector<uint8_t>> ParametersValue; // parameters content
+        std::vector<int16_t> ResultsFormat; // result format codes 0=text, 1=binary
+    };
+
+    TBindData GetBindData() const;
+    TString Dump() const;
+};
+
+struct TPGBindComplete : TPGMessage {
+    TPGBindComplete() {
+        Message = '2';
+    }
+};
+
+struct TPGDescribe : TPGMessage {
+    TPGDescribe() {
+        Message = 'D';
+    }
+
+    struct TDescribeData {
+        enum class EDescribeType : char {
+            Portal = 'P',
+            Statement = 'S',
+        };
+        EDescribeType Type;
+        TString Name;
+    };
+
+    TDescribeData GetDescribeData() const;
+    TString Dump() const;
+};
+
+struct TPGExecute : TPGMessage {
+    TPGExecute() {
+        Message = 'E';
+    }
+
+    struct TExecuteData {
+        TString PortalName;
+        uint32_t MaxRows;
+    };
+
+    TExecuteData GetExecuteData() const;
+    TString Dump() const;
+};
 #pragma pack(pop)
 
 template<typename TPGMessageType>

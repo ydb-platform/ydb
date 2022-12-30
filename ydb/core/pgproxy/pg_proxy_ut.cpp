@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TPGTest) {
         }
         TSocket s(TNetworkAddress("::", port));
         Send(s, "0000001300030000" "7573657200757365720000");  // user=user
-        NPG::TEvPGEvents::TEvAuthRequest* authRequest = actorSystem.GrabEdgeEvent<NPG::TEvPGEvents::TEvAuthRequest>(handle);
+        NPG::TEvPGEvents::TEvAuth* authRequest = actorSystem.GrabEdgeEvent<NPG::TEvPGEvents::TEvAuth>(handle);
         UNIT_ASSERT(authRequest);
         UNIT_ASSERT_VALUES_EQUAL(authRequest->InitialMessage->GetClientParams()["user"], "user");
         actorSystem.Send(new NActors::IEventHandle(handle->Sender, database, new NPG::TEvPGEvents::TEvAuthResponse()));

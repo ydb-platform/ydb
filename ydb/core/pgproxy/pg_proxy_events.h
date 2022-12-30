@@ -10,17 +10,34 @@ struct TEvPGEvents {
     enum EEv {
         EvConnectionOpened = EventSpaceBegin(NActors::TEvents::ES_PGWIRE),
         EvConnectionClosed,
-        EvAuthRequest,
+        EvAuth,
         EvAuthResponse,
         EvQuery,
-        EvRowDescription,
-        EvDataRows,
-        EvCommandComplete,
-        EvErrorResponse,
+        EvQueryResponse,
+        EvParse,
+        EvParseResponse,
+        EvBind,
+        EvBindResponse,
+        EvDescribe,
+        EvDescribeResponse,
+        EvExecute,
+        EvExecuteResponse,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PGWIRE), "ES_PGWIRE event space is too small.");
+
+    struct TRowDescriptionField {
+        TString Name;
+        uint32_t TableId = 0;
+        uint16_t ColumnId = 0;
+        uint32_t DataType;
+        uint16_t DataTypeSize;
+        //uint32_t DataTypeModifier;
+        //uint16_t Format;
+    };
+
+    using TDataRow = std::vector<TString>;
 
     struct TEvConnectionOpened : NActors::TEventLocal<TEvConnectionOpened, EvConnectionOpened> {
         std::shared_ptr<TPGInitial> Message;
@@ -33,15 +50,15 @@ struct TEvPGEvents {
     struct TEvConnectionClosed : NActors::TEventLocal<TEvConnectionClosed, EvConnectionClosed> {
     };
 
-    struct TEvAuthRequest : NActors::TEventLocal<TEvAuthRequest, EvAuthRequest> {
+    struct TEvAuth : NActors::TEventLocal<TEvAuth, EvAuth> {
         std::shared_ptr<TPGInitial> InitialMessage;
         std::unique_ptr<TPGPasswordMessage> PasswordMessage;
 
-        TEvAuthRequest(std::shared_ptr<TPGInitial> initialMessage)
+        TEvAuth(std::shared_ptr<TPGInitial> initialMessage)
             : InitialMessage(std::move(initialMessage))
         {}
 
-        TEvAuthRequest(std::shared_ptr<TPGInitial> initialMessage, std::unique_ptr<TPGPasswordMessage> message)
+        TEvAuth(std::shared_ptr<TPGInitial> initialMessage, std::unique_ptr<TPGPasswordMessage> message)
             : InitialMessage(std::move(initialMessage))
             , PasswordMessage(std::move(message))
         {}
@@ -72,30 +89,10 @@ struct TEvPGEvents {
         {}
     };
 
-    struct TEvRowDescription : NActors::TEventLocal<TEvRowDescription, EvRowDescription> {
-        struct TField {
-            TString Name;
-            uint32_t TableId = 0;
-            uint16_t ColumnId = 0;
-            uint32_t DataType;
-            uint16_t DataTypeSize;
-            //uint32_t DataTypeModifier;
-            //uint16_t Format;
-        };
-        std::vector<TField> Fields;
-    };
-
-    struct TEvDataRows : NActors::TEventLocal<TEvDataRows, EvDataRows> {
-        using TDataRow = std::vector<TString>;
-        std::vector<TDataRow> Rows;
-    };
-
-    struct TEvCommandComplete : NActors::TEventLocal<TEvCommandComplete, EvCommandComplete> {
-        TString Tag;
-
-        TEvCommandComplete(const TString& tag)
-            : Tag(tag)
-        {}
+    struct TEvQueryResponse : NActors::TEventLocal<TEvQueryResponse, EvQueryResponse> {
+        std::vector<TRowDescriptionField> DataFields;
+        std::vector<TDataRow> DataRows;
+        std::vector<std::pair<char, TString>> ErrorFields;
     };
 
         /*
@@ -127,7 +124,69 @@ struct TEvPGEvents {
         R = "scanner_yyerror"
         */
 
-    struct TEvErrorResponse : NActors::TEventLocal<TEvErrorResponse, EvErrorResponse> {
+    struct TEvParseResponse : NActors::TEventLocal<TEvParseResponse, EvParseResponse> {
+        std::unique_ptr<TPGParse> OriginalMessage;
+
+        TEvParseResponse(std::unique_ptr<TPGParse> originalMessage)
+            : OriginalMessage(std::move(originalMessage))
+        {}
+    };
+
+    struct TEvParse : NActors::TEventLocal<TEvParse, EvParse> {
+        std::unique_ptr<TPGParse> Message;
+
+        TEvParse(std::unique_ptr<TPGParse> message)
+            : Message(std::move(message))
+        {}
+
+        std::unique_ptr<TEvParseResponse> Reply() {
+            return std::make_unique<TEvParseResponse>(std::move(Message));
+        }
+    };
+
+    struct TEvBindResponse : NActors::TEventLocal<TEvBindResponse, EvBindResponse> {
+        std::unique_ptr<TPGBind> OriginalMessage;
+
+        TEvBindResponse(std::unique_ptr<TPGBind> originalMessage)
+            : OriginalMessage(std::move(originalMessage))
+        {}
+    };
+
+    struct TEvBind : NActors::TEventLocal<TEvBind, EvBind> {
+        std::unique_ptr<TPGBind> Message;
+
+        TEvBind(std::unique_ptr<TPGBind> message)
+            : Message(std::move(message))
+        {}
+
+        std::unique_ptr<TEvBindResponse> Reply() {
+            return std::make_unique<TEvBindResponse>(std::move(Message));
+        }
+    };
+
+    struct TEvDescribe : NActors::TEventLocal<TEvDescribe, EvDescribe> {
+        std::unique_ptr<TPGDescribe> Message;
+
+        TEvDescribe(std::unique_ptr<TPGDescribe> message)
+            : Message(std::move(message))
+        {}
+    };
+
+    struct TEvDescribeResponse : NActors::TEventLocal<TEvDescribeResponse, EvDescribeResponse> {
+        std::vector<TRowDescriptionField> DataFields;
+        std::vector<std::pair<char, TString>> ErrorFields;
+    };
+
+    struct TEvExecute : NActors::TEventLocal<TEvExecute, EvExecute> {
+        std::unique_ptr<TPGExecute> Message;
+
+        TEvExecute(std::unique_ptr<TPGExecute> message)
+            : Message(std::move(message))
+        {}
+    };
+
+    struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
+        std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
     };
 };

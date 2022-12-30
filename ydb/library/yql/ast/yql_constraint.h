@@ -191,7 +191,8 @@ public:
     bool HasEqualColumns(const std::vector<std::string_view>& columns) const;
 
     static const TUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
-    const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType& front)>& predicate) const;
+    const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType&)>& predicate) const;
+    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<TPathType(const TPathType&)>& rename) const;
 private:
     TFullSetType Sets_;
 };
@@ -278,7 +279,7 @@ public:
 
     static const TPartOfUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
-    static TMapType GetCommonMapping(const TUniqueConstraintNode* complete, const TPartOfUniqueConstraintNode* incomplete, const std::string_view& field = {});
+    static TMapType GetCommonMapping(const TUniqueConstraintNode* complete, const TPartOfUniqueConstraintNode* incomplete = nullptr, const std::string_view& field = {});
     static void UniqueMerge(TMapType& output, TMapType&& input);
     static void FilterFields(TMapType& mapping, const std::function<bool(const std::string_view& front)>& predicate);
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);

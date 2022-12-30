@@ -784,7 +784,7 @@ private:
                         break;
                 }
 
-                if (auto mapping = TPartOfUniqueConstraintNode::GetCommonMapping(GetDetailedUinique(node.Head().GetConstraint<TUniqueConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfUniqueConstraintNode>()); !mapping.empty()) {
+                if (auto mapping = TPartOfUniqueConstraintNode::GetCommonMapping(GetDetailedUnique(node.Head().GetConstraint<TUniqueConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfUniqueConstraintNode>()); !mapping.empty()) {
                     constraints.emplace_back(ctx.MakeConstraint<TPartOfUniqueConstraintNode>(std::move(mapping)));
                 }
                 if (const auto groupBy = node.Head().GetConstraint<TGroupByConstraintNode>()) {
@@ -853,7 +853,7 @@ private:
         }
 
         if (const auto lambdaUnique = GetConstraintFromLambda<TPartOfUniqueConstraintNode, WideOutput>(input->Tail(), ctx)) {
-            if (const auto unique = GetDetailedUinique(input->Head().GetConstraint<TUniqueConstraintNode>(), *input->Head().GetTypeAnn(), ctx)) {
+            if (const auto unique = GetDetailedUnique(input->Head().GetConstraint<TUniqueConstraintNode>(), *input->Head().GetTypeAnn(), ctx)) {
                 if (const auto complete = TPartOfUniqueConstraintNode::MakeComplete(ctx, lambdaUnique->GetColumnMapping(), unique)) {
                     input->AddConstraint(complete);
                 }
@@ -1866,22 +1866,19 @@ private:
     }
 
     TStatus EquiJoinWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        const size_t numLists = input->ChildrenSize() - 2;
-        TVector<size_t> emptyInputs;
+        const auto numLists = input->ChildrenSize() - 2U;
+        std::vector<size_t> emptyInputs;
         TJoinLabels labels;
-        for (size_t i = 0; i < numLists; ++i) {
-            auto& list = input->Child(i)->Head();
+        for (auto i = 0U; i < numLists; ++i) {
+            const auto& list = input->Child(i)->Head();
             if (list.GetConstraint<TEmptyConstraintNode>()) {
                 emptyInputs.push_back(i);
             }
-            if (auto err = labels.Add(ctx, *input->Child(i)->Child(1),
-                list.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>())) {
+            if (const auto err = labels.Add(ctx, input->Child(i)->Tail(),
+                GetSeqItemType(list.GetTypeAnn())->Cast<TStructExprType>(), GetDetailedUnique(list.GetConstraint<TUniqueConstraintNode>(), *list.GetTypeAnn(), ctx))) {
                 ctx.AddError(*err);
                 return TStatus::Error;
             }
-        }
-        if (emptyInputs.empty()) {
-            return TStatus::Ok;
         }
 
         const auto joinTree = input->Child(numLists);
@@ -1891,6 +1888,14 @@ private:
                 break;
             }
         }
+
+        const TUniqueConstraintNode* unique = nullptr;
+        if (const auto status = EquiJoinUniq(input->Pos(), unique, labels, *joinTree, ctx); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (unique)
+            input->AddConstraint(unique);
 
         return TStatus::Ok;
     }
@@ -2469,7 +2474,7 @@ private:
         return fields;
     }
 
-    static const TUniqueConstraintNode* GetDetailedUinique(const TUniqueConstraintNode* unique,  const TTypeAnnotationNode& type, TExprContext& ctx) {
+    static const TUniqueConstraintNode* GetDetailedUnique(const TUniqueConstraintNode* unique,  const TTypeAnnotationNode& type, TExprContext& ctx) {
         if (!unique)
             return nullptr;
 

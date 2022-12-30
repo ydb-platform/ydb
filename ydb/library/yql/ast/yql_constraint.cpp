@@ -595,7 +595,7 @@ bool TUniqueConstraintNode::HasEqualColumns(const std::vector<std::string_view>&
     return false;
 }
 
-const TUniqueConstraintNode* TUniqueConstraintNode::FilterFields(TExprContext& ctx, const std::function<bool(const TPathType& front)>& predicate) const {
+const TUniqueConstraintNode* TUniqueConstraintNode::FilterFields(TExprContext& ctx, const std::function<bool(const TPathType&)>& predicate) const {
     auto sets = Sets_;
     for (auto it = sets.cbegin(); sets.cend() != it;) {
         if (std::all_of(it->cbegin(), it->cend(), predicate))
@@ -604,6 +604,20 @@ const TUniqueConstraintNode* TUniqueConstraintNode::FilterFields(TExprContext& c
             it = sets.erase(it);
     }
     return sets.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
+}
+
+const TUniqueConstraintNode* TUniqueConstraintNode::RenameFields(TExprContext& ctx, const std::function<TPathType(const TPathType&)>& rename) const {
+    TFullSetType sets;
+    sets.reserve(Sets_.size());
+    for (const auto& set : Sets_) {
+        TSetType newSet;
+        newSet.reserve(set.size());
+        for (const auto& path : set)
+            newSet.insert_unique(rename(path));
+        sets.insert_unique(std::move(newSet));
+    }
+    return ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
+
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

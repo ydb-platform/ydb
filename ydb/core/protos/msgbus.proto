@@ -467,7 +467,7 @@ message TSchemeOperationStatus {
 
 message TDsTestLoadRequest {
     optional uint32 NodeId = 1;
-    optional NKikimrDataShardLoad.TEvTestLoadRequest Event = 2;
+    optional NKikimrDataShardLoad.TEvYCSBTestLoadRequest Event = 2;
 };
 
 message TDsTestLoadResponse {

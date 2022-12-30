@@ -8,36 +8,36 @@
 namespace NKikimr::NDataShardLoad {
 
 IActor *CreateUpsertBulkActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag);
 
 IActor *CreateLocalMkqlUpsertActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag);
 
 IActor *CreateKqpUpsertActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag);
 
 IActor *CreateProposeUpsertActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag);
 
 IActor *CreateReadIteratorActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag);

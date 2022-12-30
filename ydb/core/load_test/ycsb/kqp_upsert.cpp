@@ -76,8 +76,8 @@ TQueryInfo GenerateUpsert(size_t n, const TString& table) {
 // it's a partial copy-paste from TUpsertActor: logic slightly differs, so that
 // it seems better to have copy-paste rather if/else for different loads
 class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const ui64 Tag;
     const TString Database;
@@ -95,8 +95,8 @@ class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-                    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    TKqpUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+                    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                     const TActorId& parent,
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                     ui64 tag,
@@ -246,8 +246,8 @@ private:
 
 // creates multiple TKqpUpsertActor for inflight > 1 and waits completion
 class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMultiSession> {
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const ui64 Tag;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -266,8 +266,8 @@ class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMul
     size_t Errors = 0;
 
 public:
-    TKqpUpsertActorMultiSession(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-                                const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    TKqpUpsertActorMultiSession(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+                                const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                                 const TActorId& parent,
                                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                                 ui64 tag)
@@ -428,8 +428,8 @@ private:
 } // anonymous
 
 IActor *CreateKqpUpsertActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag)

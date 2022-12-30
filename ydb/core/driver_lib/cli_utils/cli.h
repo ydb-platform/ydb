@@ -36,7 +36,6 @@ namespace NDriverClient {
     int PersQueueStress(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueDiscoverClustersRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int LoadRequest(TCommandConfig &cmdConf, int argc, char **argv);
-    int DsLoadRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv);
     void HideOptions(NLastGetopt::TOpts& opts, const TString& prefix);
     void HideOptions(NLastGetopt::TOpts& opts);

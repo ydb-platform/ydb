@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/load_test/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -15,19 +16,11 @@
 
 // DataShard load is associated with full path to table: only one load per path can be started.
 //
-// TLoadManager is a "service" actor which is used to start/stop special TLoad. It controls
-// that there is only one TLoad per path.
-//
 // TLoad is used to prepare database (drop, create, configure, etc) and then start load.
-//
-// Each TLoad actor has a tag TagStep 1000: i.e. 1000, 2000, 3000. Subactors created by
-// TLoad must be within its Tag and next TagStep: i.e. 1001, 1002, etc
 
 namespace NKikimr::NDataShardLoad {
 
 namespace {
-
-constexpr ui64 TagStep = 1000;
 
 struct TFinishedTestInfo {
     ui64 Tag;
@@ -52,7 +45,7 @@ public:
 private:
     const TActorId Parent;
     const ui64 Tag;
-    NKikimrDataShardLoad::TEvTestLoadRequest Request;
+    NKikimrDataShardLoad::TEvYCSBTestLoadRequest Request;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     EState State = EState::Init;
@@ -63,13 +56,10 @@ private:
     TString Session;
 
     TActorId HttpInfoCollector;
-    THashSet<TActorId> HttpInfoWaiters;
+    THashMap<TActorId, ui64> HttpInfoWaiters;
 
     // info about finished actors
     TVector<TFinishedTestInfo> FinishedTests;
-
-    enum class State {
-    };
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -78,7 +68,7 @@ public:
 
     TLoad(TActorId parent,
           ui64 tag,
-          NKikimrDataShardLoad::TEvTestLoadRequest&& request,
+          const NKikimrDataShardLoad::TEvYCSBTestLoadRequest& request,
           const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Parent(parent)
         , Tag(tag)
@@ -319,21 +309,21 @@ public:
             return;
         }
 
-        NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart cmd;
+        NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart cmd;
         switch (Request.Command_case()) {
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertBulkStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertBulkStart:
             cmd = Request.GetUpsertBulkStart();
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertLocalMkqlStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertLocalMkqlStart:
             cmd = Request.GetUpsertLocalMkqlStart();
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertKqpStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertKqpStart:
             cmd = Request.GetUpsertKqpStart();
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertProposeStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertProposeStart:
             cmd = Request.GetUpsertProposeStart();
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kReadIteratorStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadIteratorStart:
             cmd.SetRowCount(Request.GetReadIteratorStart().GetRowCount());
             break;
         default:
@@ -366,7 +356,7 @@ public:
         auto counters = GetServiceCounters(Counters, "load_actor");
 
         switch (Request.Command_case()) {
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertBulkStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertBulkStart:
             actor.reset(CreateUpsertBulkActor(
                 Request.GetUpsertBulkStart(),
                 Request.GetTargetShard(),
@@ -374,7 +364,7 @@ public:
                 counters,
                 tag));
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertLocalMkqlStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertLocalMkqlStart:
             actor.reset(CreateLocalMkqlUpsertActor(
                 Request.GetUpsertLocalMkqlStart(),
                 Request.GetTargetShard(),
@@ -382,7 +372,7 @@ public:
                 counters,
                 tag));
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertKqpStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertKqpStart:
             actor.reset(CreateKqpUpsertActor(
                 Request.GetUpsertKqpStart(),
                 Request.GetTargetShard(),
@@ -390,7 +380,7 @@ public:
                 counters,
                 tag));
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kUpsertProposeStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertProposeStart:
             actor.reset(CreateProposeUpsertActor(
                 Request.GetUpsertProposeStart(),
                 Request.GetTargetShard(),
@@ -398,7 +388,7 @@ public:
                 counters,
                 tag));
             break;
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kReadIteratorStart:
+        case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadIteratorStart:
             actor.reset(CreateReadIteratorActor(
                 Request.GetReadIteratorStart(),
                 Request.GetTargetShard(),
@@ -450,79 +440,96 @@ public:
 
     void Finish(const TActorContext& ctx) {
         auto endTs = TAppData::TimeProvider->Now();
-
-        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
-        auto& report = *response->Record.MutableReport();
-        report.SetTag(Tag);
-        report.SetDurationMs((endTs - StartTs).MilliSeconds());
+        auto duration = endTs - StartTs;
 
         ui64 oks = 0;
         ui64 errors = 0;
         ui64 subtestCount = 0;
-        TStringStream ss;
         for (const auto& test: FinishedTests) {
             oks += test.Report.GetOperationsOK();
             errors += test.Report.GetOperationsError();
             subtestCount += test.Report.GetSubtestCount();
-            if (test.Report.HasInfo())
-                ss << test.Report.GetInfo() << Endl;
         }
 
-        report.SetOperationsOK(oks);
-        report.SetOperationsError(errors);
-        report.SetSubtestCount(subtestCount);
+        TIntrusivePtr<TEvLoad::TLoadReport> report(new TEvLoad::TLoadReport());
+        report->Duration = duration;
 
-        ctx.Send(Parent, response.release());
+        NJson::TJsonValue value;
+        value["duration_s"] = duration.Seconds();
+        value["oks"] = oks;
+        value["errors"] = errors;
+        value["subtests"] = subtestCount;
+
+        auto finishEv = std::make_unique<TEvLoad::TEvLoadTestFinished>(Tag, report);
+        finishEv->JsonResult = std::move(value);
+        ctx.Send(Parent, finishEv.release());
         Die(ctx);
     }
 
-    void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
-        if (LoadActors.empty()) {
-            TStringStream ss;
-            ss << "TLoad# " << Tag << " started on " << StartTs
-               << " with no subactors, finished# " << FinishedTests.size()
-               << ", in state# " << State;
-
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
-            auto* info = response->Record.AddReports();
-            info->SetTag(Tag);
-            info->SetInfo(ss.Str());
-            ctx.Send(ev->Sender, response.release());
+    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        HttpInfoWaiters[ev->Sender] = ev->Get()->SubRequestId;
+        if (HttpInfoCollector) {
             return;
         }
 
-        HttpInfoWaiters.insert(ev->Sender);
-        if (HttpInfoCollector)
+        if (LoadActors.empty()) {
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
+            ctx.Send(ctx.SelfID, response.release());
             return;
+        }
 
         TVector<TActorId> actors;
         actors.reserve(LoadActors.size());
-        for (const auto& actorId : LoadActors) {
-            actors.push_back(actorId);
+        for (const auto& actor : LoadActors) {
+            actors.push_back(actor);
         }
         HttpInfoCollector = ctx.Register(CreateInfoCollector(SelfId(), std::move(actors)));
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
-        TStringStream ss;
-        ss << "TLoad# " << Tag << " started on " << StartTs
-           << " with subactors active# " << LoadActors.size()
-           << ", finished# " << FinishedTests.size()
-           << ", subactors infos: ";
-
+        // aggregate total info
+        ui64 oks = 0;
+        ui64 errors = 0;
+        ui64 subtestCount = 0;
         for (auto& info: ev->Get()->Record.GetReports()) {
-            ss << "{ tag: " << info.GetTag() << ", info: " << info.GetInfo() << " }";
+            oks += info.GetOperationsOK();
+            errors += info.GetOperationsError();
+            subtestCount += info.GetSubtestCount();
         }
 
-        NKikimrDataShardLoad::TEvTestLoadInfoResponse record;
-        auto* report = record.AddReports();
-        report->SetTag(Tag);
-        report->SetInfo(ss.Str());
+        for (const auto& result: FinishedTests) {
+            oks += result.Report.GetOperationsOK();
+            errors += result.Report.GetOperationsError();
+            subtestCount += result.Report.GetSubtestCount();
+        }
 
-        for (const auto& actorId: HttpInfoWaiters) {
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
-            response->Record = record;
-            ctx.Send(actorId, response.release());
+#define PARAM(NAME, VALUE) \
+    TABLER() { \
+        TABLED() { str << NAME; } \
+        TABLED() { str << VALUE; } \
+    }
+        TStringStream str;
+        HTML(str) {
+            TABLE_CLASS("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "Parameter"; }
+                        TABLEH() { str << "Value"; }
+                    }
+                }
+                TABLEBODY() {
+                    PARAM("Elapsed time", (TAppData::TimeProvider->Now() - StartTs).Seconds() << "s");
+                    PARAM("OKs", oks);
+                    PARAM("Errors", errors);
+                    PARAM("Running subactors", LoadActors.size())
+                    PARAM("Finished subactors", FinishedTests.size())
+                }
+            }
+        }
+#undef PARAM
+
+        for (const auto& it: HttpInfoWaiters) {
+            ctx.Send(it.first, new NMon::TEvHttpInfoRes(str.Str(), it.second));
         }
 
         HttpInfoWaiters.clear();
@@ -555,236 +562,26 @@ public:
 
     STRICT_STFUNC(StateFunc,
         HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle)
-        HFunc(TEvDataShardLoad::TEvTestLoadInfoRequest, Handle)
         HFunc(TEvDataShardLoad::TEvTestLoadInfoResponse, Handle)
         HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
         HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle)
         HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle)
+        HFunc(NMon::TEvHttpInfo, Handle)
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison)
     )
 };
 
 // TLoadManager
 
-class TLoadManager : public TActorBootstrapped<TLoadManager> {
-    struct TRunningActorInfo {
-        TActorId ActorId;
-        TActorId Parent; // if set we notify parent when actor finishes
-
-        explicit TRunningActorInfo(const TActorId& actorId, const TActorId& parent = {})
-            : ActorId(actorId)
-            , Parent(parent)
-        {
-        }
-    };
-
-    // info about finished actors
-    TVector<TFinishedTestInfo> FinishedTests;
-
-    // currently running load actors
-    TMap<ui64, TRunningActorInfo> LoadActors;
-
-    ui64 LastTag = 0; // tags start from TagStep
-
-    THashMap<TActorId, ui64> HttpInfoWaiters;
-    TActorId HttpInfoCollector;
-
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::DS_LOAD_ACTOR;
-    }
-
-    TLoadManager(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
-        : Counters(counters)
-    {}
-
-    void Bootstrap(const TActorContext& /*ctx*/) {
-        Become(&TLoadManager::StateFunc);
-    }
-
-    void Handle(TEvDataShardLoad::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        ui32 status = NMsgBusProxy::MSTATUS_OK;
-        TString error;
-        ui64 tag = 0;
-        try {
-            tag = ProcessCmd(ev, ctx);
-        } catch (const TLoadManagerException& ex) {
-            LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "Exception while creating load actor, what# "
-                    << ex.what());
-            status = NMsgBusProxy::MSTATUS_ERROR;
-            error = ex.what();
-        }
-        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadResponse>();
-        response->Record.SetStatus(status);
-        if (error) {
-            response->Record.SetErrorReason(error);
-        }
-        if (record.HasCookie()) {
-            response->Record.SetCookie(record.GetCookie());
-        }
-        if (tag) {
-            response->Record.SetTag(tag);
-        }
-        ctx.Send(ev->Sender, response.release());
-    }
-
-    ui64 GetTag() {
-        LastTag += TagStep;
-
-        // just sanity check
-        if (LoadActors.contains(LastTag)) {
-            ythrow TLoadManagerException() << Sprintf("duplicate load actor with Tag# %" PRIu64, LastTag);
-        }
-
-        return LastTag;
-    }
-
-    ui64 ProcessCmd(TEvDataShardLoad::TEvTestLoadRequest::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
-        switch (record.Command_case()) {
-        case NKikimrDataShardLoad::TEvTestLoadRequest::CommandCase::kLoadStop: {
-            const auto& cmd = record.GetLoadStop();
-            if (cmd.HasRemoveAllTags() && cmd.GetRemoveAllTags()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Delete all running load actors");
-                for (auto& actorPair : LoadActors) {
-                    ctx.Send(actorPair.second.ActorId, new TEvents::TEvPoisonPill);
-                }
-                LoadActors.clear();
-            } else {
-                if (!cmd.HasTag()) {
-                    ythrow TLoadManagerException() << "Either RemoveAllTags or Tag must present";
-                }
-                const ui64 tag = cmd.GetTag();
-                auto it = LoadActors.find(tag);
-                if (it == LoadActors.end()) {
-                    ythrow TLoadManagerException()
-                        << Sprintf("load actor with Tag# %" PRIu64 " not found", tag);
-                }
-                LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Delete running load actor# " << tag);
-                ctx.Send(it->second.ActorId, new TEvents::TEvPoisonPill);
-                LoadActors.erase(it);
-            }
-
-            return 0;
-        }
-        default: {
-            const ui64 tag = GetTag();
-            bool notifyParent = record.GetNotifyWhenFinished();
-            TRunningActorInfo actorInfo(ctx.Register(new TLoad(SelfId(), tag, std::move(record), Counters)));
-            if (notifyParent)
-                actorInfo.Parent = ev->Sender;
-            LoadActors.emplace(tag, std::move(actorInfo));
-            return tag;
-        }
-        }
-    }
-
-    void Handle(TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        auto it = LoadActors.find(record.GetTag());
-
-        Y_VERIFY(it != LoadActors.end(), "%s", (TStringBuilder() << "failed to find actor with tag# " << record.GetTag()
-            << ", TEvTestLoadFinished from actor# " << ev->Sender).c_str());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load actor# " << ev->Sender
-            << " with tag# " << record.GetTag() << " finished");
-
-        if (it->second.Parent) {
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(record.GetTag());
-            response->Record = record;
-            ctx.Send(it->second.Parent, response.release());
-        }
-
-        LoadActors.erase(it);
-        FinishedTests.push_back(
-            {record.GetTag(), record.GetErrorReason(), TAppData::TimeProvider->Now(), record.GetReport()});
-    }
-
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        HttpInfoWaiters[ev->Sender] = ev->Get()->SubRequestId;
-        if (HttpInfoCollector) {
-            return;
-        }
-
-        if (LoadActors.empty()) {
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadInfoResponse>();
-            ctx.Send(ctx.SelfID, response.release());
-            return;
-        }
-
-        TVector<TActorId> actors;
-        actors.reserve(LoadActors.size());
-        for (const auto& kv : LoadActors) {
-            actors.push_back(kv.second.ActorId);
-        }
-        HttpInfoCollector = ctx.Register(CreateInfoCollector(SelfId(), std::move(actors)));
-    }
-
-    void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-
-        TStringStream str;
-        HTML(str) {
-            DIV_CLASS("panel panel-info") {
-                DIV_CLASS("panel-heading") {
-                    str << "State";
-                }
-                DIV_CLASS("panel-body") {
-                    str << "Running# " << LoadActors.size() << ", Finished# " << FinishedTests.size();
-                }
-            }
-
-            for (const auto& info: record.GetReports()) {
-                DIV_CLASS("panel panel-info") {
-                    DIV_CLASS("panel-heading") {
-                        str << "Tag# " << info.GetTag();
-                    }
-                    DIV_CLASS("panel-body") {
-                        str << info.GetInfo();
-                    }
-                }
-            }
-
-            COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
-                for (const auto& req : FinishedTests) {
-                    DIV_CLASS("panel panel-info") {
-                        DIV_CLASS("panel-heading") {
-                            str << "Tag# " << req.Tag;
-                        }
-                        DIV_CLASS("panel-body") {
-                            str << "<p>";
-                            str << "Report# " << req.Report << "<br/>";
-                            str << "Finish reason# " << req.ErrorReason << "<br/>";
-                            str << "Finish time# " << req.FinishTime << "<br/>";
-                            str << "</p>";
-                        }
-                    }
-                }
-            }
-        }
-
-        for (const auto& it: HttpInfoWaiters) {
-            ctx.Send(it.first, new NMon::TEvHttpInfoRes(str.Str(), it.second));
-        }
-
-        HttpInfoWaiters.clear();
-        HttpInfoCollector = {};
-    }
-
-    STRICT_STFUNC(StateFunc,
-        HFunc(TEvDataShardLoad::TEvTestLoadRequest, Handle)
-        HFunc(TEvDataShardLoad::TEvTestLoadFinished, Handle)
-        HFunc(TEvDataShardLoad::TEvTestLoadInfoResponse, Handle)
-        HFunc(NMon::TEvHttpInfo, Handle)
-    )
-};
-
 } // anonymous
 
-IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    return new TLoadManager(counters);
+IActor *CreateTestLoadActor(
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest& request,
+    TActorId parent,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+    ui64 tag)
+{
+    return new TLoad(parent, tag, request, counters);
 }
 
 } // NKikimr::NDataShardLoad

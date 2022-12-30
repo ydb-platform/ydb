@@ -5,7 +5,7 @@ import "ydb/core/protos/tx_datashard.proto";
 package NKikimrDataShardLoad;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TEvTestLoadRequest {
+message TEvYCSBTestLoadRequest {
     message TLoadStop {
         optional uint64 Tag = 1;
         optional bool RemoveAllTags = 2;
@@ -65,7 +65,7 @@ message TEvTestLoadRequest {
         optional bool SkipWarmup = 8;
     }
 
-    optional uint64 Cookie = 1;
+    optional uint64 Tag = 1;
 
     // normally should be used by ut only
     optional bool NotifyWhenFinished = 2;

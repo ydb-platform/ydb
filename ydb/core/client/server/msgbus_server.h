@@ -291,7 +291,6 @@ IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);
-IActor* CreateMessageBusDataShardLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveLookupTablet(TBusMessageContext &msg);

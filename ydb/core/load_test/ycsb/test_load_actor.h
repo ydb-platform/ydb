@@ -20,12 +20,12 @@ struct TEvDataShardLoad {
         EvTestLoadInfoResponse,
     };
 
-    struct TEvTestLoadRequest
-        : public TEventPB<TEvTestLoadRequest,
-                          NKikimrDataShardLoad::TEvTestLoadRequest,
+    struct TEvYCSBTestLoadRequest
+        : public TEventPB<TEvYCSBTestLoadRequest,
+                          NKikimrDataShardLoad::TEvYCSBTestLoadRequest,
                           EvTestLoadRequest>
     {
-        TEvTestLoadRequest() = default;
+        TEvYCSBTestLoadRequest() = default;
     };
 
     struct TEvTestLoadResponse
@@ -89,7 +89,11 @@ struct TEvDataShardLoad {
 
 namespace NDataShardLoad {
 
-IActor *CreateTestLoadActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+IActor *CreateTestLoadActor(
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest& request,
+    TActorId parent,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+    ui64 tag);
 
 } // NDataShardLoad
 } // NKikimr

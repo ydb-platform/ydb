@@ -1,5 +1,6 @@
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/datashard_load.proto";
 
 package NKikimr;
 option java_package = "ru.yandex.kikimr.proto";
@@ -240,6 +241,7 @@ message TEvLoadTestRequest {
         TKeyValueLoad KeyValueLoad = 8;
         TKqpLoad KqpLoad = 9;
         TMemoryLoad MemoryLoad = 10;
+        NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
     }
 }
 

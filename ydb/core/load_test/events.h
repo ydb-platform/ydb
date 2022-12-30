@@ -79,7 +79,7 @@ struct TEvLoad {
         TString LastHtmlPage;
         NJson::TJsonValue JsonResult;
 
-        TEvLoadTestFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason)
+        TEvLoadTestFinished(ui64 tag, TIntrusivePtr<TLoadReport> report, TString errorReason = {})
             : Tag(tag)
             , Report(report)
             , ErrorReason(errorReason)

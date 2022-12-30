@@ -89,8 +89,8 @@ enum {
     MTYPE_CLIENT_TENANT_SLOT_BROKER_REQUEST = 10479,
     MTYPE_CLIENT_TENANT_SLOT_BROKER_RESPONSE = 10480,
     MTYPE_CLIENT_TEST_SHARD_CONTROL = 10481,
-    MTYPE_CLIENT_DS_LOAD_REQUEST = 10482,
-    MTYPE_CLIENT_DS_LOAD_RESPONSE = 10483,
+    MTYPE_CLIENT_DS_LOAD_REQUEST = 10482, // deprecated
+    MTYPE_CLIENT_DS_LOAD_RESPONSE = 10483, // deprecated
     MTYPE_CLIENT_LOGIN_REQUEST = 10484,
 };
 
@@ -127,8 +127,6 @@ struct TBusSchemeOperationStatus : TBusMessage<TBusSchemeOperationStatus, NKikim
 struct TBusSchemeDescribe : TBusMessage<TBusSchemeDescribe, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeRequest : TBusMessage<TBusOldFlatDescribeRequest, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeResponse : TBusMessage<TBusOldFlatDescribeResponse, NKikimrClient::TFlatDescribeResponse, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE> {};
-struct TBusDsTestLoadRequest : TBusMessage<TBusDsTestLoadRequest, NKikimrClient::TDsTestLoadRequest, MTYPE_CLIENT_DS_LOAD_REQUEST> {};
-struct TBusDsTestLoadResponse : TBusMessage<TBusDsTestLoadResponse, NKikimrClient::TDsTestLoadResponse, MTYPE_CLIENT_DS_LOAD_RESPONSE> {};
 struct TBusBsTestLoadRequest : TBusMessage<TBusBsTestLoadRequest, NKikimrClient::TBsTestLoadRequest, MTYPE_CLIENT_LOAD_REQUEST> {};
 struct TBusBsTestLoadResponse : TBusMessage<TBusBsTestLoadResponse, NKikimrClient::TBsTestLoadResponse, MTYPE_CLIENT_LOAD_RESPONSE> {};
 struct TBusBsGetRequest : TBusMessage<TBusBsGetRequest, NKikimrClient::TBsGetRequest, MTYPE_CLIENT_GET_REQUEST> {};
@@ -225,8 +223,6 @@ public:
         RegisterType(new TBusSchemeDescribe);
         RegisterType(new TBusOldFlatDescribeRequest);
         RegisterType(new TBusOldFlatDescribeResponse);
-        RegisterType(new TBusDsTestLoadRequest);
-        RegisterType(new TBusDsTestLoadResponse);
         RegisterType(new TBusBsTestLoadRequest);
         RegisterType(new TBusBsTestLoadResponse);
         RegisterType(new TBusBsGetRequest);

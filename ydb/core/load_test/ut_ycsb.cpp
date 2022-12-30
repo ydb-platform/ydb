@@ -1,10 +1,12 @@
-#include "datashard_ut_common.h"
-
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD), Q_
+#include <ydb/core/load_test/events.h>
+#include <ydb/core/load_test/ycsb/test_load_actor.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
-
-#include "testload/test_load_actor.h"
 
 namespace NKikimr {
 
@@ -25,26 +27,143 @@ TString GetKey(size_t n) {
     return Sprintf("user%.19lu", n);
 }
 
+void InitRoot(Tests::TServer::TPtr server,
+    TActorId sender) {
+    server->SetupRootStoragePools(sender);
+}
+
+ui64 RunSchemeTx(
+        TTestActorRuntimeBase& runtime,
+        THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+        TActorId sender = {},
+        bool viaActorSystem = false,
+        TEvTxUserProxy::TEvProposeTransactionStatus::EStatus expectedStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress)
+{
+    if (!sender) {
+        sender = runtime.AllocateEdgeActor();
+    }
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
+
+    return ev->Get()->Record.GetTxId();
+}
+
+THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
+        NKikimrSchemeOp::EOperationType type,
+        const TString& workingDir = {})
+{
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+
+    auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetOperationType(type);
+
+    if (workingDir) {
+        tx.SetWorkingDir(workingDir);
+    }
+
+    return request;
+}
+
+void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
+    auto &runtime = *server->GetRuntime();
+    auto &settings = server->GetSettings();
+
+    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    request->Record.SetTxId(txId);
+    auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
+    runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
+    runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+}
+
 void CreateTable(Tests::TServer::TPtr server,
                  TActorId sender,
                  const TString &root,
                  const TString& tableName)
 {
-    TVector<TShardedTableOptions::TColumn> columns;
-    columns.reserve(ValueColumnsCount + 1);
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateTable, root);
 
-    columns.emplace_back("id", "Utf8", true, false);
+    auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+    NKikimrSchemeOp::TTableDescription* desc = tx.MutableCreateTable();
+
+    UNIT_ASSERT(desc);
+    desc->SetName(tableName);
+    desc->SetUniformPartitionsCount(1);
+
+    {
+        auto col = desc->AddColumns();
+        col->SetName("id");
+        col->SetType("Utf8");
+        col->SetNotNull(true);
+        desc->AddKeyColumnNames("id");
+    }
 
     for (size_t i = 0; i < ValueColumnsCount; ++i) {
         TString fieldName = FieldPrefix + ToString(i);
-        columns.emplace_back(fieldName, "String", false, false);
+        auto col = desc->AddColumns();
+        col->SetName(fieldName);
+        col->SetType("String");
+        col->SetNotNull(false);
     }
 
-    auto opts = TShardedTableOptions()
-        .Shards(1)
-        .Columns(columns);
+    WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));
+}
 
-    CreateShardedTable(server, sender, root, tableName, opts);
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server,
+                                                     TActorId sender,
+                                                     const TString &path)
+{
+    auto &runtime = *server->GetRuntime();
+    TAutoPtr<IEventHandle> handle;
+    TVector<ui64> shards;
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+    return *reply->MutableRecord();
+}
+
+TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
+                             TActorId sender,
+                             const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
+        shards.push_back(part.GetDatashardId());
+
+    return shards;
+}
+
+using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
+
+std::pair<TTableInfoMap, ui64> GetTables(
+    Tests::TServer::TPtr server,
+    ui64 tabletId)
+{
+    auto &runtime = *server->GetRuntime();
+
+    auto sender = runtime.AllocateEdgeActor();
+    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TTableInfoMap result;
+
+    TAutoPtr<IEventHandle> handle;
+    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+    for (auto& table: response->Record.GetUserTables()) {
+        result[table.GetName()] = table;
+    }
+
+    auto ownerId = response->Record.GetTabletInfo().GetSchemeShard();
+
+    return std::make_pair(result, ownerId);
 }
 
 TVector<TCell> ToCells(const std::vector<TString>& keys) {
@@ -215,41 +334,28 @@ struct TTestHelper {
         }
     }
 
-    std::unique_ptr<TEvDataShardLoad::TEvTestLoadFinished> RunTestLoad(
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request)
+    std::unique_ptr<TEvLoad::TEvLoadTestFinished> RunTestLoad(
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request)
     {
         request->Record.SetNotifyWhenFinished(true);
         auto &runtime = *Server->GetRuntime();
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
-        auto testLoadActor = runtime.Register(CreateTestLoadActor(counters));
-
-        runtime.Send(new IEventHandle(testLoadActor, Sender, request.release()), 0, true);
-
-        {
-            // check load started
-            TAutoPtr<IEventHandle> handle;
-            runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadResponse>(handle);
-            UNIT_ASSERT(handle);
-            auto response = handle->Release<TEvDataShardLoad::TEvTestLoadResponse>();
-            auto& responseRecord = response->Record;
-            UNIT_ASSERT_VALUES_EQUAL(responseRecord.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        }
+        runtime.Register(CreateTestLoadActor(request->Record, Sender, counters, 0));
 
         {
             // wait until load finished
             TAutoPtr<IEventHandle> handle;
-            runtime.GrabEdgeEventRethrow<TEvDataShardLoad::TEvTestLoadFinished>(handle);
+            runtime.GrabEdgeEventRethrow<TEvLoad::TEvLoadTestFinished>(handle);
             UNIT_ASSERT(handle);
-            auto response = handle->Release<TEvDataShardLoad::TEvTestLoadFinished>();
-            UNIT_ASSERT(response->Record.HasReport());
-            UNIT_ASSERT(!response->Record.HasErrorReason());
+            auto response = handle->Release<TEvLoad::TEvLoadTestFinished>();
+            UNIT_ASSERT(response->ErrorReason.Empty());
 
-            return std::unique_ptr<TEvDataShardLoad::TEvTestLoadFinished>(response.Release());
+            return std::unique_ptr<TEvLoad::TEvLoadTestFinished>(response.Release());
         }
     }
 
     void RunUpsertTestLoad(
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> loadRequest,
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> loadRequest,
         size_t keyFrom,
         size_t expectedRowCount,
         bool forceResolve = false)
@@ -277,7 +383,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
@@ -298,7 +404,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 100;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
@@ -321,7 +427,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
@@ -343,7 +449,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         const ui64 keyFrom = 12345;
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
@@ -364,7 +470,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertLocalMkqlStart();
 
@@ -386,7 +492,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertLocalMkqlStart();
 
@@ -408,7 +514,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         const ui64 keyFrom = 12345;
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertLocalMkqlStart();
 
@@ -429,7 +535,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 20;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertKqpStart();
 
@@ -452,7 +558,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 20;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertKqpStart();
 
@@ -474,7 +580,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         const ui64 keyFrom = 12345;
         const ui64 expectedRowCount = 20;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertKqpStart();
 
@@ -497,7 +603,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
@@ -529,7 +635,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
 
         {
             // write some data, which should not be seen after drop
-            std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+            std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
             auto& record = request->Record;
             auto& command = *record.MutableUpsertBulkStart();
 
@@ -546,7 +652,7 @@ Y_UNIT_TEST_SUITE(UpsertLoad) {
         // because of drop we should see only these rows
         const ui64 expectedRowCount = 10;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableUpsertBulkStart();
 
@@ -577,7 +683,7 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
 
         const ui64 expectedRowCount = 1000;
 
-        std::unique_ptr<TEvDataShardLoad::TEvTestLoadRequest> request(new TEvDataShardLoad::TEvTestLoadRequest());
+        std::unique_ptr<TEvDataShardLoad::TEvYCSBTestLoadRequest> request(new TEvDataShardLoad::TEvYCSBTestLoadRequest());
         auto& record = request->Record;
         auto& command = *record.MutableReadIteratorStart();
 
@@ -593,10 +699,9 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
         setupTable.SetTableName("usertable");
 
         auto result = helper.RunTestLoad(std::move(request));
-        UNIT_ASSERT(result->Record.HasReport());
 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReport().GetSubtestCount(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReport().GetOperationsOK(), (4 * expectedRowCount));
+        UNIT_ASSERT_VALUES_EQUAL(result->JsonResult["subtests"].GetInteger(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(result->JsonResult["oks"].GetInteger(), (4 * expectedRowCount));
 
         // sanity check that there was data in table
         helper.CheckKeys(0, expectedRowCount);

@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(testload)
 add_subdirectory(ut_background_compaction)
 add_subdirectory(ut_build_index)
 add_subdirectory(ut_change_collector)
@@ -33,7 +32,6 @@ add_subdirectory(ut_replication)
 add_subdirectory(ut_rs)
 add_subdirectory(ut_snapshot)
 add_subdirectory(ut_stats)
-add_subdirectory(ut_testload)
 add_subdirectory(ut_upload_rows)
 add_subdirectory(ut_volatile)
 
@@ -68,7 +66,6 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
-  tx-datashard-testload
   tx-long_tx_service-public
   ydb-core-util
   ydb-core-wrappers
@@ -322,7 +319,6 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
-  tx-datashard-testload
   tx-long_tx_service-public
   ydb-core-util
   ydb-core-wrappers

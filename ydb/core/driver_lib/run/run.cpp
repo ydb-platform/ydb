@@ -43,7 +43,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/statestorage_impl.h>
-#include <ydb/core/base/services/datashard_service_id.h>
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/core/mind/local.h>
@@ -1220,14 +1219,6 @@ void TKikimrRunner::InitializeActorSystem(
                 false,
                 ActorSystem.Get(),
                 MakeLoadServiceID(runConfig.NodeId));
-
-            Monitoring->RegisterActorPage(
-                ActorsMonPage,
-                "dsload",
-                "DSLoad",
-                false,
-                ActorSystem.Get(),
-                MakeDataShardLoadId(runConfig.NodeId));
         }
 
         if (servicesMask.EnableFailureInjectionService) {

@@ -125,8 +125,8 @@ TRequestsVector GenerateRequests(
 }
 
 class TUpsertActor : public TActorBootstrapped<TUpsertActor> {
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart Config;
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     const ui64 Tag;
     const ERequestType RequestType;
@@ -148,8 +148,8 @@ public:
         return NKikimrServices::TActivity::DS_LOAD_ACTOR;
     }
 
-    TUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-                 const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    TUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+                 const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                  const TActorId& parent,
                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                  ui64 tag,
@@ -319,22 +319,22 @@ private:
 
 } // anonymous
 
-IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+        const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
         const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     return new TUpsertActor(cmd, target, parent, std::move(counters), tag, ERequestType::UpsertBulk);
 }
 
-IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+        const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
         const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     return new TUpsertActor(cmd, target, parent, std::move(counters), tag, ERequestType::UpsertLocalMkql);
 }
 
-IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvTestLoadRequest::TUpdateStart& cmd,
-        const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
+        const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
         const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
 {
     Y_UNUSED(cmd);

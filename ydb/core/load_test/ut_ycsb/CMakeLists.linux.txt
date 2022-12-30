@@ -7,14 +7,14 @@
 
 
 
-add_executable(ydb-core-tx-datashard-ut_testload)
-target_compile_options(ydb-core-tx-datashard-ut_testload PRIVATE
+add_executable(ydb-core-load_test-ut_ycsb)
+target_compile_options(ydb-core-load_test-ut_ycsb PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-core-tx-datashard-ut_testload PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard
+target_include_directories(ydb-core-load_test-ut_ycsb PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test
 )
-target_link_libraries(ydb-core-tx-datashard-ut_testload PUBLIC
+target_link_libraries(ydb-core-load_test-ut_ycsb PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_testload PUBLIC
   libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  core-tx-datashard
+  ydb-core-load_test
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
@@ -33,7 +33,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_testload PUBLIC
   public-lib-yson_value
   cpp-client-ydb_result
 )
-target_link_options(ydb-core-tx-datashard-ut_testload PRIVATE
+target_link_options(ydb-core-load_test-ut_ycsb PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -43,19 +43,18 @@ target_link_options(ydb-core-tx-datashard-ut_testload PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-core-tx-datashard-ut_testload PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_testload.cpp
+target_sources(ydb-core-load_test-ut_ycsb PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ut_ycsb.cpp
 )
 add_test(
   NAME
-  ydb-core-tx-datashard-ut_testload
+  ydb-core-load_test-ut_ycsb
   COMMAND
-  ydb-core-tx-datashard-ut_testload
+  ydb-core-load_test-ut_ycsb
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
 )
-vcs_info(ydb-core-tx-datashard-ut_testload)
+vcs_info(ydb-core-load_test-ut_ycsb)

@@ -403,8 +403,8 @@ enum class EState {
 };
 
 class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadScenario> {
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart Config;
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard Target;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart Config;
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     const ui64 Tag;
@@ -448,8 +448,8 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
     ui64 ReadCount = 0;
 
 public:
-    TReadIteratorLoadScenario(const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
-                              const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    TReadIteratorLoadScenario(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
+                              const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                               const TActorId& parent,
                               TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                               ui64 tag)
@@ -808,8 +808,8 @@ private:
 } // anonymous
 
 IActor *CreateReadIteratorActor(
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TReadStart& cmd,
-    const NKikimrDataShardLoad::TEvTestLoadRequest::TTargetShard& target,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
+    const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag)
 {

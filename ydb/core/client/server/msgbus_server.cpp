@@ -116,8 +116,6 @@ public:
             MTYPE(TBusSchemeDescribe)
             MTYPE(TBusOldFlatDescribeRequest)
             MTYPE(TBusOldFlatDescribeResponse)
-            MTYPE(TBusDsTestLoadRequest)
-            MTYPE(TBusDsTestLoadResponse)
             MTYPE(TBusBsTestLoadRequest)
             MTYPE(TBusBsTestLoadResponse)
             MTYPE(TBusBsGetRequest)
@@ -178,7 +176,6 @@ public:
 
             REPLY_OPTION(TBusResponse)
             REPLY_OPTION(TBusDbResponse)
-            REPLY_OPTION(TBusDsTestLoadResponse)
             REPLY_OPTION(TBusBsTestLoadResponse)
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
@@ -545,8 +542,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST:
     case MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg);
-    case MTYPE_CLIENT_DS_LOAD_REQUEST:
-        return ClientActorRequest(CreateMessageBusDataShardLoadRequest, msg);
     case MTYPE_CLIENT_LOAD_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageLoadRequest, msg);
     case MTYPE_CLIENT_GET_REQUEST:

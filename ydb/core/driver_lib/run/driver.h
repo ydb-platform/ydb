@@ -36,7 +36,6 @@ namespace NKikimr {
     XX(EDM_PERSQUEUE_STRESS, "persqueue-stress", "stress read or write to a persqueue tablet") \
     XX(EDM_PERSQUEUE_DISCOVER_CLUSTERS, "persqueue-discover-clusters", "persqueue session clusters discovery") \
     XX(EDM_LOAD_REQUEST, "load-test", "send protobuf request to test load actor") \
-    XX(EDM_DS_LOAD_REQUEST, "ds-load-test", "send protobuf request to datashard test load actor (https://wiki.yandex-team.ru/kikimr/developers/DSLoadTest/)") \
     XX(EDM_ACTORSYS_PERFTEST, "actorsys-perf-test", "make actorsystem performance test") \
 
 

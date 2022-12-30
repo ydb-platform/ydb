@@ -1275,7 +1275,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     std::optional<ui64> TGetShardIteratorActor::SequenceNumberToInt(const TString& sequenceNumberStr) {
         try {
-            return std::stoll(sequenceNumberStr.c_str());
+            return std::stoull(sequenceNumberStr.c_str());
         } catch(...) {
             return std::nullopt;
         }

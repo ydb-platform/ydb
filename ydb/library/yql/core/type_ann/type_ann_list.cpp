@@ -4915,7 +4915,7 @@ namespace {
                 }
             }
 
-            const bool isAggApply = child->Child(1)->IsCallable({ "AggApply", "AggApplyState" });
+            const bool isAggApply = child->Child(1)->IsCallable({ "AggApply", "AggApplyState", "AggApplyManyState" });
             const bool isTraits = child->Child(1)->IsCallable("AggregationTraits");
             if (!isAggApply && !isTraits) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), "Expected aggregation traits"));
@@ -5212,6 +5212,7 @@ namespace {
     IGraphTransformer::TStatus AggApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         const bool overState = input->Content().EndsWith("State");
+        const bool isMany = input->Content().EndsWith("ManyState");
         if (overState) {
             if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -5307,6 +5308,15 @@ namespace {
                 }
 
                 input->SetTypeAnn(structType->GetItems()[0]->GetItemType());
+                if (isMany) {
+                    if (input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                            TStringBuilder() << "Expected optional state"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    input->SetTypeAnn(input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
+                }
             } else {
                 input->SetTypeAnn(retType);
             }

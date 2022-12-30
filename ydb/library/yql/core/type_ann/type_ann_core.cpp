@@ -11596,6 +11596,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;
         Functions["AggApply"] = &AggApplyWrapper;
         Functions["AggApplyState"] = &AggApplyWrapper;
+        Functions["AggApplyManyState"] = &AggApplyWrapper;
         Functions["AggBlockApply"] = &AggBlockApplyWrapper;
         Functions["AggBlockApplyState"] = &AggBlockApplyWrapper;
         Functions["WinOnRows"] = &WinOnWrapper;

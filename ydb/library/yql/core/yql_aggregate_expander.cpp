@@ -122,7 +122,7 @@ bool TAggregateExpander::CollectTraits() {
     bool allTraitsCollected = true;
     for (ui32 index = 0; index < AggregatedColumns->ChildrenSize(); ++index) {
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
-        if (trait->IsCallable({ "AggApply", "AggApplyState" })) {
+        if (trait->IsCallable({ "AggApply", "AggApplyState", "AggApplyManyState" })) {
             trait = ExpandAggApply(trait);
             allTraitsCollected = false;
         }
@@ -138,7 +138,7 @@ TExprNode::TPtr TAggregateExpander::RebuildAggregate()
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
         if (trait->IsCallable("AggApply")) {
             newAggregatedColumnsItems[index] = Ctx.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(Traits[index]));
-        } else if (trait->IsCallable("AggApplyState")) {
+        } else if (trait->IsCallable("AggApplyState") || trait->IsCallable("AggApplyManyState")) {
             auto newTrait = Ctx.Builder(Node->Pos())
                 .Callable("AggregationTraits")
                     .Add(0, trait->ChildPtr(1))
@@ -2060,17 +2060,22 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Build();
 
         if (isAggApply) {
+            auto initialType = originalTrait->GetTypeAnn();
+            if (many) {
+                initialType = Ctx.MakeType<TOptionalExprType>(initialType);
+            }
+
             auto originalExtractorTypeNode = Ctx.Builder(Node->Pos())
                 .Callable("StructType")
                     .List(0)
                         .Add(0, InitialColumnNames[index])
-                        .Add(1, ExpandType(Node->Pos(), *originalTrait->GetTypeAnn(), Ctx))
+                        .Add(1, ExpandType(Node->Pos(), *initialType, Ctx))
                     .Seal()
                 .Seal()
                 .Build();
 
             mergeTraits.push_back(Ctx.Builder(Node->Pos())
-                .Callable("AggApplyState")
+                .Callable(many ? "AggApplyManyState" : "AggApplyState")
                     .Add(0, originalTrait->ChildPtr(0))
                     .Add(1, extractorTypeNode)
                     .Add(2, extractor)
@@ -2395,7 +2400,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
 
     for (const auto& x : AggregatedColumns->Children()) {
         auto trait = x->ChildPtr(1);
-        if (!trait->IsCallable("AggApplyState")) {
+        if (!trait->IsCallable({ "AggApplyState", "AggApplyManyState" })) {
             return nullptr;
         }
     }

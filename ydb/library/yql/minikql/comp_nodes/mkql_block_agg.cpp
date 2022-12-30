@@ -1169,7 +1169,31 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareB
 }
 
 template <typename TAggregator>
-ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams<TAggregator>>& aggsParams, const TTypeEnvironment& env, bool overState) {
+ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams<TAggregator>>& aggsParams,
+    const TTypeEnvironment& env, bool overState, bool many) {
+    TTupleType* unwrappedTupleType = tupleType;
+    if (many) {
+        TVector<TType*> unwrappedTypes(tupleType->GetElementsCount());
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            unwrappedTypes[i] = tupleType->GetElementType(i);
+        }
+
+        for (ui32 i = 0; i < aggsVal->GetValuesCount(); ++i) {
+            auto aggVal = AS_VALUE(TTupleLiteral, aggsVal->GetValue(i));
+            MKQL_ENSURE(aggVal->GetValuesCount() == 2, "Expected only one column");
+            auto index = AS_VALUE(TDataLiteral, aggVal->GetValue(1))->AsValue().Get<ui32>();
+            MKQL_ENSURE(index < unwrappedTypes.size(), "Bad state column index");
+            auto blockType = AS_TYPE(TBlockType, unwrappedTypes[index]);
+            MKQL_ENSURE(blockType->GetShape() == TBlockType::EShape::Many, "State must be a block");
+            bool isOptional;
+            auto unpacked = UnpackOptional(blockType->GetItemType(), isOptional);
+            MKQL_ENSURE(isOptional, "State must be optional");
+            unwrappedTypes[index] = TBlockType::Create(unpacked, TBlockType::EShape::Many, env);
+        }
+
+        unwrappedTupleType = TTupleType::Create(unwrappedTypes.size(), unwrappedTypes.data(), env);
+    }
+
     ui32 totalStateSize = 0;
     for (ui32 i = 0; i < aggsVal->GetValuesCount(); ++i) {
         auto aggVal = AS_VALUE(TTupleLiteral, aggsVal->GetValue(i));
@@ -1181,7 +1205,7 @@ ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<
         }
 
         TAggParams<TAggregator> p;
-        p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), tupleType, filterColumn, argColumns, env);
+        p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), unwrappedTupleType, filterColumn, argColumns, env);
         if (overState) {
             MKQL_ENSURE(argColumns.size() == 1, "Expected exactly one column");
             p.Column_ = argColumns[0];
@@ -1451,7 +1475,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false);
     return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
 
@@ -1478,7 +1502,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TAggParams<IBlockAggregatorCombineKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false);
 
     ui32 totalKeysSize = 0;
     std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
@@ -1516,7 +1540,7 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, false);
 
     ui32 totalKeysSize = 0;
     std::vector<std::unique_ptr<IKeySerializer>> keySerializers;
@@ -1546,7 +1570,7 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, true);
 
     ui32 totalKeysSize = 0;
     std::vector<std::unique_ptr<IKeySerializer>> keySerializers;

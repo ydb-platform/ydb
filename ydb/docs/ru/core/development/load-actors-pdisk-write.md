@@ -1,8 +1,10 @@
-# PDisk нагрузка на запись
+# PDiskWriteLoad
 
-Представляется VDisk и пишет на PDisk данные, и в чанки, и в лог. Самостоятельно выделяет чанки для записи и освобождает в конце работы.
+Подает на PDisk нагрузку write-only. Имитирует VDisk. Актор создает на указанном PDisk чанки и записывает в них случайные данные с указанными параметрами. Результатом теста является производительность записи в байтах в секунду.
 
-## Структура {#proto}
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 <!-- 
 ```proto
@@ -11,7 +13,7 @@ enum ELogMode {
     LOG_SEQUENTIAL = 2;
     LOG_NONE = 3;
 }
-message TPDiskLoadStart {
+message TPDiskWriteLoad {
     message TChunkInfo {
         optional uint32 Slots = 1; // number of slots per chunk
         optional uint32 Weight = 2; // probability weight
@@ -40,7 +42,7 @@ enum ELogMode {
     LOG_NONE = 3;
 }
 
-message TPDiskLoadStart {
+message TPDiskWriteLoad {
     message TChunkInfo {
         optional uint32 Slots = 1; // количество слотов в чанке. Фактически определяет размер записей/чтений,
                                    // которой можно расчитать, разделив размер чанка на количество слотов
@@ -68,5 +70,3 @@ message TPDiskLoadStart {
     optional bool IsWardenlessTest = 13 [default = false]; // позволяет использовать в тестах, где нет NodeWarden
 }
 ```
-
-{% include notitle [addition](../_includes/addition.md) %}

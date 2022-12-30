@@ -1,16 +1,18 @@
-# DSProxy нагрузка
+# StorageLoad
 
-Представляется таблеткой и пишет в группу.
+Нагружает Distributed Storage без задействования слоев таблеток и Query Processor. Результатом теста является производительность записи на Distributed Storage в блобах в секунду.
 
-## Структура {#proto}
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 ```proto
-message TLoadStart {
+message TStorageLoad {
     message TRequestInfo {
         optional float SendTime = 1;
         optional uint64 Type = 2;
         optional uint32 Size = 3;
-        optional EPutHandleClass PutHandleClass = 4;
+        optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 4;
     }
     message TTabletInfo {
         optional uint64 TabletId = 1;
@@ -27,14 +29,14 @@ message TLoadStart {
         optional uint32 MaxInFlightRequests = 4;
         optional uint32 MaxInFlightBytes = 5;
         repeated TIntervalInfo FlushIntervals = 6;
-        optional EPutHandleClass PutHandleClass = 7;
+        optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 7;
         optional bool Soft = 8;
         optional uint32 MaxInFlightReadRequests = 9;
         optional uint32 MaxInFlightReadBytes = 10;
         repeated TIntervalInfo ReadIntervals = 11;
         repeated TSizeInfo ReadSizes = 12;
         optional uint64 MaxTotalBytesWritten = 13;
-        optional EGetHandleClass GetHandleClass = 14;
+        optional NKikimrBlobStorage.EGetHandleClass GetHandleClass = 14;
     };
     optional uint64 Tag = 1;
     optional uint32 DurationSeconds = 2;
@@ -44,7 +46,7 @@ message TLoadStart {
     optional uint64 ScheduleRoundingUs = 6;
 }
 ```
-
+<!-- 
 ## Примеры {#example}
 
 **Читающая нагрузка**
@@ -53,49 +55,60 @@ message TLoadStart {
 
 Вторая часть основная, читающая. Читает запросами размера `$SIZE`, запросы отправляет каждые `${INTERVAL}` микросекунд. Можно его задать в 0, тогда этот параметр не будет играть роли. Конфигурация ограничивает количество запросов в полете числом `${IN_FLIGHT}`.
 
-```proto
-NodeId: ${NODEID}
-Event: { LoadStart: {
-    DurationSeconds: ${DURATION}
-    ScheduleThresholdUs: 0
-    ScheduleRoundingUs: 0
-    Tablets: {
-        Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
-        Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }
-        MaxInFlightRequests: 1
+{% list tabs %}
 
-        ReadSizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-        ReadIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
-        MaxInFlightReadRequests: ${IN_FLIGHT}
-        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
-        PutHandleClass: ${PUT_HANDLE_CLASS}
-        GetHandleClass: ${GET_HANDLE_CLASS}
-        Soft: true
-    }
-}}
-```
+- CLI
+
+  ```proto
+  NodeId: ${NODEID}
+  Event: { StorageLoad: {
+      DurationSeconds: ${DURATION}
+      ScheduleThresholdUs: 0
+      ScheduleRoundingUs: 0
+      Tablets: {
+          Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
+          Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
+          WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }
+          MaxInFlightRequests: 1
+
+          ReadSizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
+          ReadIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
+          MaxInFlightReadRequests: ${IN_FLIGHT}
+          FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
+          PutHandleClass: ${PUT_HANDLE_CLASS}
+          GetHandleClass: ${GET_HANDLE_CLASS}
+          Soft: true
+      }
+  }}
+  ```
+
+{% endlist %}
 
 **Пишущая нагрузка**
 
 Пишет в группу `$GROUPID` нагрузку длительностью `$DURATION` секунд. Пишет размерами `$SIZE`, ограничивая количество запросов в полете числом `$IN_FLIGHT`.
 
-```proto
-NodeId: ${NODEID}
-Event: { LoadStart: {
-    DurationSeconds: ${DURATION}
-    ScheduleThresholdUs: 0
-    ScheduleRoundingUs: 0
-    Tablets: {
-        Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
-        Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
-        WriteIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
-        MaxInFlightRequests: ${IN_FLIGHT}
-        FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
-        PutHandleClass: ${PUT_HANDLE_CLASS}
-        Soft: true
-    }
-}}
-```
+{% list tabs %}
 
-{% include notitle [addition](../_includes/addition.md) %}
+- CLI
+
+  ```proto
+  NodeId: ${NODEID}
+  Event: { StorageLoad: {
+      DurationSeconds: ${DURATION}
+      ScheduleThresholdUs: 0
+      ScheduleRoundingUs: 0
+      Tablets: {
+          Tablets: { TabletId: ${TABLETID} Channel: 0 GroupId: ${GROUPID} Generation: 1 }
+          Sizes: { Weight: 1.0 Min: ${SIZE} Max: ${SIZE} }
+          WriteIntervals: { Weight: 1.0 Uniform: { MinUs: ${INTERVAL} MaxUs: ${INTERVAL} } }
+          MaxInFlightRequests: ${IN_FLIGHT}
+          FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 10000000 MaxUs: 10000000 } }
+          PutHandleClass: ${PUT_HANDLE_CLASS}
+          Soft: true
+      }
+  }}
+  ```
+
+{% endlist %}
+ -->

@@ -1,9 +1,13 @@
-# Проверка производительности памяти
+# MemoryLoad
 
-## Структура {#proto}
+Тестирует производительность аллокаторов памяти. Аллоцирует блоки памяти указанного размера через заданные промежутки времени. Результатом теста 
+
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 ```proto
-message TMemoryLoadStart {
+message TMemoryLoad {
     optional uint64 Tag = 1;
     optional uint32 DurationSeconds = 2;
     optional uint64 BlockSize = 3;
@@ -11,9 +15,7 @@ message TMemoryLoadStart {
 }
 ```
 <!-- 
-## Параметры {#options}
-
-### MemoryLoadStart
+## Параметры актора {#options}
 
 Параметр | Описание
 --- | ---
@@ -25,13 +27,17 @@ message TMemoryLoadStart {
 
 ## Примеры {#examples}
 
-```proto
-NodeId: 1
-Event: { MemoryLoadStart: {
-    DurationSeconds: 120
-    BlockSize: 4096
-    IntervalUs: 1000
-}}
-```
+{% list tabs %}
 
-{% include notitle [addition](../_includes/addition.md) %}
+- CLI
+
+  ```proto
+  NodeId: 1
+  Event: { MemoryLoad: {
+      DurationSeconds: 120
+      BlockSize: 4096
+      IntervalUs: 1000
+  }}
+  ```
+
+{% endlist %}

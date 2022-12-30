@@ -21,7 +21,7 @@ items:
 - { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
 - name: Разработка
-  hidden: true
+  # hidden: true
   items:
   - name: Ядро
     items:
@@ -29,24 +29,24 @@ items:
       items:
       - name: Обзор
         href: development/load-actors-overview.md
-      - name: KqpLoadStart
+      - name: KqpLoad
         href: development/load-actors-kqp.md
-      - name: KeyValueLoadStart
+      - name: KeyValueLoad
         href: development/load-actors-key-value.md
-      - name: LoadStart
-        href: development/load-actors-load-start.md
-      - name: VDiskLoadStart
+      - name: StorageLoad
+        href: development/load-actors-storage.md
+      - name: VDiskLoad
         href: development/load-actors-vdisk.md
-      - name: PDiskLoadStart
-        href: development/load-actors-pdisk.md
-      - name: PDiskReadLoadStart
+      - name: PDiskWriteLoad
+        href: development/load-actors-pdisk-write.md
+      - name: PDiskReadLoad
         href: development/load-actors-pdisk-read.md
-      - name: PDiskLogLoadStart
+      - name: PDiskLogLoad
         href: development/load-actors-pdisk-log.md
-      - name: MemoryLoadStart
+      - name: MemoryLoad
         href: development/load-actors-memory.md
-      - name: LoadStop
-        href: development/load-actors-load-stop.md
+      - name: Stop
+        href: development/load-actors-stop.md
 
 # Footer
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }

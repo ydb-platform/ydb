@@ -1,9 +1,13 @@
-# Key-Value нагрузка
+# KeyValueLoad
 
-## Структура {#proto}
+Нагружает Key-value таблетку.
+
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 ```proto
-message TKeyValueLoadStart {
+message TKeyValueLoad {
     message TWorkerConfig {
         optional string KeyPrefix = 1;
         optional uint32 MaxInFlight = 2;
@@ -17,5 +21,3 @@ message TKeyValueLoadStart {
     repeated TWorkerConfig Workers = 7;
 }
 ```
-
-{% include notitle [addition](../_includes/addition.md) %}

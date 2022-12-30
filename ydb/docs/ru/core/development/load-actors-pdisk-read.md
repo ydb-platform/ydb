@@ -1,9 +1,13 @@
-# PDisk нагрузка на чтение
+# PDiskReadLoad
 
-## Структура {#proto}
+Подает на PDisk нагрузку read-only. Имитирует VDisk. Актор создает на указанном PDisk чанки, записывает в них случайные данные и выполняет чтение из них с указанными параметрами. Результатом теста является производительность чтения в байтах в секунду.
+
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 ```proto
-message TPDiskReadLoadStart {
+message TPDiskReadLoad {
     message TChunkInfo {
         optional uint32 Slots = 1; // number of slots per chunk
         optional uint32 Weight = 2; // probability weight
@@ -23,5 +27,3 @@ message TPDiskReadLoadStart {
     optional bool IsWardenlessTest = 13 [default = false];
 }
 ```
-
-{% include notitle [addition](../_includes/addition.md) %}

@@ -1,9 +1,13 @@
-# VDisk нагрузка
+# VDiskLoad
 
-## Структура {#proto}
+Подает на VDisk нагрузку write-only. Имитирует Distributed Storage Proxy. Результатом теста является производительность записи в операциях в секунду.
+
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 ```proto
-message TVDiskLoadStart {
+message TVDiskLoad {
     optional uint64 Tag = 1;
 
     // full VDisk identifier
@@ -11,7 +15,7 @@ message TVDiskLoadStart {
 
     reserved 3; // obsolete field
     reserved 4; // obsolete field
-    optional TGroupInfo GroupInfo = 16;
+    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 16;
 
     // tablet id, channel and generation used in blob ids and barriers
     optional uint64 TabletId = 5;
@@ -34,7 +38,7 @@ message TVDiskLoadStart {
     optional uint64 InFlightPutBytesMax = 12;
 
     // put handle class
-    optional EPutHandleClass PutHandleClass = 13;
+    optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 13;
 
     // a distribution of intervals between barrier advances
     repeated TIntervalInfo BarrierAdvanceIntervals = 14;
@@ -43,5 +47,3 @@ message TVDiskLoadStart {
     optional uint32 StepDistance = 15;
 }
 ```
-
-{% include notitle [addition](../_includes/addition.md) %}

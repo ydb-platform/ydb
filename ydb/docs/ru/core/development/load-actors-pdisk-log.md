@@ -1,9 +1,13 @@
-# PDisk нагрузка, пишущая в лог
+# PDiskLogLoad
 
-## Структура {#proto}
+Тестирует вырезание из середины лога PDisk. Не является нагружающим, в первую очередь направлен на тестирование корректности.
+
+{% include notitle [addition](../_includes/addition.md) %}
+
+## Спецификация актора {#proto}
 
 ```proto
-message TPDiskLogLoadStart {
+message TPDiskLogLoad {
     message TWorkerConfig {
         optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
         optional uint32 MaxInFlight = 2;
@@ -28,5 +32,3 @@ message TPDiskLogLoadStart {
     optional bool IsWardenlessTest = 8 [default = false];
 }
 ```
-
-{% include notitle [addition](../_includes/addition.md) %}

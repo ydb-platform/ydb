@@ -36,8 +36,10 @@ TRuntimeNode BuildSerializeCall(
     } else if (format == "json_list") {
         return ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.SqueezeToList(input, ctx.ProgramBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)),
             [&ctx] (TRuntimeNode list) {
+                TRuntimeNode listNotEmpty = ctx.ProgramBuilder.HasItems(list);
                 const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({list.GetStaticType()})});
-                return ctx.ProgramBuilder.ToString(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.SerializeJson"), {ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.From", {}, userType), {list})}));
+                TRuntimeNode serialize = ctx.ProgramBuilder.ToString(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.SerializeJson"), {ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.From", {}, userType), {list})}));
+                return ctx.ProgramBuilder.If(listNotEmpty, serialize, ctx.ProgramBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<const char*>::Id));
             }
         );
     }

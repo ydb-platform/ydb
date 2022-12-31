@@ -14,12 +14,10 @@ target_include_directories(restricted-boost-interprocess INTERFACE
 target_link_libraries(restricted-boost-interprocess INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-container
   restricted-boost-core
-  restricted-boost-date_time
   restricted-boost-integer
   restricted-boost-intrusive
   restricted-boost-move

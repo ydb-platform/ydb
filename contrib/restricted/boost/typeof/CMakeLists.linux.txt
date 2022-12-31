@@ -14,10 +14,7 @@ target_include_directories(restricted-boost-typeof INTERFACE
 target_link_libraries(restricted-boost-typeof INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
-  restricted-boost-core
-  restricted-boost-mpl
   restricted-boost-preprocessor
   restricted-boost-type_traits
 )

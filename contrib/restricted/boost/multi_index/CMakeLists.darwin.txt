@@ -13,13 +13,11 @@ target_include_directories(restricted-boost-multi_index INTERFACE
 )
 target_link_libraries(restricted-boost-multi_index INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-bind
   restricted-boost-config
   restricted-boost-container_hash
   restricted-boost-core
-  restricted-boost-detail
   restricted-boost-foreach
   restricted-boost-integer
   restricted-boost-iterator

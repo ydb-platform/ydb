@@ -19,7 +19,6 @@ target_link_libraries(restricted-boost-date_time INTERFACE
   restricted-boost-core
   restricted-boost-io
   restricted-boost-lexical_cast
-  restricted-boost-mpl
   restricted-boost-numeric_conversion
   restricted-boost-range
   restricted-boost-smart_ptr

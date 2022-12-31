@@ -13,10 +13,8 @@ target_include_directories(restricted-boost-property_map INTERFACE
 )
 target_link_libraries(restricted-boost-property_map INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-any
   restricted-boost-assert
-  restricted-boost-bind
   restricted-boost-concept_check
   restricted-boost-config
   restricted-boost-core
@@ -24,9 +22,6 @@ target_link_libraries(restricted-boost-property_map INTERFACE
   restricted-boost-iterator
   restricted-boost-lexical_cast
   restricted-boost-mpl
-  restricted-boost-multi_index
-  restricted-boost-optional
-  restricted-boost-serialization
   restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-throw_exception

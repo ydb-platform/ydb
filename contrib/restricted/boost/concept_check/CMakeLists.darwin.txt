@@ -13,9 +13,8 @@ target_include_directories(restricted-boost-concept_check INTERFACE
 )
 target_link_libraries(restricted-boost-concept_check INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-config
-  restricted-boost-mpl
   restricted-boost-preprocessor
+  restricted-boost-static_assert
   restricted-boost-type_traits
 )

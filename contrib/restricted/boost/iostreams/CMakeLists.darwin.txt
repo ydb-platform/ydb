@@ -27,7 +27,6 @@ target_link_libraries(restricted-boost-iostreams PUBLIC
   ZLIB::ZLIB
   contrib-libs-zstd
   restricted-boost-assert
-  restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
   restricted-boost-detail
@@ -35,6 +34,7 @@ target_link_libraries(restricted-boost-iostreams PUBLIC
   restricted-boost-integer
   restricted-boost-iterator
   restricted-boost-mpl
+  restricted-boost-numeric_conversion
   restricted-boost-preprocessor
   restricted-boost-random
   restricted-boost-range

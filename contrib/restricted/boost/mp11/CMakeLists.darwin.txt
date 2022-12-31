@@ -13,6 +13,4 @@ target_include_directories(restricted-boost-mp11 INTERFACE
 )
 target_link_libraries(restricted-boost-mp11 INTERFACE
   contrib-libs-cxxsupp
-  yutil
-  restricted-boost-config
 )

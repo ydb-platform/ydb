@@ -27,9 +27,7 @@ target_link_libraries(restricted-boost-coroutine PUBLIC
   restricted-boost-core
   restricted-boost-exception
   restricted-boost-move
-  restricted-boost-range
   restricted-boost-system
-  restricted-boost-thread
   restricted-boost-throw_exception
   restricted-boost-type_traits
   restricted-boost-utility

@@ -13,7 +13,6 @@ target_include_directories(restricted-boost-bimap INTERFACE
 )
 target_link_libraries(restricted-boost-bimap INTERFACE
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-concept_check
   restricted-boost-config
   restricted-boost-container_hash
@@ -23,7 +22,6 @@ target_link_libraries(restricted-boost-bimap INTERFACE
   restricted-boost-mpl
   restricted-boost-multi_index
   restricted-boost-preprocessor
-  restricted-boost-property_map
   restricted-boost-serialization
   restricted-boost-static_assert
   restricted-boost-throw_exception

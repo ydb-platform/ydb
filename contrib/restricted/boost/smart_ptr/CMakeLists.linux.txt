@@ -14,12 +14,10 @@ target_include_directories(restricted-boost-smart_ptr INTERFACE
 target_link_libraries(restricted-boost-smart_ptr INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core
   restricted-boost-move
-  restricted-boost-predef
   restricted-boost-static_assert
   restricted-boost-throw_exception
   restricted-boost-type_traits

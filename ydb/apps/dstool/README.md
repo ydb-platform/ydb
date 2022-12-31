@@ -3,9 +3,9 @@
 ## Clone ydb
 
 ```bash
-~$ mkdir github
-~$ cd github
-~$ git clone https://github.com/ydb-platform/ydb.git
+user@host:~$ mkdir github
+user@host:~$ cd github
+user@host:~$ git clone https://github.com/ydb-platform/ydb.git
 ```
 
 ## Install python grpc_tools
@@ -15,19 +15,19 @@ Have a look at https://grpc.io/docs/languages/python/quickstart.
 ## Compile proto files
 
 ```bash
-~$ cd ~/github/ydb
-~/github/ydb$ ydb_root=$(pwd)
-~/github/ydb$ chmod +x ydb/apps/dstool/compile_protos.py
-~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
+user@host:~$ cd ~/github/ydb
+user@host:~/github/ydb$ ydb_root=$(pwd)
+user@host:~/github/ydb$ chmod +x ydb/apps/dstool/compile_protos.py
+user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
 ```
 
 ## Run
 
 ```bash
-~$ cd ~/github/ydb
-~/github/ydb$ export PYTHONPATH=$PYTHONPATH:${ydb_root}
-~/github/ydb$ chmod +x ./ydb/apps/dstool/ydb-dstool.py
-~/github/ydb$ ./ydb/apps/dstool/ydb-dstool.py -e ydb.endpoint cluster list
+user@host:~$ cd ~/github/ydb
+user@host:~/github/ydb$ export PYTHONPATH=$PYTHONPATH:${ydb_root}
+user@host:~/github/ydb$ chmod +x ./ydb/apps/dstool/ydb-dstool.py
+user@host:~/github/ydb$ ./ydb/apps/dstool/ydb-dstool.py -e ydb.endpoint cluster list
 ```
 
 # How to do things with ydb-dstool
@@ -36,19 +36,19 @@ Have a look at https://grpc.io/docs/languages/python/quickstart.
 
 In order to list all available commands along with their descriptions in a nicely printed tree run
 
-```
+```bash
 ydb-dstool --help
 ```
 
 ### Get help for a particular subset of commands or a command
 
-```
+```bash
 ydb-dstool pdisk --help
 ```
 
 The above command prints help for the ```pdisk``` commands.
 
-```
+```bash
 ydb-dstool pdisk list --help
 ```
 
@@ -58,7 +58,7 @@ The above command prints help for the ```pdisk list``` command.
 
 To make operation of a command verbose add ```--verbose``` to global options:
 
-```
+```bash
 ydb-dstool --verbose -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
@@ -66,7 +66,7 @@ ydb-dstool --verbose -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 
 To dismiss non-vital messages of a command add ```--quiet``` to global options:
 
-```
+```bash
 ydb-dstool --quiet -e ydbd.endpoint pool balance
 ```
 
@@ -74,7 +74,7 @@ ydb-dstool --quiet -e ydbd.endpoint pool balance
 
 To run command without side effect add ```--dry-run``` to global options:
 
-```
+```bash
 ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
@@ -83,14 +83,14 @@ ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 By convention ```ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status
 as follows:
 
-```
+```bash
 ~$ ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ~$ if [ $? -eq 0 ]; then echo "success"; else echo "failure"; fi
 ```
 
 ```ydb-dstool``` outputs errors to ```stderr``` so to redirect errors to ```errors.txt``` one could run:
 
-```
+```bash
 ~$ ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id} 2> ~/errors.txt
 ```
 
@@ -99,7 +99,7 @@ as follows:
 Еndpoint is a connection point used to perform operations on cluster. It is set by a triplet
 ```[PROTOCOL://]HOST[:PORT]```. To set endpoint use ```--endpoint``` global option:
 
-```
+```bash
 ydb-dstool --endpoint https://ydbd.endpoint:8765 pdisk list
 ```
 
@@ -111,7 +111,7 @@ The default protocol is ```http```, the default port is ```8765```.
 There is support for authentication with access token. When authentication is required, user can set authentication
 token with ```--token-file``` global option:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint --token-file ~/access_token
 ```
 
@@ -129,7 +129,7 @@ are available:
 
 To set output format to ```tsv``` add ```--format tsv``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --format tsv
 ```
 
@@ -137,7 +137,7 @@ ydb-dstool -e ydbd.endpoint pdisk list --format tsv
 
 To exclude header with the column names from the output add ```--no-header``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --format tsv --no-header
 ```
 
@@ -146,7 +146,7 @@ ydb-dstool -e ydbd.endpoint pdisk list --format tsv --no-header
 By default a listing like command outputs only certain columns. The default columns vary from command to command.
 To output all available columns add ```--all-columns``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --all-columns
 ```
 
@@ -155,7 +155,7 @@ ydb-dstool -e ydbd.endpoint pdisk list --all-columns
 To output only certain columns add ```--columns``` along with a space separated list of columns names to command
 options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --columns NodeId:PDiskId Path
 ```
 
@@ -166,7 +166,7 @@ The above command lists only the ```NodeId:PDiskId```, ```Path``` columns while 
 To sort output by certain columns add ```--sort-by``` along with a space separated list of columns names to command
 options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --sort-by FQDN
 ```
 
@@ -177,7 +177,7 @@ The above command lists pdisks sorted by the ```FQDN``` column.
 To output sizes in terms of kilobytes, megabytes, etc. and fractions in terms of percents add ```--human-readable```
 or ```-H``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage -H
 ```
 
@@ -185,7 +185,7 @@ ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage -H
 
 ### List pdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list
 ```
 
@@ -193,7 +193,7 @@ The above command lists all pdisks of a cluster along with their state.
 
 ### Show space usage of every pdisk
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage --human-readable
 ```
 
@@ -201,7 +201,7 @@ The above command lists usage of all pdisks of a cluster in a human-readable way
 
 ### Prevent new groups from using certain pdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_PENDING --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
@@ -209,7 +209,7 @@ The above command prevents new groups from using pdisk ```"[NODE_ID:PDISK_ID]"``
 
 ### Move data out from certain pdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
@@ -221,7 +221,7 @@ this step prior to unplugging either certain disks or complete host from a clust
 
 ### List vdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint vdisk list
 ```
 
@@ -229,7 +229,7 @@ The above command lists all vdisks of a cluster along with the corresponding pdi
 
 ### Show status of pdisks were vdisks reside
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint vdisk list --show-pdisk-status
 ```
 
@@ -238,7 +238,7 @@ vdisk it lists the status of the corresponding pdisk where vdisk resides.
 
 ### Show space usage every vdisk
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint vdisk list --show-vdisk-usage --human-readable
 ```
 
@@ -246,7 +246,7 @@ The above command lists usage of all vdisks of a cluster in a human-readable way
 
 ### Unload certain pdisks by moving some vdisks from them
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]"
 ```
 
@@ -256,7 +256,7 @@ are running out of space. This might happen because of usage sckew of certain gr
 
 ### Wipe certain vdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint vdisk wipe --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]" --run
 ```
 
@@ -265,9 +265,9 @@ vdisk becomes unhealable.
 
 ### Remove no longer needed donor vdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint vdisk remove-donor --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]"
-````
+```
 
 The above command removes donor vdisks ```[8200001b:3:0:7:0]```, ```[8200001c:1:0:1:0]```. The provided vdisks
 have to be in donor state.
@@ -287,7 +287,7 @@ Group can be thought of as a RAID of vdisks. Any vdisk belongs to a single group
 
 ### List groups
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group list
 ```
 
@@ -298,7 +298,7 @@ The above command lists all groups of a cluster.
 To show aggregated statuses of vdisks within a group (i.e. how many vdisks within a group are in a certain state),
 add ```--show-vdisk-status``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group list --show-vdisk-status
 ```
 
@@ -306,7 +306,7 @@ ydb-dstool -e ydbd.endpoint group list --show-vdisk-status
 
 To show space usage of groups, add ```--show-vdisk-usage``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group list --show-vdisk-usage -H
 ```
 
@@ -314,7 +314,7 @@ The above command lists all groups of a cluster along with their space usage in 
 
 ### Check certain groups for compliance with failure model
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group check --group-ids 2181038097 2181038105 --failure-model
 ```
 
@@ -322,7 +322,7 @@ The above command checks groups ```2181038097```, ```2181038105``` for complianc
 
 ### Show space usage of groups by tablets
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group show usage-by-tablets
 ```
 
@@ -330,7 +330,7 @@ The above command shows which tablets are using which groups and what the space 
 
 ### Show info about certain blob from a certain group
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group show blob-info --group-id 2181038081 --blob-id "[72075186224037892:1:2:1:8192:410:0]"
 ```
 
@@ -339,7 +339,7 @@ group ```2181038081```. This command might be useful in certain debug scenarios.
 
 ### Add new groups to certain pool
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint group add --pool-name /Root:nvme --groups 1
 ```
 
@@ -347,7 +347,7 @@ The above command adds one group to the pool ```/Root:nvme```
 
 ### Figure out whether certain number of groups can be added
 
-```
+```bash
 ydb-dstool --dry-run -e ydbd.endpoint group add --pool-name /Root:nvme --groups 10
 ```
 
@@ -360,7 +360,7 @@ Pool is a collection of groups.
 
 ### List pools
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pool list
 ```
 
@@ -371,7 +371,7 @@ The above command lists all pools of a cluster.
 To show aggregated statuses of groups within a pool (i.e. how many groups within a pool are in a certain state),
 add ```--show-group-status``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pool list --show-group-status
 ```
 
@@ -380,7 +380,7 @@ ydb-dstool -e ydbd.endpoint pool list --show-group-status
 To show aggregated statuses of vdisks within a pool (i.e. how many vdisks within a pool are in a certain state),
 add ```--show-vdisk-status``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pool list --show-vdisk-status
 ```
 
@@ -388,7 +388,7 @@ ydb-dstool -e ydbd.endpoint pool list --show-vdisk-status
 
 To show space usage of pools, add ```--show-vdisk-usage``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pool list --show-vdisk-usage -H
 ```
 
@@ -396,7 +396,7 @@ The above command lists all pools of a cluster along with their space usage in a
 
 ### Show estimated space usage of pools
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint pool list --show-vdisk-estimated-usage
 ```
 
@@ -411,9 +411,8 @@ Box is a collection of pdisks.
 
 ###  List boxes
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint box list
-
 ```
 
 The above command lists all boxes of a cluster.
@@ -423,7 +422,7 @@ The above command lists all boxes of a cluster.
 Tow show aggregated statuses of pdisks within a box (i.e. how many pdisks within a box are in a certain state),
 add ```--show-pdisk-status``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint box list --show-pdisk-status
 ```
 
@@ -431,7 +430,7 @@ ydb-dstool -e ydbd.endpoint box list --show-pdisk-status
 
 To show space usage of boxes, add ```--show-pdisk-usage``` to command options:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint box list --show-pdisk-usage -H
 ```
 
@@ -444,7 +443,7 @@ In terms of implementation, a node is a a YDB process running on one of cluster'
 
 ### List nodes
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint node list
 ```
 
@@ -454,7 +453,7 @@ The above command lists all nodes of a cluster.
 
 ### Show how many cluster entities there are
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster list
 ```
 
@@ -475,7 +474,7 @@ are in the cluster.
 In rare cases some pdisks can become overpopulated (i.e. they host too many vdisks) and the cluster would benefit from
 balancing of vdisks over pdisks. To accomplish this, run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster balance
 ```
 
@@ -496,13 +495,13 @@ failed vdisk within a group.
 
 To enable self-healing on a cluster, run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --enable-self-heal
 ```
 
 To disable self-healing on a cluster, run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --disable-self-heal
 ```
 
@@ -514,13 +513,13 @@ old vdisk could be used as a donor, so that the new vdisk would copy all of the 
 
 To enable support for donor vdisk mode on a cluster, run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --enable-donor-mode
 ```
 
 To disable support for donor vdisk mode on a cluster, run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --disable-donor-mode
 ```
 
@@ -529,19 +528,19 @@ ydb-dstool -e ydbd.endpoint cluster set --disable-donor-mode
 Scrubbing is a background process that checks data integrity and performs data recovery if necessary. To disable data scrubbing on
 a cluster enter the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --scrub-periodicity disable
 ```
 
 To set scrubbing interval to two days run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --scrub-periodicity 2d
 ```
 
 ### Set maximum number of simultaneously scrubbed pdisks
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster set --max-scrubbed-disks-at-once 2
 ```
 
@@ -551,7 +550,7 @@ The above command sets maximum number of simultaneously scrubbed pdisk to two.
 
 To run workload that allows to stress test failure model of groups, run the following command:
 
-```
+```bash
 ydb-dstool -e ydbd.endpoint cluster workload run
 ```
 

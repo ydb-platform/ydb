@@ -63,6 +63,9 @@ namespace boost
       template <> struct promote_arg<long double> { using type = long double; };
       template <> struct promote_arg<int> {  using type = double; };
 
+      template <typename T>
+      using promote_arg_t = typename promote_arg<T>::type;
+
       template <class T1, class T2>
       struct promote_args_2
       { // Promote, if necessary, & pick the wider of the two floating-point types.
@@ -108,6 +111,9 @@ namespace boost
       template <> struct promote_args_2<double, long double> {  using type = long double; };
       template <> struct promote_args_2<long double, double> {  using type = long double; };
 
+      template <typename T, typename U>
+      using promote_args_2_t = typename promote_args_2<T, U>::type;
+
       template <class T1, class T2=float, class T3=float, class T4=float, class T5=float, class T6=float>
       struct promote_args
       {
@@ -135,6 +141,9 @@ namespace boost
 #endif
       };
 
+      template <class T1, class T2=float, class T3=float, class T4=float, class T5=float, class T6=float>
+      using promote_args_t = typename promote_args<T1, T2, T3, T4, T5, T6>::type;
+
       //
       // This struct is the same as above, but has no static assert on long double usage,
       // it should be used only on functions that can be implemented for long double
@@ -159,6 +168,9 @@ namespace boost
             >::type
          >::type;
       };
+
+      template <class T1, class T2=float, class T3=float, class T4=float, class T5=float, class T6=float>
+      using promote_args_permissive_t = typename promote_args_permissive<T1, T2, T3, T4, T5, T6>::type;
 
     } // namespace tools
   } // namespace math

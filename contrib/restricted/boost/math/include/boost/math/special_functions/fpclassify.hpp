@@ -128,7 +128,7 @@ inline bool is_nan_helper(T, const std::false_type&)
 {
    return false;
 }
-#if defined(BOOST_MATH_USE_FLOAT128) 
+#if defined(BOOST_MATH_USE_FLOAT128)
 #if defined(BOOST_MATH_HAS_QUADMATH_H)
 inline bool is_nan_helper(__float128 f, const std::true_type&) { return ::isnanq(f); }
 inline bool is_nan_helper(__float128 f, const std::false_type&) { return ::isnanq(f); }
@@ -279,7 +279,7 @@ inline int fpclassify BOOST_NO_MACRO_EXPAND(T t)
    typedef typename traits::method method;
    typedef typename tools::promote_args_permissive<T>::type value_type;
 #ifdef BOOST_NO_LIMITS_COMPILE_TIME_CONSTANTS
-   if(std::numeric_limits<T>::is_specialized && detail::is_generic_tag_false(static_cast<method*>(0)))
+   if(std::numeric_limits<T>::is_specialized && detail::is_generic_tag_false(static_cast<method*>(nullptr)))
       return detail::fpclassify_imp(static_cast<value_type>(t), detail::generic_tag<true>());
    return detail::fpclassify_imp(static_cast<value_type>(t), method());
 #else
@@ -295,7 +295,7 @@ inline int fpclassify<long double> BOOST_NO_MACRO_EXPAND(long double t)
    typedef traits::method method;
    typedef long double value_type;
 #ifdef BOOST_NO_LIMITS_COMPILE_TIME_CONSTANTS
-   if(std::numeric_limits<long double>::is_specialized && detail::is_generic_tag_false(static_cast<method*>(0)))
+   if(std::numeric_limits<long double>::is_specialized && detail::is_generic_tag_false(static_cast<method*>(nullptr)))
       return detail::fpclassify_imp(static_cast<value_type>(t), detail::generic_tag<true>());
    return detail::fpclassify_imp(static_cast<value_type>(t), method());
 #else

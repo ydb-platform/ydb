@@ -8,20 +8,22 @@
 
 
 add_library(restricted-boost-random)
+target_compile_options(restricted-boost-random PRIVATE
+  -Wno-everything
+)
 target_include_directories(restricted-boost-random PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/random/include
 )
 target_link_libraries(restricted-boost-random PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  yutil
+  restricted-boost-array
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core
+  restricted-boost-dynamic_bitset
   restricted-boost-integer
   restricted-boost-io
-  restricted-boost-math
-  restricted-boost-mpl
   restricted-boost-range
   restricted-boost-static_assert
   restricted-boost-system

@@ -32,6 +32,7 @@ target_link_libraries(libs-apache-avro PUBLIC
   restricted-boost-crc
   restricted-boost-format
   restricted-boost-iostreams
+  restricted-boost-math
 )
 target_sources(libs-apache-avro PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryDecoder.cc

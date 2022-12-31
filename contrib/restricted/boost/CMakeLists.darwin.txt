@@ -89,8 +89,3 @@ add_subdirectory(variant)
 add_subdirectory(variant2)
 add_subdirectory(winapi)
 add_subdirectory(xpressive)
-
-add_library(contrib-restricted-boost INTERFACE)
-target_link_libraries(contrib-restricted-boost INTERFACE
-  contrib-libs-cxxsupp
-)

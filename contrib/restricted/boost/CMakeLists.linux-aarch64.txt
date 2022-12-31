@@ -80,9 +80,3 @@ add_subdirectory(utility)
 add_subdirectory(variant)
 add_subdirectory(variant2)
 add_subdirectory(winapi)
-
-add_library(contrib-restricted-boost INTERFACE)
-target_link_libraries(contrib-restricted-boost INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)

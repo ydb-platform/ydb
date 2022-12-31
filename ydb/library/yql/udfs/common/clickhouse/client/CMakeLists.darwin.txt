@@ -20,7 +20,6 @@ target_link_libraries(clickhouse_client_udf INTERFACE
   yql-public-udf
   public-udf-support
   contrib-libs-cctz
-  contrib-restricted-boost
   restricted-boost-multi_index
   restricted-boost-program_options
   contrib-restricted-cityhash-1.0.2
@@ -80,7 +79,6 @@ target_link_libraries(clickhouse_client_udf.global PUBLIC
   yql-public-udf
   public-udf-support
   contrib-libs-cctz
-  contrib-restricted-boost
   restricted-boost-multi_index
   restricted-boost-program_options
   contrib-restricted-cityhash-1.0.2

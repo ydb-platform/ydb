@@ -4191,8 +4191,12 @@ namespace {
         }
 
         const TTypeAnnotationNode* retItemType = nullptr;
-        if (!EnsureNewSeqType<true, true>(*lambdaFinishHandler, ctx.Expr, &retItemType)) {
-            return IGraphTransformer::TStatus::Error;
+        if (input->Content() == "FinalizeByKey") {
+            retItemType = lambdaFinishHandler->GetTypeAnn();
+        } else {
+            if (!EnsureNewSeqType<true, true>(*lambdaFinishHandler, ctx.Expr, &retItemType)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(MakeSequenceType(inputTypeKind, *retItemType, ctx.Expr));

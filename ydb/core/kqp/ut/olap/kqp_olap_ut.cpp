@@ -1429,6 +1429,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
             }
+            queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
+            
             queryFixed << Query << Endl;
             Cerr << "REQUEST:\n" << queryFixed << Endl;
             return queryFixed;

@@ -45,6 +45,8 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage));
+        AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage));
+        AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<false>));
@@ -173,7 +175,7 @@ protected:
 
 
     TMaybeNode<TExprBase> ExpandAggregatePhase(TExprBase node, TExprContext& ctx) {
-        auto output = ExpandAggregatePeephole(node.Ptr(), ctx, TypesCtx);
+        auto output = ExpandAggregatePeepholeImpl(node.Ptr(), ctx, TypesCtx, KqpCtx.Config->HasOptUseFinalizeByKey(), false);
         DumpAppliedRule("ExpandAggregatePhase", node.Ptr(), output, ctx);
         return TExprBase(output);
     }
@@ -223,6 +225,18 @@ protected:
     {
         TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("PushCombineToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = DqBuildShuffleStage(node, ctx, *getParents());
+        DumpAppliedRule("BuildShuffleStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = DqBuildFinalizeByKeyStage(node, ctx, *getParents());
+        DumpAppliedRule("BuildFinalizeByKeyStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

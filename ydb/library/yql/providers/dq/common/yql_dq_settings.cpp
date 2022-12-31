@@ -13,6 +13,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, AnalyzeQuery);
     REGISTER_SETTING(*this, _AnalyzeQueryPercentage);
     REGISTER_SETTING(*this, MaxRetries);
+    REGISTER_SETTING(*this, UseFinalizeByKey);
     REGISTER_SETTING(*this, MaxNetworkRetries);
     REGISTER_SETTING(*this, RetryBackoffMs);
     REGISTER_SETTING(*this, CollectCoreDumps);

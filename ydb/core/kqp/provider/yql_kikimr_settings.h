@@ -48,6 +48,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
@@ -66,6 +67,7 @@ struct TKikimrSettings {
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptUseFinalizeByKey() const;
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetEnableLlvm() const;
 

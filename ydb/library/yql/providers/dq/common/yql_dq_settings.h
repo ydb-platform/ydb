@@ -76,6 +76,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> _OneGraphPerQuery;
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
     NCommon::TConfSetting<bool, false> _EnablePrecompute;
+    NCommon::TConfSetting<bool, false> UseFinalizeByKey;
     NCommon::TConfSetting<bool, false> EnableDqReplicate;
     NCommon::TConfSetting<TString, false> WatermarksMode;
     NCommon::TConfSetting<bool, false> WatermarksEnableIdlePartitions;
@@ -124,6 +125,7 @@ struct TDqSettings {
         SAVE_SETTING(EnableFullResultWrite);
         SAVE_SETTING(_FallbackOnRuntimeErrors);
         SAVE_SETTING(WorkerFilter);
+        SAVE_SETTING(UseFinalizeByKey);
         SAVE_SETTING(ComputeActorType);
         SAVE_SETTING(WatermarksMode);
         SAVE_SETTING(WatermarksEnableIdlePartitions);

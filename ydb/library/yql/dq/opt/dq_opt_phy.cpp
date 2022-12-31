@@ -1021,6 +1021,54 @@ TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, const TParentsM
         .Done();
 }
 
+TExprBase DqBuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap) {
+    auto finalizeInput = node.Maybe<TCoFinalizeByKey>().Input();
+    if (!finalizeInput.Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto finalize = node.Cast<TCoFinalizeByKey>();
+    auto dqUnion = finalize.Input().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap)) {
+        return node;
+    }
+
+    auto keyLambda = finalize.KeySelectorLambda();
+
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+
+    inputConns.push_back(dqUnion);
+
+    auto finalizeStage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(inputConns)
+            .Build()
+        .Program()
+            .Args({ "input" })
+            .Body<TCoToStream>()
+                .Input<TCoFinalizeByKey>()
+                    .Input("input")
+                    .PreMapLambda(finalize.PreMapLambda())
+                    .KeySelectorLambda(finalize.KeySelectorLambda())
+                    .InitHandlerLambda(finalize.InitHandlerLambda())
+                    .UpdateHandlerLambda(finalize.UpdateHandlerLambda())
+                    .FinishHandlerLambda(finalize.FinishHandlerLambda())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(finalizeStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 /*
  * Optimizer rule which handles a switch to scalar expression context for aggregation results.
  * This switch happens for full aggregations, such as @code select sum(column) from table @endcode).

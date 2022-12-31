@@ -1302,41 +1302,112 @@ TExprNode::TPtr TAggregateExpander::ReturnKeyAsIsForCombineInit(const TExprNode:
             .Build();
 }
 
+TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TPtr& preprocessLambda, const TExprNode::TPtr& keyExtractor) {
+    return Ctx.Builder(Node->Pos())
+    .Lambda()
+        .Param("stream")
+        .Callable("FinalizeByKey")
+            .Arg(0, "stream")
+            .Lambda(1)
+                .Param("item")
+                .Callable("Just")
+                    .Apply(0, preprocessLambda)
+                        .With(0, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Add(2, keyExtractor)
+            .Lambda(3)
+                .Param("key")
+                .Param("item")
+                .Apply(GeneratePostAggregateInitPhase())
+                    .With(0, "item")
+                .Seal()
+            .Seal()
+            .Lambda(4)
+                .Param("key")
+                .Param("item")
+                .Param("state")
+                .Apply(GeneratePostAggregateMergePhase())
+                    .With(0, "item")
+                    .With(1, "state")
+                .Seal()
+            .Seal()
+            .Lambda(5)
+                .Param("key")
+                .Param("state")
+                .Apply(GeneratePostAggregateSavePhase())
+                    .With(0, "state")
+                .Seal()
+            .Seal()
+        .Seal()
+    .Seal().Build();
+}
+
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr& preAgg, const TExprNode::TPtr& keyExtractor)
 {
     auto preprocessLambda = GeneratePreprocessLambda(keyExtractor);
-    auto condenseSwitch = GenerateCondenseSwitch(keyExtractor);
-    auto postAgg = Ctx.Builder(Node->Pos())
-        .Callable("PartitionsByKeys")
-            .Add(0, std::move(preAgg))
-            .Add(1, keyExtractor)
-            .Add(2, SortParams.Order)
-            .Add(3, SortParams.Key)
-            .Lambda(4)
-                .Param("stream")
+    TExprNode::TPtr postAgg;
+    if (!UsePartitionsByKeys && UseFinalizeByKeys) {
+        if (KeyColumns->ChildrenSize() == 0) {
+            postAgg = Ctx.Builder(Node->Pos())
                 .Apply(GetContextLambda())
                     .With(0)
-                        .Callable("Map")
-                            .Callable(0, "Condense1")
-                                .Apply(0, preprocessLambda)
-                                    .With(0, "stream")
-                                .Seal()
-                                .Add(1, GeneratePostAggregateInitPhase())
-                                .Add(2, condenseSwitch)
-                                .Add(3, GeneratePostAggregateMergePhase())
-                            .Seal()
-                            .Add(1, GeneratePostAggregateSavePhase())
+                        .Apply(BuildFinalizeByKeyLambda(preprocessLambda, keyExtractor))
+                            .With(0, preAgg)
                         .Seal()
                     .Done()
+                .Seal().Build();
+        } else {
+            postAgg = Ctx.Builder(Node->Pos())
+                .Callable("ShuffleByKeys")
+                    .Add(0, std::move(preAgg))
+                    .Add(1, keyExtractor)
+                    .Lambda(2)
+                        .Param("stream")
+                        .Apply(GetContextLambda())
+                            .With(0)
+                                .Apply(BuildFinalizeByKeyLambda(preprocessLambda, keyExtractor))
+                                    .With(0, "stream")
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        }
+    } else {
+        auto condenseSwitch = GenerateCondenseSwitch(keyExtractor);
+        postAgg = Ctx.Builder(Node->Pos())
+            .Callable("PartitionsByKeys")
+                .Add(0, std::move(preAgg))
+                .Add(1, keyExtractor)
+                .Add(2, SortParams.Order)
+                .Add(3, SortParams.Key)
+                .Lambda(4)
+                    .Param("stream")
+                    .Apply(GetContextLambda())
+                        .With(0)
+                            .Callable("Map")
+                                .Callable(0, "Condense1")
+                                    .Apply(0, preprocessLambda)
+                                        .With(0, "stream")
+                                    .Seal()
+                                    .Add(1, GeneratePostAggregateInitPhase())
+                                    .Add(2, condenseSwitch)
+                                    .Add(3, GeneratePostAggregateMergePhase())
+                                .Seal()
+                                .Add(1, GeneratePostAggregateSavePhase())
+                            .Seal()
+                        .Done()
+                    .Seal()
                 .Seal()
-            .Seal()
-        .Seal().Build();
-
+            .Seal().Build();
+    }
     if (KeyColumns->ChildrenSize() == 0 && !HaveSessionSetting && (Suffix == "" || Suffix.EndsWith("Finalize"))) {
         return MakeSingleGroupRow(*Node, postAgg, Ctx);
     }
-
     return postAgg;
+
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePreprocessLambda(const TExprNode::TPtr& keyExtractor)
@@ -2391,7 +2462,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
-    if (UsePartitionsByKeys) {
+    if (UsePartitionsByKeys || !TypesCtx.UseBlocks) {
         return nullptr;
     }
 

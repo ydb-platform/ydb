@@ -11585,6 +11585,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
         Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
         Functions["CombineByKey"] = &CombineByKeyWrapper;
+        Functions["FinalizeByKey"] = &CombineByKeyWrapper;
         Functions["NewMTRand"] = &NewMTRandWrapper;
         Functions["NextMTRand"] = &NextMTRandWrapper;
         Functions["FormatType"] = &FormatTypeWrapper;

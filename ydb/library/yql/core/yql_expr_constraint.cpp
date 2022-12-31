@@ -182,6 +182,7 @@ public:
         Functions["IfPresent"] = &TCallableConstraintTransformer::IfPresentWrap;
         Functions["Coalesce"] = &TCallableConstraintTransformer::CommonFromChildren<0, TSortedConstraintNode, TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["CombineByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineByKey::idx_FinishHandlerLambda>;
+        Functions["FinalizeByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoFinalizeByKey::idx_FinishHandlerLambda>;
         Functions["CombineCore"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineCore::idx_FinishHandler>;
         Functions["PartitionByKey"] = &TCallableConstraintTransformer::PartitionByKeyWrap;
         Functions["PartitionsByKeys"] = &TCallableConstraintTransformer::PartitionByKeyWrap;

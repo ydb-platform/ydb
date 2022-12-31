@@ -419,6 +419,18 @@
             ]
         },
         {
+            "Name": "TCoFinalizeByKey",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "FinalizeByKey"},
+            "Children": [
+                {"Index": 1, "Name": "PreMapLambda",        "Type": "TCoLambda"},
+                {"Index": 2, "Name": "KeySelectorLambda",   "Type": "TCoLambda"},
+                {"Index": 3, "Name": "InitHandlerLambda",   "Type": "TCoLambda"},
+                {"Index": 4, "Name": "UpdateHandlerLambda", "Type": "TCoLambda"},
+                {"Index": 5, "Name": "FinishHandlerLambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TCoAggrCountInit",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "AggrCountInit"},

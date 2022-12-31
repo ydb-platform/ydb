@@ -6,13 +6,10 @@
 
 #ifndef BOOST_LOCALE_IMPL_WIN32_LOCALIZATION_BACKEND_HPP
 #define BOOST_LOCALE_IMPL_WIN32_LOCALIZATION_BACKEND_HPP
-namespace boost {
-    namespace locale {
-        class localization_backend;
-        namespace impl_win {
-            localization_backend *create_localization_backend();
-        } // impl_win
-    } // locale
-} // boost
+namespace boost { namespace locale {
+    class localization_backend;
+    namespace impl_win {
+        localization_backend* create_localization_backend();
+    } // namespace impl_win
+}}    // namespace boost::locale
 #endif
-

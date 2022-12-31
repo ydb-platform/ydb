@@ -8,28 +8,20 @@
 #define BOOST_SRC_LOCALE_MO_LAMBDA_HPP_INCLUDED
 
 #include <boost/locale/config.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
-namespace boost {
-    namespace locale {
-        namespace gnu_gettext {
-            namespace lambda {
+namespace boost { namespace locale { namespace gnu_gettext { namespace lambda {
 
-                struct plural {
+    struct plural {
+        virtual int operator()(int n) const = 0;
+        virtual plural* clone() const = 0;
+        virtual ~plural() = default;
+    };
 
-                    virtual int operator()(int n) const = 0;
-                    virtual plural *clone() const = 0;
-                    virtual ~plural() {}
-                };
+    typedef std::shared_ptr<plural> plural_ptr;
 
-                typedef boost::shared_ptr<plural> plural_ptr;
+    plural_ptr compile(const char* c_expression);
 
-                plural_ptr compile(char const *c_expression);
-
-            } // lambda
-        } // gnu_gettext
-     } // locale
-} // boost
+}}}} // namespace boost::locale::gnu_gettext::lambda
 
 #endif
-

@@ -1,4 +1,4 @@
-# Boost.CI
+# Boost.Locale
 
 Part of the [Boost C++ Libraries](http://github.com/boostorg).
 
@@ -19,7 +19,7 @@ Provided Features:
 - Character set conversion.
 - Transparent support for 8-bit character sets like Latin1
 - Support for `char` and `wchar_t`
-- Experimental support for C++0x `char16_t` and `char32_t` strings and streams.
+- Experimental support for C++11 `char16_t` and `char32_t` strings and streams.
 
 Boost.Locale enhances and unifies the standard library's API the way it becomes useful and convenient for development of cross platform and "cross-culture" software.
 
@@ -37,7 +37,8 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 ### Properties
 
-* C++03
+* C++11
+* Formatted with clang-format, see [`tools/format_source.sh`](https://github.com/boostorg/locale/blob/develop/tools/format_source.sh)
 
 ### Build Status
 

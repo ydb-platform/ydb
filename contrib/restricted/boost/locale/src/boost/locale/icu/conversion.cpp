@@ -10,50 +10,37 @@
 #include "boost/locale/icu/cdata.hpp"
 #include "boost/locale/icu/icu_util.hpp"
 #include "boost/locale/icu/uconv.hpp"
-
+#include <limits>
+#include <unicode/locid.h>
 #include <unicode/normlzr.h>
 #include <unicode/ustring.h>
-#include <unicode/locid.h>
-#include <unicode/uversion.h>
 #if BOOST_LOCALE_ICU_VERSION >= 308
-#include <unicode/ucasemap.h>
-#define BOOST_LOCALE_WITH_CASEMAP
+#    include <unicode/ucasemap.h>
+#    define BOOST_LOCALE_WITH_CASEMAP
 #endif
 #include <vector>
 
-namespace boost {
-namespace locale {
-namespace impl_icu {
-
+namespace boost { namespace locale { namespace impl_icu {
 
     namespace {
-        void normalize_string(icu::UnicodeString &str,int flags)
+        void normalize_string(icu::UnicodeString& str, int flags)
         {
-            UErrorCode code=U_ZERO_ERROR;
-            UNormalizationMode mode=UNORM_DEFAULT;
+            UErrorCode code = U_ZERO_ERROR;
+            UNormalizationMode mode = UNORM_DEFAULT;
             switch(flags) {
-            case norm_nfd:
-                mode=UNORM_NFD;
-                break;
-            case norm_nfc:
-                mode=UNORM_NFC;
-                break;
-            case norm_nfkd:
-                mode=UNORM_NFKD;
-                break;
-            case norm_nfkc:
-                mode=UNORM_NFKC;
-                break;
+                case norm_nfd: mode = UNORM_NFD; break;
+                case norm_nfc: mode = UNORM_NFC; break;
+                case norm_nfkd: mode = UNORM_NFKD; break;
+                case norm_nfkc: mode = UNORM_NFKC; break;
             }
             icu::UnicodeString tmp;
-            icu::Normalizer::normalize(str,mode,0,tmp,code);
+            icu::Normalizer::normalize(str, mode, 0, tmp, code);
 
             check_and_throw_icu_error(code);
 
-            str=tmp;
+            str = tmp;
         }
-    }
-
+    } // namespace
 
     template<typename CharType>
     class converter_impl : public converter<CharType> {
@@ -61,34 +48,21 @@ namespace impl_icu {
         typedef CharType char_type;
         typedef std::basic_string<char_type> string_type;
 
-        converter_impl(cdata const &d) :
-            locale_(d.locale),
-            encoding_(d.encoding)
-        {
-        }
+        converter_impl(const cdata& d) : locale_(d.locale), encoding_(d.encoding) {}
 
-        string_type convert(converter_base::conversion_type how, char_type const* begin, char_type const* end, int flags = 0) const BOOST_OVERRIDE
+        string_type convert(converter_base::conversion_type how,
+                            const char_type* begin,
+                            const char_type* end,
+                            int flags = 0) const override
         {
             icu_std_converter<char_type> cvt(encoding_);
-            icu::UnicodeString str=cvt.icu(begin,end);
+            icu::UnicodeString str = cvt.icu(begin, end);
             switch(how) {
-            case converter_base::normalization:
-                normalize_string(str,flags);
-                break;
-            case converter_base::upper_case:
-                str.toUpper(locale_);
-                break;
-            case converter_base::lower_case:
-                str.toLower(locale_);
-                break;
-            case converter_base::title_case:
-                str.toTitle(0,locale_);
-                break;
-            case converter_base::case_folding:
-                str.foldCase();
-                break;
-            default:
-                ;
+                case converter_base::normalization: normalize_string(str, flags); break;
+                case converter_base::upper_case: str.toUpper(locale_); break;
+                case converter_base::lower_case: str.toLower(locale_); break;
+                case converter_base::title_case: str.toTitle(0, locale_); break;
+                case converter_base::case_folding: str.foldCase(); break;
             }
             return cvt.std(str);
         }
@@ -98,79 +72,90 @@ namespace impl_icu {
         std::string encoding_;
     }; // converter_impl
 
-    #ifdef BOOST_LOCALE_WITH_CASEMAP
+#ifdef BOOST_LOCALE_WITH_CASEMAP
+    template<typename T>
+    struct get_casemap_size_type;
+
+    template<typename TRes, typename TCaseMap, typename TSize>
+    struct get_casemap_size_type<TRes (*)(TCaseMap*, char*, TSize, const char*, TSize, UErrorCode*)> {
+        using type = TSize;
+    };
+
     class raii_casemap {
-        raii_casemap(raii_casemap const &);
-        void operator = (raii_casemap const&);
     public:
-        raii_casemap(std::string const &locale_id) :
-            map_(0)
+        raii_casemap(const raii_casemap&) = delete;
+        void operator=(const raii_casemap&) = delete;
+
+        raii_casemap(const std::string& locale_id) : map_(0)
         {
-            UErrorCode err=U_ZERO_ERROR;
-            map_ = ucasemap_open(locale_id.c_str(),0,&err);
+            UErrorCode err = U_ZERO_ERROR;
+            map_ = ucasemap_open(locale_id.c_str(), 0, &err);
             check_and_throw_icu_error(err);
             if(!map_)
                 throw std::runtime_error("Failed to create UCaseMap");
         }
         template<typename Conv>
-        std::string convert(Conv func,char const *begin,char const *end) const
+        std::string convert(Conv func, const char* begin, const char* end) const
         {
-                std::vector<char> buf((end-begin)*11/10+1);
-                UErrorCode err=U_ZERO_ERROR;
-                int size = func(map_,&buf.front(),buf.size(),begin,end-begin,&err);
-                if(err == U_BUFFER_OVERFLOW_ERROR) {
-                    err = U_ZERO_ERROR;
-                    buf.resize(size+1);
-                    size = func(map_,&buf.front(),buf.size(),begin,end-begin,&err);
-                }
-                check_and_throw_icu_error(err);
-                return std::string(&buf.front(),size);
+            using size_type = typename get_casemap_size_type<Conv>::type;
+            if((end - begin) >= std::numeric_limits<std::ptrdiff_t>::max() / 11)
+                throw std::range_error("String to long to be converted by ICU");
+            const auto max_converted_size = (end - begin) * 11 / 10 + 1;
+            if(max_converted_size >= std::numeric_limits<size_type>::max())
+                throw std::range_error("String to long to be converted by ICU");
+            std::vector<char> buf(max_converted_size);
+            UErrorCode err = U_ZERO_ERROR;
+            auto size = func(map_,
+                             &buf.front(),
+                             static_cast<size_type>(buf.size()),
+                             begin,
+                             static_cast<size_type>(end - begin),
+                             &err);
+            if(err == U_BUFFER_OVERFLOW_ERROR) {
+                err = U_ZERO_ERROR;
+                buf.resize(size + 1);
+                size = func(map_,
+                            &buf.front(),
+                            static_cast<size_type>(buf.size()),
+                            begin,
+                            static_cast<size_type>(end - begin),
+                            &err);
+            }
+            check_and_throw_icu_error(err);
+            return std::string(&buf.front(), size);
         }
-        ~raii_casemap()
-        {
-            ucasemap_close(map_);
-        }
+        ~raii_casemap() { ucasemap_close(map_); }
+
     private:
-        UCaseMap *map_;
+        UCaseMap* map_;
     };
 
     class utf8_converter_impl : public converter<char> {
     public:
+        utf8_converter_impl(const cdata& d) : locale_id_(d.locale.getName()), map_(locale_id_) {}
 
-        utf8_converter_impl(cdata const &d) :
-            locale_id_(d.locale.getName()),
-            map_(locale_id_)
+        std::string
+        convert(converter_base::conversion_type how, const char* begin, const char* end, int flags = 0) const override
         {
-        }
-
-        std::string convert(converter_base::conversion_type how,char const *begin,char const *end,int flags = 0) const BOOST_OVERRIDE
-        {
-
-            if(how == converter_base::normalization) {
-                icu_std_converter<char> cvt("UTF-8");
-                icu::UnicodeString str=cvt.icu(begin,end);
-                normalize_string(str,flags);
-                return cvt.std(str);
-            }
-
-            switch(how)
-            {
-            case converter_base::upper_case:
-                return map_.convert(ucasemap_utf8ToUpper,begin,end);
-            case converter_base::lower_case:
-                return map_.convert(ucasemap_utf8ToLower,begin,end);
-            case converter_base::title_case:
-                {
+            switch(how) {
+                case converter_base::upper_case: return map_.convert(ucasemap_utf8ToUpper, begin, end);
+                case converter_base::lower_case: return map_.convert(ucasemap_utf8ToLower, begin, end);
+                case converter_base::title_case: {
                     // Non-const method, so need to create a separate map
                     raii_casemap map(locale_id_);
-                    return map.convert(ucasemap_utf8ToTitle,begin,end);
+                    return map.convert(ucasemap_utf8ToTitle, begin, end);
                 }
-            case converter_base::case_folding:
-                return map_.convert(ucasemap_utf8FoldCase,begin,end);
-            default:
-                return std::string(begin,end-begin);
+                case converter_base::case_folding: return map_.convert(ucasemap_utf8FoldCase, begin, end);
+                case converter_base::normalization: {
+                    icu_std_converter<char> cvt("UTF-8");
+                    icu::UnicodeString str = cvt.icu(begin, end);
+                    normalize_string(str, flags);
+                    return cvt.std(str);
+                }
             }
+            return std::string(begin, end - begin);
         }
+
     private:
         std::string locale_id_;
         raii_casemap map_;
@@ -178,32 +163,25 @@ namespace impl_icu {
 
 #endif // BOOST_LOCALE_WITH_CASEMAP
 
-    std::locale create_convert(std::locale const &in,cdata const &cd,character_facet_type type)
+    std::locale create_convert(const std::locale& in, const cdata& cd, char_facet_t type)
     {
         switch(type) {
-        case char_facet:
-            #ifdef BOOST_LOCALE_WITH_CASEMAP
-            if(cd.utf8)
-                return std::locale(in,new utf8_converter_impl(cd));
-            #endif
-            return std::locale(in,new converter_impl<char>(cd));
-        case wchar_t_facet:
-            return std::locale(in,new converter_impl<wchar_t>(cd));
-        #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
-        case char16_t_facet:
-            return std::locale(in,new converter_impl<char16_t>(cd));
-        #endif
-        #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
-        case char32_t_facet:
-            return std::locale(in,new converter_impl<char32_t>(cd));
-        #endif
-        default:
-            return in;
+            case char_facet_t::nochar: break;
+            case char_facet_t::char_f:
+#ifdef BOOST_LOCALE_WITH_CASEMAP
+                if(cd.utf8)
+                    return std::locale(in, new utf8_converter_impl(cd));
+#endif
+                return std::locale(in, new converter_impl<char>(cd));
+            case char_facet_t::wchar_f: return std::locale(in, new converter_impl<wchar_t>(cd));
+#ifdef BOOST_LOCALE_ENABLE_CHAR16_T
+            case char_facet_t::char16_f: return std::locale(in, new converter_impl<char16_t>(cd));
+#endif
+#ifdef BOOST_LOCALE_ENABLE_CHAR32_T
+            case char_facet_t::char32_f: return std::locale(in, new converter_impl<char32_t>(cd));
+#endif
         }
+        return in;
     }
 
-
-} // impl_icu
-} // locale
-} // boost
-
+}}} // namespace boost::locale::impl_icu

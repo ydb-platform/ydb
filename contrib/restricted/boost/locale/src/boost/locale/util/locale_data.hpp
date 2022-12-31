@@ -9,37 +9,27 @@
 
 #include <string>
 
-namespace boost {
-    namespace locale {
-        namespace util {
+namespace boost { namespace locale { namespace util {
 
-            class locale_data {
-            public:
-                locale_data() :
-                    language("C"),
-                    encoding("us-ascii"),
-                    utf8(false)
-                {
-                }
+    class locale_data {
+    public:
+        locale_data() : language("C"), encoding("us-ascii"), utf8(false) {}
 
-                std::string language;
-                std::string country;
-                std::string variant;
-                std::string encoding;
-                bool utf8;
+        std::string language;
+        std::string country;
+        std::string variant;
+        std::string encoding;
+        bool utf8;
 
-                void parse(std::string const &locale_name);
+        void parse(const std::string& locale_name);
 
-            private:
+    private:
+        void parse_from_lang(const std::string& locale_name);
+        void parse_from_country(const std::string& locale_name);
+        void parse_from_encoding(const std::string& locale_name);
+        void parse_from_variant(const std::string& locale_name);
+    };
 
-                void parse_from_lang(std::string const &locale_name);
-                void parse_from_country(std::string const &locale_name);
-                void parse_from_encoding(std::string const &locale_name);
-                void parse_from_variant(std::string const &locale_name);
-            };
-
-        } // util
-    } // locale
-} // boost
+}}} // namespace boost::locale::util
 
 #endif

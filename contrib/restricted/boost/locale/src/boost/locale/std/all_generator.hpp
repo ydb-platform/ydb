@@ -11,43 +11,34 @@
 #include <locale>
 #include <string>
 
-namespace boost {
-    namespace locale {
-        namespace impl_std {
-            typedef enum {
-                utf8_none,
-                utf8_native,
-                utf8_native_with_wide,
-                utf8_from_wide
-            } utf8_support;
+namespace boost { namespace locale { namespace impl_std {
+    enum class utf8_support { none, native, native_with_wide, from_wide };
 
-            std::locale create_convert( std::locale const &in,
-                                        std::string const &locale_name,
-                                        character_facet_type type,
-                                        utf8_support utf = utf8_none);
+    std::locale create_convert(const std::locale& in,
+                               const std::string& locale_name,
+                               char_facet_t type,
+                               utf8_support utf = utf8_support::none);
 
-            std::locale create_collate( std::locale const &in,
-                                        std::string const &locale_name,
-                                        character_facet_type type,
-                                        utf8_support utf = utf8_none);
+    std::locale create_collate(const std::locale& in,
+                               const std::string& locale_name,
+                               char_facet_t type,
+                               utf8_support utf = utf8_support::none);
 
-            std::locale create_formatting(  std::locale const &in,
-                                            std::string const &locale_name,
-                                            character_facet_type type,
-                                            utf8_support utf = utf8_none);
+    std::locale create_formatting(const std::locale& in,
+                                  const std::string& locale_name,
+                                  char_facet_t type,
+                                  utf8_support utf = utf8_support::none);
 
-            std::locale create_parsing( std::locale const &in,
-                                        std::string const &locale_name,
-                                        character_facet_type type,
-                                        utf8_support utf = utf8_none);
+    std::locale create_parsing(const std::locale& in,
+                               const std::string& locale_name,
+                               char_facet_t type,
+                               utf8_support utf = utf8_support::none);
 
-            std::locale create_codecvt( std::locale const &in,
-                                        std::string const &locale_name,
-                                        character_facet_type type,
-                                        utf8_support utf = utf8_none);
+    std::locale create_codecvt(const std::locale& in,
+                               const std::string& locale_name,
+                               char_facet_t type,
+                               utf8_support utf = utf8_support::none);
 
-        }
-    }
-}
+}}} // namespace boost::locale::impl_std
 
 #endif

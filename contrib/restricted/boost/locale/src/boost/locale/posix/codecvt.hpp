@@ -12,15 +12,10 @@
 #include <memory>
 #include <string>
 
-namespace boost {
-namespace locale {
-namespace impl_posix {
+namespace boost { namespace locale { namespace impl_posix {
     BOOST_LOCALE_DECL
-    util::base_converter *create_iconv_converter(std::string const &encoding);
+    std::unique_ptr<util::base_converter> create_iconv_converter(const std::string& encoding);
 
-} // impl_posix
-} // locale
-} // boost
+}}} // namespace boost::locale::impl_posix
 
 #endif
-

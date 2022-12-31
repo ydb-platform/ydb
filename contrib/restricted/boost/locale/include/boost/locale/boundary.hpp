@@ -7,10 +7,10 @@
 #ifndef BOOST_LOCALE_BOUNDARY_HPP_INCLUDED
 #define BOOST_LOCALE_BOUNDARY_HPP_INCLUDED
 
-#include <boost/locale/boundary/types.hpp>
-#include <boost/locale/boundary/facets.hpp>
-#include <boost/locale/boundary/segment.hpp>
 #include <boost/locale/boundary/boundary_point.hpp>
+#include <boost/locale/boundary/facets.hpp>
 #include <boost/locale/boundary/index.hpp>
+#include <boost/locale/boundary/segment.hpp>
+#include <boost/locale/boundary/types.hpp>
 
 #endif

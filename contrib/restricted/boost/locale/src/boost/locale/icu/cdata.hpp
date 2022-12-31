@@ -8,20 +8,15 @@
 #define BOOST_LOCALE_ICU_CDATA_HPP
 
 #include <boost/locale/config.hpp>
-#include <unicode/locid.h>
 #include <string>
+#include <unicode/locid.h>
 
-namespace boost {
-    namespace locale {
-        namespace impl_icu {
-            struct cdata {
-                icu::Locale locale;
-                std::string encoding;
-                bool utf8;
-            };
-        }
-    }
-}
-
+namespace boost { namespace locale { namespace impl_icu {
+    struct cdata {
+        icu::Locale locale;
+        std::string encoding;
+        bool utf8;
+    };
+}}} // namespace boost::locale::impl_icu
 
 #endif

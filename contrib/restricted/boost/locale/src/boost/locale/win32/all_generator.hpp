@@ -10,33 +10,20 @@
 #include <boost/locale/generator.hpp>
 #include <locale>
 
-namespace boost {
-    namespace locale {
-        namespace impl_win {
+namespace boost { namespace locale { namespace impl_win {
 
-            class winlocale;
+    class winlocale;
 
-            std::locale create_convert( std::locale const &in,
-                                        winlocale const &lc,
-                                        character_facet_type type);
+    std::locale create_convert(const std::locale& in, const winlocale& lc, char_facet_t type);
 
-            std::locale create_collate( std::locale const &in,
-                                        winlocale const &lc,
-                                        character_facet_type type);
+    std::locale create_collate(const std::locale& in, const winlocale& lc, char_facet_t type);
 
-            std::locale create_formatting(  std::locale const &in,
-                                            winlocale const &lc,
-                                            character_facet_type type);
+    std::locale create_formatting(const std::locale& in, const winlocale& lc, char_facet_t type);
 
-            std::locale create_parsing( std::locale const &in,
-                                        winlocale const &lc,
-                                        character_facet_type type);
+    std::locale create_parsing(const std::locale& in, const winlocale& lc, char_facet_t type);
 
-            std::locale create_codecvt( std::locale const &in,
-                                        character_facet_type type);
+    std::locale create_codecvt(const std::locale& in, char_facet_t type);
 
-        }
-    }
-}
+}}} // namespace boost::locale::impl_win
 
 #endif

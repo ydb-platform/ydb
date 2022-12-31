@@ -7,17 +7,13 @@
 #ifndef BOOST_LOCALE_IMPL_WIN32_LCID_HPP
 #define BOOST_LOCALE_IMPL_WIN32_LCID_HPP
 
-#include <string>
 #include <boost/locale/config.hpp>
+#include <string>
 
-namespace boost {
-    namespace locale {
-        namespace impl_win {
+namespace boost { namespace locale { namespace impl_win {
 
-            BOOST_LOCALE_DECL unsigned locale_to_lcid(std::string const &locale_name);
+    BOOST_LOCALE_DECL unsigned locale_to_lcid(const std::string& locale_name);
 
-        } // impl_win
-    } // locale
-} // boost
+}}} // namespace boost::locale::impl_win
 
 #endif

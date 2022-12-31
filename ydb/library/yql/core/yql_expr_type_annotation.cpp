@@ -5370,6 +5370,13 @@ const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, boo
     }
 }
 
+const TTypeAnnotationNode* MakeBlockType(const TTypeAnnotationNode& blockItemType, TExprContext& ctx, bool withChunked) {
+    if (withChunked && !blockItemType.HasFixedSizeRepr()) {
+        return ctx.MakeType<TChunkedBlockExprType>(&blockItemType);
+    }
+    return ctx.MakeType<TBlockExprType>(&blockItemType);
+}
+
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto name = input->Child(0)->Content();
     if (name == "count" || name == "count_all" || name == "sum" || name == "min" || name == "max") {

@@ -647,12 +647,7 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (type->HasFixedSizeRepr()) {
-            retMultiType.push_back(ctx.Expr.MakeType<TBlockExprType>(type));
-        } else {
-            retMultiType.push_back(ctx.Expr.MakeType<TChunkedBlockExprType>(type));
-        }
-
+        retMultiType.push_back(MakeBlockType(*type, ctx.Expr));
     }
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));

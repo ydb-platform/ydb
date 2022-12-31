@@ -264,10 +264,8 @@ IGraphTransformer::TStatus BlockBitCastWrapper(const TExprNode::TPtr& input, TEx
 
     if (isScalar) {
         input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(outputType));
-    } else if (outputType->HasFixedSizeRepr()) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(outputType));
     } else {
-        input->SetTypeAnn(ctx.Expr.MakeType<TChunkedBlockExprType>(outputType));
+        input->SetTypeAnn(MakeBlockType(*outputType, ctx.Expr));
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -431,7 +429,7 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
     }
 
     for (auto& t : retMultiType) {
-        t = ctx.Expr.MakeType<TBlockExprType>(t);
+        t = MakeBlockType(*t, ctx.Expr);
     }
 
     retMultiType.push_back(ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
@@ -462,7 +460,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
     }
 
     for (auto& t : retMultiType) {
-        t = ctx.Expr.MakeType<TBlockExprType>(t);
+        t = MakeBlockType(*t, ctx.Expr);
     }
 
     if (many) {

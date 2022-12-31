@@ -3021,10 +3021,6 @@ TExprNode::TPtr ExpandFinalizeByKey(const TExprNode::TPtr& node, TExprContext& c
         return parent;
     };
 
-    Cerr << combine.UpdateHandlerLambda().Ref().Dump() << Endl;
-    Cerr << update.size() << "/" << update.front()->Dump() << "/" << update.back()->Dump() << Endl;
-    Cerr << inputWidth << "/" << stateWidth << Endl;
-
     return ctx.Builder(node->Pos())
         .Callable("NarrowMap")
             .Callable(0, "WideCombiner")

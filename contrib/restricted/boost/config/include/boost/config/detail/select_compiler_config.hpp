@@ -39,7 +39,7 @@
 //  Intel
 #   define BOOST_COMPILER_CONFIG "boost/config/compiler/intel.hpp"
 
-#elif defined __clang__ && !defined(__ibmxl__) && !defined(__CODEGEARC__) && !defined(_MSC_VER)
+#elif defined __clang__ && !defined(__ibmxl__) && !defined(__CODEGEARC__)
 //  Clang C++ emulates GCC, so it has to appear early.
 #   define BOOST_COMPILER_CONFIG "boost/config/compiler/clang.hpp"
 

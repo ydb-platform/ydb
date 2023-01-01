@@ -230,7 +230,7 @@ public:
                     auto& arr = s.Arrays_[i];
                     auto& builder = s.Builders_[i];
                     auto slice = Chop(arr, takeInputLen);
-                    builder->AddMany(*slice, takeInputPopcnt, bitmapData, s.InputSize_);
+                    builder->AddMany(*slice, takeInputPopcnt, bitmapData, takeInputLen);
                 }
             }
 

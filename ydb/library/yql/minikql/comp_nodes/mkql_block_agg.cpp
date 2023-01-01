@@ -394,7 +394,10 @@ public:
 private:
     void Ensure(size_t delta) {
         if (Pos_ + delta > Vec_.size()) {
-            Vec_.reserve(Max(2 * Vec_.capacity(), Pos_ + delta));
+            if (Pos_ + delta > Vec_.capacity()) {
+                Vec_.reserve(Max(2 * Vec_.capacity(), Pos_ + delta));
+            }
+            // TODO: replace TVector - resize() performs unneeded zeroing here
             Vec_.resize(Pos_ + delta);
         }
     }

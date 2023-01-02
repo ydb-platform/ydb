@@ -678,6 +678,9 @@ public:
     inline ui64 GetEstimatedListLength() const;
     inline TUnboxedValue GetListIterator() const;
     inline bool HasListItems() const;
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
+    inline void Push(const TUnboxedValuePod& value) const;
+#endif
 
     // Dict accessors
     inline ui64 GetDictLength() const;

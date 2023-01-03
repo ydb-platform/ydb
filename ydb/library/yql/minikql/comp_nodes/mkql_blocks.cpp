@@ -1,6 +1,7 @@
 #include "mkql_blocks.h"
 #include "mkql_block_builder.h"
 #include "mkql_block_reader.h"
+#include "mkql_block_impl.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
@@ -55,12 +56,12 @@ private:
     TType* ItemType_;
 };
 
-class TWideToBlocksWrapper : public TStatefulWideFlowComputationNode<TWideToBlocksWrapper> {
+class TWideToBlocksWrapper : public TStatefulWideFlowBlockComputationNode<TWideToBlocksWrapper> {
 public:
     TWideToBlocksWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         TVector<TType*>&& types)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        : TStatefulWideFlowBlockComputationNode(mutables, flow, types.size() + 1)
         , Flow_(flow)
         , Types_(std::move(types))
         , Width_(Types_.size())
@@ -410,116 +411,27 @@ private:
     TType* Type_;
 };
 
-class TBlockExpandChunkedWrapper : public TStatefulWideFlowComputationNode<TBlockExpandChunkedWrapper> {
+class TBlockExpandChunkedWrapper : public TStatefulWideFlowBlockComputationNode<TBlockExpandChunkedWrapper> {
 public:
     TBlockExpandChunkedWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 width)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        : TStatefulWideFlowBlockComputationNode(mutables, flow, width)
         , Flow_(flow)
-        , Width_(width)
     {
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx,
                              NUdf::TUnboxedValue*const* output) const
     {
-        auto& s = GetState(state, ctx);
-        while (s.Count_ == 0) {
-            auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
-            if (result != EFetchResult::One) {
-                return result;
-            }
-
-            s.Count_ = TArrowBlock::From(s.Values_[Width_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-            for (size_t i = 0; i < Width_; ++i) {
-                s.Arrays_[i].clear();
-                if (!output[i]) {
-                    continue;
-                }
-                auto& datum = TArrowBlock::From(s.Values_[i]).GetDatum();
-                if (datum.is_scalar()) {
-                    continue;
-                }
-                Y_VERIFY(datum.is_arraylike());
-                if (datum.is_array()) {
-                    s.Arrays_[i].push_back(datum.array());
-                } else {
-                    for (auto& chunk : datum.chunks()) {
-                        s.Arrays_[i].push_back(chunk->data());
-                    }
-                }
-            }
-        }
-
-        ui64 sliceSize = s.Count_;
-        for (size_t i = 0; i < Width_; ++i) {
-            if (s.Arrays_[i].empty()) {
-                continue;
-            }
-
-            Y_VERIFY(s.Arrays_[i].front()->length <= s.Count_);
-            sliceSize = std::min<ui64>(sliceSize, s.Arrays_[i].front()->length);
-        }
-
-        for (size_t i = 0; i < Width_; ++i) {
-            if (!output[i]) {
-                continue;
-            }
-
-            if (s.Arrays_[i].empty()) {
-                *(output[i]) = s.Values_[i];
-                continue;
-            }
-
-            auto& array = s.Arrays_[i].front();
-            Y_VERIFY(array->length >= sliceSize);
-            if (array->length == sliceSize) {
-                *(output[i]) = ctx.HolderFactory.CreateArrowBlock(std::move(array));
-                s.Arrays_[i].pop_front();
-            } else {
-                *(output[i]) = ctx.HolderFactory.CreateArrowBlock(Chop(array, sliceSize));
-            }
-        }
-
-        MKQL_ENSURE(output[Width_], "Block size is unused");
-        *(output[Width_]) = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
-        s.Count_ -= sliceSize;
-        return EFetchResult::One;
+        Y_UNUSED(state);
+        return Flow_->FetchValues(ctx, output);
     }
-
-private:
-    struct TState : public TComputationValue<TState> {
-        TVector<NUdf::TUnboxedValue> Values_;
-        TVector<NUdf::TUnboxedValue*> ValuePointers_;
-        TVector<TDeque<std::shared_ptr<arrow::ArrayData>>> Arrays_;
-        ui64 Count_ = 0;
-
-        TState(TMemoryUsageInfo* memInfo, size_t width, TComputationContext& ctx)
-            : TComputationValue(memInfo)
-            , Values_(width + 1)
-            , ValuePointers_(width + 1)
-            , Arrays_(width)
-        {
-            for (size_t i = 0; i < width + 1; ++i) {
-                ValuePointers_[i] = &Values_[i];
-            }
-        }
-    };
 
 private:
     void RegisterDependencies() const final {
         FlowDependsOn(Flow_);
     }
 
-    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Width_, ctx);
-        }
-        return *static_cast<TState*>(state.AsBoxed().Get());
-    }
-
-private:
     IComputationWideFlowNode* Flow_;
-    const size_t Width_;
 };
 
 
@@ -584,12 +496,11 @@ IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputation
 
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto tupleType = AS_TYPE(TTupleType, flowType->GetItemType());
-    MKQL_ENSURE(tupleType->GetElementsCount() > 0, "Expected at least one column");
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
-    return new TBlockExpandChunkedWrapper(ctx.Mutables, wideFlow, tupleType->GetElementsCount() - 1);
+    return new TBlockExpandChunkedWrapper(ctx.Mutables, wideFlow, tupleType->GetElementsCount());
 }
 
 }

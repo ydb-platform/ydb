@@ -236,9 +236,9 @@ public:
         return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null || kind == ETypeAnnotationKind::Pg;
     }
 
-    bool IsAnyBlockOrScalar() const {
+    bool IsBlockOrScalar() const {
         auto kind = GetKind();
-        return kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::ChunkedBlock || kind == ETypeAnnotationKind::Scalar;
+        return kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::Scalar;
     }
 
     bool HasFixedSizeRepr() const {

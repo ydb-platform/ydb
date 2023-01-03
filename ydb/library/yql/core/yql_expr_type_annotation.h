@@ -118,8 +118,7 @@ bool EnsureFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx,
-     bool allowChunked = false, bool allowScalar = true);
+bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureType(const TExprNode& node, TExprContext& ctx);
@@ -298,10 +297,9 @@ bool IsCallableTypeHasStreams(const TCallableExprType* callableType);
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
 bool HasContextFuncs(const TExprNode& input);
 
-bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx, bool allowChunked = false);
-bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool allowChunked = false);
+bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx);
+bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar);
-const TTypeAnnotationNode* MakeBlockType(const TTypeAnnotationNode& blockItemType, TExprContext& ctx, bool withChunked = true);
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx);
 bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);

@@ -2697,7 +2697,7 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
     return true;
 }
 
-bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowChunked, bool allowScalar) {
+bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (!EnsureWideFlowType(node, ctx)) {
         return false;
     }
@@ -2711,7 +2711,7 @@ bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListTy
     bool isScalar;
     for (ui32 i = 0; i < items.size(); ++i) {
         const auto& type = items[i];
-        if (!EnsureBlockOrScalarType(node.Pos(), *type, ctx, allowChunked)) {
+        if (!EnsureBlockOrScalarType(node.Pos(), *type, ctx)) {
             return false;
         }
 
@@ -5333,21 +5333,18 @@ bool HasContextFuncs(const TExprNode& input) {
     return needCtx;
 }
 
-bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx, bool allowChunked) {
+bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected block or scalar type, but got lambda"));
         return false;
     }
 
-    return EnsureBlockOrScalarType(node.Pos(), *node.GetTypeAnn(), ctx, allowChunked);
+    return EnsureBlockOrScalarType(node.Pos(), *node.GetTypeAnn(), ctx);
 }
 
-bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool allowChunked) {
-    bool valid = allowChunked ? type.IsAnyBlockOrScalar() :
-        (type.GetKind() == ETypeAnnotationKind::Block ||
-         type.GetKind() == ETypeAnnotationKind::Scalar);
-    if (HasError(&type, ctx) || !valid) {
+bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx) || !type.IsBlockOrScalar()) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected block or scalar type, but got: " << type));
         return false;
     }
@@ -5356,25 +5353,14 @@ bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode
 }
 
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar) {
-    YQL_ENSURE(type.IsAnyBlockOrScalar());
+    YQL_ENSURE(type.IsBlockOrScalar());
     const auto kind = type.GetKind();
     if (kind == ETypeAnnotationKind::Block) {
         isScalar = false;
         return type.Cast<TBlockExprType>()->GetItemType();
-    } else if (kind == ETypeAnnotationKind::ChunkedBlock) {
-        isScalar = false;
-        return type.Cast<TChunkedBlockExprType>()->GetItemType();
-    } else {
-        isScalar = true;
-        return type.Cast<TScalarExprType>()->GetItemType();
     }
-}
-
-const TTypeAnnotationNode* MakeBlockType(const TTypeAnnotationNode& blockItemType, TExprContext& ctx, bool withChunked) {
-    if (withChunked && !blockItemType.HasFixedSizeRepr()) {
-        return ctx.MakeType<TChunkedBlockExprType>(&blockItemType);
-    }
-    return ctx.MakeType<TBlockExprType>(&blockItemType);
+    isScalar = true;
+    return type.Cast<TScalarExprType>()->GetItemType();
 }
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {

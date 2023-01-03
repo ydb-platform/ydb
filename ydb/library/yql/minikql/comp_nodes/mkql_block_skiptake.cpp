@@ -1,4 +1,5 @@
 #include "mkql_block_skiptake.h"
+#include "mkql_block_impl.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
@@ -12,12 +13,12 @@ namespace NMiniKQL {
 
 namespace {
 
-class TWideSkipBlocksWrapper: public TStatefulWideFlowComputationNode<TWideSkipBlocksWrapper> {
-    typedef TStatefulWideFlowComputationNode<TWideSkipBlocksWrapper> TBaseComputation;
+class TWideSkipBlocksWrapper: public TStatefulWideFlowBlockComputationNode<TWideSkipBlocksWrapper> {
+    typedef TStatefulWideFlowBlockComputationNode<TWideSkipBlocksWrapper> TBaseComputation;
 
 public:
     TWideSkipBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, size_t width)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Any)
+        : TBaseComputation(mutables, flow, width)
         , Flow(flow)
         , Count(count)
         , Width(width)
@@ -77,12 +78,12 @@ private:
     const size_t Width;
 };
 
-class TWideTakeBlocksWrapper: public TStatefulWideFlowComputationNode<TWideTakeBlocksWrapper> {
-    typedef TStatefulWideFlowComputationNode<TWideTakeBlocksWrapper> TBaseComputation;
+class TWideTakeBlocksWrapper: public TStatefulWideFlowBlockComputationNode<TWideTakeBlocksWrapper> {
+    typedef TStatefulWideFlowBlockComputationNode<TWideTakeBlocksWrapper> TBaseComputation;
 
 public:
     TWideTakeBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, size_t width)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Any)
+        : TBaseComputation(mutables, flow, width)
         , Flow(flow)
         , Count(count)
         , Width(width)

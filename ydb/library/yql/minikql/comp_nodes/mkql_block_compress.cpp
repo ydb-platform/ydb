@@ -1,5 +1,6 @@
 #include "mkql_block_compress.h"
 #include "mkql_block_builder.h"
+#include "mkql_block_impl.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
@@ -13,10 +14,10 @@ namespace NMiniKQL {
 
 namespace {
 
-class TCompressWithScalarBitmap : public TStatefulWideFlowComputationNode<TCompressWithScalarBitmap> {
+class TCompressWithScalarBitmap : public TStatefulWideFlowBlockComputationNode<TCompressWithScalarBitmap> {
 public:
     TCompressWithScalarBitmap(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 width)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        : TStatefulWideFlowBlockComputationNode(mutables, flow, width - 1)
         , Flow_(flow)
         , BitmapIndex_(bitmapIndex)
         , Width_(width)
@@ -89,10 +90,10 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
-class TCompressScalars : public TStatefulWideFlowComputationNode<TCompressScalars> {
+class TCompressScalars : public TStatefulWideFlowBlockComputationNode<TCompressScalars> {
 public:
     TCompressScalars(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 width)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        : TStatefulWideFlowBlockComputationNode(mutables, flow, width - 1)
         , Flow_(flow)
         , BitmapIndex_(bitmapIndex)
         , Width_(width)
@@ -156,10 +157,10 @@ private:
     const ui32 Width_;
 };
 
-class TCompressBlocks : public TStatefulWideFlowComputationNode<TCompressBlocks> {
+class TCompressBlocks : public TStatefulWideFlowBlockComputationNode<TCompressBlocks> {
 public:
     TCompressBlocks(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, TVector<TBlockType*>&& types)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        : TStatefulWideFlowBlockComputationNode(mutables, flow, types.size() - 1)
         , Flow_(flow)
         , BitmapIndex_(bitmapIndex)
         , Types_(std::move(types))

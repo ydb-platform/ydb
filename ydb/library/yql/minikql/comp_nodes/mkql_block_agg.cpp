@@ -1,6 +1,7 @@
 #include "mkql_block_agg.h"
 #include "mkql_block_agg_factory.h"
 #include "mkql_block_builder.h"
+#include "mkql_block_impl.h"
 #include "mkql_rh_hash.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
@@ -841,10 +842,10 @@ TStringBuf GetKeyView(const TSSOKey& key) {
 }
 
 template <typename TKey, typename TAggregator, typename TFixedAggState, bool UseSet, bool UseFilter, bool Finalize, bool Many, typename TDerived>
-class THashedWrapperBase : public TStatefulWideFlowComputationNode<TDerived> {
+class THashedWrapperBase : public TStatefulWideFlowBlockComputationNode<TDerived> {
 public:
     using TSelf = THashedWrapperBase<TKey, TAggregator, TFixedAggState, UseSet, UseFilter, Finalize, Many, TDerived>;
-    using TBase = TStatefulWideFlowComputationNode<TDerived>;
+    using TBase = TStatefulWideFlowBlockComputationNode<TDerived>;
 
     static constexpr bool UseArena = !InlineAggState && std::is_same<TFixedAggState, TStateArena>::value;
 
@@ -857,7 +858,7 @@ public:
         TVector<TAggParams<TAggregator>>&& aggsParams,
         ui32 streamIndex,
         TVector<TVector<ui32>>&& streams)
-        : TBase(mutables, flow, EValueRepresentation::Any)
+        : TBase(mutables, flow, keys.size() + aggsParams.size() + 1)
         , Flow_(flow)
         , FilterColumn_(filterColumn)
         , Width_(width)

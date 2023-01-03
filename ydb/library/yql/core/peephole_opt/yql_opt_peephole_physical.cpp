@@ -4700,7 +4700,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
     TVector<const TTypeAnnotationNode*> allInputTypes;
     for (const auto& i : multiInputType->GetItems()) {
-        if (i->IsAnyBlockOrScalar()) {
+        if (i->IsBlockOrScalar()) {
             return false;
         }
 
@@ -4800,24 +4800,19 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         }
 
         TVector<const TTypeAnnotationNode*> argTypes;
+        bool hasBlockArg = false;
         for (ui32 i = isUdf ? 1 : 0; i < node->ChildrenSize(); ++i) {
             auto child = node->Child(i);
             if (child->IsComplete()) {
                 argTypes.push_back(ctx.MakeType<TScalarExprType>(child->GetTypeAnn()));
-            } else if (child->GetTypeAnn()->HasFixedSizeRepr()) {
-                argTypes.push_back(ctx.MakeType<TBlockExprType>(child->GetTypeAnn()));
             } else {
-                argTypes.push_back(ctx.MakeType<TChunkedBlockExprType>(child->GetTypeAnn()));
+                hasBlockArg = true;
+                argTypes.push_back(ctx.MakeType<TBlockExprType>(child->GetTypeAnn()));
             }
         }
 
-        const TTypeAnnotationNode* outType = node->GetTypeAnn();
-        if (outType->HasFixedSizeRepr()) {
-            outType = ctx.MakeType<TBlockExprType>(outType);
-        } else {
-            outType = ctx.MakeType<TChunkedBlockExprType>(outType);
-        }
-
+        YQL_ENSURE(!node->IsComplete() && hasBlockArg);
+        const TTypeAnnotationNode* outType = ctx.MakeType<TBlockExprType>(node->GetTypeAnn());
         if (isUdf) {
             funcArgs.push_back(ctx.Builder(node->Head().Pos())
                 .Callable("Udf")
@@ -4989,16 +4984,15 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
                                   << ", extra columns: " << rewritePositions.size();
 
-    // TODO: since arrow kernels handle chunked blocks automatically, we may need an optimizer that drops such BlockExpandChunked
     auto ret = ctx.Builder(node->Pos())
         .Callable("WideFromBlocks")
-            .Callable(0, "WideMap")
-                .Callable(0, "BlockExpandChunked")
+            .Callable(0, "BlockExpandChunked")
+                .Callable(0, "WideMap")
                     .Callable(0, "WideToBlocks")
                         .Add(0, node->HeadPtr())
                     .Seal()
+                    .Add(1, blockLambda)
                 .Seal()
-                .Add(1, blockLambda)
             .Seal()
         .Seal()
         .Build();
@@ -5026,13 +5020,13 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
     }
 
     auto blockMapped = ctx.Builder(node->Pos())
-        .Callable("WideMap")
-            .Callable(0, "BlockExpandChunked")
+        .Callable("BlockExpandChunked")
+            .Callable(0, "WideMap")
                 .Callable(0, "WideToBlocks")
                     .Add(0, node->HeadPtr())
                 .Seal()
+                .Add(1, blockLambda)
             .Seal()
-            .Add(1, blockLambda)
         .Seal()
         .Build();
 
@@ -5044,9 +5038,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         YQL_ENSURE(it->second == multiInputType->GetSize(), "Block filter column must follow original input columns");
         auto result = ctx.Builder(node->Pos())
             .Callable("BlockCompress")
-                .Callable(0, "BlockExpandChunked")
-                    .Add(0, blockMapped)
-                .Seal()
+                .Add(0, blockMapped)
                 .Atom(1, ToString(it->second), TNodeFlags::Default)
             .Seal()
             .Build();
@@ -5054,9 +5046,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         if (node->ChildrenSize() == 3) {
             result = ctx.Builder(node->Pos())
                 .Callable("WideTakeBlocks")
-                    .Callable(0, "BlockExpandChunked")
-                        .Add(0, result)
-                    .Seal()
+                    .Add(0, result)
                     .Add(1, node->ChildPtr(2))
                 .Seal()
                 .Build();
@@ -5128,7 +5118,7 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
     }
 
     const auto& allTypes = flowItemType->Cast<TMultiExprType>()->GetItems();
-    if (AnyOf(allTypes, [](const TTypeAnnotationNode* type) { return type->IsAnyBlockOrScalar(); })) {
+    if (AnyOf(allTypes, [](const TTypeAnnotationNode* type) { return type->IsBlockOrScalar(); })) {
         return node;
     }
 
@@ -5144,10 +5134,8 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
     return ctx.Builder(node->Pos())
         .Callable("WideFromBlocks")
             .Callable(0, newName)
-                .Callable(0, "BlockExpandChunked")
-                    .Callable(0, "WideToBlocks")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
+                .Callable(0, "WideToBlocks")
+                    .Add(0, node->HeadPtr())
                 .Seal()
                 .Add(1, node->ChildPtr(1))
             .Seal()

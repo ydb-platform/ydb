@@ -1,4 +1,15 @@
 #include "factory.h"
+
+#if defined(_win_)
+namespace NYql {
+
+IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& /*compression*/) {
+    return {};
+}
+
+}
+#else
+
 #include "lz4io.h"
 #include "brotli.h"
 #include "zstd.h"
@@ -47,3 +58,4 @@ IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression) {
 }
 
 }
+#endif

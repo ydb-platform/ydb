@@ -839,6 +839,7 @@ inline void Out<NKikimr::NDataShardLoad::EState>(IOutputStream& o, NKikimr::NDat
     }
 }
 
+#ifndef _win_
 template <>
 inline void Out<NKikimrDataShardLoad::TLoadReport>(IOutputStream& o, const NKikimrDataShardLoad::TLoadReport& report) {
     if (report.HasPrefixInfo())
@@ -860,3 +861,4 @@ inline void Out<NKikimrDataShardLoad::TLoadReport>(IOutputStream& o, const NKiki
         o << ", Info: " << report.GetInfo();
     }
 }
+#endif

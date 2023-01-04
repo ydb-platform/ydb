@@ -7,8 +7,8 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 --------------+-------+--------+---------
    b'develop' |     7 |   4200 |   25100 
    b'develop' |     9 |   4500 |   25100 
-   b'develop' |    10 |   5200 |   25100 
    b'develop' |    11 |   5200 |   25100 
+   b'develop' |    10 |   5200 |   25100 
    b'develop' |     8 |   6000 |   25100 
  b'personnel' |     5 |   3500 |    7400 
  b'personnel' |     2 |   3900 |    7400 
@@ -25,16 +25,16 @@ SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITI
 
    depname    | empno | salary | column3 
 --------------+-------+--------+---------
+     b'sales' |     3 |   4800 |       1 
+     b'sales' |     4 |   4800 |       1 
+     b'sales' |     1 |   5000 |       3 
+ b'personnel' |     5 |   3500 |       1 
+ b'personnel' |     2 |   3900 |       2 
    b'develop' |     7 |   4200 |       1 
    b'develop' |     9 |   4500 |       2 
    b'develop' |    10 |   5200 |       3 
    b'develop' |    11 |   5200 |       3 
    b'develop' |     8 |   6000 |       5 
- b'personnel' |     5 |   3500 |       1 
- b'personnel' |     2 |   3900 |       2 
-     b'sales' |     3 |   4800 |       1 
-     b'sales' |     4 |   4800 |       1 
-     b'sales' |     1 |   5000 |       3 
 (10 rows)
 
 
@@ -76,16 +76,16 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 
    depname    | empno | salary | column3 
 --------------+-------+--------+---------
+     b'sales' |     1 |   5000 |   14600 
+     b'sales' |     3 |   4800 |   14600 
+     b'sales' |     4 |   4800 |   14600 
+ b'personnel' |     2 |   3900 |    7400 
+ b'personnel' |     5 |   3500 |    7400 
    b'develop' |     7 |   4200 |   25100 
    b'develop' |     8 |   6000 |   25100 
    b'develop' |     9 |   4500 |   25100 
    b'develop' |    10 |   5200 |   25100 
    b'develop' |    11 |   5200 |   25100 
- b'personnel' |     2 |   3900 |    7400 
- b'personnel' |     5 |   3500 |    7400 
-     b'sales' |     1 |   5000 |   14600 
-     b'sales' |     3 |   4800 |   14600 
-     b'sales' |     4 |   4800 |   14600 
 (10 rows)
 
 
@@ -96,15 +96,15 @@ SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PA
 
    depname    | empno | salary | r 
 --------------+-------+--------+---
-   b'develop' |     7 |   4200 | 1 
-     b'sales' |     4 |   4800 | 1 
      b'sales' |     3 |   4800 | 1 
+     b'sales' |     4 |   4800 | 1 
+   b'develop' |     7 |   4200 | 1 
  b'personnel' |     5 |   3500 | 1 
  b'personnel' |     2 |   3900 | 2 
    b'develop' |     9 |   4500 | 2 
-   b'develop' |    11 |   5200 | 3 
-   b'develop' |    10 |   5200 | 3 
      b'sales' |     1 |   5000 | 3 
+   b'develop' |    10 |   5200 | 3 
+   b'develop' |    11 |   5200 | 3 
    b'develop' |     8 |   6000 | 5 
 (10 rows)
 
@@ -144,16 +144,16 @@ SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW
 
  sum_1 | ten | four 
 -------+-----+------
-     1 |   9 |    1 
-     0 |   4 |    0 
-     1 |   7 |    1 
-     0 |   0 |    0 
-     0 |   0 |    0 
-     2 |   0 |    2 
-     3 |   3 |    3 
      3 |   1 |    3 
      4 |   1 |    1 
      5 |   1 |    1 
+     3 |   3 |    3 
+     0 |   0 |    0 
+     0 |   0 |    0 
+     2 |   0 |    2 
+     1 |   7 |    1 
+     0 |   4 |    0 
+     1 |   9 |    1 
 (10 rows)
 
 
@@ -184,16 +184,16 @@ SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 
  rank_1 | ten | four 
 --------+-----+------
-      1 |   0 |    2 
+      1 |   1 |    3 
+      2 |   3 |    3 
+      1 |   0 |    0 
+      1 |   0 |    0 
+      3 |   4 |    0 
       1 |   1 |    1 
       1 |   1 |    1 
       3 |   7 |    1 
       4 |   9 |    1 
-      1 |   0 |    0 
-      1 |   0 |    0 
-      3 |   4 |    0 
-      1 |   1 |    3 
-      2 |   3 |    3 
+      1 |   0 |    2 
 (10 rows)
 
 
@@ -204,16 +204,16 @@ SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS 
 
  column0 | ten | four 
 ---------+-----+------
-       1 |   0 |    2 
+       1 |   1 |    3 
+       2 |   3 |    3 
+       1 |   0 |    0 
+       1 |   0 |    0 
+       2 |   4 |    0 
        1 |   1 |    1 
        1 |   1 |    1 
        2 |   7 |    1 
        3 |   9 |    1 
-       1 |   0 |    0 
-       1 |   0 |    0 
-       2 |   4 |    0 
-       1 |   1 |    3 
-       2 |   3 |    3 
+       1 |   0 |    2 
 (10 rows)
 
 
@@ -224,16 +224,16 @@ SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PAR
 
  column0 | ten | four 
 ---------+-----+------
-    None |   0 |    2 
+    None |   1 |    3 
+       1 |   3 |    3 
+    None |   0 |    0 
+       0 |   0 |    0 
+       0 |   4 |    0 
     None |   1 |    1 
        1 |   1 |    1 
        1 |   7 |    1 
        7 |   9 |    1 
-    None |   0 |    0 
-       0 |   0 |    0 
-       0 |   4 |    0 
-    None |   1 |    3 
-       1 |   3 |    3 
+    None |   0 |    2 
 (10 rows)
 
 
@@ -244,16 +244,16 @@ SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PA
 
  column0 | ten | four 
 ---------+-----+------
-    None |   0 |    2 
+       3 |   1 |    3 
+    None |   3 |    3 
+       0 |   0 |    0 
+       4 |   0 |    0 
+    None |   4 |    0 
        1 |   1 |    1 
        7 |   1 |    1 
        9 |   7 |    1 
     None |   9 |    1 
-       0 |   0 |    0 
-       4 |   0 |    0 
-    None |   4 |    0 
-       3 |   1 |    3 
-    None |   3 |    3 
+    None |   0 |    2 
 (10 rows)
 
 
@@ -264,16 +264,16 @@ SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 
  column0 | ten | four 
 ---------+-----+------
-    None |   0 |    2 
+       6 |   1 |    3 
+    None |   3 |    3 
+       0 |   0 |    0 
+       8 |   0 |    0 
+    None |   4 |    0 
        2 |   1 |    1 
       14 |   1 |    1 
       18 |   7 |    1 
     None |   9 |    1 
-       0 |   0 |    0 
-       8 |   0 |    0 
-    None |   4 |    0 
-       6 |   1 |    3 
-    None |   3 |    3 
+    None |   0 |    2 
 (10 rows)
 
 
@@ -284,16 +284,16 @@ SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 
  column0 | ten | four 
 ---------+-----+------
-       0 |   0 |    2 
+       1 |   1 |    3 
+       1 |   3 |    3 
+       0 |   0 |    0 
+       0 |   0 |    0 
+       0 |   4 |    0 
        1 |   1 |    1 
        1 |   1 |    1 
        1 |   7 |    1 
        1 |   9 |    1 
-       0 |   0 |    0 
-       0 |   0 |    0 
-       0 |   4 |    0 
-       1 |   1 |    3 
-       1 |   3 |    3 
+       0 |   0 |    2 
 (10 rows)
 
 
@@ -348,16 +348,16 @@ FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten);
 
  ten | two | gsum  |  wsum  
 -----+-----+-------+--------
-   1 |   1 | 46000 |  46000 
-   3 |   1 | 48000 |  94000 
-   5 |   1 | 50000 | 144000 
-   7 |   1 | 52000 | 196000 
-   9 |   1 | 54000 | 250000 
    0 |   0 | 45000 |  45000 
    2 |   0 | 47000 |  92000 
    4 |   0 | 49000 | 141000 
    6 |   0 | 51000 | 192000 
    8 |   0 | 53000 | 245000 
+   1 |   1 | 46000 |  46000 
+   3 |   1 | 48000 |  94000 
+   5 |   1 | 50000 | 144000 
+   7 |   1 | 52000 | 196000 
+   9 |   1 | 54000 | 250000 
 (10 rows)
 
 
@@ -368,12 +368,12 @@ SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE uniq
 
  column0 | four 
 ---------+------
-       4 |    1 
-       4 |    1 
-       4 |    1 
-       4 |    1 
        2 |    3 
        2 |    3 
+       4 |    1 
+       4 |    1 
+       4 |    1 
+       4 |    1 
 (6 rows)
 
 
@@ -386,16 +386,16 @@ WINDOW w AS (PARTITION BY four ORDER BY ten);
 
  cntsum 
 --------
-     51 
+     92 
+    136 
+     21 
+     22 
+     87 
      22 
      24 
      82 
      92 
-     21 
-     22 
-     87 
-     92 
-    136 
+     51 
 (10 rows)
 
 
@@ -422,16 +422,16 @@ SELECT avg(four) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY 
 
  column0 
 ---------
+     3.0 
+     3.0 
+     0.0 
+     0.0 
+     0.0 
+     1.0 
+     1.0 
+     1.0 
+     1.0 
      2.0 
-     1.0 
-     1.0 
-     1.0 
-     1.0 
-     0.0 
-     0.0 
-     0.0 
-     3.0 
-     3.0 
 (10 rows)
 
 
@@ -443,16 +443,16 @@ FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 
  ten | two | gsum  |  wsum  
 -----+-----+-------+--------
-   1 |   1 | 46000 |  46000 
-   3 |   1 | 48000 |  94000 
-   5 |   1 | 50000 | 144000 
-   7 |   1 | 52000 | 196000 
-   9 |   1 | 54000 | 250000 
    0 |   0 | 45000 |  45000 
    2 |   0 | 47000 |  92000 
    4 |   0 | 49000 | 141000 
    6 |   0 | 51000 | 192000 
    8 |   0 | 53000 | 245000 
+   1 |   1 | 46000 |  46000 
+   3 |   1 | 48000 |  94000 
+   5 |   1 | 50000 | 144000 
+   7 |   1 | 52000 | 196000 
+   9 |   1 | 54000 | 250000 
 (10 rows)
 
 
@@ -509,16 +509,16 @@ SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION B
 
  column0 | column1 
 ---------+---------
+    5000 |       1 
+    9800 |       2 
+   14600 |       2 
+    3900 |       1 
+    7400 |       2 
     6000 |       1 
    11200 |       2 
    16400 |       2 
    20900 |       4 
    25100 |       5 
-    3900 |       1 
-    7400 |       2 
-    5000 |       1 
-    9800 |       2 
-   14600 |       2 
 (10 rows)
 
 
@@ -600,13 +600,13 @@ select first_value(max(x)) over w, y
 
  column0 | y  
 ---------+----
-    9980 |  0 
-    9980 |  2 
-    9980 |  4 
-    9980 |  6 
-    9980 |  8 
-    9980 | 10 
-    9980 | 12 
+    9999 | 12 
+    9999 | 10 
+    9999 |  8 
+    9999 |  6 
+    9999 |  4 
+    9999 |  2 
+    9999 |  0 
 (7 rows)
 
 
@@ -621,26 +621,26 @@ WINDOW w AS (partition by four order by ten);
 
  four | ten | column2 | column3 
 ------+-----+---------+---------
-    3 |   1 |       1 |       1 
-    3 |   3 |       4 |       3 
-    3 |   5 |       9 |       5 
-    3 |   7 |      16 |       7 
-    3 |   9 |      25 |       9 
-    1 |   1 |       1 |       1 
-    1 |   3 |       4 |       3 
-    1 |   5 |       9 |       5 
-    1 |   7 |      16 |       7 
-    1 |   9 |      25 |       9 
-    2 |   0 |       0 |       0 
-    2 |   2 |       2 |       2 
-    2 |   4 |       6 |       4 
-    2 |   6 |      12 |       6 
-    2 |   8 |      20 |       8 
     0 |   0 |       0 |       0 
     0 |   2 |       2 |       2 
     0 |   4 |       6 |       4 
     0 |   6 |      12 |       6 
     0 |   8 |      20 |       8 
+    3 |   1 |       1 |       1 
+    3 |   3 |       4 |       3 
+    3 |   5 |       9 |       5 
+    3 |   7 |      16 |       7 
+    3 |   9 |      25 |       9 
+    2 |   0 |       0 |       0 
+    2 |   2 |       2 |       2 
+    2 |   4 |       6 |       4 
+    2 |   6 |      12 |       6 
+    2 |   8 |      20 |       8 
+    1 |   1 |       1 |       1 
+    1 |   3 |       4 |       3 
+    1 |   5 |       9 |       5 
+    1 |   7 |      16 |       7 
+    1 |   9 |      25 |       9 
 (20 rows)
 
 
@@ -655,26 +655,26 @@ WINDOW w AS (partition by four order by ten/4 rows between unbounded preceding a
 
  four | two | column2 | column3 
 ------+-----+---------+---------
-    3 |   0 |       0 |       0 
-    3 |   0 |       0 |       0 
-    3 |   1 |       1 |       1 
-    3 |   1 |       2 |       1 
-    3 |   2 |       4 |       2 
-    1 |   0 |       0 |       0 
-    1 |   0 |       0 |       0 
-    1 |   1 |       1 |       1 
-    1 |   1 |       2 |       1 
-    1 |   2 |       4 |       2 
-    2 |   0 |       0 |       0 
-    2 |   0 |       0 |       0 
-    2 |   1 |       1 |       1 
-    2 |   1 |       2 |       1 
-    2 |   2 |       4 |       2 
     0 |   0 |       0 |       0 
     0 |   0 |       0 |       0 
     0 |   1 |       1 |       1 
     0 |   1 |       2 |       1 
     0 |   2 |       4 |       2 
+    3 |   0 |       0 |       0 
+    3 |   0 |       0 |       0 
+    3 |   1 |       1 |       1 
+    3 |   1 |       2 |       1 
+    3 |   2 |       4 |       2 
+    2 |   0 |       0 |       0 
+    2 |   0 |       0 |       0 
+    2 |   1 |       1 |       1 
+    2 |   1 |       2 |       1 
+    2 |   2 |       4 |       2 
+    1 |   0 |       0 |       0 
+    1 |   0 |       0 |       0 
+    1 |   1 |       1 |       1 
+    1 |   1 |       2 |       1 
+    1 |   2 |       4 |       2 
 (20 rows)
 
 

@@ -538,6 +538,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"StartsWith", &TProgramBuilder::StartsWith},
         {"EndsWith", &TProgramBuilder::EndsWith},
+        {"StringContains", &TProgramBuilder::StringContains},
 
         {"SqueezeToList", &TProgramBuilder::SqueezeToList},
 

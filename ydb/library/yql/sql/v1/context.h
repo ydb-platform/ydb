@@ -279,6 +279,7 @@ namespace NSQLTranslationV1 {
         bool EmitStartsWith = true;
         bool EmitAggApply = false;
         bool UseBlocks = false;
+        bool AnsiLike = false;
     };
 
     class TColumnRefScope {

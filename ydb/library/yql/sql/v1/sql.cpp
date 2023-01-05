@@ -2177,44 +2177,52 @@ namespace {
     }
 
     template<typename TChar>
-    struct TSplitResult {
+    struct TPatternComponent {
         TBasicString<TChar> Prefix;
         TBasicString<TChar> Suffix;
+        bool IsSimple = true;
+
+        void AppendPlain(TChar c) {
+            if (IsSimple) {
+                Prefix.push_back(c);
+            }
+            Suffix.push_back(c);
+        }
+
+        void AppendAnyChar() {
+            IsSimple = false;
+            Suffix.clear();
+        }
     };
 
     template<typename TChar>
-    TSplitResult<TChar> SplitPattern(const TBasicString<TChar>& pattern, TMaybe<char> escape,
-        bool& inEscape, bool& hasPattern, bool& isSimple)
-    {
-        inEscape = hasPattern = false;
-        isSimple = true;
-        TSplitResult<TChar> result;
-        TBasicString<TChar> left, right, current;
-        for (const auto c : pattern) {
+    TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& pattern, TMaybe<char> escape, bool& inEscape) {
+        inEscape = false;
+        TVector<TPatternComponent<TChar>> result;
+        TPatternComponent<TChar> current;
+        bool prevIsPercentChar = false;
+        for (const TChar c : pattern) {
             if (inEscape) {
-                current.append(c);
+                current.AppendPlain(c);
                 inEscape = false;
+                prevIsPercentChar = false;
             } else if (escape && c == static_cast<TChar>(*escape)) {
                 inEscape = true;
-            } else if (c == '%' || c == '_') {
-                if (result.Prefix.empty() && !hasPattern)
-                    std::swap(result.Prefix, current);
-                else if (left.empty())
-                    std::swap(left, current);
-                else if (right.empty())
-                    std::swap(right, current);
-                else
-                    isSimple = false;
-                hasPattern = true;
-                if (c == '_') {
-                    isSimple = false;
+            } else if (c == '%') {
+                if (!prevIsPercentChar) {
+                    result.push_back(std::move(current));
                 }
+                current = {};
+                prevIsPercentChar = true;
+            } else if (c == '_') {
+                current.AppendAnyChar();
+                prevIsPercentChar = false;
             } else {
-                current.append(c);
+                current.AppendPlain(c);
+                prevIsPercentChar = false;
             }
         }
-
-        result.Suffix = std::move(current);
+        result.push_back(std::move(current));
         return result;
     }
 }
@@ -5160,26 +5168,26 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                     }
 
                     if (literalPattern) {
-                        TString prefix, suffix;
                         bool inEscape = false;
-                        bool hasPattern = false;
-                        bool isSimple = true;
-
                         TMaybe<char> escape;
                         if (escapeLiteral) {
                             escape = escapeLiteral->front();
                         }
 
                         bool mayIgnoreCase;
+                        TVector<TPatternComponent<char>> components;
                         if (isUtf8) {
-                            auto splitResult = SplitPattern(UTF8ToUTF32<false>(*literalPattern), escape, inEscape, hasPattern, isSimple);
-                            prefix = WideToUTF8(splitResult.Prefix);
-                            suffix = WideToUTF8(splitResult.Suffix);
+                            auto splitResult = SplitPattern(UTF8ToUTF32<false>(*literalPattern), escape, inEscape);
+                            for (const auto& component : splitResult) {
+                                TPatternComponent<char> converted;
+                                converted.IsSimple = component.IsSimple;
+                                converted.Prefix = WideToUTF8(component.Prefix);
+                                converted.Suffix = WideToUTF8(component.Suffix);
+                                components.push_back(std::move(converted));
+                            }
                             mayIgnoreCase = ToLowerUTF8(*literalPattern) == ToUpperUTF8(*literalPattern);
                         } else {
-                            auto splitResult = SplitPattern(*literalPattern, escape, inEscape, hasPattern, isSimple);
-                            prefix = splitResult.Prefix;
-                            suffix = splitResult.Suffix;
+                            components = SplitPattern(*literalPattern, escape, inEscape);
                             mayIgnoreCase = WithoutAlpha(*literalPattern);
                         }
 
@@ -5190,32 +5198,68 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                         }
 
                         if (opName == "like" || mayIgnoreCase) {
-//TODO: Drop regex          if (isSimple) {}
-
-                            if (!(hasPattern || suffix.empty())) {
-                                isMatch = BuildBinaryOp(Ctx, pos, "==", res, BuildLiteralRawString(pos, suffix, isUtf8));
-                            } else if (!prefix.empty()) {
+                            // TODO: expand LIKE in optimizers - we can analyze argument types there
+                            YQL_ENSURE(!components.empty());
+                            const auto& first = components.front();
+                            if (components.size() == 1 && first.IsSimple) {
+                                // no '%'s and '_'s  in pattern
+                                YQL_ENSURE(first.Prefix == first.Suffix);
+                                isMatch = BuildBinaryOp(Ctx, pos, "==", res, BuildLiteralRawString(pos, first.Suffix, isUtf8));
+                            } else if (!first.Prefix.empty()) {
+                                const TString& prefix = first.Prefix;
+                                TNodePtr prefixMatch;
                                 if (Ctx.EmitStartsWith) {
-                                    const auto& lowerBoundOp = BuildBinaryOp(Ctx, pos, "StartsWith", res, BuildLiteralRawString(pos, prefix, isUtf8));
-                                    isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch);
+                                    prefixMatch = BuildBinaryOp(Ctx, pos, "StartsWith", res, BuildLiteralRawString(pos, prefix, isUtf8));
                                 } else {
-                                    const auto& lowerBoundOp = BuildBinaryOp(Ctx, pos, ">=", res, BuildLiteralRawString(pos, prefix, isUtf8));
+                                    prefixMatch = BuildBinaryOp(Ctx, pos, ">=", res, BuildLiteralRawString(pos, prefix, isUtf8));
                                     auto upperBound = isUtf8 ? NextValidUtf8(prefix) : NextLexicographicString(prefix);
-
                                     if (upperBound) {
-                                        const auto& between = BuildBinaryOp(
+                                        prefixMatch = BuildBinaryOp(
                                             Ctx,
                                             pos,
                                             "And",
-                                            lowerBoundOp,
+                                            prefixMatch,
                                             BuildBinaryOp(Ctx, pos, "<", res, BuildLiteralRawString(pos, TString(*upperBound), isUtf8))
                                         );
-                                        isMatch = BuildBinaryOp(Ctx, pos, "And", between, isMatch);
-                                    } else {
-                                        isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch);
                                     }
                                 }
+
+                                if (Ctx.AnsiLike && first.IsSimple && components.size() == 2 && components.back().IsSimple) {
+                                    const TString& suffix = components.back().Suffix;
+                                    // 'prefix%suffix'
+                                    if (suffix.empty()) {
+                                        isMatch = prefixMatch;
+                                    } else {
+                                        // len(str) >= len(prefix) + len(suffix) && StartsWith(str, prefix) && EndsWith(str, suffix)
+                                        TNodePtr sizePred = BuildBinaryOp(Ctx, pos, ">=",
+                                            TNodePtr(new TCallNodeImpl(pos, "Size", { res })),
+                                            TNodePtr(new TLiteralNumberNode<ui32>(pos, "Uint32", ToString(prefix.size() + suffix.size()))));
+                                        TNodePtr suffixMatch = BuildBinaryOp(Ctx, pos, "EndsWith", res, BuildLiteralRawString(pos, suffix, isUtf8));
+                                        isMatch = new TCallNodeImpl(pos, "And", {
+                                            sizePred,
+                                            prefixMatch,
+                                            suffixMatch
+                                        });
+                                    }
+                                } else {
+                                    isMatch = BuildBinaryOp(Ctx, pos, "And", prefixMatch, isMatch);
+                                }
+                            } else if (Ctx.AnsiLike && AllOf(components, [](const auto& comp) { return comp.IsSimple; })) {
+                                YQL_ENSURE(first.Prefix.empty());
+                                if (components.size() == 3 && components.back().Prefix.empty()) {
+                                    // '%foo%'
+                                    YQL_ENSURE(!components[1].Prefix.empty());
+                                    isMatch = BuildBinaryOp(Ctx, pos, "StringContains", res, BuildLiteralRawString(pos, components[1].Prefix, isUtf8));
+                                } else if (components.size() == 2) {
+                                    // '%foo'
+                                    isMatch = BuildBinaryOp(Ctx, pos, "EndsWith", res, BuildLiteralRawString(pos, components[1].Prefix, isUtf8));
+                                }
+                            } else if (Ctx.AnsiLike && !components.back().Suffix.empty()) {
+                                const TString& suffix = components.back().Suffix;
+                                TNodePtr suffixMatch = BuildBinaryOp(Ctx, pos, "EndsWith", res, BuildLiteralRawString(pos, suffix, isUtf8));
+                                isMatch = BuildBinaryOp(Ctx, pos, "And", suffixMatch, isMatch);
                             }
+                            // TODO: more StringContains/StartsWith/EndsWith cases?
                         }
                     }
 
@@ -10088,6 +10132,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableuseblocks") {
             Ctx.UseBlocks = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableUseBlocks");
+        } else if (normalizedPragma == "ansilike") {
+            Ctx.AnsiLike = true;
+            Ctx.IncrementMonCounter("sql_pragma", "AnsiLike");
+        } else if (normalizedPragma == "disableansilike") {
+            Ctx.AnsiLike = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiLike");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

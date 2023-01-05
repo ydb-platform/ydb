@@ -11359,6 +11359,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RFind"] = &FindWrapper;
         Functions["StartsWith"] = &WithWrapper;
         Functions["EndsWith"] = &WithWrapper;
+        Functions["StringContains"] = &WithWrapper;
         Functions["ByteAt"] = &ByteAtWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         Functions["AsList"] = &AsListWrapper<false>;

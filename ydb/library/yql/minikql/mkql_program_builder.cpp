@@ -4121,6 +4121,36 @@ TRuntimeNode TProgramBuilder::EndsWith(TRuntimeNode string, TRuntimeNode suffix)
     return DataCompare(__func__, string, suffix);
 }
 
+TRuntimeNode TProgramBuilder::StringContains(TRuntimeNode string, TRuntimeNode pattern) {
+    bool isOpt1, isOpt2;
+    TDataType* type1 = UnpackOptionalData(string, isOpt1);
+    TDataType* type2 = UnpackOptionalData(pattern, isOpt2);
+    MKQL_ENSURE(type1->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id ||
+                type1->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expecting string as first argument");
+    MKQL_ENSURE(type2->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id ||
+                type2->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expecting string as second argument");
+    if constexpr (RuntimeVersion < 32U) {
+        auto stringCasted = (type1->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id) ? ToString(string) : string;
+        auto patternCasted = (type2->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id) ? ToString(pattern) : pattern;
+        auto found = Exists(Find(stringCasted, patternCasted, NewDataLiteral(ui32(0))));
+        if (!isOpt1 && !isOpt2) {
+            return found;
+        }
+        TVector<TRuntimeNode> predicates;
+        if (isOpt1) {
+            predicates.push_back(Exists(string));
+        }
+        if (isOpt2) {
+            predicates.push_back(Exists(pattern));
+        }
+
+        TRuntimeNode argsNotNull = (predicates.size() == 1) ? predicates.front() : And(predicates);
+        return If(argsNotNull, NewOptional(found), NewEmptyOptionalDataLiteral(NUdf::TDataType<bool>::Id));
+    }
+
+    return DataCompare(__func__, string, pattern);
+}
+
 TRuntimeNode TProgramBuilder::ByteAt(TRuntimeNode data, TRuntimeNode index) {
     const std::array<TRuntimeNode, 2U> args = {{ data, index }};
     return Invoke(__func__, NewOptionalType(NewDataType(NUdf::TDataType<ui8>::Id)), args);

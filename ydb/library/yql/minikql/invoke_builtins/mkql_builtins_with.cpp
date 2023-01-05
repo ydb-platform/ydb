@@ -59,7 +59,7 @@ template<NUdf::EDataSlot> using TContains = TStringWith<&StringContains>;
 void RegisterWith(IBuiltinFunctionRegistry& registry) {
     RegisterCompareStrings<TStartsWith, TCompareArgsOpt, false>(registry, "StartsWith");
     RegisterCompareStrings<TEndsWith, TCompareArgsOpt, false>(registry, "EndsWith");
-    RegisterCompareStrings<TContains, TCompareArgsOpt, false>(registry, "Contains");
+    RegisterCompareStrings<TContains, TCompareArgsOpt, false>(registry, "StringContains");
 }
 
 } // namespace NMiniKQL

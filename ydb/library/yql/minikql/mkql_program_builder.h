@@ -210,6 +210,7 @@ public:
     TRuntimeNode RFind(TRuntimeNode haystack, TRuntimeNode needle, TRuntimeNode pos);
     TRuntimeNode StartsWith(TRuntimeNode string, TRuntimeNode prefix);
     TRuntimeNode EndsWith(TRuntimeNode string, TRuntimeNode suffix);
+    TRuntimeNode StringContains(TRuntimeNode string, TRuntimeNode pattern);
     TRuntimeNode ByteAt(TRuntimeNode data, TRuntimeNode index);
     TRuntimeNode Size(TRuntimeNode data);
     template <bool Utf8 = false>

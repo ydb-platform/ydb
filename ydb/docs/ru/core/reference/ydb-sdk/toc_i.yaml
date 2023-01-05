@@ -1,10 +1,12 @@
 items:
   - name: Обзор
     href: index.md
-  - name: Установка
+  - name: Установка SDK
     href: install.md
-  - name: Аутентификация
+  - name: Аутентификация в SDK
     href: auth.md
+  - name: Параметризованные запросы
+    href: parameterized_queries.md
   - name: Работа с топиками
     href: topic.md
   - name: Тестовое приложение
@@ -14,9 +16,9 @@ items:
   - name: gRPC API
     items:
     - name: Обзор
-      href: overview-grpc-api.md  
+      href: overview-grpc-api.md
     - name: Health Check API
-      href: health-check-api.md  
+      href: health-check-api.md
   - name: Рецепты кода
     include: { mode: link, path: recipes/toc_p.yaml }
   - name: Сравнение возможностей SDK

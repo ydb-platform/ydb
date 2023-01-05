@@ -4520,10 +4520,21 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["IsDistinctFrom"] = std::bind(&OptimizeDistinctFrom<false>, _1, _2);
 
     map["StartsWith"] = map["EndsWith"] = map["StringContains"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
-        if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional &&
-            node->Tail().IsCallable("String") && node->Tail().Head().Content().empty())
-        {
+        if (node->Tail().IsCallable("String") && node->Tail().Head().Content().empty()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty string in second argument";
+            if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+                return ctx.Builder(node->Pos())
+                    .Callable("Map")
+                        .Add(0, node->HeadPtr())
+                        .Lambda(1)
+                            .Param("unwrappedFirstArg")
+                            .Callable("Bool")
+                                .Atom(0, "true", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
             return MakeBool<true>(node->Pos(), ctx);
         }
 

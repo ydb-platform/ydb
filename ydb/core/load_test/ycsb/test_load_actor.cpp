@@ -490,17 +490,14 @@ public:
         // aggregate total info
         ui64 oks = 0;
         ui64 errors = 0;
-        ui64 subtestCount = 0;
         for (auto& info: ev->Get()->Record.GetReports()) {
             oks += info.GetOperationsOK();
             errors += info.GetOperationsError();
-            subtestCount += info.GetSubtestCount();
         }
 
         for (const auto& result: FinishedTests) {
             oks += result.Report.GetOperationsOK();
             errors += result.Report.GetOperationsError();
-            subtestCount += result.Report.GetSubtestCount();
         }
 
 #define PARAM(NAME, VALUE) \

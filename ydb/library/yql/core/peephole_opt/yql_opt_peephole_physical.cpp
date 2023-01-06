@@ -4654,8 +4654,11 @@ struct TBlockRules {
         {">",  { "Greater" } },
         {">=", { "GreaterOrEqual" } },
 
-        // size kernel
+        // string kernels
         {"Size", { "Size" } },
+        {"StartsWith", { "StartsWith" } },
+        {"EndsWith", { "EndsWith" } },
+        {"StringContains", { "StringContains" } },
     };
 
     TBlockRules()

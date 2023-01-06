@@ -246,6 +246,48 @@ struct TStrGreaterOrEqualOp {
     }
 };
 
+struct TStrStartsWithOp {
+    static inline bool Do(std::string_view left, std::string_view right) {
+        return left.starts_with(right);
+    }
+
+    static inline bool DoWithEmptyLeft(size_t rightLen) {
+        return rightLen == 0;
+    }
+
+    static constexpr bool DoWithEmptyRight() {
+        return true;
+    }
+};
+
+struct TStrEndsWithOp {
+    static inline bool Do(std::string_view left, std::string_view right) {
+        return left.ends_with(right);
+    }
+
+    static inline bool DoWithEmptyLeft(size_t rightLen) {
+        return rightLen == 0;
+    }
+
+    static constexpr bool DoWithEmptyRight() {
+        return true;
+    }
+};
+
+struct TStrContainsOp {
+    static inline bool Do(std::string_view left, std::string_view right) {
+        return left.contains(right);
+    }
+
+    static inline bool DoWithEmptyLeft(size_t rightLen) {
+        return rightLen == 0;
+    }
+
+    static constexpr bool DoWithEmptyRight() {
+        return true;
+    }
+};
+
 template<typename TInput1, typename TInput2, typename TOp>
 void AddCompareStringKernel(TKernelFamilyBase& kernelFamily) {
     // ui8 type is used as bool replacement
@@ -325,12 +367,38 @@ void RegisterStringKernelSize(TKernelFamilyBase& kernelFamily) {
     AddSizeStringKernel<NUdf::TUtf8>(kernelFamily);
 }
 
+void RegisterStringKernelStartsWith(TKernelFamilyBase& kernelFamily) {
+    AddCompareStringKernels<TStrStartsWithOp>(kernelFamily);
+}
+
+void RegisterStringKernelEndsWith(TKernelFamilyBase& kernelFamily) {
+    AddCompareStringKernels<TStrEndsWithOp>(kernelFamily);
+}
+
+void RegisterStringKernelContains(TKernelFamilyBase& kernelFamily) {
+    AddCompareStringKernels<TStrContainsOp>(kernelFamily);
+}
+
 void RegisterSizeBuiltin(TKernelFamilyMap& kernelFamilyMap) {
     auto family = std::make_unique<TKernelFamilyBase>();
 
     RegisterStringKernelSize(*family);
 
     kernelFamilyMap["Size"] = std::move(family);
+}
+
+void RegisterWith(TKernelFamilyMap& kernelFamilyMap) {
+    auto family = std::make_unique<TKernelFamilyBase>();
+    RegisterStringKernelStartsWith(*family);
+    kernelFamilyMap["StartsWith"] = std::move(family);
+
+    family = std::make_unique<TKernelFamilyBase>();
+    RegisterStringKernelEndsWith(*family);
+    kernelFamilyMap["EndsWith"] = std::move(family);
+
+    family = std::make_unique<TKernelFamilyBase>();
+    RegisterStringKernelContains(*family);
+    kernelFamilyMap["StringContains"] = std::move(family);
 }
 
 }

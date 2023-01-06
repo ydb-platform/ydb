@@ -109,6 +109,7 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamily
     RegisterSubstring(registry);
     RegisterFind(registry);
     RegisterWith(registry);
+    RegisterWith(kernelFamilyMap);
     RegisterInversePresortString(registry);
     RegisterInverseString(registry);
     RegisterNanvl(registry);

@@ -1739,13 +1739,41 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto options = input->ChildPtr(2);
 
     const bool ansiIn = HasSetting(*options, "ansi");
+    const bool tableSource = HasSetting(*options, "tableSource");
+    static const size_t MaxCollectionItemsToExpandAsOrChain = 5;
+    const bool hasOptionals = collection->GetTypeAnn()->HasOptionalOrNull() ||
+                              lookup->GetTypeAnn()->HasOptionalOrNull();
+    if (ansiIn || !hasOptionals) {
+        const size_t collectionSize = collection->ChildrenSize();
+        if ((collection->IsCallable("AsList") || collection->IsList()) &&
+            collectionSize <= MaxCollectionItemsToExpandAsOrChain &&
+            collectionSize > 0)
+        {
+            TExprNodeList orItems;
+            for (size_t i = 0; i < collectionSize; ++i) {
+                TExprNode::TPtr collectionItem = collection->ChildPtr(i);
+                if (tableSource) {
+                    collectionItem = ctx.NewCallable(input->Pos(), "SingleMember", { collectionItem });
+                }
+                orItems.push_back(ctx.Builder(input->Pos())
+                    .Callable("==")
+                        .Add(0, lookup)
+                        .Add(1, collectionItem)
+                    .Seal()
+                    .Build()
+                );
+            }
+            YQL_CLOG(DEBUG, CorePeepHole) << "IN with small literal list/tuple (of size " << collectionSize << ")";
+            return ctx.NewCallable(input->Pos(), "Or", std::move(orItems));
+        }
+    }
 
     auto collectionType = collection->GetTypeAnn();
     TExprNode::TPtr dict;
     const TTypeAnnotationNode* dictKeyType = nullptr;
     if (collectionType->GetKind() == ETypeAnnotationKind::List)
     {
-        if (collectionType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct) {
+        if (tableSource) {
             YQL_CLOG(DEBUG, CorePeepHole) << "IN List of Structs";
             dict = BuildDictOverListOfStructs(input->Pos(), collection, dictKeyType, ctx);
         } else {

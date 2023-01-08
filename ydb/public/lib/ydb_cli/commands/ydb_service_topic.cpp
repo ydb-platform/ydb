@@ -381,10 +381,12 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&StartingMessageTimestamp_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "topic for which consumer will be added");
+        AddAllowedCodecs(config, AllowedCodecs);
     }
 
     void TCommandTopicConsumerAdd::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
+        ParseCodecs();
         ParseTopicName(config, 0);
     }
 

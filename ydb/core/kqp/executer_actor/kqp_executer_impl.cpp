@@ -207,6 +207,11 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                     data = false;
                     break;
 
+                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                    // TODO: Use separate executer.
+                    data = false;
+                    break;
+
                 default:
                     YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)tx.Body->GetType());
             }

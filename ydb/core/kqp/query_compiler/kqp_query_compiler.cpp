@@ -29,6 +29,7 @@ NKqpProto::TKqpPhyTx::EType GetPhyTxType(const EPhysicalTxType& type) {
         case EPhysicalTxType::Compute: return NKqpProto::TKqpPhyTx::TYPE_COMPUTE;
         case EPhysicalTxType::Data: return NKqpProto::TKqpPhyTx::TYPE_DATA;
         case EPhysicalTxType::Scan: return NKqpProto::TKqpPhyTx::TYPE_SCAN;
+        case EPhysicalTxType::Generic: return NKqpProto::TKqpPhyTx::TYPE_GENERIC;
 
         case EPhysicalTxType::Unspecified:
             break;
@@ -41,6 +42,7 @@ NKqpProto::TKqpPhyQuery::EType GetPhyQueryType(const EPhysicalQueryType& type) {
     switch (type) {
         case EPhysicalQueryType::Data: return NKqpProto::TKqpPhyQuery::TYPE_DATA;
         case EPhysicalQueryType::Scan: return NKqpProto::TKqpPhyQuery::TYPE_SCAN;
+        case EPhysicalQueryType::Query: return NKqpProto::TKqpPhyQuery::TYPE_QUERY;
 
         case EPhysicalQueryType::Unspecified:
             break;

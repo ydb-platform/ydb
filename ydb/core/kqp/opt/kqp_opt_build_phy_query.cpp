@@ -33,6 +33,10 @@ public:
                 querySettings.Type = EPhysicalQueryType::Scan;
                 break;
             }
+            case EKikimrQueryType::Query: {
+                querySettings.Type = EPhysicalQueryType::Query;
+                break;
+            }
             default: {
                 YQL_ENSURE(false, "Unexpected query type: " << KqpCtx->QueryCtx->Type);
             }

@@ -174,6 +174,31 @@ public:
         return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, scanSettings);
     }
 
+    TIntrusivePtr<TAsyncQueryResult> PrepareQuery(const TString& cluster, const TExprNode::TPtr& query,
+        TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings) override
+    {
+        YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Query);
+        YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly);
+        YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery);
+        YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
+
+        TKiDataQueryBlocks dataQueryBlocks(query);
+
+        const auto& queryBlock = dataQueryBlocks.Arg(0);
+        if (queryBlock.Results().Size() != 1) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(dataQueryBlocks.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                "Multiple result sets not yet supported."));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+        }
+        if (queryBlock.Effects().ArgCount() > 0) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(dataQueryBlocks.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                "Data modifications not yet supported."));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+        }
+
+        return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, settings);
+    }
+
 private:
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster,
         const TKiDataQueryBlocks& dataQueryBlocks, TExprContext& ctx,
@@ -217,6 +242,7 @@ private:
         switch (queryType) {
             case EKikimrQueryType::Dml:
             case EKikimrQueryType::Scan:
+            case EKikimrQueryType::Query:
                 break;
             default:
                 YQL_ENSURE(false, "PrepareQueryNewEngine, unexpected query type: " << queryType);

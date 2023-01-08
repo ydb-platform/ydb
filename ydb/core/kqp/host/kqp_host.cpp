@@ -677,6 +677,8 @@ public:
                     return KqpRunner->PrepareDataQuery(cluster, query, ctx, settings);
                 case EKikimrQueryType::Scan:
                     return KqpRunner->PrepareScanQuery(cluster, query, ctx, settings);
+                case EKikimrQueryType::Query:
+                    return KqpRunner->PrepareQuery(cluster, query, ctx, settings);
                 case EKikimrQueryType::YqlScript:
                 case EKikimrQueryType::YqlScriptStreaming:
                     break;
@@ -1024,6 +1026,13 @@ public:
             });
     }
 
+    IAsyncQueryResultPtr PrepareQuery(const TString& query, const TPrepareSettings& settings) override {
+        return CheckedProcessQuery(*ExprCtx,
+            [this, &query, settings] (TExprContext& ctx) mutable {
+                return PrepareQueryInternal(query, settings, ctx);
+            });
+    }
+
     IAsyncQueryResultPtr ExecuteYqlScript(const TString& script, NKikimrMiniKQL::TParams&& parameters,
         const TExecScriptSettings& settings) override
     {
@@ -1315,6 +1324,29 @@ private:
 
         return MakeIntrusive<TAsyncExecuteKqlResult>(queryExpr.Get(), ctx, *DataQueryAstTransformer,
             SessionCtx, *ExecuteCtx);
+    }
+
+    IAsyncQueryResultPtr PrepareQueryInternal(const TString& query, const TPrepareSettings& settings,
+        TExprContext& ctx)
+    {
+        SetupYqlTransformer();
+
+        SessionCtx->Query().Type = EKikimrQueryType::Query;
+        SessionCtx->Query().PrepareOnly = true;
+        SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        if (settings.DocumentApiRestricted) {
+            SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
+        }
+
+        // TODO: Support PG
+        TMaybe<TSqlVersion> sqlVersion = 1;
+        auto queryExpr = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, ctx, sqlVersion);
+        if (!queryExpr) {
+            return nullptr;
+        }
+
+        return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+            query, sqlVersion);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TString& query, bool isSql, TExprContext& ctx,

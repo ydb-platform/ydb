@@ -92,22 +92,6 @@ std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
     return std::nullopt;
 }
 
-bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) {
-    switch (queryType) {
-        case NKikimrKqp::QUERY_TYPE_SQL_DML:
-        case NKikimrKqp::QUERY_TYPE_SQL_DDL:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-            return true;
-
-        default:
-            break;
-    }
-
-    return false;
-}
-
 TString EncodeSessionId(ui32 nodeId, const TString& id) {
     Ydb::TOperationId opId;
     opId.SetKind(NOperationId::TOperationId::SESSION_YQL);

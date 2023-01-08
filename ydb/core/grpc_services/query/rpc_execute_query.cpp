@@ -34,8 +34,7 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
         }
     }
 
-    // TODO: Use new type of query (QUERY_TYPE_SQL_QUERY)
-    kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+    kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_QUERY);
     kqpRequest.MutableRequest()->SetKeepSession(false);
 
     switch (req.query_case()) {

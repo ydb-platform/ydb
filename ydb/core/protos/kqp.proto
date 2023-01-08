@@ -36,6 +36,8 @@ enum EQueryType {
     QUERY_TYPE_SQL_SCAN = 9;
     QUERY_TYPE_AST_SCAN = 10;
     QUERY_TYPE_SQL_SCRIPT_STREAMING = 11;
+
+    QUERY_TYPE_SQL_QUERY = 12;
 };
 
 enum EQueryAction {

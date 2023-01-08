@@ -236,6 +236,10 @@ public:
     virtual TIntrusivePtr<TAsyncQueryResult> PrepareScanQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& query, NYql::TExprContext& ctx,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
+
+    virtual TIntrusivePtr<TAsyncQueryResult> PrepareQuery(const TString& cluster,
+        const NYql::TExprNode::TPtr& query, NYql::TExprContext& ctx,
+        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,

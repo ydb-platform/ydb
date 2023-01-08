@@ -13,6 +13,8 @@ static EPhysicalQueryType GetPhysicalQueryType(const TStringBuf& value) {
         return EPhysicalQueryType::Data;
     } else if (value == "scan_query") {
         return EPhysicalQueryType::Scan;
+    } else if (value == "query") {
+        return EPhysicalQueryType::Query;
     } else {
         YQL_ENSURE(false, "Unknown physical query type: " << value);
     }
@@ -26,6 +28,8 @@ static TStringBuf PhysicalQueryTypeToString(EPhysicalQueryType type) {
             return "data_query";
         case EPhysicalQueryType::Scan:
             return "scan_query";
+        case EPhysicalQueryType::Query:
+            return "query";
     }
 
     YQL_ENSURE(false, "Unexpected physical query type: " << type);
@@ -67,6 +71,8 @@ static EPhysicalTxType GetPhysicalTxType(const TStringBuf& value) {
         return EPhysicalTxType::Data;
     } else if (value == "scan") {
         return EPhysicalTxType::Scan;
+    } else if (value == "generic") {
+        return EPhysicalTxType::Generic;
     } else {
         YQL_ENSURE(false, "Unknown physical tx type: " << value);
     }
@@ -82,6 +88,8 @@ static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) {
             return "data";
         case EPhysicalTxType::Scan:
             return "scan";
+        case EPhysicalTxType::Generic:
+            return "generic";
     }
 
     YQL_ENSURE(false, "Unexpected physical tx type: " << type);

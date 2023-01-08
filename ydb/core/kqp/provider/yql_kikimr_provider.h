@@ -67,6 +67,7 @@ enum class EKikimrQueryType {
     YqlInternal,
     Scan,
     YqlScriptStreaming,
+    Query,
 };
 
 struct TKikimrQueryContext : TThrRefBase {
@@ -304,6 +305,13 @@ public:
             if (queryType == EKikimrQueryType::Dml && (newOp & KikimrSchemeOps())) {
                 TString message = TStringBuilder() << "Operation '" << newOp
                     << "' can't be performed in data query";
+                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                return false;
+            }
+
+            if (queryType == EKikimrQueryType::Query && (newOp & KikimrSchemeOps())) {
+                TString message = TStringBuilder() << "Operation '" << newOp
+                    << "' can't be performed in query";
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
                 return false;
             }

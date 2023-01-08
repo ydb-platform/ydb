@@ -107,11 +107,27 @@ public:
 
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-        AsyncCompileResult = Query.IsScan()
-            ? KqpHost->PrepareScanQuery(Query.Text, Query.IsSql(), prepareSettings)
-            : Query.IsSql()
-                ? KqpHost->PrepareDataQuery(Query.Text, prepareSettings)
-                : KqpHost->PrepareDataQueryAst(Query.Text, prepareSettings);
+        switch (Query.QueryType) {
+            case NKikimrKqp::QUERY_TYPE_SQL_DML:
+                AsyncCompileResult = KqpHost->PrepareDataQuery(Query.Text, prepareSettings);
+                break;
+
+            case NKikimrKqp::QUERY_TYPE_AST_DML:
+                AsyncCompileResult = KqpHost->PrepareDataQueryAst(Query.Text, prepareSettings);
+                break;
+
+            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
+            case NKikimrKqp::QUERY_TYPE_AST_SCAN:
+                AsyncCompileResult = KqpHost->PrepareScanQuery(Query.Text, Query.IsSql(), prepareSettings);
+                break;
+
+            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+                AsyncCompileResult = KqpHost->PrepareQuery(Query.Text, prepareSettings);
+                break;
+
+            default:
+                YQL_ENSURE(false, "Unexpected query type: " << Query.QueryType);
+        }
 
         Continue(ctx);
 

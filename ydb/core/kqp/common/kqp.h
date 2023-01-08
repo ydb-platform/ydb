@@ -145,6 +145,8 @@ struct TKqpQuerySettings {
     }
 };
 
+bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType);
+
 struct TKqpQueryId {
     TString Cluster;
     TString Database;
@@ -165,19 +167,17 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-            break;
+            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+                break;
+
             default:
-            Y_ENSURE(false, "Unsupported request type");
+                Y_ENSURE(false, "Unsupported request type");
         }
 
     }
 
-    bool IsScan() const {
-        return QueryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN || QueryType == NKikimrKqp::QUERY_TYPE_AST_SCAN;
-    }
-
     bool IsSql() const {
-        return QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML || QueryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
+        return IsSqlQuery(QueryType);
     }
 
     bool operator==(const TKqpQueryId& other) const {

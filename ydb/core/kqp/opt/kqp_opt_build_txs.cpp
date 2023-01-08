@@ -26,7 +26,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowD
 class TKqpBuildTxTransformer : public TSyncTransformerBase {
 public:
     TKqpBuildTxTransformer()
-        : QueryType(EKikimrQueryType::Dml)
+        : QueryType(EKikimrQueryType::Unspecified)
         , IsPrecompute(false) {}
 
     void Init(EKikimrQueryType queryType, bool isPrecompute) {
@@ -66,6 +66,14 @@ private:
             }
 
             return EPhysicalTxType::Scan;
+        }
+
+        if (QueryType == EKikimrQueryType::Query) {
+            if (IsPrecompute && allStagesArePure) {
+                return EPhysicalTxType::Compute;
+            }
+
+            return EPhysicalTxType::Generic;
         }
 
         if (allStagesArePure) {

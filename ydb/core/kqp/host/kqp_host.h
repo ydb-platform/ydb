@@ -49,6 +49,9 @@ public:
 
     virtual IAsyncQueryResultPtr ExplainScanQuery(const TString& query, bool isSql) = 0;
 
+    /* Generic queries */
+    virtual IAsyncQueryResultPtr PrepareQuery(const TString& query, const TPrepareSettings& settings) = 0;
+
     /* Scripting */
     virtual IAsyncQueryResultPtr ValidateYqlScript(const TString& script) = 0;
     virtual TQueryResult SyncValidateYqlScript(const TString& script) = 0;

@@ -400,6 +400,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
+            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
                 return true;
 
             // should not be compiled. TODO: forward to request executer
@@ -707,6 +708,10 @@ public:
         ) {
             AcquirePersistentSnapshot();
             return;
+        } else if (queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_QUERY) {
+            // TODO: Switch to MVCC snapshots after moving to separate executer.
+            AcquirePersistentSnapshot();
+            return;
         } else if (NeedSnapshot(*QueryState->TxCtx, *Config, /*rollback*/ false, QueryState->Commit,
             QueryState->PreparedQuery->GetPhysicalQuery()))
         {
@@ -897,10 +902,22 @@ public:
             action = NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
         }
 
-        YQL_ENSURE(action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_SQL_SCAN
-            || action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_AST_SCAN
-            || action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED && type == NKikimrKqp::QUERY_TYPE_PREPARED_DML,
-            "Unexpected query action: " << action << " and type: " << type);
+        switch (action) {
+            case NKikimrKqp::QUERY_ACTION_EXECUTE:
+                YQL_ENSURE(
+                    type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
+                    type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
+                    type == NKikimrKqp::QUERY_TYPE_SQL_QUERY
+                );
+                break;
+
+            case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
+                YQL_ENSURE(type == NKikimrKqp::QUERY_TYPE_PREPARED_DML);
+                break;
+
+            default:
+                YQL_ENSURE(false, "Unexpected query action: " << action);
+        }
 
         ParseParameters(QueryState->Request.GetParameters());
         ParseParameters(QueryState->Request.GetYdbParameters());
@@ -948,7 +965,7 @@ public:
         Cleanup(IsFatalError(record.GetYdbStatus()));
     }
 
-    IKqpGateway::TExecPhysicalRequest PrepareRequest(TKqpQueryState *queryState, TTxAllocatorState::TPtr alloc) {
+    IKqpGateway::TExecPhysicalRequest PrepareBaseRequest(TKqpQueryState *queryState, TTxAllocatorState::TPtr alloc) {
         IKqpGateway::TExecPhysicalRequest request(alloc);
 
         if (queryState) {
@@ -971,13 +988,15 @@ public:
 
 
     IKqpGateway::TExecPhysicalRequest PreparePureRequest(TKqpQueryState *queryState) {
-        auto request = PrepareRequest(queryState, queryState->TxCtx->TxAlloc);
+        auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
         request.NeedTxId = false;
         return request;
     }
 
-    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState, TTxAllocatorState::TPtr alloc) {
-        auto request = PrepareRequest(queryState, alloc);
+    IKqpGateway::TExecPhysicalRequest PreparePhysicalRequest(TKqpQueryState *queryState,
+        TTxAllocatorState::TPtr alloc)
+    {
+        auto request = PrepareBaseRequest(queryState, alloc);
 
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
@@ -990,7 +1009,7 @@ public:
     }
 
     IKqpGateway::TExecPhysicalRequest PrepareScanRequest(TKqpQueryState *queryState) {
-        auto request = PrepareRequest(queryState, queryState->TxCtx->TxAlloc);
+        auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
@@ -999,6 +1018,42 @@ public:
         request.Snapshot = queryState->TxCtx->GetSnapshot();
 
         return request;
+    }
+
+    IKqpGateway::TExecPhysicalRequest PrepareGenericRequest(TKqpQueryState *queryState) {
+        auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
+
+        YQL_ENSURE(queryState);
+        request.Snapshot = queryState->TxCtx->GetSnapshot();
+
+        return request;
+    }
+
+    IKqpGateway::TExecPhysicalRequest PrepareRequest(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool pure,
+        TKqpQueryState *queryState)
+    {
+        if (pure) {
+            YQL_ENSURE(tx);
+            return PreparePureRequest(QueryState.get());
+        }
+
+        if (!tx) {
+            return PreparePhysicalRequest(QueryState.get(), queryState->TxCtx->TxAlloc);
+        }
+
+        switch (tx->GetType()) {
+            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+                // TODO: Compute is always pure, should not depend on number of stages.
+                return PreparePhysicalRequest(QueryState.get(), queryState->TxCtx->TxAlloc);
+            case NKqpProto::TKqpPhyTx::TYPE_DATA:
+                return PreparePhysicalRequest(QueryState.get(), queryState->TxCtx->TxAlloc);
+            case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+                return PrepareScanRequest(QueryState.get());
+            case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                return PrepareGenericRequest(QueryState.get());
+            default:
+                YQL_ENSURE(false, "Unexpected physical tx type: " << (int)tx->GetType());
+        }
     }
 
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
@@ -1176,14 +1231,10 @@ public:
 
             return true;
         };
-        bool pure = tx && calcPure(*tx);
 
-        auto request = pure
-            ? PreparePureRequest(QueryState.get())
-            : (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCAN)
-                ? PrepareScanRequest(QueryState.get())
-                : PreparePhysicalRequest(QueryState.get(), QueryState->TxCtx->TxAlloc);
-            ;
+        bool pure = tx && calcPure(*tx);
+        auto request = PrepareRequest(tx, pure, QueryState.get());
+
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
                 << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
 
@@ -1198,6 +1249,7 @@ public:
                 case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
                 case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
                     break;
                 default:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
@@ -1453,7 +1505,8 @@ public:
             case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
+            case NKikimrKqp::QUERY_TYPE_SQL_QUERY: {
                 TString text = ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
@@ -1632,10 +1685,12 @@ public:
         bool useYdbResponseFormat = QueryState->Request.GetUsePublicResponseDataFormat();
 
         // Result for scan query is sent directly to target actor.
-        bool isScanQuery = QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN
-            || QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
+        bool streamResult =
+            QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
+            QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
+            QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_QUERY;
 
-        if (QueryState->PreparedQuery && !isScanQuery) {
+        if (QueryState->PreparedQuery && !streamResult) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 auto& rb = phyQuery.GetResultBindings(i);

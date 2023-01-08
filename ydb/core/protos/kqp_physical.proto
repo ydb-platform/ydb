@@ -287,6 +287,7 @@ message TKqpPhyTx {
         TYPE_COMPUTE = 1;
         TYPE_DATA = 2;
         TYPE_SCAN = 3;
+        TYPE_GENERIC = 4;
     };
 
     EType Type = 1;
@@ -325,6 +326,7 @@ message TKqpPhyQuery {
         TYPE_UNSPECIFIED = 0;
         TYPE_DATA = 1;
         TYPE_SCAN = 2;
+        TYPE_QUERY = 3;
     };
 
     EType Type = 1;

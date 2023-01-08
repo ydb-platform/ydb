@@ -10,7 +10,8 @@ const TStringBuf KqpEffectTag = "KqpEffect";
 enum class EPhysicalQueryType {
     Unspecified,
     Data,
-    Scan
+    Scan,
+    Query
 };
 
 struct TKqpPhyQuerySettings {
@@ -25,7 +26,8 @@ enum class EPhysicalTxType {
     Unspecified,
     Compute,
     Data,
-    Scan
+    Scan,
+    Generic
 };
 
 struct TKqpPhyTxSettings {

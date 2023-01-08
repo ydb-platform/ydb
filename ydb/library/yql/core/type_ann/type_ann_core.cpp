@@ -1257,7 +1257,7 @@ namespace NTypeAnnImpl {
 
             auto subStructType = itemType->Cast<TStructExprType>();
             for (const auto& y : subStructType->GetItems()) {
-                if (!isOptional || y->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                if (!isOptional || y->GetItemType()->IsOptionalOrNull()) {
                     allItems.push_back(y);
                 } else {
                     auto newItem = ctx.Expr.MakeType<TItemExprType>(y->GetName(), ctx.Expr.MakeType<TOptionalExprType>(y->GetItemType()));

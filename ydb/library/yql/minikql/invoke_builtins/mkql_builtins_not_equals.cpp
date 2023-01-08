@@ -160,13 +160,8 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TNotEqualsOp;
 
 template<typename TLeft, typename TRight>
-struct TNotEqualsOp<TLeft, TRight, ui8> : public TNotEquals<TLeft, TRight, false> {
-    using TBase = TNotEquals<TLeft, TRight, false>;
+struct TNotEqualsOp<TLeft, TRight, bool> : public TNotEquals<TLeft, TRight, false> {
     static constexpr bool DefaultNulls = true;
-    static ui8 Do(TLeft left, TRight right)
-    {
-        return TBase::Do(left, right);
-    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -187,6 +182,14 @@ struct TDiffDateNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiff
             GenNotEquals<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
+};
+
+template<typename TLeft, typename TRight, typename TOutput>
+struct TDiffDateNotEqualsOp;
+
+template<typename TLeft, typename TRight>
+struct TDiffDateNotEqualsOp<TLeft, TRight, bool> : public TDiffDateNotEquals<TLeft, TRight, false> {
+    static constexpr bool DefaultNulls = true;
 };
 
 template <typename TLeft, typename TRight, bool Aggr>
@@ -293,7 +296,8 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
 void RegisterNotEquals(TKernelFamilyMap& kernelFamilyMap) {
     auto family = std::make_unique<TKernelFamilyBase>();
 
-    AddBinaryIntegralPredicateKernels<TNotEqualsOp>(*family);
+    AddNumericComparisonKernels<TNotEqualsOp>(*family);
+    AddDateComparisonKernels<TDiffDateNotEqualsOp>(*family);
     RegisterStringKernelNotEquals(*family);
 
     kernelFamilyMap["NotEquals"] = std::move(family);

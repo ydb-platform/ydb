@@ -878,7 +878,6 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true> : TBinaryKerne
 
     static arrow::Status ExecScalarArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         auto& resArr = *res->array();
@@ -898,7 +897,6 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true> : TBinaryKerne
 
     static arrow::Status ExecArrayScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         auto& resArr = *res->array();
@@ -918,7 +916,6 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, true> : TBinaryKerne
 
     static arrow::Status ExecArrayArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr1 = *arg1.array();
@@ -965,7 +962,6 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false> : TBinaryKern
 
     static arrow::Status ExecScalarArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr2 = *arg2.array();
@@ -1000,7 +996,6 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false> : TBinaryKern
 
     static arrow::Status ExecArrayScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr1 = *arg1.array();
@@ -1035,7 +1030,6 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false> : TBinaryKern
 
     static arrow::Status ExecArrayArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        static_assert(!std::is_same<TOutput, bool>::value);
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         const auto& arr1 = *arg1.array();
@@ -1088,106 +1082,95 @@ private:
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
 void AddBinaryKernel(TKernelFamilyBase& owner) {
-    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
-    using TExecs = TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, TFuncInstance::DefaultNulls>;
+    using TInput1Layout = typename TInput1::TLayout;
+    using TInput2Layout = typename TInput2::TLayout;
+    using TOutputLayout = typename TOutput::TLayout;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id });
-    NUdf::TDataTypeId returnType = NUdf::TDataType<TOutput>::Id;
+    using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, TInput2Layout, TOutputLayout, TFunc, TFuncInstance::DefaultNulls>;
 
-    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
-    k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
-}
+    std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
+    NUdf::TDataTypeId returnType = TOutput::Id;
 
-template<typename TInput1, typename TInput2,
-    template<typename, typename, typename> class TFunc>
-void AddBinaryPredicateKernel(TKernelFamilyBase& owner) {
-    // ui8 type is used as bool replacement
-    using TOutput = ui8;
-    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
-    using TExecs = TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, TFuncInstance::DefaultNulls>;
-
-    std::vector<NUdf::TDataTypeId> argTypes({ NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id });
-    NUdf::TDataTypeId returnType = NUdf::TDataType<bool>::Id;
-
-    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>() }, GetPrimitiveOutputArrowType<TOutput>(), &TExecs::Exec);
+    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1Layout>(), GetPrimitiveInputArrowType<TInput2Layout>() },
+                                   GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
     k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
     owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
 }
 
 template<template<typename, typename, typename> class TFunc>
 void AddBinaryIntegralKernels(TKernelFamilyBase& owner) {
-    AddBinaryKernel<ui8, ui8, ui8, TFunc>(owner);
-    AddBinaryKernel<ui8, i8, i8, TFunc>(owner);
-    AddBinaryKernel<ui8, ui16, ui16, TFunc>(owner);
-    AddBinaryKernel<ui8, i16, i16, TFunc>(owner);
-    AddBinaryKernel<ui8, ui32, ui32, TFunc>(owner);
-    AddBinaryKernel<ui8, i32, i32, TFunc>(owner);
-    AddBinaryKernel<ui8, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<ui8, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i8>,   NUdf::TDataType<i8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<i8, ui8, i8, TFunc>(owner);
-    AddBinaryKernel<i8, i8, i8, TFunc>(owner);
-    AddBinaryKernel<i8, ui16, ui16, TFunc>(owner);
-    AddBinaryKernel<i8, i16, i16, TFunc>(owner);
-    AddBinaryKernel<i8, ui32, ui32, TFunc>(owner);
-    AddBinaryKernel<i8, i32, i32, TFunc>(owner);
-    AddBinaryKernel<i8, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<i8, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui8>,  NUdf::TDataType<i8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i8>,   NUdf::TDataType<i8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<ui16, ui8, ui16, TFunc>(owner);
-    AddBinaryKernel<ui16, i8, ui16, TFunc>(owner);
-    AddBinaryKernel<ui16, ui16, ui16, TFunc>(owner);
-    AddBinaryKernel<ui16, i16, i16, TFunc>(owner);
-    AddBinaryKernel<ui16, ui32, ui32, TFunc>(owner);
-    AddBinaryKernel<ui16, i32, i32, TFunc>(owner);
-    AddBinaryKernel<ui16, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<ui16, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i8>,   NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<i16, ui8, i16, TFunc>(owner);
-    AddBinaryKernel<i16, i8, i16, TFunc>(owner);
-    AddBinaryKernel<i16, ui16, i16, TFunc>(owner);
-    AddBinaryKernel<i16, i16, i16, TFunc>(owner);
-    AddBinaryKernel<i16, ui32, ui32, TFunc>(owner);
-    AddBinaryKernel<i16, i32, i32, TFunc>(owner);
-    AddBinaryKernel<i16, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<i16, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui8>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i8>,   NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui16>, NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<ui32, ui8, ui32, TFunc>(owner);
-    AddBinaryKernel<ui32, i8, ui32, TFunc>(owner);
-    AddBinaryKernel<ui32, ui16, ui32, TFunc>(owner);
-    AddBinaryKernel<ui32, i16, ui32, TFunc>(owner);
-    AddBinaryKernel<ui32, ui32, ui32, TFunc>(owner);
-    AddBinaryKernel<ui32, i32, i32, TFunc>(owner);
-    AddBinaryKernel<ui32, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<ui32, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i8>,   NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i16>,  NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<i32, ui8, i32, TFunc>(owner);
-    AddBinaryKernel<i32, i8, i32, TFunc>(owner);
-    AddBinaryKernel<i32, ui16, i32, TFunc>(owner);
-    AddBinaryKernel<i32, i16, i32, TFunc>(owner);
-    AddBinaryKernel<i32, ui32, i32, TFunc>(owner);
-    AddBinaryKernel<i32, i32, i32, TFunc>(owner);
-    AddBinaryKernel<i32, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<i32, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui8>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i8>,   NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui16>, NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i16>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui32>, NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<ui64, ui8, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, i8, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, ui16, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, i16, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, ui32, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, i32, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, ui64, ui64, TFunc>(owner);
-    AddBinaryKernel<ui64, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i8>,   NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i16>,  NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i32>,  NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 
-    AddBinaryKernel<i64, ui8, i64, TFunc>(owner);
-    AddBinaryKernel<i64, i8, i64, TFunc>(owner);
-    AddBinaryKernel<i64, ui16, i64, TFunc>(owner);
-    AddBinaryKernel<i64, i16, i64, TFunc>(owner);
-    AddBinaryKernel<i64, ui32, i64, TFunc>(owner);
-    AddBinaryKernel<i64, i32, i64, TFunc>(owner);
-    AddBinaryKernel<i64, ui64, i64, TFunc>(owner);
-    AddBinaryKernel<i64, i64, i64, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui8>,  NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i8>,   NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui16>, NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i16>,  NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui32>, NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i32>,  NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui64>, NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
 }
 
 template<template<typename, typename, typename> class TFunc>
@@ -1200,79 +1183,60 @@ public:
     }
 };
 
+template<typename TInput1, typename TInput2,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryPredicateKernel(TKernelFamilyBase& owner) {
+    AddBinaryKernel<TInput1, TInput2, NUdf::TDataType<bool>, TFunc>(owner);
+}
+
+template<typename TLeft, template<typename, typename, typename> class TPred>
+void AddArithmeticComparisonKernels(TKernelFamilyBase& owner) {
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui8>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i8>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui16>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i16>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui32>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i32>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui64>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i64>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<float>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<double>, TPred>(owner);
+}
+
 template<template<typename, typename, typename> class TPred>
-void AddBinaryIntegralPredicateKernels(TKernelFamilyBase& owner) {
-    AddBinaryPredicateKernel<ui8, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, i8, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, i16, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, i32, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<ui8, i64, TPred>(owner);
+void AddNumericComparisonKernels(TKernelFamilyBase& owner) {
+    // arithmetic types (integral and floating points)
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui8>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i8>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui16>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i16>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui32>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i32>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui64>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i64>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<float>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<double>, TPred>(owner);
 
-    AddBinaryPredicateKernel<i8, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<i8, i8, TPred>(owner);
-    AddBinaryPredicateKernel<i8, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<i8, i16, TPred>(owner);
-    AddBinaryPredicateKernel<i8, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<i8, i32, TPred>(owner);
-    AddBinaryPredicateKernel<i8, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<i8, i64, TPred>(owner);
+    // bool can only be compared with itself
+    AddBinaryPredicateKernel<NUdf::TDataType<bool>, NUdf::TDataType<bool>, TPred>(owner);
+}
 
-    AddBinaryPredicateKernel<ui16, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, i8, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, i16, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, i32, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<ui16, i64, TPred>(owner);
+template<template<typename, typename, typename> class TPred>
+void AddDateComparisonKernels(TKernelFamilyBase& owner) {
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
 
-    AddBinaryPredicateKernel<i16, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<i16, i8, TPred>(owner);
-    AddBinaryPredicateKernel<i16, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<i16, i16, TPred>(owner);
-    AddBinaryPredicateKernel<i16, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<i16, i32, TPred>(owner);
-    AddBinaryPredicateKernel<i16, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<i16, i64, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
 
-    AddBinaryPredicateKernel<ui32, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, i8, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, i16, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, i32, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<ui32, i64, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
 
-    AddBinaryPredicateKernel<i32, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<i32, i8, TPred>(owner);
-    AddBinaryPredicateKernel<i32, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<i32, i16, TPred>(owner);
-    AddBinaryPredicateKernel<i32, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<i32, i32, TPred>(owner);
-    AddBinaryPredicateKernel<i32, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<i32, i64, TPred>(owner);
-
-    AddBinaryPredicateKernel<ui64, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, i8, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, i16, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, i32, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<ui64, i64, TPred>(owner);
-
-    AddBinaryPredicateKernel<i64, ui8, TPred>(owner);
-    AddBinaryPredicateKernel<i64, i8, TPred>(owner);
-    AddBinaryPredicateKernel<i64, ui16, TPred>(owner);
-    AddBinaryPredicateKernel<i64, i16, TPred>(owner);
-    AddBinaryPredicateKernel<i64, ui32, TPred>(owner);
-    AddBinaryPredicateKernel<i64, i32, TPred>(owner);
-    AddBinaryPredicateKernel<i64, ui64, TPred>(owner);
-    AddBinaryPredicateKernel<i64, i64, TPred>(owner);
+    // Interval can only be compared with itself
+    AddBinaryPredicateKernel<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
 }
 
 }

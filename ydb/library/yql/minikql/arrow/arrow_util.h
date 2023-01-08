@@ -87,6 +87,16 @@ inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<ui64>() {
 }
 
 template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<float>() {
+    return arrow::float32();
+}
+
+template <>
+inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<double>() {
+    return arrow::float64();
+}
+
+template <>
 inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType<char*>() {
     return arrow::binary();
 }
@@ -145,6 +155,16 @@ struct TPrimitiveDataType<ui64> {
 };
 
 template<>
+struct TPrimitiveDataType<float> {
+    using TResult = arrow::FloatType;
+};
+
+template<>
+struct TPrimitiveDataType<double> {
+    using TResult = arrow::DoubleType;
+};
+
+template<>
 struct TPrimitiveDataType<char*> {
     using TResult = arrow::BinaryType;
 };
@@ -200,6 +220,16 @@ inline arrow::Datum MakeScalarDatum<i64>(i64 value) {
 template <>
 inline arrow::Datum MakeScalarDatum<ui64>(ui64 value) {
     return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<float>(float value) {
+    return arrow::Datum(std::make_shared<arrow::FloatScalar>(value));
+}
+
+template <>
+inline arrow::Datum MakeScalarDatum<double>(double value) {
+    return arrow::Datum(std::make_shared<arrow::DoubleScalar>(value));
 }
 
 // similar to arrow::TypedBufferBuilder, but with UnsafeAdvance() method

@@ -153,13 +153,8 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TLessOrEqualOp;
 
 template<typename TLeft, typename TRight>
-struct TLessOrEqualOp<TLeft, TRight, ui8> : public TLessOrEqual<TLeft, TRight, false> {
-    using TBase = TLessOrEqual<TLeft, TRight, false>;
+struct TLessOrEqualOp<TLeft, TRight, bool> : public TLessOrEqual<TLeft, TRight, false> {
     static constexpr bool DefaultNulls = true;
-    static ui8 Do(TLeft left, TRight right)
-    {
-        return TBase::Do(left, right);
-    }
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -180,6 +175,14 @@ struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDi
             GenLessOrEqual<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
+};
+
+template<typename TLeft, typename TRight, typename TOutput>
+struct TDiffDateLessOrEqualOp;
+
+template<typename TLeft, typename TRight>
+struct TDiffDateLessOrEqualOp<TLeft, TRight, bool> : public TDiffDateLessOrEqual<TLeft, TRight, false> {
+    static constexpr bool DefaultNulls = true;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -290,7 +293,8 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
 void RegisterLessOrEqual(TKernelFamilyMap& kernelFamilyMap) {
     auto family = std::make_unique<TKernelFamilyBase>();
 
-    AddBinaryIntegralPredicateKernels<TLessOrEqualOp>(*family);
+    AddNumericComparisonKernels<TLessOrEqualOp>(*family);
+    AddDateComparisonKernels<TDiffDateLessOrEqualOp>(*family);
     RegisterStringKernelLessOrEqual(*family);
 
     kernelFamilyMap["LessOrEqual"] = std::move(family);

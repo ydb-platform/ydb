@@ -214,9 +214,29 @@ The above command prevents new groups from using pdisk ```"[NODE_ID:PDISK_ID]"``
 user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
-The above command initiates a background process that is going to move all of the data from
-pdisk ```"[NODE_ID:PDISK_ID]"``` to some ```DECOMMIT_NONE``` pdisks. It's useful, for example, to accomplish
-this step prior to unplugging either certain disks or complete host from a cluster.
+The above command initiates a background process that is going to move all of the data from pdisk ```"[NODE_ID:PDISK_ID]"```
+to some ```DECOMMIT_NONE``` pdisks. This command is useful prior to unplugging either certain disks or complete hosts from
+a cluster.
+
+### Move data out from broken pdisks
+
+```bash
+user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --status BROKEN --unavail-as-offline --pdisk-ids "[NODE_ID:PDISK_ID]"
+```
+
+The above command moves all of the data from pdisk ```"[NODE_ID:PDISK_ID]"``` to some ```DECOMMIT_NONE``` pdisks.
+The operation is synchronous and happens in foreground. This command is useful when data needs to be moved from
+pdisk ASAP. The ```--unavail-as-offline``` command option treats pdisk unavailable in whiteboard as not working.
+
+### Activate broken pdisks after recovery
+
+Broken pdisks need to be enabled after recovery. The following command
+
+```bash
+user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --status ACTIVE --allow-working-disks --pdisk-ids "[NODE_ID:PDISK_ID]"
+```
+
+enables pdisk ```"[NODE_ID:PDISK_ID]"```. The ```--allow-working-disks``` command option allows to set state for working pdisks.
 
 ## Do things with vdisks
 

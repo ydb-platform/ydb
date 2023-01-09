@@ -178,7 +178,10 @@ private:
             NRm::TKqpResourcesRequest resourcesRequest;
             resourcesRequest.ExecutionUnits = 1;
             resourcesRequest.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
-            resourcesRequest.Memory = task.second.Memory;
+
+            // !!!!!!!!!!!!!!!!!!!!!
+            // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
+            resourcesRequest.Memory = Min<double>(task.second.Memory, 1 << 19) /* 512kb limit for check that memory exists for processing with minimal requirements */;
 
             NRm::TKqpNotEnoughResources resourcesResponse;
             if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {

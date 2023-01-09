@@ -1,4 +1,5 @@
 #pragma once
+#include "behaviour.h"
 #include "config.h"
 #include "executor_controller.h"
 
@@ -6,6 +7,8 @@
 #include <ydb/services/bg_tasks/abstract/task.h>
 #include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/metadata/initializer/accessor_init.h>
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NBackgroundTasks {
 
@@ -59,8 +62,34 @@ private:
     const TConfig Config;
     std::set<TString> CurrentTaskIds;
     TExecutorController::TPtr InternalController;
+    NMetadata::NProvider::TEventsWaiter DeferredEventsOnIntialization;
+
+    std::shared_ptr<TBehaviour> Behaviour;
+
+    enum class EActivity {
+        Created,
+        Preparation,
+        Active
+    };
+
+    EActivity ActivityState = EActivity::Created;
+
+    bool CheckActivity() {
+        switch (ActivityState) {
+            case EActivity::Created:
+                ActivityState = EActivity::Preparation;
+                Sender<NMetadata::NProvider::TEvPrepareManager>(Behaviour).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
+                break;
+            case EActivity::Preparation:
+                break;
+            case EActivity::Active:
+                return true;
+        }
+        return false;
+    }
+
 protected:
-    void Handle(NMetadata::NInitializer::TEvInitializationFinished::TPtr& ev);
+    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& ev);
     void Handle(TEvStartAssign::TPtr& ev);
     void Handle(TEvAssignFinished::TPtr& ev);
     void Handle(TEvFetchingFinished::TPtr& ev);
@@ -74,7 +103,7 @@ protected:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadata::NInitializer::TEvInitializationFinished, Handle);
+            hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
             hFunc(TEvStartAssign, Handle);
             hFunc(TEvAssignFinished, Handle);
             hFunc(TEvFetchingFinished, Handle);
@@ -94,7 +123,9 @@ public:
 
     TExecutor(const TConfig& config)
         : Config(config)
+        , Behaviour(std::make_shared<TBehaviour>(Config))
     {
+
         TServiceOperator::Register();
     }
 };

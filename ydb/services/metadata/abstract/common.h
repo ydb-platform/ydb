@@ -37,6 +37,7 @@ enum EEvents {
     EvPathExistsCheckFailed,
     EvPathExistsCheckResult,
     EvStartMetadataService,
+    EvStartRegistration,
     EvEnd
 };
 

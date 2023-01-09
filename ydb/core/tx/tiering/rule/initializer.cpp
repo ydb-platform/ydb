@@ -35,7 +35,7 @@ TVector<NKikimr::NMetadata::NInitializer::ITableModifier::TPtr> TTierRulesInitia
 }
 
 void TTierRulesInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const {
-    controller->PreparationFinished(BuildModifiers());
+    controller->OnPreparationFinished(BuildModifiers());
 }
 
 }

@@ -27,4 +27,13 @@ TString TSnapshot::DoSerializeToString() const {
     return sb;
 }
 
+bool TSnapshot::HasComponent(const TString& componentId) const {
+    for (auto&& i : Objects) {
+        if (i.first.GetComponentId() == componentId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }

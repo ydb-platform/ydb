@@ -194,7 +194,7 @@ public:
 class IAlterCommand {
 private:
     YDB_READONLY_DEF(std::vector<NInternal::TTableRecord>, Records);
-    YDB_ACCESSOR_DEF(IClassBehaviour::TPtr, Manager);
+    YDB_ACCESSOR_DEF(IClassBehaviour::TPtr, Behaviour);
     YDB_READONLY_DEF(IAlterController::TPtr, Controller);
 protected:
     mutable IOperationsManager::TModificationContext Context;
@@ -205,7 +205,7 @@ public:
 
     template <class TObject>
     std::shared_ptr<IObjectOperationsManager<TObject>> GetOperationsManagerFor() const {
-        auto result = std::dynamic_pointer_cast<IObjectOperationsManager<TObject>>(Manager->GetOperationsManager());
+        auto result = std::dynamic_pointer_cast<IObjectOperationsManager<TObject>>(Behaviour->GetOperationsManager());
         Y_VERIFY(result);
         return result;
     }
@@ -215,29 +215,37 @@ public:
     }
 
     IAlterCommand(const std::vector<NInternal::TTableRecord>& records,
-        IClassBehaviour::TPtr manager,
+        IClassBehaviour::TPtr behaviour,
         NModifications::IAlterController::TPtr controller,
         const IOperationsManager::TModificationContext& context)
         : Records(records)
-        , Manager(manager)
+        , Behaviour(behaviour)
         , Controller(controller)
         , Context(context) {
-        Y_VERIFY(Manager->GetOperationsManager());
+        Y_VERIFY(Behaviour->GetOperationsManager());
     }
 
     IAlterCommand(const NInternal::TTableRecord& record,
-        IClassBehaviour::TPtr manager,
+        IClassBehaviour::TPtr behaviour,
         NModifications::IAlterController::TPtr controller,
         const IOperationsManager::TModificationContext& context)
-        : Manager(manager)
+        : Behaviour(behaviour)
         , Controller(controller)
         , Context(context) {
-        Y_VERIFY(Manager->GetOperationsManager());
+        Y_VERIFY(Behaviour->GetOperationsManager());
         Records.emplace_back(record);
 
     }
 
     void Execute() const {
+        if (!Behaviour) {
+            Controller->OnAlteringProblem("behaviour not ready");
+            return;
+        }
+        if (!Behaviour->GetOperationsManager()) {
+            Controller->OnAlteringProblem("behaviour's manager not initialized");
+            return;
+        }
         DoExecute();
     }
 };

@@ -55,17 +55,17 @@ protected:
         auto& first = TBase::Patches.front();
         std::vector<Ydb::Column> columns = first.SelectOwnedColumns(Manager->GetSchema().GetPKColumns());
         if (!columns.size()) {
-            TBase::ExternalController->AlterProblem("no pk columns in patch");
+            TBase::ExternalController->OnAlteringProblem("no pk columns in patch");
             return false;
         }
         if (columns.size() != Manager->GetSchema().GetPKColumns().size()) {
-            TBase::ExternalController->AlterProblem("no columns for pk detection");
+            TBase::ExternalController->OnAlteringProblem("no columns for pk detection");
             return false;
         }
         TBase::RestoreObjectIds.InitColumns(columns);
         for (auto&& i : TBase::Patches) {
             if (!TBase::RestoreObjectIds.AddRecordNativeValues(i)) {
-                TBase::ExternalController->AlterProblem("incorrect pk columns");
+                TBase::ExternalController->OnAlteringProblem("incorrect pk columns");
                 return false;
             }
         }

@@ -7,13 +7,13 @@ namespace NKikimr::NMetadata::NSecret {
 
 void TAccessManager::DoPrepareObjectsBeforeModification(std::vector<TAccess>&& patchedObjects, NModifications::IAlterPreparationController<TAccess>::TPtr controller, const NModifications::IOperationsManager::TModificationContext& context) const {
     if (context.GetActivityType() == IOperationsManager::EActivityType::Alter) {
-        controller->PreparationProblem("access object cannot be modified");
+        controller->OnPreparationProblem("access object cannot be modified");
         return;
     }
     if (!!context.GetUserToken()) {
         for (auto&& i : patchedObjects) {
             if (i.GetOwnerUserId() != context.GetUserToken()->GetUserSID()) {
-                controller->PreparationProblem("no permissions for modify secret access");
+                controller->OnPreparationProblem("no permissions for modify secret access");
                 return;
             }
         }
@@ -87,7 +87,7 @@ void TSecretManager::DoPrepareObjectsBeforeModification(std::vector<TSecret>&& p
     if (!!context.GetUserToken()) {
         for (auto&& i : patchedObjects) {
             if (i.GetOwnerUserId() != context.GetUserToken()->GetUserSID()) {
-                controller->PreparationProblem("no permissions for modify secrets");
+                controller->OnPreparationProblem("no permissions for modify secrets");
                 return;
             }
         }

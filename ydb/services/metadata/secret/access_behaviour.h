@@ -8,7 +8,7 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TAccessBehaviour: public IClassBehaviour {
+class TAccessBehaviour: public TClassBehaviour<TAccess> {
 private:
     static TFactory::TRegistrator<TAccessBehaviour> Registrator;
 protected:

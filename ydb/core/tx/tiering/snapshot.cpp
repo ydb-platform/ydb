@@ -11,35 +11,8 @@ namespace NKikimr::NColumnShard::NTiers {
 
 bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
     Y_VERIFY(rawDataResult.result_sets().size() == 2);
-    {
-        auto& rawData = rawDataResult.result_sets()[0];
-        TTierConfig::TDecoder decoder(rawData);
-        for (auto&& r : rawData.rows()) {
-            TTierConfig config;
-            if (!config.DeserializeFromRecord(decoder, r)) {
-                ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot parse tier config from snapshot";
-                continue;
-            }
-            TierConfigs.emplace(config.GetTierName(), config);
-        }
-    }
-    {
-        auto& rawData = rawDataResult.result_sets()[1];
-        TTieringRule::TDecoder decoder(rawData);
-        TVector<TTieringRule> rulesLocal;
-        rulesLocal.reserve(rawData.rows().size());
-        for (auto&& r : rawData.rows()) {
-            TTieringRule tr;
-            if (!tr.DeserializeFromRecord(decoder, r)) {
-                ALS_WARN(NKikimrServices::TX_TIERING) << "cannot parse record for tiering info";
-                continue;
-            }
-            rulesLocal.emplace_back(std::move(tr));
-        }
-        for (auto&& i : rulesLocal) {
-            TableTierings.emplace(i.GetTieringRuleId(), std::move(i));
-        }
-    }
+    ParseSnapshotObjects<TTierConfig>(rawDataResult.result_sets()[0], [this](TTierConfig&& s) {TierConfigs.emplace(s.GetTierName(), s); });
+    ParseSnapshotObjects<TTieringRule>(rawDataResult.result_sets()[1], [this](TTieringRule&& s) {TableTierings.emplace(s.GetTieringRuleId(), s); });
     return true;
 }
 

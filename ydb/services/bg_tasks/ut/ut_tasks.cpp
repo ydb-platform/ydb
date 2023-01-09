@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(BGTaskTests) {
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(false)
+            .SetEnableMetadataProvider(true)
             .SetEnableBackgroundTasks(true)
             .SetEnableOlapSchemaOperations(true);
         ;

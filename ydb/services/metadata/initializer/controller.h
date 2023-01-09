@@ -15,10 +15,10 @@ public:
 
     }
 
-    virtual void AlterProblem(const TString& errorMessage) override;
-    virtual void AlterFinished() override;
-    virtual void PreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const override;
-    virtual void PreparationProblem(const TString& errorMessage) const override;
+    virtual void OnAlteringProblem(const TString& errorMessage) override;
+    virtual void OnAlteringFinished() override;
+    virtual void OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const override;
+    virtual void OnPreparationProblem(const TString& errorMessage) const override;
 };
 
 class TInitializerOutput: public IInitializerOutput {
@@ -30,7 +30,7 @@ public:
 
     }
 
-    virtual void InitializationFinished(const TString& id) const override;
+    virtual void OnInitializationFinished(const TString& id) const override;
 };
 
 }

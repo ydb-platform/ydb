@@ -5,7 +5,7 @@
 
 namespace NKikimr::NMetadata::NSecret {
 
-class TSecretBehaviour: public IClassBehaviour {
+class TSecretBehaviour: public TClassBehaviour<TSecret> {
 private:
     static TFactory::TRegistrator<TSecretBehaviour> Registrator;
 protected:

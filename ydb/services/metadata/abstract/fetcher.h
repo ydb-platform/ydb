@@ -14,6 +14,7 @@
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/alter.h>
+#include <util/system/type_name.h>
 
 namespace NKikimr::NMetadata::NFetcher {
 
@@ -33,6 +34,24 @@ private:
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) = 0;
     virtual TString DoSerializeToString() const = 0;
+
+    template <class TObject, class TActor>
+    bool ParseSnapshotObjects(const Ydb::ResultSet& rawData, const TActor& actor, const bool stopOnIncorrectDeserialization = false) {
+        typename TObject::TDecoder decoder(rawData);
+        for (auto&& r : rawData.rows()) {
+            TObject object;
+            if (!object.DeserializeFromRecord(decoder, r)) {
+                ALS_WARN(NKikimrServices::METADATA_PROVIDER) << "cannot parse object: " << TypeName<TObject>();
+                if (stopOnIncorrectDeserialization) {
+                    return false;
+                } else {
+                    continue;
+                }
+            }
+            actor(std::move(object));
+        }
+        return true;
+    }
 public:
     using TPtr = std::shared_ptr<ISnapshot>;
     ISnapshot(const TInstant actuality)

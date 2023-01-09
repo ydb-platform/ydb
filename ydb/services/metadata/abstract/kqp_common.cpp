@@ -26,13 +26,6 @@ NInitializer::IInitializationBehaviour::TPtr IClassBehaviour::GetInitializer() c
     return Initializer;
 }
 
-NModifications::IOperationsManager::TPtr IClassBehaviour::GetOperationsManager() const {
-    if (!OperationsManager) {
-        OperationsManager = ConstructOperationsManager();
-    }
-    return OperationsManager;
-}
-
 TString IClassBehaviour::GetInternalStorageHistoryTablePath() const {
     return GetInternalStorageTablePath() + "_history";
 }

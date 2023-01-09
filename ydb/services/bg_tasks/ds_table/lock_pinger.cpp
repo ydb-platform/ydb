@@ -36,7 +36,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor
 }
 
 void TLockPingerActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*ev*/) {
-    ExecutorController->LockPingerFinished();
+    ExecutorController->OnLockPingerFinished();
 }
 
 }

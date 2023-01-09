@@ -1,11 +1,11 @@
 #pragma once
-#include "object.h"
 
+#include "object.h"
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TTieringRuleBehaviour: public NMetadata::IClassBehaviour {
+class TTieringRuleBehaviour: public NMetadata::TClassBehaviour<TTieringRule> {
 private:
     static TFactory::TRegistrator<TTieringRuleBehaviour> Registrator;
 protected:

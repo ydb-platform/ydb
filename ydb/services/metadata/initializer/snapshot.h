@@ -15,6 +15,8 @@ protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;
 public:
+    bool HasComponent(const TString& componentId) const;
+
     using TBase::TBase;
 };
 

@@ -38,7 +38,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TInterruptTaskAc
 }
 
 void TInterruptTaskActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
-    ExecutorController->TaskFinished(TaskId);
+    ExecutorController->OnTaskFinished(TaskId);
 }
 
 }

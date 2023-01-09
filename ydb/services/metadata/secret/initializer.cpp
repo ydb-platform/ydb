@@ -33,7 +33,7 @@ void TSecretInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr control
     }
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageTablePath(), "acl"));
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TSecret::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
-    controller->PreparationFinished(result);
+    controller->OnPreparationFinished(result);
 }
 
 void TAccessInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr controller) const {
@@ -66,7 +66,7 @@ void TAccessInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr control
     }
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetBehaviour()->GetStorageTablePath(), "acl"));
     result.emplace_back(NInitializer::TACLModifierConstructor::GetNoAccessModifier(TAccess::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
-    controller->PreparationFinished(result);
+    controller->OnPreparationFinished(result);
 }
 
 }

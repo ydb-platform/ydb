@@ -38,12 +38,12 @@ public:
         return Config.GetRequestConfig();
     }
 
-    virtual void InitializationFinished(const TString& id) const override;
-    void LockPingerFinished() const;
-    void TaskFetched(const TTask& task) const;
-    void TaskFinished(const TString& taskId) const;
-    void AssignFinished() const;
-    void FetchingFinished() const;
+    virtual void OnInitializationFinished(const TString& id) const override;
+    void OnLockPingerFinished() const;
+    void OnTaskFetched(const TTask& task) const;
+    void OnTaskFinished(const TString& taskId) const;
+    void OnAssignFinished() const;
+    void OnFetchingFinished() const;
 };
 
 }

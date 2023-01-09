@@ -69,15 +69,15 @@ public:
 class IInitializerInput {
 public:
     using TPtr = std::shared_ptr<IInitializerInput>;
-    virtual void PreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const = 0;
-    virtual void PreparationProblem(const TString& errorMessage) const = 0;
+    virtual void OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const = 0;
+    virtual void OnPreparationProblem(const TString& errorMessage) const = 0;
     virtual ~IInitializerInput() = default;
 };
 
 class IInitializerOutput {
 public:
     using TPtr = std::shared_ptr<IInitializerOutput>;
-    virtual void InitializationFinished(const TString& id) const = 0;
+    virtual void OnInitializationFinished(const TString& id) const = 0;
     virtual ~IInitializerOutput() = default;
 };
 

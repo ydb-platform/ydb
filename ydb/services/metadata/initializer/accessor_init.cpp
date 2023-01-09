@@ -34,7 +34,7 @@ void TDSAccessorInitialized::Handle(TEvInitializerPreparationFinished::TPtr& ev)
         Modifiers.front()->Execute(SelfId(), Config);
     } else {
         ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "initialization finished";
-        ExternalController->InitializationFinished(ComponentId);
+        ExternalController->OnInitializationFinished(ComponentId);
     }
 }
 
@@ -49,7 +49,7 @@ void TDSAccessorInitialized::DoNextModifier() {
         Modifiers.front()->Execute(SelfId(), Config);
     } else {
         ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "initialization finished";
-        ExternalController->InitializationFinished(ComponentId);
+        ExternalController->OnInitializationFinished(ComponentId);
     }
 }
 

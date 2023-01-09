@@ -4,30 +4,8 @@ namespace NKikimr::NMetadata::NSecret {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
     Y_VERIFY(rawDataResult.result_sets().size() == 2);
-    {
-        auto& rawData = rawDataResult.result_sets()[0];
-        TSecret::TDecoder decoder(rawData);
-        for (auto&& r : rawData.rows()) {
-            TSecret object;
-            if (!object.DeserializeFromRecord(decoder, r)) {
-                ALS_ERROR(NKikimrServices::METADATA_SECRET) << "cannot parse secret info for snapshot";
-                continue;
-            }
-            Secrets.emplace(object, object);
-        }
-    }
-    {
-        auto& rawData = rawDataResult.result_sets()[1];
-        TAccess::TDecoder decoder(rawData);
-        for (auto&& r : rawData.rows()) {
-            TAccess object;
-            if (!object.DeserializeFromRecord(decoder, r)) {
-                ALS_ERROR(NKikimrServices::METADATA_SECRET) << "cannot parse secret info for snapshot";
-                continue;
-            }
-            Access.emplace_back(object);
-        }
-    }
+    ParseSnapshotObjects<TSecret>(rawDataResult.result_sets()[0], [this](TSecret&& s) {Secrets.emplace(s, s); });
+    ParseSnapshotObjects<TAccess>(rawDataResult.result_sets()[1], [this](TAccess&& s) {Access.emplace_back(std::move(s)); });
     return true;
 }
 

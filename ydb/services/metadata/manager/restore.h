@@ -30,17 +30,17 @@ private:
         for (auto&& row : qResult.result_sets()[0].rows()) {
             TObject object;
             if (!object.DeserializeFromRecord(decoder, row)) {
-                Controller->RestoreProblem("cannot parse exists object");
+                Controller->OnRestoringProblem("cannot parse exists object");
                 return;
             }
             objects.emplace_back(std::move(object));
         }
-        Controller->RestoreFinished(std::move(objects), qResult.tx_meta().id());
+        Controller->OnRestoringFinished(std::move(objects), qResult.tx_meta().id());
     }
 
     void Handle(NRequest::TEvRequestFailed::TPtr& /*ev*/) {
         auto g = TBase::PassAwayGuard();
-        Controller->RestoreProblem("cannot execute yql request");
+        Controller->OnRestoringProblem("cannot execute yql request");
     }
 
 public:
@@ -64,7 +64,7 @@ public:
 
     void Bootstrap() {
         if (ObjectIds.empty()) {
-            Controller->RestoreProblem("no objects for restore");
+            Controller->OnRestoringProblem("no objects for restore");
             TBase::PassAway();
         }
         auto request = ObjectIds.BuildSelectQuery(TObject::GetBehaviour()->GetStorageTablePath());

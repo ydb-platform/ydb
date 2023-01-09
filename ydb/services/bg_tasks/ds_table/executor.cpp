@@ -59,36 +59,44 @@ void TExecutor::Handle(TEvTaskExecutorFinished::TPtr& ev) {
 }
 
 void TExecutor::Handle(TEvAddTask::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::BG_TASKS) << "add task";
-    Register(new TAddTasksActor(InternalController, ev->Get()->GetTask(), ev->Sender));
+    if (CheckActivity()) {
+        ALS_DEBUG(NKikimrServices::BG_TASKS) << "add task";
+        Register(new TAddTasksActor(InternalController, ev->Get()->GetTask(), ev->Sender));
+    } else {
+        DeferredEventsOnIntialization.Add(*ev);
+    }
 }
 
 void TExecutor::Handle(TEvUpdateTaskEnabled::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::BG_TASKS) << "start task";
-    Register(new TUpdateTaskEnabledActor(InternalController, ev->Get()->GetTaskId(), ev->Get()->GetEnabled(), ev->Sender));
+    if (CheckActivity()) {
+        ALS_DEBUG(NKikimrServices::BG_TASKS) << "start task";
+        Register(new TUpdateTaskEnabledActor(InternalController, ev->Get()->GetTaskId(), ev->Get()->GetEnabled(), ev->Sender));
+    } else {
+        DeferredEventsOnIntialization.Add(*ev);
+    }
 }
 
-void TExecutor::Handle(NMetadata::NInitializer::TEvInitializationFinished::TPtr& /*ev*/) {
+void TExecutor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& /*ev*/) {
+    ActivityState = EActivity::Active;
     Sender<TEvStartAssign>().SendTo(SelfId());
     Schedule(Config.GetPingPeriod(), new TEvLockPingerStart);
+    DeferredEventsOnIntialization.ResendAll(SelfId());
 }
 
 void TExecutor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     auto snapshot = ev->Get()->GetValidatedSnapshotAs<NMetadata::NInitializer::TSnapshot>();
-    auto b = std::make_shared<TBGTasksInitializer>(Config);
-    Register(new NMetadata::NInitializer::TDSAccessorInitialized(Config.GetRequestConfig(), "bg_tasks", b, InternalController, snapshot));
+    Y_VERIFY(snapshot, "incorrect initialization snapshot from metadata service");
+    if (snapshot->HasComponent("bg_tasks")) {
+        CheckActivity();
+    }
 }
 
 void TExecutor::Bootstrap() {
     InternalController = std::make_shared<TExecutorController>(SelfId(), Config);
     Become(&TExecutor::StateMain);
     auto manager = std::make_shared<NMetadata::NInitializer::TFetcher>();
-    if (NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-        Sender<NMetadata::NProvider::TEvSubscribeExternal>(manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
-    } else {
-        auto b = std::make_shared<TBGTasksInitializer>(Config);
-        Register(new NMetadata::NInitializer::TDSAccessorInitialized(Config.GetRequestConfig(), "bg_tasks", b, InternalController, nullptr));
-    }
+    Y_VERIFY(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service not active");
+    Sender<NMetadata::NProvider::TEvSubscribeExternal>(manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
 }
 
 NActors::IActor* CreateService(const TConfig& config) {

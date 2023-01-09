@@ -8,8 +8,8 @@ class IModificationObjectsController {
 public:
     using TPtr = std::shared_ptr<IModificationObjectsController>;
     virtual ~IModificationObjectsController() = default;
-    virtual void ModificationProblem(const TString& errorMessage) = 0;
-    virtual void ModificationFinished() = 0;
+    virtual void OnModificationProblem(const TString& errorMessage) = 0;
+    virtual void OnModificationFinished() = 0;
 };
 
 class TEvModificationFinished: public TEventLocal<TEvModificationFinished, EvModificationFinished> {

@@ -30,7 +30,7 @@ TVector<NKikimr::NMetadata::NInitializer::ITableModifier::TPtr> TTiersInitialize
 }
 
 void TTiersInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const {
-    controller->PreparationFinished(BuildModifiers());
+    controller->OnPreparationFinished(BuildModifiers());
 }
 
 }

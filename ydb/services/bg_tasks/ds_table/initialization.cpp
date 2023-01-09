@@ -63,7 +63,7 @@ void TBGTasksInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::
         }
         result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
     }
-    controller->PreparationFinished(result);
+    controller->OnPreparationFinished(result);
 }
 
 }

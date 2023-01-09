@@ -7,7 +7,7 @@ void TManager::DoPrepareObjectsBeforeModification(std::vector<TDBInitialization>
     NModifications::IAlterPreparationController<TDBInitialization>::TPtr controller,
     const TModificationContext& /*context*/) const
 {
-    controller->PreparationFinished(std::move(objects));
+    controller->OnPreparationFinished(std::move(objects));
 }
 
 NModifications::TOperationParsingResult TManager::DoBuildPatchFromSettings(

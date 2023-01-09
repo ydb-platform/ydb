@@ -11,20 +11,20 @@ void TSecretPreparationActor::StartChecker() {
     for (auto&& i : Objects) {
         if (Context.GetActivityType() == NModifications::IOperationsManager::EActivityType::Alter) {
             if (!Secrets->GetSecrets().contains(i)) {
-                Controller->PreparationProblem("secret " + i.GetSecretId() + " not found for alter");
+                Controller->OnPreparationProblem("secret " + i.GetSecretId() + " not found for alter");
                 return;
             }
         }
         for (auto&& sa : Secrets->GetAccess()) {
             if (Context.GetActivityType() == NModifications::IOperationsManager::EActivityType::Drop) {
                 if (sa.GetOwnerUserId() == i.GetOwnerUserId() && sa.GetSecretId() == i.GetSecretId()) {
-                    Controller->PreparationProblem("secret " + i.GetSecretId() + " using in access for " + sa.GetAccessSID());
+                    Controller->OnPreparationProblem("secret " + i.GetSecretId() + " using in access for " + sa.GetAccessSID());
                     return;
                 }
             }
         }
     }
-    Controller->PreparationFinished(std::move(Objects));
+    Controller->OnPreparationFinished(std::move(Objects));
 }
 
 void TSecretPreparationActor::Handle(NProvider::TEvRefreshSubscriberData::TPtr& ev) {

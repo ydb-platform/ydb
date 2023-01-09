@@ -12,7 +12,7 @@ void TTierPreparationActor::StartChecker() {
     }
     auto g = PassAwayGuard();
     if (!SSCheckResult->GetContent().GetOperationAllow()) {
-        Controller->PreparationProblem(SSCheckResult->GetContent().GetDenyReason());
+        Controller->OnPreparationProblem(SSCheckResult->GetContent().GetDenyReason());
         return;
     }
     for (auto&& tier : Objects) {
@@ -27,30 +27,30 @@ void TTierPreparationActor::StartChecker() {
                 }
             }
             if (tieringsWithTiers.size()) {
-                Controller->PreparationProblem("tier in usage for tierings: " + JoinSeq(", ", tieringsWithTiers));
+                Controller->OnPreparationProblem("tier in usage for tierings: " + JoinSeq(", ", tieringsWithTiers));
                 return;
             }
         }
         if (!Secrets->CheckSecretAccess(tier.GetProtoConfig().GetObjectStorage().GetAccessKey(), Context.GetUserToken())) {
-            Controller->PreparationProblem("no access for secret: " + tier.GetProtoConfig().GetObjectStorage().GetAccessKey());
+            Controller->OnPreparationProblem("no access for secret: " + tier.GetProtoConfig().GetObjectStorage().GetAccessKey());
             return;
         } else if (!Secrets->CheckSecretAccess(tier.GetProtoConfig().GetObjectStorage().GetSecretKey(), Context.GetUserToken())) {
-            Controller->PreparationProblem("no access for secret: " + tier.GetProtoConfig().GetObjectStorage().GetSecretKey());
+            Controller->OnPreparationProblem("no access for secret: " + tier.GetProtoConfig().GetObjectStorage().GetSecretKey());
             return;
         }
     }
-    Controller->PreparationFinished(std::move(Objects));
+    Controller->OnPreparationFinished(std::move(Objects));
 }
 
 void TTierPreparationActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev) {
     auto& proto = ev->Get()->Record;
     if (proto.HasError()) {
-        Controller->PreparationProblem(proto.GetError().GetErrorMessage());
+        Controller->OnPreparationProblem(proto.GetError().GetErrorMessage());
         PassAway();
     } else if (proto.HasContent()) {
         SSCheckResult = SSFetcher->UnpackResult(ev->Get()->Record.GetContent().GetData());
         if (!SSCheckResult) {
-            Controller->PreparationProblem("cannot unpack ss-fetcher result for class " + SSFetcher->GetClassName());
+            Controller->OnPreparationProblem("cannot unpack ss-fetcher result for class " + SSFetcher->GetClassName());
             PassAway();
         } else {
             StartChecker();

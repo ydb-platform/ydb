@@ -14,10 +14,10 @@ public:
 
     }
 
-    virtual void AlterProblem(const TString& errorMessage) override {
+    virtual void OnAlteringProblem(const TString& errorMessage) override {
         Promise.SetValue(TObjectOperatorResult(false).SetErrorMessage(errorMessage));
     }
-    virtual void AlterFinished() override {
+    virtual void OnAlteringFinished() override {
         Promise.SetValue(TObjectOperatorResult(true));
     }
 

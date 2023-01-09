@@ -24,22 +24,22 @@ public:
 
     }
 
-    virtual void RestoreFinished(std::vector<TObject>&& objects, const TString& transactionId) override {
+    virtual void OnRestoringFinished(std::vector<TObject>&& objects, const TString& transactionId) override {
         ActorId.Send(ActorId, new TEvRestoreFinished<TObject>(std::move(objects), transactionId));
     }
-    virtual void RestoreProblem(const TString& errorMessage) override {
+    virtual void OnRestoringProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvRestoreProblem(errorMessage));
     }
-    virtual void ModificationFinished() override {
+    virtual void OnModificationFinished() override {
         ActorId.Send(ActorId, new TEvModificationFinished());
     }
-    virtual void ModificationProblem(const TString& errorMessage) override {
+    virtual void OnModificationProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvModificationProblem(errorMessage));
     }
-    virtual void PreparationProblem(const TString& errorMessage) override {
+    virtual void OnPreparationProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvAlterPreparationProblem(errorMessage));
     }
-    virtual void PreparationFinished(std::vector<TObject>&& objects)  override {
+    virtual void OnPreparationFinished(std::vector<TObject>&& objects)  override {
         ActorId.Send(ActorId, new TEvAlterPreparationFinished<TObject>(std::move(objects)));
     }
 
@@ -119,7 +119,7 @@ public:
     void Bootstrap() {
         InitState();
         if (!Patches.size()) {
-            ExternalController->AlterProblem("no patches");
+            ExternalController->OnAlteringProblem("no patches");
             return TBase::PassAway();
         }
         if (!BuildRestoreObjectIds()) {
@@ -158,29 +158,29 @@ public:
         records.ReserveRows(ev->Get()->GetObjects().size());
         for (auto&& i : ev->Get()->GetObjects()) {
             if (!records.AddRecordNativeValues(i.SerializeToRecord())) {
-                ExternalController->AlterProblem("unexpected serialization inconsistency");
+                ExternalController->OnAlteringProblem("unexpected serialization inconsistency");
                 return TBase::PassAway();
             }
         }
         if (!ProcessPreparedObjects(std::move(records))) {
-            ExternalController->AlterProblem("cannot process prepared objects");
+            ExternalController->OnAlteringProblem("cannot process prepared objects");
             return TBase::PassAway();
         }
     }
 
     void Handle(typename NRequest::TEvRequestFailed::TPtr& /*ev*/) {
         auto g = TBase::PassAwayGuard();
-        ExternalController->AlterProblem("cannot initialize session");
+        ExternalController->OnAlteringProblem("cannot initialize session");
     }
 
     void Handle(TEvAlterPreparationProblem::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        ExternalController->AlterProblem("preparation problem: " + ev->Get()->GetErrorMessage());
+        ExternalController->OnAlteringProblem("preparation problem: " + ev->Get()->GetErrorMessage());
     }
 
     void Handle(TEvRestoreProblem::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        ExternalController->AlterProblem("cannot restore objects: " + ev->Get()->GetErrorMessage());
+        ExternalController->OnAlteringProblem("cannot restore objects: " + ev->Get()->GetErrorMessage());
     }
 
 };
@@ -199,7 +199,7 @@ protected:
         TBase::RestoreObjectIds.InitColumns(Manager->GetSchema().GetPKColumns());
         for (auto&& i : TBase::Patches) {
             if (!TBase::RestoreObjectIds.AddRecordNativeValues(i)) {
-                TBase::ExternalController->AlterProblem("no pk columns in patch");
+                TBase::ExternalController->OnAlteringProblem("no pk columns in patch");
                 return false;
             }
         }
@@ -233,13 +233,13 @@ public:
             }
             TObject objectPatched;
             if (!trPatch) {
-                TBase::ExternalController->AlterProblem("cannot found patch for object");
+                TBase::ExternalController->OnAlteringProblem("cannot found patch for object");
                 return false;
             } else if (!trObject.TakeValuesFrom(*trPatch)) {
-                TBase::ExternalController->AlterProblem("cannot patch object");
+                TBase::ExternalController->OnAlteringProblem("cannot patch object");
                 return false;
             } else if (!TObject::TDecoder::DeserializeFromRecord(objectPatched, trObject)) {
-                TBase::ExternalController->AlterProblem("cannot parse object after patch");
+                TBase::ExternalController->OnAlteringProblem("cannot parse object after patch");
                 return false;
             } else {
                 i = std::move(objectPatched);
@@ -256,7 +256,7 @@ public:
             if (!found) {
                 TObject object;
                 if (!TObject::TDecoder::DeserializeFromRecord(object, p)) {
-                    TBase::ExternalController->AlterProblem("cannot parse new object");
+                    TBase::ExternalController->OnAlteringProblem("cannot parse new object");
                     return false;
                 }
                 objects.emplace_back(std::move(object));
@@ -267,12 +267,12 @@ public:
 
     void Handle(TEvModificationFinished::TPtr& /*ev*/) {
         auto g = TBase::PassAwayGuard();
-        TBase::ExternalController->AlterFinished();
+        TBase::ExternalController->OnAlteringFinished();
     }
 
     void Handle(TEvModificationProblem::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        TBase::ExternalController->AlterProblem("cannot " + GetModificationType() + " objects: " + ev->Get()->GetErrorMessage());
+        TBase::ExternalController->OnAlteringProblem("cannot " + GetModificationType() + " objects: " + ev->Get()->GetErrorMessage());
     }
 
 };

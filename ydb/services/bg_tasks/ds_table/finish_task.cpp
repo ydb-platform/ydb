@@ -21,7 +21,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TDropTaskActor::
 }
 
 void TDropTaskActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
-    Controller->TaskFinished(TaskId);
+    Controller->OnTaskFinished(TaskId);
 }
 
 }

@@ -7,27 +7,27 @@
 
 namespace NKikimr::NBackgroundTasks {
 
-void TExecutorController::AssignFinished() const {
+void TExecutorController::OnAssignFinished() const {
     ExecutorActorId.Send(ExecutorActorId, new TEvAssignFinished());
 }
 
-void TExecutorController::FetchingFinished() const {
+void TExecutorController::OnFetchingFinished() const {
     ExecutorActorId.Send(ExecutorActorId, new TEvFetchingFinished());
 }
 
-void TExecutorController::TaskFetched(const TTask& task) const {
+void TExecutorController::OnTaskFetched(const TTask& task) const {
     ExecutorActorId.Send(ExecutorActorId, new TEvTaskFetched(task));
 }
 
-void TExecutorController::TaskFinished(const TString& taskId) const {
+void TExecutorController::OnTaskFinished(const TString& taskId) const {
     ExecutorActorId.Send(ExecutorActorId, new TEvTaskExecutorFinished(taskId));
 }
 
-void TExecutorController::InitializationFinished(const TString& id) const {
+void TExecutorController::OnInitializationFinished(const TString& id) const {
     ExecutorActorId.Send(ExecutorActorId, new NMetadata::NInitializer::TEvInitializationFinished(id));
 }
 
-void TExecutorController::LockPingerFinished() const {
+void TExecutorController::OnLockPingerFinished() const {
     ExecutorActorId.Send(ExecutorActorId, new TEvLockPingerFinished());
 }
 

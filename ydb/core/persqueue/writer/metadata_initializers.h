@@ -31,10 +31,10 @@ protected:
     TInitBehaviourPtr ConstructInitializer() const override {
         return TSrcIdMetaInitializer::GetInstant();
     }
-    std::shared_ptr<NMetadata::NModifications::IOperationsManager> ConstructOperationsManager() const override {
+public:
+    std::shared_ptr<NMetadata::NModifications::IOperationsManager> GetOperationsManager() const override {
         return nullptr;
     }
-public:
     static TClassBehaviourPtr GetInstant() {
         static TClassBehaviourPtr res{new TSrcIdMetaInitManager()};
         return res;

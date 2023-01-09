@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
                 result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
             }
             result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));
-            controller->PreparationFinished(result);
+            controller->OnPreparationFinished(result);
         }
     public:
     };
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
         virtual std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour> ConstructInitializer() const override {
             return std::make_shared<TTestInitializer>();
         }
-        virtual std::shared_ptr<NMetadata::NModifications::IOperationsManager> ConstructOperationsManager() const override {
+        virtual std::shared_ptr<NMetadata::NModifications::IOperationsManager> GetOperationsManager() const override {
             return nullptr;
         }
     public:
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
             return TypeName<TInitBehaviourTest>();
         }
 
-        static IClassBehaviour::TPtr GetInstant() {
+        static IClassBehaviour::TPtr GetInstance() {
             static std::shared_ptr<TInitBehaviourTest> result = std::make_shared<TInitBehaviourTest>();
             return result;
         }
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
 
         void Bootstrap() {
             Become(&TThis::StateWork);
-            Sender<NMetadata::NProvider::TEvPrepareManager>(TInitBehaviourTest::GetInstant()).
+            Sender<NMetadata::NProvider::TEvPrepareManager>(TInitBehaviourTest::GetInstance()).
                 SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
         }
     };

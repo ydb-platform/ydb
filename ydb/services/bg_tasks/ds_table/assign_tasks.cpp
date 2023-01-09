@@ -39,7 +39,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TAssignTasksActo
 }
 
 void TAssignTasksActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& /*result*/) {
-    Controller->AssignFinished();
+    Controller->OnAssignFinished();
 }
 
 }

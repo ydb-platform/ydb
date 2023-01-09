@@ -222,11 +222,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     private:
         YDB_READONLY_FLAG(Finished, false);
     public:
-        virtual void AlterProblem(const TString& errorMessage) override {
+        virtual void OnAlteringProblem(const TString& errorMessage) override {
             Cerr << errorMessage << Endl;
             Y_VERIFY(false);
         }
-        virtual void AlterFinished() override {
+        virtual void OnAlteringFinished() override {
             FinishedFlag = true;
         }
     };

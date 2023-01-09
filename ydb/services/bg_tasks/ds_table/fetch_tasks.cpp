@@ -16,9 +16,9 @@ void TFetchTasksActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TR
             ALS_ERROR(NKikimrServices::BG_TASKS) << "cannot parse task record";
             continue;
         }
-        Controller->TaskFetched(task);
+        Controller->OnTaskFetched(task);
     }
-    Controller->FetchingFinished();
+    Controller->OnFetchingFinished();
 }
 
 std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TFetchTasksActor::OnSessionId(const TString& sessionId) {

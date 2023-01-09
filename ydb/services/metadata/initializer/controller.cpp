@@ -5,23 +5,23 @@
 
 namespace NKikimr::NMetadata::NInitializer {
 
-void TInitializerInput::PreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const {
+void TInitializerInput::OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const {
     ActorId.Send(ActorId, new TEvInitializerPreparationFinished(modifiers));
 }
 
-void TInitializerInput::PreparationProblem(const TString& errorMessage) const {
+void TInitializerInput::OnPreparationProblem(const TString& errorMessage) const {
     ActorId.Send(ActorId, new TEvInitializerPreparationProblem(errorMessage));
 }
 
-void TInitializerInput::AlterProblem(const TString& errorMessage) {
+void TInitializerInput::OnAlteringProblem(const TString& errorMessage) {
     ActorId.Send(ActorId, new NModifications::TEvModificationProblem(errorMessage));
 }
 
-void TInitializerInput::AlterFinished() {
+void TInitializerInput::OnAlteringFinished() {
     ActorId.Send(ActorId, new NModifications::TEvModificationFinished());
 }
 
-void TInitializerOutput::InitializationFinished(const TString& id) const {
+void TInitializerOutput::OnInitializationFinished(const TString& id) const {
     ActorId.Send(ActorId, new TEvInitializationFinished(id));
 }
 

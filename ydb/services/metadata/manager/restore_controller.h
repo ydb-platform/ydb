@@ -11,8 +11,8 @@ public:
     using TPtr = std::shared_ptr<IRestoreObjectsController>;
     virtual ~IRestoreObjectsController() = default;
 
-    virtual void RestoreFinished(std::vector<TObject>&& objects, const TString& transactionId) = 0;
-    virtual void RestoreProblem(const TString& errorMessage) = 0;
+    virtual void OnRestoringFinished(std::vector<TObject>&& objects, const TString& transactionId) = 0;
+    virtual void OnRestoringProblem(const TString& errorMessage) = 0;
 };
 
 template <class TObject>

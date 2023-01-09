@@ -18,12 +18,12 @@ void TAccessPreparationActor::StartChecker() {
                 }
             }
             if (!foundSecret) {
-                Controller->PreparationProblem("used in access secret " + i.GetSecretId() + " not found");
+                Controller->OnPreparationProblem("used in access secret " + i.GetSecretId() + " not found");
                 return;
             }
         }
     }
-    Controller->PreparationFinished(std::move(Objects));
+    Controller->OnPreparationFinished(std::move(Objects));
 }
 
 void TAccessPreparationActor::Handle(NProvider::TEvRefreshSubscriberData::TPtr& ev) {

@@ -17,19 +17,30 @@ public:
     using TPtr = std::shared_ptr<IClassBehaviour>;
 private:
     mutable std::shared_ptr<NInitializer::IInitializationBehaviour> Initializer;
-    mutable std::shared_ptr<NModifications::IOperationsManager> OperationsManager;
 protected:
+    virtual std::shared_ptr<NInitializer::IInitializationBehaviour> ConstructInitializer() const = 0;
     virtual TString GetInternalStorageTablePath() const = 0;
     virtual TString GetInternalStorageHistoryTablePath() const;
-    virtual std::shared_ptr<NInitializer::IInitializationBehaviour> ConstructInitializer() const = 0;
-    virtual std::shared_ptr<NModifications::IOperationsManager> ConstructOperationsManager() const = 0;
 public:
     virtual ~IClassBehaviour() = default;
     TString GetStorageTablePath() const;
     TString GetStorageHistoryTablePath() const;
     std::shared_ptr<NInitializer::IInitializationBehaviour> GetInitializer() const;
-    std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const;
+    virtual std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const = 0;
 
     virtual TString GetTypeId() const = 0;
 };
+
+template <class TObject>
+class TClassBehaviour: public IClassBehaviour {
+private:
+protected:
+    virtual std::shared_ptr<NModifications::IOperationsManager> ConstructOperationsManager() const = 0;
+public:
+    virtual std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const override final {
+        static std::shared_ptr<NModifications::IOperationsManager> manager = ConstructOperationsManager();
+        return manager;
+    }
+};
+
 }

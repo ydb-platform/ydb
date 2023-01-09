@@ -28,7 +28,7 @@ void TInitializer::DoPrepare(IInitializerInput::TPtr controller) const {
         result.emplace_back(new TGenericTableModifier<NRequest::TDialogCreateTable>(request, "create"));
     }
     result.emplace_back(TACLModifierConstructor::GetReadOnlyModifier(TDBInitialization::GetBehaviour()->GetStorageTablePath(), "acl"));
-    controller->PreparationFinished(result);
+    controller->OnPreparationFinished(result);
 }
 
 }

@@ -13,6 +13,34 @@ public:
     virtual void OnDescriptionSuccess(THashMap<ui32, TSysTables::TTableColumnInfo>&& result, const TString& requestId) const = 0;
 };
 
+class TEvTableDescriptionFailed: public TEventLocal<TEvTableDescriptionFailed, EEvents::EvTableDescriptionFailed> {
+private:
+    YDB_READONLY_DEF(TString, ErrorMessage);
+    YDB_READONLY_DEF(TString, RequestId);
+public:
+    explicit TEvTableDescriptionFailed(const TString& errorMessage, const TString& reqId)
+        : ErrorMessage(errorMessage)
+        , RequestId(reqId) {
+
+    }
+};
+
+class TEvTableDescriptionSuccess: public TEventLocal<TEvTableDescriptionSuccess, EEvents::EvTableDescriptionSuccess> {
+private:
+    using TDescription = THashMap<ui32, TSysTables::TTableColumnInfo>;
+    YDB_READONLY_DEF(TString, RequestId);
+    YDB_READONLY_DEF(TDescription, Description);
+public:
+    TEvTableDescriptionSuccess(TDescription&& description, const TString& reqId)
+        : RequestId(reqId)
+        , Description(std::move(description)) {
+    }
+
+    NModifications::TTableSchema GetSchema() const {
+        return NModifications::TTableSchema(Description);
+    }
+};
+
 class TSchemeDescriptionActor: public NActors::TActorBootstrapped<TSchemeDescriptionActor> {
 private:
     using TBase = NActors::TActorBootstrapped<TSchemeDescriptionActor>;

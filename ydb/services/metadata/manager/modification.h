@@ -53,14 +53,14 @@ protected:
                 Requests.front(), SystemUserToken, TBase::SelfId()));
             Requests.pop_front();
         } else {
-            Controller->ModificationFinished();
+            Controller->OnModificationFinished();
             TBase::PassAway();
         }
     }
 
     void Handle(NRequest::TEvRequestFailed::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
-        Controller->ModificationProblem("cannot execute yql request for " + GetModifyType() +
+        Controller->OnModificationProblem("cannot execute yql request for " + GetModifyType() +
             " objects: " + ev->Get()->GetErrorMessage());
     }
 

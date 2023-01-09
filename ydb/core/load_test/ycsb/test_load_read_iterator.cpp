@@ -850,8 +850,10 @@ inline void Out<NKikimrDataShardLoad::TLoadReport>(IOutputStream& o, const NKiki
       << ", OK=" << report.GetOperationsOK()
       << ", Error=" << report.GetOperationsError();
 
+    // note that we check Seconds() instead of Milliseconds() to ensure
+    // that there was enough load to make calculations
     if (report.GetOperationsOK() && duration.Seconds()) {
-        ui64 throughput = report.GetOperationsOK() / duration.Seconds();
+        ui64 throughput = report.GetOperationsOK() * 1000 / duration.MilliSeconds();
         o << ", throughput=" << throughput << " OK_ops/s";
     }
     if (report.HasSubtestCount()) {

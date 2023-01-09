@@ -285,7 +285,7 @@ private:
                 << " sent " << CurrentRequest << " out of " << Requests.size();
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
-            auto throughput = Requests.size() / delta.Seconds();
+            auto throughput = Requests.size() * 1000 / delta.MilliSeconds();
             str << " in " << delta << " (" << throughput << " op/s)"
                 << " errors=" << Errors;
         }

@@ -25,6 +25,7 @@ struct TEvPrivate {
         EvCompletePublication,
         EvCompleteBarrier,
         EvPersistStats,
+        EvConsoleConfigsTimeout,
         EvEnd
     };
 
@@ -159,6 +160,9 @@ struct TEvPrivate {
 
     struct TEvPersistStats: public TEventLocal<TEvPersistStats, EvPersistStats> {
         TEvPersistStats() = default;
+    };
+
+    struct TEvConsoleConfigsTimeout: public TEventLocal<TEvConsoleConfigsTimeout, EvConsoleConfigsTimeout> {
     };
 
 }; // TEvPrivate

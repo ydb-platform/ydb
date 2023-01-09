@@ -4064,6 +4064,8 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
+
     default:
         StateInitImpl(ev, ctx);
     }
@@ -4100,6 +4102,8 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
+
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4247,6 +4251,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvFindTabletSubDomainPathId, Handle);
 
@@ -6309,6 +6314,12 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
         }),
         IEventHandle::FlagTrackDelivery
     );
+    ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvConsoleConfigsTimeout);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr&, const TActorContext& ctx) {
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot get console configs");
+    LoadTableProfiles(nullptr, ctx);
 }
 
 void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {

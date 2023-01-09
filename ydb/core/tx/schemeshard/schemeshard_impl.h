@@ -393,6 +393,7 @@ public:
     void SubscribeConsoleConfigs(const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr& ev, const TActorContext& ctx);
 
     void ConfigureStatsBatching(
         const NKikimrConfig::TSchemeShardConfig& config,

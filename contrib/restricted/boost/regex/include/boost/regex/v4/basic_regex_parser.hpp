@@ -22,6 +22,9 @@
 #ifdef BOOST_MSVC
 #pragma warning(push)
 #pragma warning(disable: 4103)
+#if BOOST_MSVC >= 1800
+#pragma warning(disable: 26812)
+#endif
 #endif
 #ifdef BOOST_HAS_ABI_HEADERS
 #  include BOOST_ABI_PREFIX
@@ -35,7 +38,10 @@ namespace BOOST_REGEX_DETAIL_NS{
 
 #ifdef BOOST_MSVC
 #pragma warning(push)
-#pragma warning(disable:4244 4800)
+#pragma warning(disable:4244)
+#if BOOST_MSVC < 1910
+#pragma warning(disable:4800)
+#endif
 #endif
 
 inline boost::intmax_t umax(mpl::false_ const&)
@@ -121,7 +127,8 @@ private:
 
 template <class charT, class traits>
 basic_regex_parser<charT, traits>::basic_regex_parser(regex_data<charT, traits>* data)
-   : basic_regex_creator<charT, traits>(data), m_mark_count(0), m_mark_reset(-1), m_max_mark(0), m_paren_start(0), m_alt_insert_point(0), m_has_case_change(false), m_recursion_count(0)
+   : basic_regex_creator<charT, traits>(data), m_parser_proc(), m_base(0), m_end(0), m_position(0), 
+   m_mark_count(0), m_mark_reset(-1), m_max_mark(0), m_paren_start(0), m_alt_insert_point(0), m_has_case_change(false), m_recursion_count(0)
 {
 }
 
@@ -165,7 +172,7 @@ void basic_regex_parser<charT, traits>::parse(const charT* p1, const charT* p2, 
       m_parser_proc = &basic_regex_parser<charT, traits>::parse_literal;
       break;
    default:
-      // Ooops, someone has managed to set more than one of the main option flags, 
+      // Oops, someone has managed to set more than one of the main option flags, 
       // so this must be an error:
       fail(regex_constants::error_unknown, 0, "An invalid combination of regular expression syntax flags was used.");
       return;
@@ -183,14 +190,14 @@ void basic_regex_parser<charT, traits>::parse(const charT* p1, const charT* p2, 
    // have had an unexpected ')' :
    if(!result)
    {
-      fail(regex_constants::error_paren, ::boost::BOOST_REGEX_DETAIL_NS::distance(m_base, m_position), "Found a closing ) with no corresponding openening parenthesis.");
+      fail(regex_constants::error_paren, ::boost::BOOST_REGEX_DETAIL_NS::distance(m_base, m_position), "Found a closing ) with no corresponding opening parenthesis.");
       return;
    }
    // if an error has been set then give up now:
    if(this->m_pdata->m_status)
       return;
    // fill in our sub-expression count:
-   this->m_pdata->m_mark_count = 1 + m_mark_count;
+   this->m_pdata->m_mark_count = 1u + (std::size_t)m_mark_count;
    this->finalize(p1, p2);
 }
 
@@ -318,6 +325,12 @@ bool basic_regex_parser<charT, traits>::parse_basic()
    return true;
 }
 
+#ifdef BOOST_MSVC
+#  pragma warning(push)
+#if BOOST_MSVC >= 1800
+#pragma warning(disable:26812)
+#endif
+#endif
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_extended()
 {
@@ -405,6 +418,9 @@ bool basic_regex_parser<charT, traits>::parse_extended()
    }
    return result;
 }
+#ifdef BOOST_MSVC
+#  pragma warning(pop)
+#endif
 #ifdef BOOST_MSVC
 #pragma warning(pop)
 #endif
@@ -542,8 +558,8 @@ bool basic_regex_parser<charT, traits>::parse_open_paren()
    //
    // allow backrefs to this mark:
    //
-   if((markid > 0) && (markid < sizeof(unsigned) * CHAR_BIT))
-      this->m_backrefs |= 1u << (markid - 1);
+   if(markid > 0)
+      this->m_backrefs.set(markid);
 
    return true;
 }
@@ -856,7 +872,7 @@ escape_type_class_jump:
       {
          bool have_brace = false;
          bool negative = false;
-         static const char* incomplete_message = "Incomplete \\g escape found.";
+         static const char incomplete_message[] = "Incomplete \\g escape found.";
          if(++m_position == m_end)
          {
             fail(regex_constants::error_escape, m_position - m_base, incomplete_message);
@@ -908,8 +924,8 @@ escape_type_class_jump:
             pc = m_position;
          }
          if(negative)
-            i = 1 + m_mark_count - i;
-         if(((i > 0) && (i < std::numeric_limits<unsigned>::digits) && (i - 1 < static_cast<boost::intmax_t>(sizeof(unsigned) * CHAR_BIT)) && (this->m_backrefs & (1u << (i-1)))) || ((i > 10000) && (this->m_pdata->get_id(i) > 0) && (this->m_pdata->get_id(i)-1 < static_cast<boost::intmax_t>(sizeof(unsigned) * CHAR_BIT)) && (this->m_backrefs & (1u << (this->m_pdata->get_id(i)-1)))))
+            i = 1 + (static_cast<boost::intmax_t>(m_mark_count) - i);
+         if(((i < hash_value_mask) && (i > 0) && (this->m_backrefs.test(i))) || ((i >= hash_value_mask) && (this->m_pdata->get_id(i) > 0) && (this->m_backrefs.test(this->m_pdata->get_id(i)))))
          {
             m_position = pc;
             re_brace* pb = static_cast<re_brace*>(this->append_state(syntax_element_backref, sizeof(re_brace)));
@@ -965,7 +981,7 @@ template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_repeat(std::size_t low, std::size_t high)
 {
    bool greedy = true;
-   bool pocessive = false;
+   bool possessive = false;
    std::size_t insert_point;
    // 
    // when we get to here we may have a non-greedy ? mark still to come:
@@ -989,12 +1005,12 @@ bool basic_regex_parser<charT, traits>::parse_repeat(std::size_t low, std::size_
          greedy = false;
          ++m_position;
       }
-      // for perl regexes only check for pocessive ++ repeats.
+      // for perl regexes only check for possessive ++ repeats.
       if((m_position != m_end)
          && (0 == (this->flags() & regbase::main_option_type)) 
          && (this->m_traits.syntax_type(*m_position) == regex_constants::syntax_plus))
       {
-         pocessive = true;
+         possessive = true;
          ++m_position;
       }
    }
@@ -1039,6 +1055,7 @@ bool basic_regex_parser<charT, traits>::parse_repeat(std::size_t low, std::size_
       case syntax_element_jump:
       case syntax_element_startmark:
       case syntax_element_backstep:
+      case syntax_element_toggle_case:
          // can't legally repeat any of the above:
          fail(regex_constants::error_badrepeat, m_position - m_base);
          return false;
@@ -1066,10 +1083,10 @@ bool basic_regex_parser<charT, traits>::parse_repeat(std::size_t low, std::size_
    rep = static_cast<re_repeat*>(this->getaddress(rep_off));
    rep->alt.i = this->m_pdata->m_data.size() - rep_off;
    //
-   // If the repeat is pocessive then bracket the repeat with a (?>...)
+   // If the repeat is possessive then bracket the repeat with a (?>...)
    // independent sub-expression construct:
    //
-   if(pocessive)
+   if(possessive)
    {
       if(m_position != m_end)
       {
@@ -1108,6 +1125,9 @@ bool basic_regex_parser<charT, traits>::parse_repeat(std::size_t low, std::size_
                   }
                   else
                      contin = false;
+                  break;
+               default:
+                  contin = false;
                }
             }
             else
@@ -1130,7 +1150,7 @@ bool basic_regex_parser<charT, traits>::parse_repeat(std::size_t low, std::size_
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_repeat_range(bool isbasic)
 {
-   static const char* incomplete_message = "Missing } in quantified repetition.";
+   static const char incomplete_message[] = "Missing } in quantified repetition.";
    //
    // parse a repeat-range:
    //
@@ -1336,7 +1356,7 @@ bool basic_regex_parser<charT, traits>::parse_alt()
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_set()
 {
-   static const char* incomplete_message = "Character set declaration starting with [ terminated prematurely - either no ] was found or the set had no content.";
+   static const char incomplete_message[] = "Character set declaration starting with [ terminated prematurely - either no ] was found or the set had no content.";
    ++m_position;
    if(m_position == m_end)
    {
@@ -1428,7 +1448,7 @@ bool basic_regex_parser<charT, traits>::parse_set()
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_inner_set(basic_char_set<charT, traits>& char_set)
 {
-   static const char* incomplete_message = "Character class declaration starting with [ terminated prematurely - either no ] was found or the set had no content.";
+   static const char incomplete_message[] = "Character class declaration starting with [ terminated prematurely - either no ] was found or the set had no content.";
    //
    // we have either a character class [:name:]
    // a collating element [.name.]
@@ -1526,7 +1546,7 @@ bool basic_regex_parser<charT, traits>::parse_inner_set(basic_char_set<charT, tr
          fail(regex_constants::error_ctype, name_first - m_base);
          return false;
       }
-      if(negated == false)
+      if(!negated)
          char_set.add_class(m);
       else
          char_set.add_negated_class(m);
@@ -1564,7 +1584,7 @@ bool basic_regex_parser<charT, traits>::parse_inner_set(basic_char_set<charT, tr
          return false;
       }
       string_type m = this->m_traits.lookup_collatename(name_first, name_last);
-      if((0 == m.size()) || (m.size() > 2))
+      if(m.empty() || (m.size() > 2))
       {
          fail(regex_constants::error_collate, name_first - m_base);
          return false;
@@ -1932,7 +1952,7 @@ charT basic_regex_parser<charT, traits>::unescape_character()
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_backref()
 {
-   BOOST_ASSERT(m_position != m_end);
+   BOOST_REGEX_ASSERT(m_position != m_end);
    const charT* pc = m_position;
    boost::intmax_t i = this->m_traits.toi(pc, pc + 1, 10);
    if((i == 0) || (((this->flags() & regbase::main_option_type) == regbase::perl_syntax_group) && (this->flags() & regbase::no_bk_refs)))
@@ -1941,7 +1961,7 @@ bool basic_regex_parser<charT, traits>::parse_backref()
       charT c = unescape_character();
       this->append_literal(c);
    }
-   else if((i > 0) && (this->m_backrefs & (1u << (i-1))))
+   else if((i > 0) && (this->m_backrefs.test(i)))
    {
       m_position = pc;
       re_brace* pb = static_cast<re_brace*>(this->append_state(syntax_element_backref, sizeof(re_brace)));
@@ -2129,7 +2149,7 @@ insert_recursion:
          // Oops not a relative recursion at all, but a (?-imsx) group:
          goto option_group_jump;
       }
-      v = m_mark_count + 1 - v;
+      v = static_cast<boost::intmax_t>(m_mark_count) + 1 - v;
       if(v <= 0)
       {
          // Rewind to start of (? sequence:
@@ -2593,7 +2613,7 @@ option_group_jump:
       this->fail(regex_constants::error_paren, ::boost::BOOST_REGEX_DETAIL_NS::distance(m_base, m_end));
       return false;
    }
-   BOOST_ASSERT(this->m_traits.syntax_type(*m_position) == regex_constants::syntax_close_mark);
+   BOOST_REGEX_ASSERT(this->m_traits.syntax_type(*m_position) == regex_constants::syntax_close_mark);
    ++m_position;
    //
    // restore the flags:
@@ -2707,7 +2727,7 @@ option_group_jump:
    {
 #ifndef BOOST_NO_STD_DISTANCE
       if(this->flags() & regbase::save_subexpression_location)
-         this->m_pdata->m_subs.at(markid - 1).second = std::distance(m_base, m_position) - 1;
+         this->m_pdata->m_subs.at((std::size_t)markid - 1).second = std::distance(m_base, m_position) - 1;
 #else
       if(this->flags() & regbase::save_subexpression_location)
          this->m_pdata->m_subs.at(markid - 1).second = (m_position - m_base) - 1;
@@ -2715,8 +2735,7 @@ option_group_jump:
       //
       // allow backrefs to this mark:
       //
-      if(markid < (int)(sizeof(unsigned) * CHAR_BIT))
-         this->m_backrefs |= 1u << (markid - 1);
+      this->m_backrefs.set(markid);
    }
    return true;
 }
@@ -2744,6 +2763,12 @@ bool basic_regex_parser<charT, traits>::match_verb(const char* verb)
    return true;
 }
 
+#ifdef BOOST_MSVC
+#  pragma warning(push)
+#if BOOST_MSVC >= 1800
+#pragma warning(disable:26812)
+#endif
+#endif
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::parse_perl_verb()
 {
@@ -2912,6 +2937,9 @@ bool basic_regex_parser<charT, traits>::parse_perl_verb()
    fail(regex_constants::error_perl_extension, m_position - m_base);
    return false;
 }
+#ifdef BOOST_MSVC
+#  pragma warning(pop)
+#endif
 
 template <class charT, class traits>
 bool basic_regex_parser<charT, traits>::add_emacs_code(bool negate)
@@ -3088,7 +3116,7 @@ bool basic_regex_parser<charT, traits>::unwind_alts(std::ptrdiff_t last_paren_st
    // alternative then that's an error:
    //
    if((this->m_alt_insert_point == static_cast<std::ptrdiff_t>(this->m_pdata->m_data.size()))
-      && m_alt_jumps.size() && (m_alt_jumps.back() > last_paren_start)
+      && (!m_alt_jumps.empty()) && (m_alt_jumps.back() > last_paren_start)
       &&
       !(
          ((this->flags() & regbase::main_option_type) == regbase::perl_syntax_group)
@@ -3103,7 +3131,7 @@ bool basic_regex_parser<charT, traits>::unwind_alts(std::ptrdiff_t last_paren_st
    // 
    // Fix up our alternatives:
    //
-   while(m_alt_jumps.size() && (m_alt_jumps.back() > last_paren_start))
+   while((!m_alt_jumps.empty()) && (m_alt_jumps.back() > last_paren_start))
    {
       //
       // fix up the jump to point to the end of the states
@@ -3113,7 +3141,13 @@ bool basic_regex_parser<charT, traits>::unwind_alts(std::ptrdiff_t last_paren_st
       m_alt_jumps.pop_back();
       this->m_pdata->m_data.align();
       re_jump* jmp = static_cast<re_jump*>(this->getaddress(jump_offset));
-      BOOST_ASSERT(jmp->type == syntax_element_jump);
+      if (jmp->type != syntax_element_jump)
+      {
+         // Something really bad happened, this used to be an assert, 
+         // but we'll make it an error just in case we should ever get here.
+         fail(regex_constants::error_unknown, this->m_position - this->m_base, "Internal logic failed while compiling the expression, probably you added a repeat to something non-repeatable!");
+         return false;
+      }
       jmp->alt.i = this->m_pdata->m_data.size() - jump_offset;
    }
    return true;

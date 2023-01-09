@@ -22,11 +22,17 @@
 #ifdef __cplusplus
 #  include <boost/cstdint.hpp>
 #endif
-#include <boost/detail/workaround.hpp>
 
 #ifdef __cplusplus
 namespace boost{
    namespace regex_constants{
+#endif
+
+#ifdef BOOST_MSVC
+#pragma warning(push)
+#if BOOST_MSVC >= 1800
+#pragma warning(disable : 26812)
+#endif
 #endif
 
 typedef enum _match_flags
@@ -45,7 +51,7 @@ typedef enum _match_flags
    match_any = match_init << 1,                      /* don't care what we match */
    match_not_null = match_any << 1,                  /* string can't be null */
    match_continuous = match_not_null << 1,           /* each grep match must continue from */
-                                                     /* uninterupted from the previous one */
+                                                     /* uninterrupted from the previous one */
    match_partial = match_continuous << 1,            /* find partial matches */
    
    match_stop = match_partial << 1,                  /* stop after first match (grep) V3 only */
@@ -55,7 +61,7 @@ typedef enum _match_flags
    match_posix = match_perl << 1,                    /* Use POSIX matching rules */
    match_nosubs = match_posix << 1,                  /* don't trap marked subs */
    match_extra = match_nosubs << 1,                  /* include full capture information for repeated captures */
-   match_single_line = match_extra << 1,             /* treat text as single line and ignor any \n's when matching ^ and $. */
+   match_single_line = match_extra << 1,             /* treat text as single line and ignore any \n's when matching ^ and $. */
    match_unused1 = match_single_line << 1,           /* unused */
    match_unused2 = match_unused1 << 1,               /* unused */
    match_unused3 = match_unused2 << 1,               /* unused */
@@ -64,9 +70,9 @@ typedef enum _match_flags
    format_perl = 0,                                  /* perl style replacement */
    format_default = 0,                               /* ditto. */
    format_sed = match_max << 1,                      /* sed style replacement. */
-   format_all = format_sed << 1,                     /* enable all extentions to sytax. */
+   format_all = format_sed << 1,                     /* enable all extensions to syntax. */
    format_no_copy = format_all << 1,                 /* don't copy non-matching segments. */
-   format_first_only = format_no_copy << 1,          /* Only replace first occurance. */
+   format_first_only = format_no_copy << 1,          /* Only replace first occurrence. */
    format_is_if = format_first_only << 1,            /* internal use only. */
    format_literal = format_is_if << 1,               /* treat string as a literal */
 
@@ -83,7 +89,7 @@ typedef enum _match_flags
 
 } match_flags;
 
-#if defined(__BORLANDC__) || BOOST_WORKAROUND(BOOST_MSVC, <= 1310)
+#if defined(BOOST_BORLANDC) || (defined(_MSC_VER) && (_MSC_VER <= 1310))
 typedef unsigned long match_flag_type;
 #else
 typedef match_flags match_flag_type;
@@ -110,7 +116,7 @@ inline match_flags& operator^=(match_flags& m1, match_flags m2)
 #ifdef __cplusplus
 } /* namespace regex_constants */
 /*
- * import names into boost for backwards compatiblity:
+ * import names into boost for backwards compatibility:
  */
 using regex_constants::match_flag_type;
 using regex_constants::match_default;
@@ -143,6 +149,11 @@ using regex_constants::format_default;
 using regex_constants::format_no_copy;
 using regex_constants::format_first_only;
 /*using regex_constants::format_is_if;*/
+
+#ifdef BOOST_MSVC
+#pragma warning(pop)
+#endif
+
 
 } /* namespace boost */
 #endif /* __cplusplus */

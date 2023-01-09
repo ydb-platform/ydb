@@ -254,7 +254,9 @@ void TResource::ChargeUsedAmount(double amount, TInstant now) {
     FreeBalance -= amount;
     Balance -= amount;
     AmountConsumed += amount;
-    History.Add(now, amount);
+    if (StatUpdatePolicy != EStatUpdatePolicy::Never) {
+        History.Add(now, amount);
+    }
     Counters.Consumed->Add(static_cast<i64>(amount));
     if (Balance >= 0.0) {
         StopStarvation(now);
@@ -291,7 +293,9 @@ TDuration TResource::Charge(double amount, TInstant now) {
             LastAllocated = Max(now - QuoterServiceConfig.ScheduleTickSize * 2, timeToFullfill);
             Balance -= amount;
             AmountConsumed += amount;
-            History.Add(now, amount);
+            if (StatUpdatePolicy != EStatUpdatePolicy::Never) {
+                History.Add(now, amount);
+            }
 
             if (FreeBalance > Balance)
                 FreeBalance = Balance;
@@ -306,7 +310,9 @@ TDuration TResource::Charge(double amount, TInstant now) {
             FreeBalance -= amount;
             Balance -= amount;
             AmountConsumed += amount;
-            History.Add(now, amount);
+            if (StatUpdatePolicy != EStatUpdatePolicy::Never) {
+                History.Add(now, amount);
+            }
 
             Counters.Consumed->Add(static_cast<i64>(amount));
             StopStarvation(now);

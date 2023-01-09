@@ -21,7 +21,7 @@ user@host:~/github/ydb$ chmod +x ydb/apps/dstool/compile_protos.py
 user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
 ```
 
-## Run
+## Set up environment and run
 
 ```bash
 user@host:~$ cd ~/github/ydb

@@ -93,6 +93,7 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
     const NKikimrTxDataShard::EScanDataFormat Format;
     const ui64 TabletId;
     const TActorId Parent;
+    const TSubLoadId Id;
 
     TActorId Pipe;
 
@@ -109,12 +110,14 @@ public:
     TReadIteratorPoints(TEvDataShard::TEvRead* request,
                         ui64 tablet,
                         const TActorId& parent,
+                        const TSubLoadId& id,
                         const TVector<TOwnedCellVec>& points,
                         ui64 readCount)
         : BaseRequest(request)
         , Format(BaseRequest->Record.GetResultFormat())
         , TabletId(tablet)
         , Parent(parent)
+        , Id(id)
         , Points(points)
         , ReadCount(readCount)
     {
@@ -122,8 +125,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << " Bootstrap called, will read keys# " << Points.size());
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Bootstrap called, will read keys# " << Points.size());
 
         Become(&TReadIteratorPoints::StateFunc);
 
@@ -138,16 +141,16 @@ public:
 
 private:
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << " Connect to# " << TabletId << " called");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Connect to# " << TabletId << " called");
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << " Handle TEvClientConnected called, Status# " << msg->Status);
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
             TStringStream ss;
@@ -160,8 +163,8 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << " Handle TEvClientDestroyed called");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Handle TEvClientDestroyed called");
         return StopWithError(ctx, "broken pipe");
     }
 
@@ -217,8 +220,8 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << ", stopped with error: " << reason);
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << ", stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(0, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
@@ -226,8 +229,8 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << SelfId()
-            << " with parent# " << Parent << " tablet recieved PoisonPill, going to die");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " tablet recieved PoisonPill, going to die");
 
         // TODO: cancel iterator
         return Die(ctx);
@@ -249,6 +252,7 @@ class TReadIteratorScan : public TActorBootstrapped<TReadIteratorScan> {
     const NKikimrTxDataShard::EScanDataFormat Format;
     const ui64 TabletId;
     const TActorId Parent;
+    const TSubLoadId Id;
     const ui64 SampleKeyCount;
 
     TActorId Pipe;
@@ -259,18 +263,23 @@ class TReadIteratorScan : public TActorBootstrapped<TReadIteratorScan> {
     TVector<TOwnedCellVec> SampledKeys;
 
 public:
-    TReadIteratorScan(TEvDataShard::TEvRead* request, ui64 tablet, const TActorId& parent, ui64 sample)
+    TReadIteratorScan(TEvDataShard::TEvRead* request,
+                      ui64 tablet,
+                      const TActorId& parent,
+                      const TSubLoadId& id,
+                      ui64 sample)
         : Request(request)
         , Format(Request->Record.GetResultFormat())
         , TabletId(tablet)
         , Parent(parent)
+        , Id(id)
         , SampleKeyCount(sample)
     {
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << " Bootstrap called, sample# " << SampleKeyCount);
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+            << " Bootstrap called, sample# " << SampleKeyCount);
 
         Become(&TReadIteratorScan::StateFunc);
         Connect(ctx);
@@ -278,16 +287,16 @@ public:
 
 private:
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << " Connect to# " << TabletId << " called");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+            << " Connect to# " << TabletId << " called");
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << " Handle TEvClientConnected called, Status# " << msg->Status);
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+            << " Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
             TStringStream ss;
@@ -300,8 +309,8 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << " Handle TEvClientDestroyed called");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+            << " Handle TEvClientDestroyed called");
         return StopWithError(ctx, "broken pipe");
     }
 
@@ -340,8 +349,8 @@ private:
             }
 
             if (record.GetFinished() || SampledKeys.size() >= SampleKeyCount) {
-                LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-                    << " with parent# " << Parent << " finished in " << delta
+                LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+                    << " finished in " << delta
                     << ", sampled# " << SampledKeys.size()
                     << ", iter finished# " << record.GetFinished()
                     << ", oks# " << Oks);
@@ -352,8 +361,8 @@ private:
 
             return;
         } else if (record.GetFinished()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-                << " with parent# " << Parent << " finished in " << delta
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+                << " finished in " << delta
                 << ", read# " << Oks);
 
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(0);
@@ -368,8 +377,8 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << ", stopped with error: " << reason);
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+            << ", stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(0, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
@@ -377,8 +386,8 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << SelfId()
-            << " with parent# " << Parent << " tablet recieved PoisonPill, going to die");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
+            << " tablet recieved PoisonPill, going to die");
 
         // TODO: cancel iterator
         return Die(ctx);
@@ -407,7 +416,7 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    const ui64 Tag;
+    const TSubLoadId Id;
 
     // used to measure full run of this actor
     TInstant StartTs;
@@ -437,6 +446,8 @@ class TReadIteratorLoadScenario : public TActorBootstrapped<TReadIteratorLoadSce
     EState State = EState::DescribePath;
     ui64 Inflight = 0;
 
+    ui64 LastSubTag = 0;
+
     // setup for fullscan
     TVector<ui64> ChunkSizes = {0, 0, 1, 1, 10, 10, 100, 100, 1000, 1000}; // each twice intentionally
     size_t ChunkIndex = 0;
@@ -452,12 +463,12 @@ public:
                               const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                               const TActorId& parent,
                               TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                              ui64 tag)
+                              const TSubLoadId& id)
         : Config(cmd)
         , Target(target)
         , Parent(parent)
         , Counters(std::move(counters))
-        , Tag(tag)
+        , Id(id)
         , HeadReadsHist(1000, 4)
     {
         google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
@@ -485,7 +496,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << SelfId()
-            << " with tag# " << Tag << " Bootstrap called: " << ConfingString);
+            << " with id# " << Id << " Bootstrap called: " << ConfingString);
 
         Become(&TReadIteratorLoadScenario::StateFunc);
         StartTs = TInstant::Now();
@@ -543,7 +554,7 @@ private:
             AllColumnIds.push_back(column.GetId());
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " will work with tablet# " << TabletId << " with ownerId# " << OwnerId
             << " with tableId# " << TableId << " resolved for path# "
             << Target.GetWorkingDir() << "/" << Target.GetTableName()
@@ -580,7 +591,8 @@ private:
 
         record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
 
-        auto* actor = new TReadIteratorScan(request.release(), TabletId, SelfId(), sampleKeys);
+        TSubLoadId subId(Id.Tag, SelfId(), ++LastSubTag);
+        auto* actor = new TReadIteratorScan(request.release(), TabletId, SelfId(), subId, sampleKeys);
         StartedActors.emplace_back(ctx.Register(actor));
 
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "started fullscan actor# " << StartedActors.back());
@@ -651,7 +663,7 @@ private:
     void Handle(TEvPrivate::TEvKeys::TPtr& ev, const TActorContext& ctx) {
         Keys = std::move(ev->Get()->Keys);
 
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " received keyCount# " << Keys.size());
 
         State = EState::ReadHeadPoints;
@@ -684,16 +696,18 @@ private:
 
         record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
 
+        TSubLoadId subId(Id.Tag, SelfId(), ++LastSubTag);
         auto* readActor = new TReadIteratorPoints(
             request.release(),
             TabletId,
             SelfId(),
+            subId,
             Keys,
             ReadCount);
 
         StartedActors.emplace_back(ctx.Register(readActor));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " started read actor with id# " << StartedActors.back());
     }
 
@@ -701,7 +715,7 @@ private:
         --Inflight;
 
         const auto& requestTimes = ev->Get()->RequestTimes;
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " received point times# " << requestTimes.size() << ", Inflight left# " << Inflight);
 
         for (auto t: requestTimes) {
@@ -743,9 +757,9 @@ private:
         auto ts = TInstant::Now();
         auto delta = ts - StartTs;
 
-        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+        auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Id.SubTag);
         auto& report = *response->Record.MutableReport();
-        report.SetTag(Tag);
+        report.SetTag(Id.SubTag);
         report.SetDurationMs(delta.MilliSeconds());
         report.SetOperationsOK(Oks);
         report.SetOperationsError(0);
@@ -758,7 +772,7 @@ private:
         report.SetInfo(ss.Str());
         report.SetSubtestCount(Results.size());
 
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " finished in " << delta << " with report:\n" << report.GetInfo());
 
         ctx.Send(Parent, response.release());
@@ -769,22 +783,22 @@ private:
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "ReadIteratorLoadScenario# " << Tag << " started on " << StartTs;
+            str << "ReadIteratorLoadScenario# " << Id << " started on " << StartTs;
         }
-        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Id.SubTag, str.Str()));
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " tablet recieved PoisonPill, going to die");
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Tag
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
             << " stopped with error: " << reason);
 
-        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         Stop(ctx);
     }
 
@@ -811,9 +825,9 @@ IActor *CreateReadIteratorActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag)
+    const TSubLoadId& id)
 {
-    return new TReadIteratorLoadScenario(cmd, target, parent, std::move(counters), tag);
+    return new TReadIteratorLoadScenario(cmd, target, parent, std::move(counters), id);
 }
 
 } // NKikimr::NDataShardLoad

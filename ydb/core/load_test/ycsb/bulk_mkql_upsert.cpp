@@ -128,7 +128,7 @@ class TUpsertActor : public TActorBootstrapped<TUpsertActor> {
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
-    const ui64 Tag;
+    const TSubLoadId Id;
     const ERequestType RequestType;
     TString ConfingString;
 
@@ -152,12 +152,12 @@ public:
                  const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                  const TActorId& parent,
                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                 ui64 tag,
+                 const TSubLoadId& id,
                  ERequestType requestType)
         : Config(cmd)
         , Target(target)
         , Parent(parent)
-        , Tag(tag)
+        , Id(id)
         , RequestType(requestType)
     {
         Y_UNUSED(counters);
@@ -165,7 +165,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor Bootstrap called: " << ConfingString);
 
         // note that we generate all requests at once to send at max speed, i.e.
@@ -184,14 +184,14 @@ public:
 
 private:
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag << " TUpsertActor Connect called");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id << " TUpsertActor Connect called");
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), Target.GetTabletId()));
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
@@ -206,7 +206,7 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor Handle TEvClientDestroyed called");
         StopWithError(ctx, "broken pipe");
     }
@@ -214,8 +214,8 @@ private:
     void SendRows(const TActorContext &ctx) {
         while (Inflight < Config.GetInflight() && CurrentRequest < Requests.size()) {
             const auto* request = Requests[CurrentRequest].get();
-            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
-                << "TUpsertActor# " << Tag << " send request# " << CurrentRequest << ": " << request->ToString());
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+                << "TUpsertActor# " << Id << " send request# " << CurrentRequest << ": " << request->ToString());
             NTabletPipe::SendData(ctx, Pipe, Requests[CurrentRequest].release());
             ++CurrentRequest;
             ++Inflight;
@@ -229,30 +229,30 @@ private:
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
 
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Id.SubTag);
             auto& report = *response->Record.MutableReport();
-            report.SetTag(Tag);
+            report.SetTag(Id.SubTag);
             report.SetDurationMs(delta.MilliSeconds());
             report.SetOperationsOK(Requests.size() - Errors);
             report.SetOperationsError(Errors);
 
             ctx.Send(Parent, response.release());
 
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
                 << " TUpsertActor finished in " << delta << ", errors=" << Errors);
             Die(ctx);
         }
     }
 
     void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr ev, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 
         TEvDataShard::TEvUploadRowsResponse *msg = ev->Get();
         if (msg->Record.GetStatus() != 0) {
             ++Errors;
-            LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+            LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
                 << " TUpsertActor TEvUploadRowsResponse: " << msg->ToString());
         }
 
@@ -260,14 +260,14 @@ private:
     }
 
     void Handle(TEvTablet::TEvLocalMKQLResponse::TPtr ev, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 
         TEvTablet::TEvLocalMKQLResponse *msg = ev->Get();
         if (msg->Record.GetStatus() != 0) {
             ++Errors;
-            LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Tag# " << Tag
+            LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
                 << " TUpsertActor TEvLocalMKQLResponse: " << msg->ToString());
         }
 
@@ -281,7 +281,7 @@ private:
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "DS bulk upsert load actor# " << Tag << " started on " << StartTs
+            str << "DS bulk upsert load actor# " << Id << " started on " << StartTs
                 << " sent " << CurrentRequest << " out of " << Requests.size();
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
@@ -290,7 +290,7 @@ private:
                 << " errors=" << Errors;
         }
 
-        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Id.SubTag, str.Str()));
     }
 
     void HandlePoison(const TActorContext& ctx) {
@@ -301,7 +301,7 @@ private:
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
         LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
-        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);
     }
@@ -321,27 +321,30 @@ private:
 
 IActor *CreateUpsertBulkActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
         const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const TSubLoadId& id)
 {
-    return new TUpsertActor(cmd, target, parent, std::move(counters), tag, ERequestType::UpsertBulk);
+    return new TUpsertActor(cmd, target, parent, std::move(counters), id, ERequestType::UpsertBulk);
 }
 
 IActor *CreateLocalMkqlUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
         const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const TSubLoadId& id)
 {
-    return new TUpsertActor(cmd, target, parent, std::move(counters), tag, ERequestType::UpsertLocalMkql);
+    return new TUpsertActor(cmd, target, parent, std::move(counters), id, ERequestType::UpsertLocalMkql);
 }
 
 IActor *CreateProposeUpsertActor(const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
         const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
-        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag)
+        const TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const TSubLoadId& id)
 {
     Y_UNUSED(cmd);
     Y_UNUSED(target);
     Y_UNUSED(parent);
     Y_UNUSED(counters);
-    Y_UNUSED(tag);
+    Y_UNUSED(id);
     return nullptr; // not yet implemented
 }
 

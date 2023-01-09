@@ -12,35 +12,35 @@ IActor *CreateUpsertBulkActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag);
+    const TSubLoadId& id);
 
 IActor *CreateLocalMkqlUpsertActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag);
+    const TSubLoadId& id);
 
 IActor *CreateKqpUpsertActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag);
+    const TSubLoadId& id);
 
 IActor *CreateProposeUpsertActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart& cmd,
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag);
+    const TSubLoadId& id);
 
 IActor *CreateReadIteratorActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TReadStart& cmd,
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag);
+    const TSubLoadId& id);
 
 class TLoadManagerException : public yexception {
 };

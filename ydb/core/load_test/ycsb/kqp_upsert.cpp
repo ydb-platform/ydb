@@ -72,14 +72,13 @@ TQueryInfo GenerateUpsert(size_t n, const TString& table) {
     return TQueryInfo(str.Str(), std::move(params));
 }
 
-
 // it's a partial copy-paste from TUpsertActor: logic slightly differs, so that
 // it seems better to have copy-paste rather if/else for different loads
 class TKqpUpsertActor : public TActorBootstrapped<TKqpUpsertActor> {
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
-    const ui64 Tag;
+    const TSubLoadId Id;
     const TString Database;
 
     TString ConfingString;
@@ -99,12 +98,12 @@ public:
                     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                     const TActorId& parent,
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                    ui64 tag,
+                    const TSubLoadId& id,
                     TRequestsVector requests)
         : Config(cmd)
         , Target(target)
         , Parent(parent)
-        , Tag(tag)
+        , Id(id)
         , Database(Target.GetWorkingDir())
         , Requests(std::move(requests))
     {
@@ -113,7 +112,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
             << " Bootstrap called: " << ConfingString);
 
         Become(&TKqpUpsertActor::StateFunc);
@@ -123,7 +122,7 @@ public:
 private:
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
             << " sends event for session creation to proxy: " << kqpProxy.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
@@ -136,7 +135,7 @@ private:
             return;
 
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
             << " sends session close query to proxy: " << kqpProxy);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -150,7 +149,7 @@ private:
             request->Record.MutableRequest()->SetSessionId(Session);
 
             auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
                 << " send request# " << CurrentRequest
                 << " to proxy# " << kqpProxy << ": " << request->ToString());
 
@@ -168,23 +167,24 @@ private:
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
 
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Id.SubTag);
             auto& report = *response->Record.MutableReport();
-            report.SetTag(Tag);
+            report.SetTag(Id.SubTag);
             report.SetDurationMs(delta.MilliSeconds());
             report.SetOperationsOK(Requests.size() - Errors);
             report.SetOperationsError(Errors);
 
             ctx.Send(Parent, response.release());
 
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
                 << " finished in " << delta << ", errors=" << Errors);
             Die(ctx);
         }
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag << " tablet recieved PoisonPill, going to die");
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            << " tablet recieved PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -194,7 +194,7 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag << " session: " << Session);
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id << " session: " << Session);
             SendRows(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -202,7 +202,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Tag
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
             << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
         --Inflight;
@@ -217,14 +217,14 @@ private:
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
         LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
-        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         Die(ctx);
     }
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "TKqpUpsertActor# " << Tag << " started on " << StartTs
+            str << "TKqpUpsertActor# " << Id << " started on " << StartTs
                 << " sent " << CurrentRequest << " out of " << Requests.size();
             TInstant ts = EndTs ? EndTs : TInstant::Now();
             auto delta = ts - StartTs;
@@ -233,7 +233,7 @@ private:
                 << " errors=" << Errors;
         }
 
-        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Id.SubTag, str.Str()));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -249,12 +249,13 @@ class TKqpUpsertActorMultiSession : public TActorBootstrapped<TKqpUpsertActorMul
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TUpdateStart Config;
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard Target;
     const TActorId Parent;
-    const ui64 Tag;
+    const TSubLoadId Id;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     const TString Database;
 
     TString ConfingString;
 
+    ui64 LastSubTag = 0;
     TVector<TActorId> Actors;
 
     size_t Inflight = 0;
@@ -270,11 +271,11 @@ public:
                                 const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
                                 const TActorId& parent,
                                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                                ui64 tag)
+                                const TSubLoadId& id)
         : Config(cmd)
         , Target(target)
         , Parent(parent)
-        , Tag(tag)
+        , Id(id)
         , Counters(counters)
         , Database(target.GetWorkingDir())
     {
@@ -283,7 +284,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
             << " Bootstrap called: " << ConfingString);
 
         Become(&TKqpUpsertActorMultiSession::StateFunc);
@@ -331,7 +332,7 @@ private:
         Actors.reserve(actorsCount);
         Inflight = actorsCount;
         for (size_t i = 0; i < actorsCount; ++i) {
-            ui32 pseudoTag = 1000000 + i;
+            TSubLoadId subId(Id.Tag, SelfId(), ++LastSubTag);
             auto configCopy = Config;
             configCopy.SetInflight(1); // we have only 1 session
             configCopy.SetRowCount(requestsPerActor);
@@ -341,12 +342,12 @@ private:
                 Target,
                 SelfId(),
                 Counters,
-                pseudoTag,
+                subId,
                 std::move(perActorRequests[i]));
             Actors.emplace_back(ctx.Register(kqpActor));
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
             << " started# " << actorsCount << " actors each with inflight# " << requestsPerActor);
     }
 
@@ -362,7 +363,7 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Tag << " finished: " << ev->Get()->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Id << " finished: " << ev->Get()->ToString());
 
         Errors += record.GetReport().GetOperationsError();
         Oks += record.GetReport().GetOperationsOK();
@@ -372,15 +373,15 @@ private:
             EndTs = TInstant::Now();
             auto delta = EndTs - StartTs;
 
-            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Tag);
+            auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(Id.SubTag);
             auto& report = *response->Record.MutableReport();
-            report.SetTag(Tag);
+            report.SetTag(Id.SubTag);
             report.SetDurationMs(delta.MilliSeconds());
             report.SetOperationsOK(Oks);
             report.SetOperationsError(Errors);
             ctx.Send(Parent, response.release());
 
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
                 << " finished in " << delta << ", oks# " << Oks << ", errors# " << Errors);
 
             Stop(ctx);
@@ -390,22 +391,22 @@ private:
     void Handle(TEvDataShardLoad::TEvTestLoadInfoRequest::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
         HTML(str) {
-            str << "TKqpUpsertActorMultiSession# " << Tag << " started on " << StartTs;
+            str << "TKqpUpsertActorMultiSession# " << Id << " started on " << StartTs;
         }
-        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Tag, str.Str()));
+        ctx.Send(ev->Sender, new TEvDataShardLoad::TEvTestLoadInfoResponse(Id.SubTag, str.Str()));
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
             << " tablet recieved PoisonPill, going to die");
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
             << " stopped with error: " << reason);
 
-        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Tag, reason));
+        ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         Stop(ctx);
     }
 
@@ -431,9 +432,9 @@ IActor *CreateKqpUpsertActor(
     const NKikimrDataShardLoad::TEvYCSBTestLoadRequest::TTargetShard& target,
     const TActorId& parent,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    ui64 tag)
+    const TSubLoadId& id)
 {
-    return new TKqpUpsertActorMultiSession(cmd, target, parent, std::move(counters), tag);
+    return new TKqpUpsertActorMultiSession(cmd, target, parent, std::move(counters), id);
 }
 
 } // NKikimr::NDataShardLoad

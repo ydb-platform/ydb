@@ -95,5 +95,17 @@ IActor *CreateTestLoadActor(
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     ui64 tag);
 
+struct TSubLoadId {
+    ui64 Tag = 0; // tag assigned to the "main" load actor (i.e. controlling the load) by service actor
+    TActorId Parent; // parent of the subload
+    ui64 SubTag = 0;
+
+    TSubLoadId(ui64 tag, const TActorId& parent, ui64 subTag = 0)
+        : Tag(tag)
+        , Parent(parent)
+        , SubTag(subTag)
+    {}
+};
+
 } // NDataShardLoad
 } // NKikimr

@@ -49,7 +49,7 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     EState State = EState::Init;
-    ui64 LastTag;
+    ui64 LastTag = 0;
     TInstant StartTs;
     THashSet<TActorId> LoadActors;
 
@@ -74,7 +74,6 @@ public:
         , Tag(tag)
         , Request(std::move(request))
         , Counters(counters)
-        , LastTag(tag)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -346,7 +345,7 @@ public:
                target,
                ctx.SelfID,
                GetServiceCounters(Counters, "load_actor"),
-               ++LastTag)));
+               TSubLoadId(Tag, ctx.SelfID, ++LastTag))));
     }
 
     void RunLoad(const TActorContext& ctx) {
@@ -362,7 +361,7 @@ public:
                 Request.GetTargetShard(),
                 ctx.SelfID,
                 counters,
-                tag));
+                TSubLoadId(Tag, ctx.SelfID, ++LastTag)));
             break;
         case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertLocalMkqlStart:
             actor.reset(CreateLocalMkqlUpsertActor(
@@ -370,7 +369,7 @@ public:
                 Request.GetTargetShard(),
                 ctx.SelfID,
                 counters,
-                tag));
+                TSubLoadId(Tag, ctx.SelfID, ++LastTag)));
             break;
         case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertKqpStart:
             actor.reset(CreateKqpUpsertActor(
@@ -378,7 +377,7 @@ public:
                 Request.GetTargetShard(),
                 ctx.SelfID,
                 counters,
-                tag));
+                TSubLoadId(Tag, ctx.SelfID, ++LastTag)));
             break;
         case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kUpsertProposeStart:
             actor.reset(CreateProposeUpsertActor(
@@ -386,7 +385,7 @@ public:
                 Request.GetTargetShard(),
                 ctx.SelfID,
                 counters,
-                tag));
+                TSubLoadId(Tag, ctx.SelfID, ++LastTag)));
             break;
         case NKikimrDataShardLoad::TEvYCSBTestLoadRequest::CommandCase::kReadIteratorStart:
             actor.reset(CreateReadIteratorActor(
@@ -394,7 +393,7 @@ public:
                 Request.GetTargetShard(),
                 ctx.SelfID,
                 counters,
-                tag));
+                TSubLoadId(Tag, ctx.SelfID, ++LastTag)));
             break;
         default: {
             TStringStream ss;
@@ -612,4 +611,12 @@ inline void Out<NKikimr::NDataShardLoad::TLoad::EState>(
         o << (int)state;
         break;
     }
+}
+
+template <>
+void Out<NKikimr::NDataShardLoad::TSubLoadId>(
+    IOutputStream& o,
+    const NKikimr::NDataShardLoad::TSubLoadId& loadId)
+{
+    o << "{Tag: " << loadId.Tag << ", parent: " << loadId.Parent << ", subTag: " << loadId.SubTag << "}";
 }

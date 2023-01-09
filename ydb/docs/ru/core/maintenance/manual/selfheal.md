@@ -16,75 +16,19 @@ SelfHeal позволяет:
 
 - Включить SelfHeal
 
-  1. Чтобы включить обнаружение неисправных элементов, откройте страницу `http://localhost:8765/cms#show=config-items-25`.
-  1. Зайдите на любой узел.
-  1. Составьте файл обновленной конфигурации с включенным параметром `SentinelConfig { Enable: true }`.
+  Чтобы включить ```self-healing``` выполните команду:
 
-     Пример файла `config.txt`:
-
-     ```text
-     Actions {
-         AddConfigItem {
-             ConfigItem {
-                 Config {
-                     CmsConfig {
-                         SentinelConfig {
-                             Enable: true
-                         }
-                     }
-                 }
-             }
-         }
-     }
-     ```
-
-  1. Выполните команду:
-
-     ```bash
-     kikimr admin console configs update config.txt
-     ```
-
-  1. Чтобы включить перенос данных, выполните команду:
-
-     ```bash
-     kikimr -s <endpoint> admin bs config invoke --proto 'Command{EnableSelfHeal{Enable: true}}'
-     ```
+  ```bash
+  ydb-dstool.py -e ydb.endpoint cluster set --enable-self-heal
+  ```
 
 - Выключить SelfHeal
 
-  1. Чтобы выключить обнаружение неисправных элементов, откройте страницу `http://localhost:8765/cms#show=config-items-25`.
-  1. Зайдите на любой узел.
-  1. Составьте файл обновленной конфигурации с выключенным параметром `SentinelConfig { Enable: false }`.
+  Чтобы выключить ```self-healing``` выполните команду:
 
-     Пример файла `config.txt`:
-
-     ```text
-     Actions {
-         AddConfigItem {
-             ConfigItem {
-                 Config {
-                     CmsConfig {
-                         SentinelConfig {
-                             Enable: false
-                         }
-                     }
-                 }
-             }
-         }
-     }
-     ```
-
-  1. Выполните команду:
-
-     ```bash
-     kikimr admin console configs update config.txt
-     ```
-
-  1. Чтобы выключить перенос данных, выполните команду:
-
-     ```bash
-     kikimr -s <endpoint> admin bs config invoke --proto 'Command{EnableSelfHeal{Enable: false}}'
-     ```
+  ```bash
+  ydb-dstool.py -e ydb.endpoint cluster set --disable-self-heal
+  ```
 
 {% endlist %}
 
@@ -126,16 +70,14 @@ SelfHeal позволяет:
 
 ## Работа с дисками-донорами {#disks}
 
-Чтобы предотвратить потерю данных при переносе VDisk'а, включите возможность использования дисков-доноров:
+Диск-донор — это предыдущий VDisk после переноса данных, который продолжает хранить свои данные и отвечает только на запросы чтения от нового VDisk'а. При переносе с включенными дисками-донорами предыдущие VDisk'и продолжают функционировать до тех пор, пока данные не будут полностью перенесены на новые диски. Чтобы предотвратить потерю данных при переносе VDisk'а, включите возможность использования дисков-доноров:
 
 ```bash
-kikimr admin bs config invoke --proto 'Command { UpdateSettings { EnableDonorMode: true } }'
+ydb-dstool.py -e ydb.endpoint cluster set --enable-donor-mode
 ```
 
-Чтобы выключить диски-доноры, укажите `false` в параметре `EnableDonorMode` той же команды:
+Чтобы выключить диски-доноры, введите команду:
 
 ```bash
-kikimr admin bs config invoke --proto 'Command { UpdateSettings { EnableDonorMode: false } }'
+ydb-dstool.py -e ydb.endpoint cluster set --disable-donor-mode
 ```
-
-Диск-донор — это предыдущий VDisk после переноса данных, который продолжает хранить свои данные и отвечает только на запросы чтения от нового VDisk'а. При переносе с включенными дисками-донорами предыдущие VDisk'и продолжают функционировать до тех пор, пока данные не будут полностью перенесены на новые диски.

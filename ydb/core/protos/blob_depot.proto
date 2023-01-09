@@ -36,7 +36,6 @@ message TValue {
     repeated TValueChain ValueChain = 2;
     optional EKeepState KeepState = 3;
     optional bool Public = 4;
-    optional NKikimrProto.TLogoBlobID OriginalBlobId = 5;
 }
 
 message TGivenIdRange {

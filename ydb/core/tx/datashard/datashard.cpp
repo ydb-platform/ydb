@@ -111,7 +111,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , SrcSplitOpId(0)
     , State(TShardState::Uninitialized)
     , LastLocalTid(Schema::MinLocalTid)
-    , LastSeqno(1)
+    , NextSeqno(1)
     , NextChangeRecordOrder(1)
     , LastChangeRecordGroup(1)
     , TxReadSizeLimit(0)
@@ -398,6 +398,10 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     // Cleanup any removed snapshots from the previous generation
     Execute(new TTxCleanupRemovedSnapshots(this), ctx);
 
+    if (State != TShardState::Offline) {
+        VolatileTxManager.Start();
+    }
+
     SignalTabletActive(ctx);
     DoPeriodicTasks(ctx);
 
@@ -454,20 +458,20 @@ void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
     if (txOutReadSets.empty())
         return;
 
-    ui64 prevSeqno = LastSeqno;
+    ui64 prevSeqno = NextSeqno;
     for (auto& kv : txOutReadSets) {
         ui64 source = kv.first.first;
         ui64 target = kv.first.second;
         TReadSetKey rsKey(txId, TabletID(), source, target);
         if (! OutReadSets.Has(rsKey)) {
-            ui64 seqno = LastSeqno++;
+            ui64 seqno = NextSeqno++;
             OutReadSets.SaveReadSet(db, seqno, step, rsKey, kv.second);
             preparedRS.push_back(PrepareReadSet(step, txId, source, target, kv.second, seqno));
         }
     }
 
-    if (LastSeqno != prevSeqno) {
-        PersistSys(db, Schema::Sys_LastSeqno, LastSeqno);
+    if (NextSeqno != prevSeqno) {
+        PersistSys(db, Schema::Sys_NextSeqno, NextSeqno);
     }
 }
 
@@ -484,6 +488,43 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
+class TDataShard::TSendVolatileResult final : public IVolatileTxCallback {
+public:
+    TSendVolatileResult(
+            TDataShard* self, TOutputOpData::TResultPtr result,
+            const TActorId& target,
+            ui64 step, ui64 txId)
+        : Self(self)
+        , Result(std::move(result))
+        , Target(target)
+        , Step(step)
+        , TxId(txId)
+    { }
+
+    void OnCommit() override {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
+                    << " at tablet " << Self->TabletID() << " send result to client "
+                    << Target <<  ", exec latency: " << Result->Record.GetExecLatency()
+                    << " ms, propose latency: " << Result->Record.GetProposeLatency() << " ms");
+
+        ui64 resultSize = Result->GetTxResult().size();
+        ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
+        Self->Send(Target, Result.Release(), flags);
+    }
+
+    void OnAbort() override {
+        Y_FAIL("TODO");
+    }
+
+private:
+    TDataShard* Self;
+    TOutputOpData::TResultPtr Result;
+    TActorId Target;
+    ui64 Step;
+    ui64 TxId;
+};
+
 void TDataShard::SendResult(const TActorContext &ctx,
                                    TOutputOpData::TResultPtr &res,
                                    const TActorId &target,
@@ -491,6 +532,14 @@ void TDataShard::SendResult(const TActorContext &ctx,
                                    ui64 txId)
 {
     Y_VERIFY(txId == res->GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, res->GetTxId());
+
+    if (VolatileTxManager.FindByTxId(txId)) {
+        // This is a volatile transaction, and we need to wait until it is resolved
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
+            new TSendVolatileResult(this, std::move(res), target, step, txId));
+        Y_VERIFY(ok);
+        return;
+    }
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Complete [" << step << " : " << txId << "] from " << TabletID()

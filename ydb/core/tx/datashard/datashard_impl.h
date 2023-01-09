@@ -215,6 +215,8 @@ class TDataShard
     class TTxRemoveLock;
     class TTxGetOpenTxs;
     class TTxRemoveLockChangeRecords;
+    class TTxVolatileTxCommit;
+    class TTxVolatileTxAbort;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -293,6 +295,8 @@ class TDataShard
     class TTxChangeExchangeSplitAck;
 
     class TTxApplyReplicationChanges;
+
+    class TSendVolatileResult;
 
     struct TEvPrivate {
         enum EEv {
@@ -927,7 +931,7 @@ class TDataShard
             Sys_LastCompleteStep,
             Sys_LastCompleteTx,
             Sys_LastLocalTid,
-            Sys_LastSeqno, // Last sequence number of out read set
+            Sys_NextSeqno, // Next sequence number of out read set
             Sys_AliveStep, // Last known step we shouldn't drop at
             Sys_TxReadSizeLimit_DEPRECATED, // 10// No longer used but is present in old tables
             Sys_CurrentSchemeShardId, // TabletID of the schmemeshard that manages the datashard right now
@@ -2250,7 +2254,7 @@ private:
     ui32 State;
     ui32 LastLocalTid;
     ui32 LastLoanTableTid;
-    ui64 LastSeqno;
+    ui64 NextSeqno;
     ui64 NextChangeRecordOrder;
     ui64 LastChangeRecordGroup;
     ui64 TxReadSizeLimit;

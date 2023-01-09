@@ -579,12 +579,13 @@ public:
     }
 
     NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId) const override {
-        // TODO: handle volatile transactions
         if (TSysTables::IsSystemTable(tableId) || !LockTxId)
             return nullptr;
 
-        if (!Self->SysLocksTable().HasWriteLocks(tableId)) {
-            // We don't have any active write locks, so there's nothing we
+        if (!Self->GetVolatileTxManager().GetTxMap() &&
+            !Self->SysLocksTable().HasWriteLocks(tableId))
+        {
+            // We don't have any uncommitted changes, so there's nothing we
             // could possibly conflict with.
             return nullptr;
         }
@@ -624,9 +625,9 @@ public:
             Host->CheckReadConflict(TableId, rowVersion);
         }
 
-        void OnApplyCommitted(const TRowVersion& rowVersion, ui64) override {
-            // TODO: handle volatile read dependencies
+        void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) override {
             Host->CheckReadConflict(TableId, rowVersion);
+            Host->CheckReadDependency(txId);
         }
 
     private:
@@ -655,15 +656,25 @@ public:
             // visibility, we might shadow some change that happened after a
             // snapshot. This is a clear indication of a conflict between read
             // and that future conflict, hence we must break locks and abort.
-            // TODO: add an actual abort
             Self->SysLocksTable().BreakSetLocks();
             EngineBay.GetKqpComputeCtx().SetInconsistentReads();
         }
     }
 
+    void CheckReadDependency(ui64 txId) const {
+        if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
+            if (info->State == EVolatileTxState::Waiting) {
+                // We are reading undecided changes and need to wait until they are resolved
+                VolatileReadDependencies.insert(info->TxId);
+            }
+        }
+    }
+
     void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> row) {
-        if (!Self->SysLocksTable().HasWriteLocks(tableId)) {
-            // We don't have any active write locks, so there's nothing we
+        if (!Self->GetVolatileTxManager().GetTxMap() &&
+            !Self->SysLocksTable().HasWriteLocks(tableId))
+        {
+            // We don't have any uncommitted changes, so there's nothing we
             // could possibly conflict with.
             return;
         }
@@ -693,7 +704,7 @@ public:
             throw TNotReadyTabletException();
         }
 
-        if (LockTxId) {
+        if (LockTxId || VolatileTxId) {
             ui64 skipLimit = Self->GetMaxLockedWritesPerKey();
             if (skipLimit > 0 && skipCount >= skipLimit) {
                 throw TLockedWriteLimitException();
@@ -712,8 +723,8 @@ public:
         }
 
         void OnSkipUncommitted(ui64 txId) override {
-            // TODO: we need to somehow remember that this lock must add a
-            // dependency to some other volatile tx at commit time.
+            // Note: all active volatile transactions will be uncommitted
+            // without a tx map, and will be handled by AddWriteConflict.
             if (!Host->Db.HasRemovedTx(LocalTid, txId)) {
                 ++SkipCount;
                 if (!SelfFound) {
@@ -758,9 +769,8 @@ public:
         }
 
         void OnSkipUncommitted(ui64 txId) override {
-            // TODO: handle volatile write dependencies
-            // Note that all active volatile transactions will be uncommitted
-            // here, since we are not using tx map for conflict detection.
+            // Note: all active volatile transactions will be uncommitted
+            // without a tx map, and will be handled by BreakWriteConflict.
             Host->BreakWriteConflict(txId);
         }
 
@@ -785,11 +795,32 @@ public:
     };
 
     void AddWriteConflict(ui64 txId) const {
-        Self->SysLocksTable().AddWriteConflict(txId);
+        if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
+            Y_FAIL("TODO: add future lock dependency from %" PRIu64 " on %" PRIu64, LockTxId, info->TxId);
+        } else {
+            Self->SysLocksTable().AddWriteConflict(txId);
+        }
     }
 
     void BreakWriteConflict(ui64 txId) const {
-        Self->SysLocksTable().BreakLock(txId);
+        if (VolatileCommitTxIds.contains(txId)) {
+            // Skip our own commits
+        } else if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
+            // We must not overwrite uncommitted changes that may become committed
+            // later, so we need to switch transaction to volatile writes mid
+            // flight. This is only needed so we don't block writes and still
+            // commit changes in the correct order.
+            if (!VolatileTxId && info->State != EVolatileTxState::Aborted) {
+                Y_FAIL("TODO: implement switching to volatile writes mid-transaction");
+            }
+            // Add dependency on undecided transactions
+            if (info->State == EVolatileTxState::Waiting) {
+                VolatileDependencies.insert(info->TxId);
+            }
+        } else {
+            // Break uncommitted locks
+            Self->SysLocksTable().BreakLock(txId);
+        }
     }
 
 private:
@@ -814,6 +845,7 @@ private:
     mutable absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
     mutable absl::flat_hash_set<ui64> VolatileCommitTxIds;
     mutable absl::flat_hash_set<ui64> VolatileDependencies;
+    mutable absl::flat_hash_set<ui64> VolatileReadDependencies;
 };
 
 //

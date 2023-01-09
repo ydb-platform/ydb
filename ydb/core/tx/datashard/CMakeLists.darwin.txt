@@ -48,6 +48,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   cpp-actors-core
   cpp-containers-absl_flat_hash
   cpp-containers-flat_hash
+  cpp-containers-stack_vector
   cpp-digest-md5
   cpp-html-pcdata
   library-cpp-json
@@ -301,6 +302,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   cpp-actors-core
   cpp-containers-absl_flat_hash
   cpp-containers-flat_hash
+  cpp-containers-stack_vector
   cpp-digest-md5
   cpp-html-pcdata
   library-cpp-json

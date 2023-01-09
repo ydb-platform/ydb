@@ -611,6 +611,13 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     ui64 step = rs.Record.GetStep();
     ui64 txId = rs.Record.GetTxId();
 
+    if (Self->GetVolatileTxManager().FindByTxId(txId)) {
+        // This readset is for a known volatile transaction, we need to
+        // hand it off to volatile tx manager.
+        Self->GetVolatileTxManager().ProcessReadSet(rs, txc);
+        return true;
+    }
+
     if (step <= OutdatedReadSetStep()) {
         LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
                    "Outdated readset for %" PRIu64 ":%" PRIu64 " at %" PRIu64,

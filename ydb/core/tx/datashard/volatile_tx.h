@@ -1,7 +1,9 @@
 #pragma once
+#include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_table_committed.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NTabletFlatExecutor {
@@ -29,6 +31,15 @@ namespace NKikimr::NDataShard {
         Aborted = 2,
     };
 
+    class IVolatileTxCallback : public TThrRefBase {
+    public:
+        using TPtr = TIntrusivePtr<IVolatileTxCallback>;
+
+    public:
+        virtual void OnCommit() = 0;
+        virtual void OnAbort() = 0;
+    };
+
     struct TVolatileTxInfo {
         ui64 TxId;
         EVolatileTxState State = EVolatileTxState::Waiting;
@@ -38,10 +49,14 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> Dependents;
         absl::flat_hash_set<ui64> Participants;
         bool AddCommitted = false;
+        absl::flat_hash_set<ui64> BlockedTransactions;
+        TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
     };
 
     class TVolatileTxManager {
         using TTransactionContext = NKikimr::NTabletFlatExecutor::TTransactionContext;
+
+        friend class TDataShard;
 
     private:
         /**
@@ -106,6 +121,7 @@ namespace NKikimr::NDataShard {
 
         void Clear();
         bool Load(NIceDb::TNiceDb& db);
+        void Start();
 
         TVolatileTxInfo* FindByTxId(ui64 txId) const;
         TVolatileTxInfo* FindByCommitTxId(ui64 txId) const;
@@ -117,19 +133,41 @@ namespace NKikimr::NDataShard {
             TConstArrayRef<ui64> participants,
             TTransactionContext& txc);
 
+        bool AttachVolatileTxCallback(
+            ui64 txId, IVolatileTxCallback::TPtr callback);
+
+        void ProcessReadSet(
+            const TEvTxProcessing::TEvReadSet& rs,
+            TTransactionContext& txc);
+
         TTxMapAccess GetTxMap() const {
             return TTxMapAccess(TxMap);
         }
 
     private:
+        void PersistRemoveVolatileTx(ui64 txId, TTransactionContext& txc);
+        void RemoveVolatileTx(ui64 txId);
+
         bool LoadTxDetails(NIceDb::TNiceDb& db);
         bool LoadTxParticipants(NIceDb::TNiceDb& db);
+        void RunCommitCallbacks(TVolatileTxInfo* info);
+        void RunAbortCallbacks(TVolatileTxInfo* info);
+        void RemoveFromTxMap(TVolatileTxInfo* info);
+        void UnblockDependents(TVolatileTxInfo* info);
+        void AddPendingCommit(ui64 txId);
+        void AddPendingAbort(ui64 txId);
+        void RunPendingCommitTx();
+        void RunPendingAbortTx();
 
     private:
         TDataShard* const Self;
         absl::flat_hash_map<ui64, std::unique_ptr<TVolatileTxInfo>> VolatileTxs; // TxId -> Info
         absl::flat_hash_map<ui64, TVolatileTxInfo*> VolatileTxByCommitTxId; // CommitTxId -> Info
         TIntrusivePtr<TTxMap> TxMap;
+        std::deque<ui64> PendingCommits;
+        std::deque<ui64> PendingAborts;
+        bool PendingCommitTxScheduled = false;
+        bool PendingAbortTxScheduled = false;
     };
 
 } // namespace NKikimr::NDataShard

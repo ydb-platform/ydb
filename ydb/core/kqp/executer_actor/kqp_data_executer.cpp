@@ -1323,6 +1323,9 @@ private:
             << ", lockTxId: " << lockTxId
             << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString());
 
+        const ui32 flags =
+            (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
+            (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
         TEvDataShard::TEvProposeTransaction* ev;
         if (Snapshot.IsValid() && (ReadOnlyTx || AppData()->FeatureFlags.GetEnableKqpImmediateEffects())) {
             ev = new TEvDataShard::TEvProposeTransaction(
@@ -1332,15 +1335,14 @@ private:
                 dataTransaction.SerializeAsString(),
                 Snapshot.Step,
                 Snapshot.TxId,
-                ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
+                flags);
         } else {
             ev = new TEvDataShard::TEvProposeTransaction(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 SelfId(),
                 TxId,
                 dataTransaction.SerializeAsString(),
-                (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0) |
-                (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0));
+                flags);
         }
 
         auto traceId = ExecuterSpan.GetTraceId();
@@ -1794,12 +1796,10 @@ private:
 
         const bool needRollback = Request.EraseLocks && !Request.ValidateLocks;
 
-        const bool uncommittedWrites = AppData()->FeatureFlags.GetEnableKqpImmediateEffects() && Request.Snapshot.IsValid();
-
         VolatileTx = (
             // We want to use volatile transactions only when the feature is enabled
             AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions() &&
-            // We don't want volatile tx when acquiring locks
+            // We don't want volatile tx when acquiring locks (including write locks for uncommitted writes)
             !Request.AcquireLocksTxId &&
             // We don't want readonly volatile transactions
             !ReadOnlyTx &&
@@ -1807,8 +1807,6 @@ private:
             !ShardsWithEffects.empty() &&
             // We don't want to use volatile transactions when doing a rollback
             !needRollback &&
-            // We cannot use volatile transaction for uncommitted writes
-            !uncommittedWrites &&
             // We cannot use volatile transactions with topics
             // TODO: add support in the future
             topicTxs.empty() &&

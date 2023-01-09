@@ -809,16 +809,18 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
         for (auto& record : tx->DelayedInReadSets()) {
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
-            if (!tx->AwaitingDecisions().contains(srcTabletId) || dstTabletId != origin) {
-                // Don't process unexpected readsets
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from "
+            if (dstTabletId != origin) {
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from "
                     << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId() << " at tablet " << origin);
+                continue;
+            }
+            if (!tx->AwaitingDecisions().contains(srcTabletId)) {
                 continue;
             }
 
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
                 // No readset data: participant aborted the transaction
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed no data readset from"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed readset without data from"
                     << srcTabletId << " to " << dstTabletId << " will abort txId# " << tx->GetTxId());
                 aborted = true;
                 break;

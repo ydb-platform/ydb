@@ -79,7 +79,7 @@ protected:
         event->DebugInfo = std::move(DebugInfo);
 
         RequestCounters.Common->ResponseBytes->Add(event->GetByteSize());
-        RequestCounters.IncInFly();
+        RequestCounters.DecInFly();
         if (success) {
             RequestCounters.IncOk();
         } else {

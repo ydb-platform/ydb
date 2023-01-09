@@ -167,28 +167,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         return CreateKqpDataExecuter(std::move(request), database, userToken, counters);
     }
 
-    if (request.Locks.empty()) {
-        bool literal = true;
-        for (const auto& tx : request.Transactions) {
-            if (tx.Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
-                literal = false;
-                break;
-            }
-            for (const auto& stage : tx.Body->GetStages()) {
-                if (stage.InputsSize() != 0) {
-                    literal = false;  // allow only independent stages
-                    break;
-                }
-            }
-        }
-
-        if (literal) {
-            return CreateKqpLiteralExecuter(std::move(request), counters);
-        }
-    }
-
     bool data = true; // `false` stands for Scan
-
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
     for (auto& tx : request.Transactions) {
         if (txsType) {

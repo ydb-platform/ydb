@@ -85,5 +85,8 @@ struct TEvKqpExecuter {
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters);
 
+std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecutePure(
+    IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner);
+
 } // namespace NKqp
 } // namespace NKikimr

@@ -98,7 +98,7 @@ struct TQueryAction {
     PROBE(KqpScanExecuterFinalize, GROUPS("KQP"), \
         TYPES(ui64, ui64, TString, ui64), \
         NAMES("TxId", "lastCompletedTask", "lastCompletedComputeActor", "ResultsSize")) \
-    PROBE(KqpLiteralExecuterReplyErrorAndDie, GROUPS("KQP"), \
+    PROBE(KqpLiteralExecuterCreateErrorResponse, GROUPS("KQP"), \
         TYPES(ui64), \
         NAMES("TxId")) \
     PROBE(KqpLiteralExecuterFinalize, GROUPS("KQP"), \

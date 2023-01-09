@@ -56,27 +56,18 @@ TDqTaskRunnerExecutionContext CreateTaskRunnerExecutionContext() {
     return {};
 }
 
-class TKqpLiteralExecuter : public TActorBootstrapped<TKqpLiteralExecuter> {
-    using TBase = TActorBootstrapped<TKqpLiteralExecuter>;
-
+class TKqpLiteralExecuter {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_LITERAL_EXECUTER_ACTOR;
-    }
-
-public:
-    TKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters)
+    TKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner)
         : Request(std::move(request))
         , Counters(counters)
+        , OwnerActor(owner)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
-    }
-
-    void Bootstrap() {
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -86,49 +77,31 @@ public:
         }
 
         LOG_D("Begin literal execution. Operation timeout: " << Request.Timeout << ", cancelAfter: " << Request.CancelAfter);
-
-        Become(&TKqpLiteralExecuter::WorkState);
     }
 
-private:
-    STATEFN(WorkState) {
+    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecutePure() {
         try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTxRequest, Handle);
-                default: {
-                    LOG_C("TKqpLiteralExecuter, unexpected event: " << ev->GetTypeRewrite() << ", selfID: " << SelfId());
-                    InternalError("Unexpected event");
-                }
-            }
+            ExecutePureImpl();
         } catch (const TMemoryLimitExceededException&) {
             LOG_W("TKqpLiteralExecuter, memory limit exceeded.");
-            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
+            CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
             LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);
             InternalError(TStringBuilder() << "Unexpected exception: " << msg);
         }
+
+        return std::move(ResponseEv);
     }
 
-    void Handle(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
+    void ExecutePureImpl() {
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::LiteralExecuterPrepareTasks, LiteralExecuterSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         if (Stats) {
             Stats->StartTs = TInstant::Now();
         }
 
-        TxId = ev->Get()->Record.GetRequest().GetTxId();
-        Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
-
-        {
-            LOG_D("Report self actorId " << SelfId() << " to " << Target);
-            auto progressEv = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
-            ActorIdToProto(SelfId(), progressEv->Record.MutableExecuterActorId());
-            Send(Target, progressEv.Release());
-        }
-
         LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
-
         auto& transactions = Request.Transactions;
         FillKqpTasksGraphStages(TasksGraph, transactions);
 
@@ -196,7 +169,7 @@ private:
         }
 
         Finalize();
-        PassAway();
+        UpdateCounters();
     }
 
     void RunTask(TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
@@ -299,7 +272,7 @@ private:
 
             fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
-            Stats->AddComputeActorStats(SelfId().NodeId(), std::move(fakeComputeActorStats));
+            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats));
 
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
@@ -322,8 +295,7 @@ private:
             LiteralExecuterSpan.EndOk();
         }
         CleanupCtx();
-        LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
-        Send(Target, ResponseEv.release());
+        LOG_D("Execution is complete, results: " << ResponseEv->ResultsSize());
     }
 
 private:
@@ -340,17 +312,17 @@ private:
         auto now = AppData()->TimeProvider->Now();
 
         if (Deadline && *Deadline <= now) {
-            LOG_I("Timeout exceeded. Send timeout event to the rpc actor " << Target);
+            LOG_I("Timeout exceeded.");
 
-            ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT,
+            CreateErrorResponse(Ydb::StatusIds::TIMEOUT,
                 YqlIssue({}, TIssuesIds::KIKIMR_TIMEOUT, "Request timeout exceeded."));
             return true;
         }
 
         if (CancelAt && *CancelAt <= now) {
-            LOG_I("CancelAt exceeded. Send cancel event to the rpc actor " << Target);
+            LOG_I("CancelAt exceeded.");
 
-            ReplyErrorAndDie(Ydb::StatusIds::CANCELLED,
+            CreateErrorResponse(Ydb::StatusIds::CANCELLED,
                 YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_CANCELLED, "Request timeout exceeded."));
             return true;
         }
@@ -363,16 +335,16 @@ private:
         LOG_E(message);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(message));
-        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issue);
+        CreateErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }
 
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const TIssue& issue) {
+    void CreateErrorResponse(Ydb::StatusIds::StatusCode status, const TIssue& issue) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
         IssueToMessage(issue, issues.Add());
-        ReplyErrorAndDie(status, &issues);
+        CreateErrorResponse(status, &issues);
     }
 
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
+    void CreateErrorResponse(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         if (status != Ydb::StatusIds::SUCCESS) {
@@ -393,22 +365,19 @@ private:
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
 
-        LWTRACK(KqpLiteralExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
+        LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
         if (LiteralExecuterSpan) {
             LiteralExecuterSpan.EndError(response.DebugString());
         }
 
         CleanupCtx();
-        Send(Target, ResponseEv.release());
-        PassAway();
+        UpdateCounters();
     }
 
-    void PassAway() override {
+    void UpdateCounters() {
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->LiteralTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
-
-        TBase::PassAway();
     }
 
 private:
@@ -418,7 +387,7 @@ private:
     std::unique_ptr<TQueryExecutionStats> Stats;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;
-    TActorId Target;
+    TActorId OwnerActor;
     ui64 TxId = 0;
     TKqpTasksGraph TasksGraph;
     std::unordered_map<ui64, ui32> TaskId2StageId;
@@ -432,8 +401,13 @@ private:
 
 } // anonymous namespace
 
-IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters) {
-    return new TKqpLiteralExecuter(std::move(request), counters);
+std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecutePure(
+    IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner)
+{
+    std::unique_ptr<TKqpLiteralExecuter> executer = std::make_unique<TKqpLiteralExecuter>(
+        std::move(request), counters, owner);
+
+    return executer->ExecutePure();
 }
 
 } // namespace NKqp

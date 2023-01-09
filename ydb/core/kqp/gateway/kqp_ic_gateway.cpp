@@ -475,6 +475,7 @@ private:
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
+
 class TKqpExecPureRequestHandler: public TActorBootstrapped<TKqpExecPureRequestHandler> {
 public:
     using TResult = IKqpGateway::TExecPhysicalResult;
@@ -483,24 +484,31 @@ public:
         return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
     }
 
-    TKqpExecPureRequestHandler(const TActorId& executerId, TPromise<TResult> promise, TQueryData::TPtr params)
-        : ExecuterId(executerId)
+    TKqpExecPureRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
+        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params)
+        : Request(std::move(request))
         , Parameters(params)
+        , Counters(counters)
         , Promise(promise)
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
-        auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
-        ActorIdToProto(ctx.SelfID, executerEv->Record.MutableTarget());
-        executerEv->Record.MutableRequest()->SetTxId(0);
-        ctx.Send(ExecuterId, executerEv.Release());
-
-        Become(&TKqpExecPureRequestHandler::ProcessState);
+    void Bootstrap() {
+        auto result = ::NKikimr::NKqp::ExecutePure(std::move(Request), Counters, SelfId());
+        ProcessPureExecution(result);
+        Become(&TThis::DieState);
+        Send(SelfId(), new TEvents::TEvPoisonPill());
     }
 
 private:
-    void Handle(TEvKqpExecuter::TEvTxResponse::TPtr &ev, const TActorContext &) {
-        auto* response = ev->Get()->Record.MutableResponse();
+
+    STATEFN(DieState) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        }
+    }
+
+    void ProcessPureExecution(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev) {
+        auto* response = ev->Record.MutableResponse();
 
         TResult result;
         if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
@@ -513,7 +521,7 @@ private:
         result.ExecuterResult.Swap(response->MutableResult());
         {
             auto g = Parameters->TypeEnv().BindAllocator();
-            auto& txResults = ev->Get()->GetTxResults();
+            auto& txResults = ev->GetTxResults();
             result.Results.reserve(txResults.size());
             for(auto& tx : txResults) {
                 result.Results.emplace_back(std::move(tx.GetMkql()));
@@ -524,35 +532,13 @@ private:
         this->PassAway();
     }
 
-    void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
-    void HandleUnexpectedEvent(ui32 eventType, const TActorContext &ctx) {
-        LOG_CRIT_S(ctx, NKikimrServices::KQP_GATEWAY,
-            "TKqpExecPureRequestHandler, unexpected event, type: " << eventType);
-
-        Promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::UNEXPECTED, TStringBuilder()
-            << "TKqpExecPureRequestHandler, unexpected event, type: " << eventType)));
-
-        this->PassAway();
-    }
-
-    STFUNC(ProcessState) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvKqpExecuter::TEvTxResponse, Handle);
-            HFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
-        default:
-            HandleUnexpectedEvent(ev->GetTypeRewrite(), ctx);
-        }
-    }
-
 private:
-    TActorId ExecuterId;
+    IKqpGateway::TExecPhysicalRequest Request;
     TQueryData::TPtr Parameters;
+    TKqpRequestCounters::TPtr Counters;
     TPromise<TResult> Promise;
 };
+
 
 class TSchemeOpRequestHandler: public TRequestHandlerBase<
     TSchemeOpRequestHandler,
@@ -1702,18 +1688,9 @@ public:
         };
 
         YQL_ENSURE(containOnlyPureStages(request));
-
-        auto executerActor = CreateKqpExecuter(std::move(request), Database,
-            UserToken ? TMaybe<TString>(UserToken->Serialized) : Nothing(), Counters);
-        auto executerId = RegisterActor(executerActor);
-
-        LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Created new KQP executer: " << executerId);
-
         auto promise = NewPromise<TExecPhysicalResult>();
-
-        IActor* requestHandler = new TKqpExecPureRequestHandler(executerId, promise, params);
+        IActor* requestHandler = new TKqpExecPureRequestHandler(std::move(request), Counters, promise, params);
         RegisterActor(requestHandler);
-
         return promise.GetFuture();
     }
 

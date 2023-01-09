@@ -1267,7 +1267,14 @@ public:
         }
 
         if (pure) {
-            ;
+            if (QueryState) {
+                request.Orbit = std::move(QueryState->Orbit);
+            }
+            request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+            auto response = ExecutePure(std::move(request), RequestCounters, SelfId());
+            ++QueryState->CurrentTx;
+            ProcessExecuterResult(response.get());
+            return true;
         } else if (commit) {
             QueryState->Commited = true;
 
@@ -1394,9 +1401,13 @@ public:
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         TTimerGuard timer(this);
-        QueryState->Orbit = std::move(ev->Get()->Orbit);
+        ProcessExecuterResult(ev->Get());
+    }
 
-        auto* response = ev->Get()->Record.MutableResponse();
+    void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
+        QueryState->Orbit = std::move(ev->Orbit);
+
+        auto* response = ev->Record.MutableResponse();
 
         LOG_D("TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
             << "/" << (QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0)
@@ -1436,16 +1447,16 @@ public:
         }
 
         YQL_ENSURE(QueryState);
-        LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->Get()->ResultRowsCount);
+        LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->ResultRowsCount);
 
         auto& executerResults = *response->MutableResult();
         {
             auto g = QueryState->QueryData->TypeEnv().BindAllocator();
-            QueryState->QueryData->AddTxResults(std::move(ev->Get()->GetTxResults()));
+            QueryState->QueryData->AddTxResults(std::move(ev->GetTxResults()));
         }
 
-        if (ev->Get()->LockHandle) {
-            QueryState->TxCtx->Locks.LockHandle = std::move(ev->Get()->LockHandle);
+        if (ev->LockHandle) {
+            QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
         if (!MergeLocksWithTxResult(executerResults)) {

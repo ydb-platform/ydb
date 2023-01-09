@@ -369,17 +369,6 @@ const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type) {
     return type;
 }
 
-const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
-    switch (type->GetKind()) {
-        case ETypeAnnotationKind::List: return type->Cast<TListExprType>()->GetItemType();
-        case ETypeAnnotationKind::Flow: return type->Cast<TFlowExprType>()->GetItemType();
-        case ETypeAnnotationKind::Stream: return type->Cast<TStreamExprType>()->GetItemType();
-        case ETypeAnnotationKind::Optional: return type->Cast<TOptionalExprType>()->GetItemType();
-        default: break;
-    }
-    THROW yexception() << "Impossible to get item type from " << *type;
-}
-
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) {
     for (auto& setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && setting->Child(0)->Content() == name) {

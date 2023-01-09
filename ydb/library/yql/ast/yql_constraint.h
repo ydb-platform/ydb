@@ -16,6 +16,7 @@
 namespace NYql {
 
 struct TExprContext;
+class TTypeAnnotationNode;
 class TStructExprType;
 class TTupleExprType;
 class TMultiExprType;
@@ -69,6 +70,8 @@ public:
     virtual void Out(IOutputStream& out) const;
     virtual void ToJson(NJson::TJsonWriter& out) const = 0;
 
+    virtual bool IsAppliesToType(const TTypeAnnotationNode&) const { return true; }
+
     template <typename T>
     const T* Cast() const {
         static_assert(std::is_base_of<TConstraintNode, T>::value,
@@ -83,6 +86,7 @@ public:
         return Name_;
     }
 
+    static bool PathExistsInType(const TPathType& path, const TTypeAnnotationNode& type);
 protected:
     ui64 Hash_;
     std::string_view Name_;
@@ -192,7 +196,9 @@ public:
 
     static const TUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType&)>& predicate) const;
-    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<TPathType(const TPathType&)>& rename) const;
+    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<std::vector<std::string_view>(const std::string_view&)>& reduce) const;
+
+    bool IsAppliesToType(const TTypeAnnotationNode& type) const override;
 private:
     TFullSetType Sets_;
 };

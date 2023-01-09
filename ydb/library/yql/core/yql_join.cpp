@@ -124,10 +124,8 @@ namespace {
             }
 
             if (const auto u = (*input)->Unique) {
-                internal = external = u->RenameFields(ctx, [&](TConstraintNode::TPathType path) {
-                    if (!path.empty())
-                        path.front() = ctx.AppendString((*input)->FullName(path.front()));
-                    return path;
+                internal = external = u->RenameFields(ctx, [&](const std::string_view& name) -> std::vector<std::string_view> {
+                    return {ctx.AppendString((*input)->FullName(name))};
                 });
             }
 
@@ -948,11 +946,12 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
         optColumns.push_back(ctx.NewAtom(pos, memberName));
     }
 
-    auto optTuple = ctx.NewList(pos, std::move(optColumns));
     return ctx.Builder(pos)
         .Callable("SkipNullMembers")
             .Add(0, input)
-            .Add(1, optTuple)
+            .List(1)
+                .Add(std::move(optColumns))
+            .Seal()
         .Seal()
         .Build();
 }
@@ -960,7 +959,7 @@ TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::T
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings) {
     TMap<TStringBuf, TVector<TStringBuf>> res;
     for (const auto& child : settings.Children()) {
-        if (child->Child(0)->Content() == "rename") {
+        if (child->Head().IsAtom("rename")) {
             auto& v = res[child->Child(1)->Content()];
             if (!child->Child(2)->Content().empty()) {
                 v.push_back(child->Child(2)->Content());

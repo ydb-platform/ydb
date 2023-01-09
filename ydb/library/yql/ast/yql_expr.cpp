@@ -3513,6 +3513,17 @@ TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TS
     }
 }
 
+const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List: return type->Cast<TListExprType>()->GetItemType();
+        case ETypeAnnotationKind::Flow: return type->Cast<TFlowExprType>()->GetItemType();
+        case ETypeAnnotationKind::Stream: return type->Cast<TStreamExprType>()->GetItemType();
+        case ETypeAnnotationKind::Optional: return type->Cast<TOptionalExprType>()->GetItemType();
+        default: break;
+    }
+    throw yexception() << "Impossible to get item type from " << *type;
+}
+
 } // namespace NYql
 
 template<>

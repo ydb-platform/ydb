@@ -1895,6 +1895,15 @@ private:
             return status;
         }
 
+        if (unique) {
+            if (const auto renames = LoadJoinRenameMap(input->Tail()); !renames.empty()) {
+                unique = unique->RenameFields(ctx, [&renames](const std::string_view& name) {
+                    const auto it = renames.find(name);
+                    return renames.cend() == it ? std::vector<std::string_view>() : std::vector<std::string_view>(it->second.cbegin(), it->second.cend());
+                });
+            }
+        }
+
         if (unique)
             input->AddConstraint(unique);
 

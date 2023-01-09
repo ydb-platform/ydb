@@ -29,6 +29,38 @@ void TConstraintNode::Out(IOutputStream& out) const {
     out.Write(Name_);
 }
 
+bool TConstraintNode::PathExistsInType(const TPathType& path, const TTypeAnnotationNode& type) {
+    if (path.empty())
+        return true;
+
+    const auto tail = [](const TPathType& path) {
+        auto p(path);
+        p.pop_front();
+        return p;
+    };
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::Optional:
+            return PathExistsInType(path, *type.Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::Struct:
+            if (const auto itemType = type.Cast<TStructExprType>()->FindItemType(path.front()))
+                return PathExistsInType(tail(path), *itemType);
+            break;
+        case ETypeAnnotationKind::Tuple:
+            if (const auto index = TryFromString<ui64>(TStringBuf(path.front())))
+                if (const auto typleType = type.Cast<TTupleExprType>(); typleType->GetSize() > *index)
+                    return PathExistsInType(tail(path), *typleType->GetItems()[*index]);
+            break;
+        case ETypeAnnotationKind::Multi:
+            if (const auto index = TryFromString<ui64>(TStringBuf(path.front())))
+                if (const auto multiType = type.Cast<TMultiExprType>(); multiType->GetSize() > *index)
+                    return PathExistsInType(tail(path), *multiType->GetItems()[*index]);
+            break;
+        default:
+            break;
+    }
+    return false;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const TConstraintNode* TConstraintSet::GetConstraint(std::string_view name) const {
@@ -606,18 +638,37 @@ const TUniqueConstraintNode* TUniqueConstraintNode::FilterFields(TExprContext& c
     return sets.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
 }
 
-const TUniqueConstraintNode* TUniqueConstraintNode::RenameFields(TExprContext& ctx, const std::function<TPathType(const TPathType&)>& rename) const {
+const TUniqueConstraintNode* TUniqueConstraintNode::RenameFields(TExprContext& ctx, const std::function<std::vector<std::string_view>(const std::string_view&)>& reduce) const {
     TFullSetType sets;
     sets.reserve(Sets_.size());
     for (const auto& set : Sets_) {
-        TSetType newSet;
-        newSet.reserve(set.size());
-        for (const auto& path : set)
-            newSet.insert_unique(rename(path));
-        sets.insert_unique(std::move(newSet));
+        std::vector<TSetType> newSets(1U);
+        newSets.front().reserve(set.size());
+        for (const auto& path : set) {
+            auto newNames = reduce(path.front());
+            if (newNames.empty())
+                break;
+            auto tmpSets(std::move(newSets));
+            for (const auto& newName : newNames) {
+                for (const auto& oldSet : tmpSets) {
+                    newSets.emplace_back(oldSet);
+                    auto newPath = path;
+                    newPath.front() = newName;
+                    newSets.back().insert_unique(std::move(newPath));
+                }
+            }
+        }
+        if (set.size() == newSets.front().size())
+            sets.insert_unique(newSets.cbegin(), newSets.cend());
     }
-    return ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
+    return sets.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
+}
 
+bool TUniqueConstraintNode::IsAppliesToType(const TTypeAnnotationNode& type) const {
+    const auto itemType = GetSeqItemType(&type);
+    return std::all_of(Sets_.cbegin(), Sets_.cend(), [itemType](const TSetType& set) {
+        return std::all_of(set.cbegin(), set.cend(), std::bind(&PathExistsInType, std::placeholders::_1, std::cref(*itemType)));
+    });
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -40,6 +40,7 @@ namespace NActors {
         , ExecutorPool(executorPool)
         , Ctx(workerId, cpuId, actorSystem ? actorSystem->GetMaxActivityType() : 1)
         , ThreadName(threadName)
+        , IsUnitedWorker(true)
     {
         Ctx.Switch(
             ExecutorPool,
@@ -62,7 +63,7 @@ namespace NActors {
     }
 
     void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
-        Y_VERIFY_DEBUG(actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
+        Y_VERIFY_DEBUG(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));

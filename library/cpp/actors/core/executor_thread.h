@@ -106,6 +106,7 @@ namespace NActors {
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;
         volatile TThreadId ThreadId = UnknownThreadId;
+        bool IsUnitedWorker = false;
     };
 
     template <typename TMailbox>

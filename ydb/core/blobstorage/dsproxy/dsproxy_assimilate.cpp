@@ -10,7 +10,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     struct TBlock : TEvBlobStorage::TEvAssimilateResult::TBlock {
         TBlock(const TBlock&) = default;
 
-        TBlock(ui64 key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlock& msg) {
+        TBlock(ui64 key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlock& msg, TBlobStorageGroupType /*gtype*/) {
             Y_VERIFY_DEBUG(msg.HasBlockedGeneration());
             TabletId = key;
             BlockedGeneration = msg.GetBlockedGeneration();
@@ -33,7 +33,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     struct TBarrier : TEvBlobStorage::TEvAssimilateResult::TBarrier {
         TBarrier(const TBarrier&) = default;
 
-        TBarrier(std::tuple<ui64, ui8> key, const NKikimrBlobStorage::TEvVAssimilateResult::TBarrier& msg) {
+        TBarrier(std::tuple<ui64, ui8> key, const NKikimrBlobStorage::TEvVAssimilateResult::TBarrier& msg, TBlobStorageGroupType /*gtype*/) {
             std::tie(TabletId, Channel) = key;
 
             auto parseValue = [](auto& value, const auto& pb) {
@@ -76,20 +76,20 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     };
 
     struct TBlob : TEvBlobStorage::TEvAssimilateResult::TBlob {
-        ui64 Ingress;
-
         TBlob(const TBlob&) = default;
 
-        TBlob(TLogoBlobID key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& msg) {
+        TBlob(TLogoBlobID key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& msg, TBlobStorageGroupType gtype) {
             Y_VERIFY_DEBUG(msg.HasIngress());
             Id = key;
-            Ingress = msg.GetIngress();
-            Keep = DoNotKeep = false;
+            const int collectMode = TIngress(msg.GetIngress()).GetCollectMode(TIngress::IngressMode(gtype));
+            Keep = collectMode & CollectModeKeep;
+            DoNotKeep = collectMode & CollectModeDoNotKeep;
         }
 
         bool Merge(const TBlob& other) {
             if (Id == other.Id) {
-                Ingress |= other.Ingress;
+                Keep |= other.Keep;
+                DoNotKeep |= other.DoNotKeep;
                 return true;
             } else {
                 return false;
@@ -119,7 +119,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
         std::variant<TBlock*, TBarrier*, TBlob*, TFinished> Next;
 
         void PushDataFromMessage(const NKikimrBlobStorage::TEvVAssimilateResult& msg,
-                const TBlobStorageGroupAssimilateRequest& self) {
+                const TBlobStorageGroupAssimilateRequest& self, TBlobStorageGroupType gtype) {
             Y_VERIFY(Blocks.empty() && Barriers.empty() && Blobs.empty());
 
             std::array<ui64, 3> context = {0, 0, 0};
@@ -160,7 +160,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
                     Y_VERIFY(lastProcessed < key);
                     lastProcessed.emplace(key);
                     if (skipUpTo < key) {
-                        field.emplace_back(key, item);
+                        field.emplace_back(key, item, gtype);
                     }
                 }
             };
@@ -319,7 +319,7 @@ public:
 
         if (record.GetStatus() == NKikimrProto::OK) {
             auto& info = PerVDiskInfo[orderNumber];
-            info.PushDataFromMessage(record, *this);
+            info.PushDataFromMessage(record, *this, Info->Type);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);
                 std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare());

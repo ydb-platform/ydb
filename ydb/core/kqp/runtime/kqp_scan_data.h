@@ -14,6 +14,7 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimrTxDataShard {
     class TKqpTransaction_TScanTaskMeta;
@@ -36,6 +37,8 @@ struct TBytesStatistics {
 TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type);
 TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
     const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType);
+TBytesStatistics WriteColumnValuesFromArrow(NUdf::TUnboxedValue* editAccessors,
+    const arrow::RecordBatch& batch, i64 columnIndex, const ui32 columnsCount, NScheme::TTypeInfo columnType);
 
 void FillSystemColumn(NUdf::TUnboxedValue& rowItem, TMaybe<ui64> shardId, NTable::TTag tag, NScheme::TTypeInfo type);
 
@@ -57,6 +60,12 @@ public:
         TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns,
             const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys,
             const TSmallVec<TColumn>& resultColumns);
+
+        ui32 ColumnsCount() const {
+            return ResultColumns.size() + SystemColumns.size();
+        }
+
+        ui32 FillUnboxedCells(NUdf::TUnboxedValue* const* result);
 
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
 
@@ -82,8 +91,6 @@ public:
 
         ui64 AddRows(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
-        NUdf::TUnboxedValue TakeRow();
-
         bool IsEmpty() const {
             return RowBatches.empty();
         }
@@ -101,7 +108,8 @@ public:
         }
 
         void Clear() {
-            RowBatches.clear();
+            TQueue<RowBatch> newQueue;
+            std::swap(newQueue, RowBatches);
         }
 
     public:
@@ -134,10 +142,32 @@ public:
         std::unique_ptr<TProfileStats> ProfileStats;
 
     private:
-        struct RowBatch {
-            TUnboxedValueVector Batch;
-            TMaybe<ui64> ShardId;
+        class RowBatch {
+        private:
+            const ui32 CellsCountForRow;
+            const ui32 ColumnsCount;
+            TUnboxedValueVector Cells;
             ui64 CurrentRow = 0;
+        public:
+            TMaybe<ui64> ShardId;
+
+            explicit RowBatch(const ui32 columnsCount, TUnboxedValueVector&& cells, TMaybe<ui64> shardId)
+                : CellsCountForRow(columnsCount ? columnsCount : 1)
+                , ColumnsCount(columnsCount)
+                , Cells(std::move(cells))
+                , ShardId(shardId)
+            {
+            }
+
+            const NUdf::TUnboxedValue* GetCurrentData() const {
+                return Cells.data() + CurrentRow * CellsCountForRow;
+            }
+
+            bool IsFinished() {
+                return CurrentRow * CellsCountForRow == Cells.size();
+            }
+
+            ui32 FillUnboxedCells(NUdf::TUnboxedValue* const* result);
         };
 
         TSmallVec<TColumn> Columns;

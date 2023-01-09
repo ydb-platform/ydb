@@ -251,32 +251,38 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         scanData.AddRows(*batch, {}, factory);
 
+        std::vector<NUdf::TUnboxedValue> container;
+        container.resize(20);
+        std::vector<NUdf::TUnboxedValue*> containerPtr;
+        for (auto&& i : container) {
+            containerPtr.emplace_back(&i);
+        }
         for (auto& row: rows) {
-            auto result_row = scanData.TakeRow();
-            UNIT_ASSERT_EQUAL(result_row.GetElement(0 ).Get<bool  >(), row.Bool   );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(1 ).Get<i8    >(), row.Int8   );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(2 ).Get<i16   >(), row.Int16  );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(3 ).Get<i32   >(), row.Int32  );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(4 ).Get<i64   >(), row.Int64  );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(5 ).Get<ui8   >(), row.UInt8  );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(6 ).Get<ui16  >(), row.UInt16 );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(7 ).Get<ui32  >(), row.UInt32 );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(8 ).Get<ui64  >(), row.UInt64 );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(9 ).Get<float >(), row.Float32);
-            UNIT_ASSERT_EQUAL(result_row.GetElement(10).Get<double>(), row.Float64);
-            auto tmpString = result_row.GetElement(11);
+            scanData.FillUnboxedCells(containerPtr.data());
+            UNIT_ASSERT_EQUAL(container[0 ].Get<bool  >(), row.Bool   );
+            UNIT_ASSERT_EQUAL(container[1 ].Get<i8    >(), row.Int8   );
+            UNIT_ASSERT_EQUAL(container[2 ].Get<i16   >(), row.Int16  );
+            UNIT_ASSERT_EQUAL(container[3 ].Get<i32   >(), row.Int32  );
+            UNIT_ASSERT_EQUAL(container[4 ].Get<i64   >(), row.Int64  );
+            UNIT_ASSERT_EQUAL(container[5 ].Get<ui8   >(), row.UInt8  );
+            UNIT_ASSERT_EQUAL(container[6 ].Get<ui16  >(), row.UInt16 );
+            UNIT_ASSERT_EQUAL(container[7 ].Get<ui32  >(), row.UInt32 );
+            UNIT_ASSERT_EQUAL(container[8 ].Get<ui64  >(), row.UInt64 );
+            UNIT_ASSERT_EQUAL(container[9 ].Get<float >(), row.Float32);
+            UNIT_ASSERT_EQUAL(container[10].Get<double>(), row.Float64);
+            auto tmpString = container[11];
             UNIT_ASSERT_EQUAL(TString(tmpString.AsStringRef().Data()), row.String);
-            auto tmpUtf8 = result_row.GetElement(12);
+            auto tmpUtf8 = container[12];
             UNIT_ASSERT_EQUAL(TString(tmpUtf8.AsStringRef().Data()), row.Utf8);
-            auto tmpJson = result_row.GetElement(13);
+            auto tmpJson = container[13];
             UNIT_ASSERT_EQUAL(TString(tmpJson.AsStringRef().Data()), row.Json);
-            auto tmpYson = result_row.GetElement(14);
+            auto tmpYson = container[14];
             UNIT_ASSERT_EQUAL(TString(tmpYson.AsStringRef().Data()), row.Yson);
-            UNIT_ASSERT_EQUAL(result_row.GetElement(15).Get<i32 >(), row.Date     );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(16).Get<i64 >(), row.Datetime );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(17).Get<i64 >(), row.Timestamp);
-            UNIT_ASSERT_EQUAL(result_row.GetElement(18).Get<i64 >(), row.Interval );
-            UNIT_ASSERT_EQUAL(result_row.GetElement(19).GetInt128(), row.Decimal  );
+            UNIT_ASSERT_EQUAL(container[15].Get<i32 >(), row.Date     );
+            UNIT_ASSERT_EQUAL(container[16].Get<i64 >(), row.Datetime );
+            UNIT_ASSERT_EQUAL(container[17].Get<i64 >(), row.Timestamp);
+            UNIT_ASSERT_EQUAL(container[18].Get<i64 >(), row.Interval );
+            UNIT_ASSERT_EQUAL(container[19].GetInt128(), row.Decimal  );
         }
 
         UNIT_ASSERT(scanData.IsEmpty());
@@ -301,9 +307,16 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         scanData.AddRows(*batch, {}, factory);
 
+        std::vector<NUdf::TUnboxedValue> container;
+        container.resize(1);
+        std::vector<NUdf::TUnboxedValue*> containerPtr;
+        for (auto&& i : container) {
+            containerPtr.emplace_back(&i);
+        }
+
         for (auto& row: rows) {
-            auto result_row = scanData.TakeRow();
-            UNIT_ASSERT_EQUAL(result_row.GetElement(0).Get<i8>(), row.Int8);
+            scanData.FillUnboxedCells(containerPtr.data());
+            UNIT_ASSERT_EQUAL(container[0].Get<i8>(), row.Int8);
         }
 
         UNIT_ASSERT(scanData.IsEmpty());
@@ -321,11 +334,12 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         auto bytes = scanData.AddRows(emptyBatch, {}, factory);
         UNIT_ASSERT(bytes > 0);
 
+        std::vector<NUdf::TUnboxedValue*> containerPtr;
+
         for (const auto& row: emptyBatch) {
             Y_UNUSED(row);
             UNIT_ASSERT(!scanData.IsEmpty());
-            auto item = scanData.TakeRow();
-            UNIT_ASSERT(item.GetListLength() == 0);
+            UNIT_ASSERT(scanData.FillUnboxedCells(containerPtr.data()) == 0);
         }
         UNIT_ASSERT(scanData.IsEmpty());
     }
@@ -341,11 +355,11 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         auto bytes = scanData.AddRows(*anotherEmptyBatch, {}, factory);
         UNIT_ASSERT(bytes > 0);
+        std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (const auto& row: rows) {
             Y_UNUSED(row);
             UNIT_ASSERT(!scanData.IsEmpty());
-            auto item = scanData.TakeRow();
-            UNIT_ASSERT(item.GetListLength() == 0);
+            UNIT_ASSERT(scanData.FillUnboxedCells(containerPtr.data()) == 0);
         }
         UNIT_ASSERT(scanData.IsEmpty());
     }

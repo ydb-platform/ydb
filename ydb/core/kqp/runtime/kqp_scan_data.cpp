@@ -138,61 +138,86 @@ NUdf::TUnboxedValue MakeUnboxedValueFromDecimal128Array(arrow::Array* column, ui
 
 } // namespace
 
-TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
-    const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType)
-{
+ui32 TKqpScanComputeContext::TScanData::RowBatch::FillUnboxedCells(NUdf::TUnboxedValue* const* result) {
+    ui32 resultColumnsCount = 0;
+    if (ColumnsCount) {
+        for (ui32 i = 0; i < CellsCountForRow; ++i) {
+            if (result[i]) {
+                *result[i] = std::move(Cells[CurrentRow * CellsCountForRow + i]);
+                ++resultColumnsCount;
+            }
+        }
+    }
+    ++CurrentRow;
+    return resultColumnsCount;
+}
+
+template <class TAccessor>
+TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
+    const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType) {
     TBytesStatistics columnStats;
     // Hold pointer to column until function end
     std::shared_ptr<arrow::Array> columnSharedPtr = batch.column(columnIndex);
     arrow::Array* columnPtr = columnSharedPtr.get();
     namespace NTypeIds = NScheme::NTypeIds;
     for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
-        auto& rowItem = editAccessors[rowIndex][columnIndex];
+        auto& rowItem = editAccessor(rowIndex, columnIndex);
         if (columnPtr->IsNull(rowIndex)) {
             rowItem = NUdf::TUnboxedValue();
         } else {
-            switch(columnType.GetTypeId()) {
-                case NTypeIds::Bool: {
+            switch (columnType.GetTypeId()) {
+                case NTypeIds::Bool:
+                {
                     rowItem = MakeUnboxedValue<arrow::BooleanArray, bool>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Int8: {
+                case NTypeIds::Int8:
+                {
                     rowItem = MakeUnboxedValue<arrow::Int8Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Int16: {
+                case NTypeIds::Int16:
+                {
                     rowItem = MakeUnboxedValue<arrow::Int16Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Int32: {
+                case NTypeIds::Int32:
+                {
                     rowItem = MakeUnboxedValue<arrow::Int32Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Int64: {
+                case NTypeIds::Int64:
+                {
                     rowItem = MakeUnboxedValue<arrow::Int64Array, i64>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Uint8: {
+                case NTypeIds::Uint8:
+                {
                     rowItem = MakeUnboxedValue<arrow::UInt8Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Uint16: {
+                case NTypeIds::Uint16:
+                {
                     rowItem = MakeUnboxedValue<arrow::UInt16Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Uint32: {
+                case NTypeIds::Uint32:
+                {
                     rowItem = MakeUnboxedValue<arrow::UInt32Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Uint64: {
+                case NTypeIds::Uint64:
+                {
                     rowItem = MakeUnboxedValue<arrow::UInt64Array, ui64>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Float: {
+                case NTypeIds::Float:
+                {
                     rowItem = MakeUnboxedValue<arrow::FloatArray>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Double: {
+                case NTypeIds::Double:
+                {
                     rowItem = MakeUnboxedValue<arrow::DoubleArray>(columnPtr, rowIndex);
                     break;
                 }
@@ -201,33 +226,40 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
                 case NTypeIds::Json:
                 case NTypeIds::Yson:
                 case NTypeIds::JsonDocument:
-                case NTypeIds::DyNumber: {
+                case NTypeIds::DyNumber:
+                {
                     rowItem = MakeUnboxedValueFromBinaryData(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Date: {
+                case NTypeIds::Date:
+                {
                     rowItem = MakeUnboxedValue<arrow::UInt16Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Datetime: {
+                case NTypeIds::Datetime:
+                {
                     rowItem = MakeUnboxedValue<arrow::UInt32Array>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Timestamp: {
+                case NTypeIds::Timestamp:
+                {
                     rowItem = MakeUnboxedValue<arrow::TimestampArray, ui64>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Interval: {
+                case NTypeIds::Interval:
+                {
                     rowItem = MakeUnboxedValue<arrow::DurationArray, ui64>(columnPtr, rowIndex);
                     break;
                 }
-                case NTypeIds::Decimal: {
+                case NTypeIds::Decimal:
+                {
                     rowItem = MakeUnboxedValueFromDecimal128Array(columnPtr, rowIndex);
                     break;
                 }
                 case NTypeIds::PairUi64Ui64:
                 case NTypeIds::ActorId:
-                case NTypeIds::StepOrderId: {
+                case NTypeIds::StepOrderId:
+                {
                     Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType.GetTypeId()));
                     rowItem = MakeUnboxedValueFromFixedSizeBinaryData(columnPtr, rowIndex);
                     break;
@@ -245,11 +277,41 @@ TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>&
     return columnStats;
 }
 
+TBytesStatistics WriteColumnValuesFromArrow(NUdf::TUnboxedValue* editAccessors,
+    const arrow::RecordBatch& batch, i64 columnIndex, const ui32 columnsCount, NScheme::TTypeInfo columnType)
+{
+    const auto accessor = [editAccessors, columnsCount](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
+        return editAccessors[rowIndex * columnsCount + colIndex];
+    };
+    return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
+}
 
+TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
+    const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType)
+{
+    const auto accessor = [&editAccessors](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
+        return editAccessors[rowIndex][colIndex];
+    };
+    return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
+}
 
 std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type) {
     auto sizes = GetUnboxedValueSize(value, type);
     return {sizes.AllocatedBytes, sizes.DataBytes};
+}
+
+ui32 TKqpScanComputeContext::TScanData::FillUnboxedCells(NUdf::TUnboxedValue* const* result) {
+    YQL_ENSURE(!RowBatches.empty());
+    auto& batch = RowBatches.front();
+    auto rowStats = GetRowSize(batch.GetCurrentData(), ResultColumns, SystemColumns);
+    const ui32 resultColumnsCount = batch.FillUnboxedCells(result);
+    if (batch.IsFinished()) {
+        RowBatches.pop();
+    }
+
+    StoredBytes -= rowStats.AllocatedBytes;
+    YQL_ENSURE(RowBatches.empty() == (StoredBytes == 0), "StoredBytes miscalculated!");
+    return resultColumnsCount;
 }
 
 TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range,
@@ -325,23 +387,28 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const TVector<TOwnedCellVec>& ba
     TVector<ui64> bytesList;
     bytesList.reserve(batch.size());
 
-    TUnboxedValueVector rows;
-    rows.reserve(batch.size());
+    TUnboxedValueVector cells;
+    if (!ColumnsCount()) {
+        cells.resize(batch.size(), holderFactory.GetEmptyContainer());
+        stats.AddStatistics({ sizeof(ui64) * batch.size(), sizeof(ui64) * batch.size() });
+    } else {
+        cells.resize(batch.size() * ColumnsCount());
 
-    for (size_t rowIndex = 0; rowIndex < batch.size(); ++rowIndex) {
-        auto& row = batch[rowIndex];
+        for (size_t rowIndex = 0; rowIndex < batch.size(); ++rowIndex) {
+            auto& row = batch[rowIndex];
 
-        // Convert row into an UnboxedValue
-        NUdf::TUnboxedValue* rowItems = nullptr;
-        rows.emplace_back(holderFactory.CreateDirectArrayHolder(ResultColumns.size() + SystemColumns.size(), rowItems));
-        for (ui32 i = 0; i < ResultColumns.size(); ++i) {
-            rowItems[i] = GetCellValue(row[i], ResultColumns[i].Type);
+            auto* vectorStart = &cells.data()[rowIndex * ColumnsCount()];
+            for (ui32 i = 0; i < ResultColumns.size(); ++i) {
+                vectorStart[i] = GetCellValue(row[i], ResultColumns[i].Type);
+            }
+            FillSystemColumns(vectorStart + ResultColumns.size(), shardId, SystemColumns);
+
+            stats.AddStatistics(GetRowSize(vectorStart, ResultColumns, SystemColumns));
         }
-        FillSystemColumns(&rowItems[ResultColumns.size()], shardId, SystemColumns);
-
-        stats.AddStatistics(GetRowSize(rowItems, ResultColumns, SystemColumns));
     }
-    RowBatches.emplace(RowBatch{std::move(rows), shardId});
+    if (cells.size()) {
+        RowBatches.emplace(RowBatch(ColumnsCount(), std::move(cells), shardId));
+    }
 
     StoredBytes += stats.AllocatedBytes;
     if (BasicStats) {
@@ -361,41 +428,32 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const arrow::RecordBatch& batch,
     }
 
     TBytesStatistics stats;
-    TUnboxedValueVector rows;
+    TUnboxedValueVector cells;
 
-    if (ResultColumns.empty() && SystemColumns.empty()) {
-        rows.resize(batch.num_rows(), holderFactory.GetEmptyContainer());
+    if (!ColumnsCount()) {
+        cells.resize(batch.num_rows(), holderFactory.GetEmptyContainer());
+        stats.AddStatistics({ sizeof(ui64) * batch.num_rows(), sizeof(ui64) * batch.num_rows() });
     } else {
-        TVector<NUdf::TUnboxedValue*> editAccessors(batch.num_rows());
-        rows.reserve(batch.num_rows());
-
-        for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
-            rows.emplace_back(holderFactory.CreateDirectArrayHolder(
-                ResultColumns.size() + SystemColumns.size(),
-                editAccessors[rowIndex])
-            );
-        }
+        cells.resize(batch.num_rows() * ColumnsCount());
 
         for (size_t columnIndex = 0; columnIndex < ResultColumns.size(); ++columnIndex) {
             stats.AddStatistics(
-                WriteColumnValuesFromArrow(editAccessors, batch, columnIndex, ResultColumns[columnIndex].Type)
+                WriteColumnValuesFromArrow(cells.data(), batch, columnIndex, ColumnsCount(), ResultColumns[columnIndex].Type)
             );
         }
 
         if (!SystemColumns.empty()) {
             for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
-                FillSystemColumns(&editAccessors[rowIndex][ResultColumns.size()], shardId, SystemColumns);
+                FillSystemColumns(&cells[rowIndex * ColumnsCount() + ResultColumns.size()], shardId, SystemColumns);
             }
 
             stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
         }
     }
 
-    if (ResultColumns.empty()) {
-        stats.AddStatistics({sizeof(ui64) * batch.num_rows(), sizeof(ui64) * batch.num_rows()});
+    if (cells.size()) {
+        RowBatches.emplace(RowBatch(ColumnsCount(), std::move(cells), shardId));
     }
-
-    RowBatches.emplace(RowBatch{std::move(rows), shardId});
 
     StoredBytes += stats.AllocatedBytes;
     if (BasicStats) {
@@ -404,20 +462,6 @@ ui64 TKqpScanComputeContext::TScanData::AddRows(const arrow::RecordBatch& batch,
     }
 
     return stats.AllocatedBytes;
-}
-
-NUdf::TUnboxedValue TKqpScanComputeContext::TScanData::TakeRow() {
-    YQL_ENSURE(!RowBatches.empty());
-    auto& batch = RowBatches.front();
-    auto row = std::move(batch.Batch[batch.CurrentRow++]);
-    auto rowStats = GetRowSize(row.GetElements(), ResultColumns, SystemColumns);
-
-    StoredBytes -= rowStats.AllocatedBytes;
-    if (batch.CurrentRow == batch.Batch.size()) {
-        RowBatches.pop();
-    }
-    YQL_ENSURE(RowBatches.empty() == (StoredBytes == 0), "StoredBytes miscalculated!");
-    return row;
 }
 
 void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
@@ -458,7 +502,7 @@ public:
         : ScanData(scanData)
     {}
 
-    NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) override {
+    NUdf::EFetchStatus Next(NUdf::TUnboxedValue& /*result*/) override {
         if (ScanData.IsEmpty()) {
             if (ScanData.IsFinished()) {
                 return NUdf::EFetchStatus::Finish;
@@ -466,7 +510,8 @@ public:
             return NUdf::EFetchStatus::Yield;
         }
 
-        result = std::move(ScanData.TakeRow());
+        Y_VERIFY(false);
+//        result = std::move(ScanData.BuildNextDirectArrayHolder());
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -478,13 +523,7 @@ public:
             return EFetchResult::Yield;
         }
 
-        auto row = ScanData.TakeRow();
-        for (ui32 i = 0; i < ScanData.GetResultColumns().size() + ScanData.GetSystemColumns().size(); ++i) {
-            if (result[i]) {
-                *result[i] = std::move(row.GetElement(i));
-            }
-        }
-
+        ScanData.FillUnboxedCells(result);
         return EFetchResult::One;
     }
 

@@ -552,6 +552,10 @@ public:
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
 
+        if (HttpInfoCollector) {
+            ctx.Send(HttpInfoCollector, new TEvents::TEvPoison());
+        }
+
         CloseSession(ctx);
 
         Die(ctx);

@@ -398,8 +398,7 @@ private:
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Tag
             << " tablet recieved PoisonPill, going to die");
-        // TODO: stop subactors?
-        Die(ctx);
+        Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {

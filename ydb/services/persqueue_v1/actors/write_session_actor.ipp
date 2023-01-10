@@ -210,10 +210,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ct
     Y_VERIFY(Request);
     //ToDo !! - Set proper table paths.
     const auto& pqConfig = AppData(ctx)->PQConfig;
-    ESourceIdTableGeneration gen = pqConfig.GetTopicsAreFirstClassCitizen() ?
-            ESourceIdTableGeneration::PartitionMapping : ESourceIdTableGeneration::SrcIdMeta2;
-    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath(), gen);
-    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath(), gen);
+    SrcIdTableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
+                                                                    : ESourceIdTableGeneration::SrcIdMeta2;
+    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(pqConfig.GetSourceIdTablePath(),SrcIdTableGeneration);
+    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(pqConfig.GetSourceIdTablePath(), SrcIdTableGeneration);
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Select srcid query: " << SelectSourceIdQuery);
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
@@ -473,12 +473,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorContext& ctx) {
-    ESourceIdTableGeneration gen = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() ?
-                                   ESourceIdTableGeneration::PartitionMapping
-                                   :
-                                   ESourceIdTableGeneration::SrcIdMeta2;
     try {
-        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId, gen);
+        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId, SrcIdTableGeneration);
     } catch (yexception& e) {
         CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -659,10 +655,20 @@ void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::
 }
 
 template<bool UseMigrationProtocol>
+TString TWriteSessionActor<UseMigrationProtocol>::GetDatabaseName(const NActors::TActorContext& ctx) {
+    switch (SrcIdTableGeneration) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            return NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig);
+        case ESourceIdTableGeneration::PartitionMapping:
+            return AppData(ctx)->TenantName;
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::StartSession(const NActors::TActorContext& ctx) {
 
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
+    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 
     State = ES_WAIT_SESSION;
@@ -718,7 +724,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(const 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery);
-    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
+
+    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
     // fill tx settings: set commit tx flag & begin new serializable tx.
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
@@ -875,7 +882,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor<UseMigrationProtocol>:
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetQuery(UpdateSourceIdQuery);
-    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
+    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
     // fill tx settings: set commit tx flag & begin new serializable tx.
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
     if (KqpSessionId) {

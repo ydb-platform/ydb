@@ -160,6 +160,7 @@ private:
     ui32 CalculateFirstClassPartition(const TActorContext& ctx);
     void SendCreateManagerRequest(const TActorContext& ctx);
     void DiscoverPartition(const NActors::TActorContext& ctx);
+    TString GetDatabaseName(const NActors::TActorContext& ctx);
     void StartSession(const NActors::TActorContext& ctx);
     void SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx);
 
@@ -307,6 +308,8 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
 
     TInitRequest InitRequest;
+    NPQ::ESourceIdTableGeneration SrcIdTableGeneration;
+
 };
 
 }

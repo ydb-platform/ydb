@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 from ydb.apps.dstool.lib.arg_parser import ArgumentParser
 import ydb.apps.dstool.lib.common as common

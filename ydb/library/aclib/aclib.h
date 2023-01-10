@@ -41,7 +41,8 @@ enum EAccessRights : ui32 { // bitmask
     ReadTopic = 0x00040000, // reading topics
     WriteTopic = 0x00080000, // writing topics
 
-    GenericRead = SelectRow | ReadAttributes | DescribeSchema,
+    GenericList = ReadAttributes | DescribeSchema,
+    GenericRead = SelectRow | GenericList,
     GenericWrite = UpdateRow | EraseRow | WriteAttributes | CreateDirectory | CreateTable | CreateQueue | RemoveSchema | AlterSchema | WriteUserAttributes,
     GenericUseLegacy = GenericRead | GenericWrite | GrantAccessRights,
     GenericUse = GenericUseLegacy | ConnectDatabase,

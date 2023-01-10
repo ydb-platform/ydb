@@ -1291,6 +1291,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Stats.Aggregated = newAggregatedStats;
     Partitions.swap(newPartitioning);
     PreSerializedPathDescription.clear();
+    PreSerializedPathDescriptionWithoutRangeKey.clear();
 
     CondEraseSchedule.clear();
     InFlightCondErase.clear();

@@ -204,11 +204,13 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     bool returnPartitionStats = Params.GetOptions().GetReturnPartitionStats();
     bool returnBackupInfo = Params.GetBackupInfo();
     bool returnBoundaries = false;
+    bool returnRangeKey = true;
     if (Params.HasOptions()) {
         returnConfig = Params.GetOptions().GetReturnPartitionConfig();
         returnPartitioning = Params.GetOptions().GetReturnPartitioningInfo();
         returnBackupInfo = Params.GetOptions().GetBackupInfo();
         returnBoundaries = Params.GetOptions().GetReturnBoundaries();
+        returnRangeKey = Params.GetOptions().GetReturnRangeKey();
     }
 
     Self->DescribeTable(tableInfo, typeRegistry, returnConfig, returnBoundaries, entry);
@@ -218,24 +220,42 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
         // partitions
         if (tableInfo->PreSerializedPathDescription.empty()) {
             NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
+            NKikimrScheme::TEvDescribeSchemeResult preSerializedResultWithoutRangeKey;
+
             NKikimrSchemeOp::TPathDescription& pathDescription = *preSerializedResult.MutablePathDescription();
+            NKikimrSchemeOp::TPathDescription& pathDescriptionWithoutRangeKey = *preSerializedResultWithoutRangeKey.MutablePathDescription();
+
             pathDescription.MutableTablePartitions()->Reserve(tableInfo->GetPartitions().size());
+            pathDescriptionWithoutRangeKey.MutableTablePartitions()->Reserve(tableInfo->GetPartitions().size());
             for (auto& p : tableInfo->GetPartitions()) {
                 auto part = pathDescription.AddTablePartitions();
+                auto partWithoutRangeKey = pathDescriptionWithoutRangeKey.AddTablePartitions();
                 auto datashardIdx = p.ShardIdx;
                 auto datashardTabletId = Self->ShardInfos[datashardIdx].TabletID;
                 // Currently we only support uniform partitioning where each range is [start, end)
                 // +inf as the end of the last range is represented by empty TCell vector
                 part->SetDatashardId(ui64(datashardTabletId));
+                partWithoutRangeKey->SetDatashardId(ui64(datashardTabletId));
+
                 part->SetIsPoint(false);
+                partWithoutRangeKey->SetIsPoint(false);
+
                 part->SetIsInclusive(false);
+                partWithoutRangeKey->SetIsInclusive(false);
+
                 part->SetEndOfRangeKeyPrefix(p.EndOfRange);
             }
             Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&tableInfo->PreSerializedPathDescription);
+            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResultWithoutRangeKey.SerializeToString(&tableInfo->PreSerializedPathDescriptionWithoutRangeKey);
         }
-        Result->PreSerializedData += tableInfo->PreSerializedPathDescription;
+        if (returnRangeKey) {
+            Result->PreSerializedData += tableInfo->PreSerializedPathDescription;
+        } else {
+            Result->PreSerializedData += tableInfo->PreSerializedPathDescriptionWithoutRangeKey;
+        }
         if (!pathEl->IsCreateFinished()) {
             tableInfo->PreSerializedPathDescription.clear(); // KIKIMR-4337
+            tableInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
         }
     }
 

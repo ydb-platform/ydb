@@ -374,6 +374,20 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req(
         new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(describePath));
 
+    auto& record = req.Get()->Record;
+    if (UserToken != nullptr) {
+        auto options = record.MutableOptions();
+        if (entry.SecurityObject != nullptr) {
+            options->SetReturnBoundaries(false);
+            options->SetReturnRangeKey(false);
+            ui32 access = NACLib::EAccessRights::SelectRow;
+            if (entry.SecurityObject->CheckAccess(access, *UserToken)) {
+                options->SetReturnBoundaries(true);
+                options->SetReturnRangeKey(true);
+            }
+        }
+    }
+
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
         << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
 

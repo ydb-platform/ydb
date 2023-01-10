@@ -571,6 +571,9 @@ public:
                         if ((ar & NACLib::EAccessRights::CreateQueue) != 0) {
                             pbAce.AddAccessRights("CreateQueue");
                         }
+                        if (ar == NACLib::EAccessRights::GenericList) {
+                            pbAce.SetAccessRule("List");
+                        }
                         if (ar == NACLib::EAccessRights::GenericRead) {
                             pbAce.SetAccessRule("Read");
                         }

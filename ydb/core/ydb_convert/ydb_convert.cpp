@@ -742,6 +742,7 @@ const THashMap<TString, TACLAttrs> AccessMap_  = {
     { "ydb.database.connect", TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
     { "ydb.tables.modify", TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
     { "ydb.tables.read", TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
+    { "ydb.generic.list", EAccessRights::GenericList},
     { "ydb.generic.read", EAccessRights::GenericRead },
     { "ydb.generic.write", EAccessRights::GenericWrite },
     { "ydb.generic.use_legacy", EAccessRights::GenericUseLegacy },

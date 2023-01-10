@@ -509,6 +509,7 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
         Y_VERIFY(Tables.contains(node->PathId));
         TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
         tabletInfo->PreSerializedPathDescription.clear();
+        tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
     }
 }
 

@@ -422,6 +422,9 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
     }
     auto ar = ace.GetAccessRight();
     switch (ar) {
+        case EAccessRights::GenericList:
+            str << 'L';
+            break;
         case EAccessRights::GenericRead:
             str << 'R';
             break;
@@ -588,6 +591,9 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
         throw yexception() << "Invalid acl - no access rights";
     }
     switch (*it) {
+        case 'L':
+            ace.SetAccessRight(EAccessRights::GenericList);
+            break;
         case 'R':
             ace.SetAccessRight(EAccessRights::GenericRead);
             break;
@@ -739,6 +745,7 @@ TString AccessRightsToString(ui32 accessRights) {
     case EAccessRights::GenericFull: return "Full";
     case EAccessRights::GenericWrite: return "Write";
     case EAccessRights::GenericRead: return "Read";
+    case EAccessRights::GenericList: return "List";
     case EAccessRights::GenericManage: return "Manage";
     case EAccessRights::GenericUseLegacy: return "UseLegacy";
     case EAccessRights::GenericUse: return "Use";

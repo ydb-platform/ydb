@@ -407,6 +407,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<TTxId, TBackupRestoreResult> RestoreHistory;
 
     TString PreSerializedPathDescription;
+    TString PreSerializedPathDescriptionWithoutRangeKey;
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 

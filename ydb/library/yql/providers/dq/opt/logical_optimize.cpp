@@ -150,7 +150,7 @@ private:
         }
         const auto hopTraits = *maybeHopTraits;
 
-        const auto aggregateInputType = GetSeqItemType(node.Ptr()->Head().GetTypeAnn())->Cast<TStructExprType>();
+        const auto aggregateInputType = GetSeqItemType(*node.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
         TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
 
         if (keysDescription.NeedPickle()) {

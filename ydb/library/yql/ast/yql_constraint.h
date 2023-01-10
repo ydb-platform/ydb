@@ -70,7 +70,7 @@ public:
     virtual void Out(IOutputStream& out) const;
     virtual void ToJson(NJson::TJsonWriter& out) const = 0;
 
-    virtual bool IsAppliesToType(const TTypeAnnotationNode&) const { return true; }
+    virtual bool IsApplicableToType(const TTypeAnnotationNode&) const { return true; }
 
     template <typename T>
     const T* Cast() const {
@@ -198,7 +198,7 @@ public:
     const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType&)>& predicate) const;
     const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<std::vector<std::string_view>(const std::string_view&)>& reduce) const;
 
-    bool IsAppliesToType(const TTypeAnnotationNode& type) const override;
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
     TFullSetType Sets_;
 };

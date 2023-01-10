@@ -369,7 +369,7 @@ TExprBase KqpDropTakeOverLookupTable(const TExprBase& node, TExprContext&, const
     const auto tablePath = lookupTable.Table().Path().Value();
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tablePath);
 
-    const auto& lookupKeys = GetSeqItemType(lookupTable.LookupKeys().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
+    const auto& lookupKeys = GetSeqItemType(*lookupTable.LookupKeys().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems();
     if (table.Metadata->KeyColumnNames.size() != lookupKeys.size()) {
         return node;
     }

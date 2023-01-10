@@ -700,10 +700,10 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
         return node;
     }
 
-    const TTypeAnnotationNode* lmapItemTy = GetSeqItemType(lmap.Ref().GetTypeAnn());
-    if (lmapItemTy->GetKind() == ETypeAnnotationKind::Variant) {
+    const auto& lmapItemTy = GetSeqItemType(*lmap.Ref().GetTypeAnn());
+    if (lmapItemTy.GetKind() == ETypeAnnotationKind::Variant) {
         // preserve typing by Mux'ing several stage outputs into one
-        const auto variantItemTy = lmapItemTy->template Cast<TVariantExprType>();
+        const auto variantItemTy = lmapItemTy.template Cast<TVariantExprType>();
         const auto stageOutputNum = variantItemTy->GetUnderlyingType()->template Cast<TTupleExprType>()->GetSize();
         TVector<TExprBase> muxParts;
         muxParts.reserve(stageOutputNum);
@@ -1822,7 +1822,7 @@ TExprBase DqRewriteLengthOfStageOutputLegacy(TExprBase node, TExprContext& ctx, 
                     .Name<TCoAtom>()
                         .Value("count_all")
                     .Build()
-                    .InputType(ExpandType(node.Pos(), *GetSeqItemType(dqUnion.Raw()->GetTypeAnn()), ctx))
+                    .InputType(ExpandType(node.Pos(), GetSeqItemType(*dqUnion.Raw()->GetTypeAnn()), ctx))
                     .Extractor<TCoLambda>()
                         .Args({ "row" })
                         .Body<TCoVoid>()

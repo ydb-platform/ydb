@@ -244,11 +244,11 @@ TVector<TExprBase> CreateRenames(const TMaybeNode<TCoFlatMap>& rightFlatmap, con
 {
     TVector<TExprBase> renames;
     if (rightFlatmap) {
-        const auto flatMapType = GetSeqItemType(rightFlatmap.Ref().GetTypeAnn());
-        YQL_ENSURE(flatMapType->GetKind() == ETypeAnnotationKind::Struct);
-        renames.reserve(flatMapType->Cast<TStructExprType>()->GetSize());
+        const auto& flatMapType = GetSeqItemType(*rightFlatmap.Ref().GetTypeAnn());
+        YQL_ENSURE(flatMapType.GetKind() == ETypeAnnotationKind::Struct);
+        renames.reserve(flatMapType.Cast<TStructExprType>()->GetSize());
 
-        for (const auto& column : flatMapType->Cast<TStructExprType>()->GetItems()) {
+        for (const auto& column : flatMapType.Cast<TStructExprType>()->GetItems()) {
             renames.emplace_back(
                 Build<TCoNameValueTuple>(ctx, pos)
                     .Name<TCoAtom>()

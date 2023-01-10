@@ -693,7 +693,7 @@ TExprNode::TPtr ExtractOneItemTupleFromFold1(const TExprNode& node, TExprContext
 
 TExprNode::TPtr ExtractOneItemStructFromCondense(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Extract single item struct from " << node.Content();
-    const auto structType = GetSeqItemType(node.GetTypeAnn())->Cast<TStructExprType>();
+    const auto structType = GetSeqItemType(*node.GetTypeAnn()).Cast<TStructExprType>();
     const auto memberName = structType->GetItems().front()->GetName();
     const auto memberNameAtom = ctx.NewAtom(node.Pos(), memberName);
 
@@ -800,7 +800,7 @@ TExprNode::TPtr ExtractOneItemTupleFromCondense(const TExprNode& node, TExprCont
 
 TExprNode::TPtr ExtractOneItemStructFromCondense1(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Extract single item struct from " << node.Content();
-    const auto structType = GetSeqItemType(node.GetTypeAnn())->Cast<TStructExprType>();
+    const auto structType = GetSeqItemType(*node.GetTypeAnn()).Cast<TStructExprType>();
     const auto memberName = structType->GetItems().front()->GetName();
     const auto memberNameAtom = ctx.NewAtom(node.Pos(), memberName);
 
@@ -1744,8 +1744,8 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     if (const auto& input = self.Input().Ref(); input.IsCallable("Switch") && IsJustOrSingleAsList(self.Lambda().Body().Ref())) {
         if (const auto item = optCtx.GetParentIfSingle(self.Lambda().Args().Arg(0).Ref()); item && item->IsCallable("VariantItem")) {
-            const auto inputItemType = GetSeqItemType(input.Head().GetTypeAnn());
-            const auto variants = ETypeAnnotationKind::Variant == inputItemType->GetKind() ? inputItemType->template Cast<TVariantExprType>()->GetUnderlyingType()->template Cast<TTupleExprType>()->GetSize() : 0U;
+            const auto& inputItemType = GetSeqItemType(*input.Head().GetTypeAnn());
+            const auto variants = ETypeAnnotationKind::Variant == inputItemType.GetKind() ? inputItemType.template Cast<TVariantExprType>()->GetUnderlyingType()->template Cast<TTupleExprType>()->GetSize() : 0U;
             TNodeSet atoms(variants);
             for (auto i = 2U; i < self.Input().Ref().ChildrenSize(); ++i) {
                 const auto& ids = *input.Child(i);
@@ -1986,12 +1986,12 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return node;
         }
 
-        const auto itemType = GetSeqItemType(node->GetTypeAnn());
-        if (itemType->GetKind() == ETypeAnnotationKind::Struct &&
-            1U == itemType->Cast<TStructExprType>()->GetSize()) {
+        const auto& itemType = GetSeqItemType(*node->GetTypeAnn());
+        if (itemType.GetKind() == ETypeAnnotationKind::Struct &&
+            1U == itemType.Cast<TStructExprType>()->GetSize()) {
             return ExtractOneItemStructFromCondense(*node, ctx);
-        } else if (itemType->GetKind() == ETypeAnnotationKind::Tuple &&
-            1U == itemType->Cast<TTupleExprType>()->GetSize()) {
+        } else if (itemType.GetKind() == ETypeAnnotationKind::Tuple &&
+            1U == itemType.Cast<TTupleExprType>()->GetSize()) {
             return ExtractOneItemTupleFromCondense(*node, ctx);
         }
 
@@ -2012,12 +2012,12 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return node;
         }
 
-        const auto itemType = GetSeqItemType(node->GetTypeAnn());
-        if (itemType->GetKind() == ETypeAnnotationKind::Struct &&
-            1U == itemType->Cast<TStructExprType>()->GetSize()) {
+        const auto& itemType = GetSeqItemType(*node->GetTypeAnn());
+        if (itemType.GetKind() == ETypeAnnotationKind::Struct &&
+            1U == itemType.Cast<TStructExprType>()->GetSize()) {
             return ExtractOneItemStructFromCondense1(*node, ctx);
-        } else if (itemType->GetKind() == ETypeAnnotationKind::Tuple &&
-            1U == itemType->Cast<TTupleExprType>()->GetSize()) {
+        } else if (itemType.GetKind() == ETypeAnnotationKind::Tuple &&
+            1U == itemType.Cast<TTupleExprType>()->GetSize()) {
             return ExtractOneItemTupleFromCondense1(*node, ctx);
         }
 
@@ -2391,6 +2391,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
         return node;
     };
+
 }
 
 }

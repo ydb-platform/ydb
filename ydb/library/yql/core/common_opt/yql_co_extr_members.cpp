@@ -90,7 +90,7 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
     }
     auto input = filterNullMembers.Input().Cast<TCoAssumeAllMembersNullableAtOnce>().Input();
 
-    const auto originalStructType = GetSeqItemType(filterNullMembers.Input().Ref().GetTypeAnn())->Cast<TStructExprType>();
+    const auto originalStructType = GetSeqItemType(*filterNullMembers.Input().Ref().GetTypeAnn()).Cast<TStructExprType>();
 
     TExprNode::TPtr extendedMembers;
     TMaybeNode<TCoAtomList> filteredMembers;
@@ -209,7 +209,7 @@ TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TEx
             .Build();
     }
     else if (fieldSubset) {
-        const auto structType = GetSeqItemType(sort.Ref().GetTypeAnn())->Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(*sort.Ref().GetTypeAnn()).Cast<TStructExprType>();
         if (structType->GetSize() <= extractFields.size()) {
             return {};
         }
@@ -285,7 +285,7 @@ TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExp
         return ctx.ChangeChildren(*node, std::move(children));
     }
     else if (fieldSubset) {
-        const auto structType = GetSeqItemType(top.Ref().GetTypeAnn())->Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(*top.Ref().GetTypeAnn()).Cast<TStructExprType>();
         if (structType->GetSize() <= extractFields.size()) {
             return {};
         }
@@ -313,7 +313,7 @@ TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExp
 
 TExprNode::TPtr ApplyExtractMembersToEquiJoin(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoEquiJoin join(node);
-    const auto structType = GetSeqItemType(join.Ref().GetTypeAnn())->Cast<TStructExprType>();
+    const auto structType = GetSeqItemType(*join.Ref().GetTypeAnn()).Cast<TStructExprType>();
     if (structType->GetSize() == 0) {
         return {};
     }
@@ -834,7 +834,7 @@ TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const 
 TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExprNode::TPtr members, const TParentsMap& parentsMap, TExprContext& ctx, TStringBuf logSuffix) {
     const TCoChain1Map chain1Map(node);
     const auto allMembers = AddMembersUsedInside(chain1Map.UpdateHandler().Body().Ptr(), chain1Map.UpdateHandler().Args().Arg(1).Ref(), TExprNode::TPtr(members), parentsMap, ctx);
-    if (!allMembers || GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
+    if (!allMembers || GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
         return {};
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
@@ -879,7 +879,7 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
     allMembers = AddMembersUsedInside(condense1.UpdateHandler().Body().Ptr(), condense1.UpdateHandler().Args().Arg(1).Ref(), std::move(allMembers), parentsMap, ctx);
     allMembers = AddMembersUsedInside(condense1.SwitchHandler().Body().Ptr(), condense1.SwitchHandler().Args().Arg(1).Ref(), std::move(allMembers), parentsMap, ctx);
 
-    if (!allMembers || GetSeqItemType(node->GetTypeAnn())->Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
+    if (!allMembers || GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>()->GetSize() <= allMembers->ChildrenSize())
         return {};
 
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;

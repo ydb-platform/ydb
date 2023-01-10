@@ -1494,7 +1494,7 @@ private:
                 status = status.Combine(UpdateLambdaConstraints(input->ChildRef(++i), ctx, {argConstraints}));
             }
         } else {
-            const bool inVar = GetSeqItemType(input->Head().GetTypeAnn())->GetKind() == ETypeAnnotationKind::Variant;
+            const bool inVar = GetSeqItemType(*input->Head().GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant;
             const TSmallVec<TConstraintNode::TListType> argConstraints(1U, inVar ? TConstraintNode::TListType() : input->Head().GetAllConstraints());
             for (size_t i = 3; i < input->ChildrenSize(); i += 2) {
                 status = status.Combine(UpdateLambdaConstraints(input->ChildRef(i), ctx, argConstraints));
@@ -1508,14 +1508,14 @@ private:
 
         const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
         const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>();
-        if (GetSeqItemType(input->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Variant) {
+        if (GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant) {
             ui32 outIndexOffset = 0;
             TMultiConstraintNode::TMapType multiItems;
             TVarIndexConstraintNode::TMapType remapItems;
             bool emptyOut = true;
             for (size_t i = 2; i < input->ChildrenSize(); i += 2) {
                 const auto lambda = input->Child(i + 1);
-                const auto lambdaItemType = GetSeqItemType(lambda->GetTypeAnn());
+                const auto& lambdaItemType = GetSeqItemType(*lambda->GetTypeAnn());
 
                 if (inputVarIndex) {
                     if (auto varIndex = lambda->GetConstraint<TVarIndexConstraintNode>()) {
@@ -1524,12 +1524,12 @@ private:
                             const auto srcIndex = FromString<size_t>(input->Child(i)->Child(item.second)->Content());
                             remapItems.push_back(std::make_pair(outIndexOffset + item.first, srcIndex));
                         }
-                    } else if (lambdaItemType->GetKind() == ETypeAnnotationKind::Variant && input->Child(i)->ChildrenSize() == 1) {
+                    } else if (lambdaItemType.GetKind() == ETypeAnnotationKind::Variant && input->Child(i)->ChildrenSize() == 1) {
                         const auto srcIndex = FromString<size_t>(input->Child(i)->Head().Content());
-                        for (size_t j = 0; j < lambdaItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize(); ++j) {
+                        for (size_t j = 0; j < lambdaItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize(); ++j) {
                             remapItems.push_back(std::make_pair(outIndexOffset + j, srcIndex));
                         }
-                    } else if (lambdaItemType->GetKind() != ETypeAnnotationKind::Variant && input->Child(i)->ChildrenSize() > 1) {
+                    } else if (lambdaItemType.GetKind() != ETypeAnnotationKind::Variant && input->Child(i)->ChildrenSize() > 1) {
                         for (auto& child : input->Child(i)->Children()) {
                             const auto srcIndex = FromString<size_t>(child->Content());
                             remapItems.push_back(std::make_pair(outIndexOffset, srcIndex));
@@ -1541,7 +1541,7 @@ private:
                 if (!lambdaEmpty) {
                     emptyOut = false;
                 }
-                if (lambdaItemType->GetKind() == ETypeAnnotationKind::Variant) {
+                if (lambdaItemType.GetKind() == ETypeAnnotationKind::Variant) {
                     if (!emptyInput && outFromChildren.Test(i + 1)) {
                         if (auto multi = lambda->GetConstraint<TMultiConstraintNode>()) {
                             for (auto& item: multi->GetItems()) {
@@ -1549,7 +1549,7 @@ private:
                             }
                         }
                     }
-                    outIndexOffset += lambdaItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize();
+                    outIndexOffset += lambdaItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize();
                 } else {
                     if (!emptyInput && outFromChildren.Test(i + 1) && !lambdaEmpty) {
                         multiItems[outIndexOffset] = lambda->GetConstraintSet();
@@ -1876,7 +1876,7 @@ private:
                 emptyInputs.push_back(i);
             }
             if (const auto err = labels.Add(ctx, input->Child(i)->Tail(),
-                GetSeqItemType(list.GetTypeAnn())->Cast<TStructExprType>(), GetDetailedUnique(list.GetConstraint<TUniqueConstraintNode>(), *list.GetTypeAnn(), ctx))) {
+                GetSeqItemType(*list.GetTypeAnn()).Cast<TStructExprType>(), GetDetailedUnique(list.GetConstraint<TUniqueConstraintNode>(), *list.GetTypeAnn(), ctx))) {
                 ctx.AddError(*err);
                 return TStatus::Error;
             }
@@ -2505,7 +2505,7 @@ private:
     }
 
     static const TSortedConstraintNode* DeduceSortConstraint(const TExprNode& list, const TExprNode& directions, const TExprNode& keyExtractor, TExprContext& ctx) {
-        if (GetSeqItemType(list.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
+        if (GetSeqItemType(*list.GetTypeAnn()).GetKind() == ETypeAnnotationKind::Struct) {
             if (const auto& columns = ExtractSimpleSortTraits(directions, keyExtractor); !columns.empty()) {
                 TSortedConstraintNode::TContainerType content(columns.size());
                 std::transform(columns.cbegin(), columns.cend(), content.begin(), [](const std::pair<std::string_view, bool>& item) {

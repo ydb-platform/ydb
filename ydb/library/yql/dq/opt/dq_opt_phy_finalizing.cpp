@@ -43,7 +43,7 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
     auto result = stage.Program().Body();
     auto resultType = result.Ref().GetTypeAnn();
 
-    const TTypeAnnotationNode* resultItemType = GetSeqItemType(resultType);
+    const TTypeAnnotationNode& resultItemType = GetSeqItemType(*resultType);
 
     ui32 index = FromString<ui32>(indexAtom.Value());
     ui32 outputsCount = GetStageOutputsCount(stage, indexAtom, ctx);
@@ -56,7 +56,7 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
 
     if (outputsCount > 1) {
         YQL_ENSURE(result.Maybe<TDqReplicate>(), "got: " << NCommon::ExprToPrettyString(ctx, result.Ref()));
-        auto outputTypesTuple = resultItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+        auto outputTypesTuple = resultItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
         newOutputIndexStart = outputTypesTuple->GetSize();
     } else {
         newOutputIndexStart = 1;
@@ -271,7 +271,7 @@ TExprNode::TPtr ReplicateDqOutput(TExprNode::TPtr&& input, const TMultiUsedConne
     return ctx.ReplaceNodes(std::move(input), replaces);
 }
 
-TExprNode::TPtr ReplaceStageForConsumer(TDqStage newStage, const TExprNode* consumer, TExprNode::TPtr&& input, 
+TExprNode::TPtr ReplaceStageForConsumer(TDqStage newStage, const TExprNode* consumer, TExprNode::TPtr&& input,
     TExprContext& ctx, bool skipFirstUsage, const TExprNode* dqConnection, const TVector<TCoAtom>& outputlIndices = {}) {
     bool isStageConsumer = TMaybeNode<TDqStage>(consumer).IsValid();
     auto consumerNode = isStageConsumer

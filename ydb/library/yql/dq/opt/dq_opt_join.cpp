@@ -990,7 +990,7 @@ bool PrepareJoinSide(
 
 TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotationNode& resutType, const std::string_view& tableName, TExprContext& ctx) {
     const auto pos = input->Pos();
-    const auto typeOfSide = GetSeqItemType(input->GetTypeAnn())->Cast<TStructExprType>();
+    const auto typeOfSide = GetSeqItemType(*input->GetTypeAnn()).Cast<TStructExprType>();
     return ctx.Builder(pos)
         .Callable("Map")
             .Add(0, std::move(input))
@@ -1012,7 +1012,7 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
                             return parent;
                         })
                     .Seal()
-                    .Add(1, ExpandType(pos, *GetSeqItemType(&resutType), ctx))
+                    .Add(1, ExpandType(pos, GetSeqItemType(resutType), ctx))
                 .Seal()
             .Seal()
         .Seal().Build();

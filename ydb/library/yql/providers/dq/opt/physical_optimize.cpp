@@ -88,7 +88,7 @@ public:
 protected:
     TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
         const auto wrap = node.Cast<TDqSourceWrap>();
-        if (IsSameAnnotation(*GetSeqItemType(wrap.Ref().GetTypeAnn()), *GetSeqItemType(wrap.Input().Ref().GetTypeAnn()))) {
+        if (IsSameAnnotation(GetSeqItemType(*wrap.Ref().GetTypeAnn()), GetSeqItemType(*wrap.Input().Ref().GetTypeAnn()))) {
         return Build<TDqCnUnionAll>(ctx, node.Pos())
             .Output()
                 .Stage<TDqStage>()
@@ -109,9 +109,9 @@ protected:
                 .Index().Build("0")
             .Build().Done();
         }
-        const auto& items = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
+        const auto& items = GetSeqItemType(*wrap.Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems();
         auto sourceArg = ctx.NewArgument(node.Pos(), "source");
-        auto inputType = GetSeqItemType(wrap.Input().Ref().GetTypeAnn());
+        auto inputType = &GetSeqItemType(*wrap.Input().Ref().GetTypeAnn());
         while (inputType->GetKind() == ETypeAnnotationKind::Tuple) {
             auto tupleType = inputType->Cast<TTupleExprType>();
             if (tupleType->GetSize() > 0) {
@@ -193,7 +193,7 @@ protected:
                 .Token(wrap.Token())
             .Done();
 
-        const auto structType = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(*wrap.Ref().GetTypeAnn()).Cast<TStructExprType>();
         auto narrow = ctx.Builder(node.Pos())
             .Lambda()
                 .Callable("NarrowMap")

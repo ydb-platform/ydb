@@ -68,7 +68,7 @@ public:
                     .Columns(extract.Members())
                     .Build()
                 .DataSource(input.Cast<TDqSourceWrap>().DataSource())
-                .RowType(ExpandType(node.Pos(), *GetSeqItemType(extract.Ref().GetTypeAnn()), ctx))
+                .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
                 .Done();
         }
         if (const auto& read = input.Maybe<TDqReadWrap>().Input().Maybe<TYdbReadTable>()) {

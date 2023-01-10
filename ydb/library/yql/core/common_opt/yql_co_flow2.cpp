@@ -1117,7 +1117,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 if (const auto handler = groupingCore.ConvertHandler()) {
                     auto newBody = Build<TCoCastStruct>(ctx, handler.Cast().Body().Pos())
                         .Struct(handler.Cast().Body())
-                        .Type(ExpandType(handler.Cast().Body().Pos(), *GetSeqItemType(extract->GetTypeAnn()), ctx))
+                        .Type(ExpandType(handler.Cast().Body().Pos(), GetSeqItemType(*extract->GetTypeAnn()), ctx))
                         .Done();
 
                     groupingCore = Build<TCoGroupingCore>(ctx, groupingCore.Pos())
@@ -1147,7 +1147,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     && !usedFields.empty()
                     && HaveFieldsSubset(groupingCore.GroupSwitch().Body().Ptr(), groupingCore.GroupSwitch().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
                     && !usedFields.empty()
-                    && usedFields.size() < GetSeqItemType(groupingCore.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize()) {
+                    && usedFields.size() < GetSeqItemType(*groupingCore.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize()) {
                     if (usedFields.size() != fields.size()) {
                         fields.reserve(usedFields.size());
                         fields.clear();
@@ -1234,7 +1234,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             && !usedFields.empty()
             && HaveFieldsSubset(self.GroupSwitch().Body().Ptr(), self.GroupSwitch().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
-            && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            && usedFields.size() < GetSeqItemType(*self.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -1533,7 +1533,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
             if (HaveFieldsSubset(chopper.KeyExtractor().Body().Ptr(), chopper.KeyExtractor().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false) && !usedFields.empty() &&
                 HaveFieldsSubset(chopper.GroupSwitch().Body().Ptr(), chopper.GroupSwitch().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false) && !usedFields.empty() &&
-                usedFields.size() < GetSeqItemType(chopper.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize()) {
+                usedFields.size() < GetSeqItemType(*chopper.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize()) {
                 if (usedFields.size() != fields.size()) {
                     fields.reserve(usedFields.size());
                     fields.clear();
@@ -1856,7 +1856,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             && !usedFields.empty()
             && HaveFieldsSubset(self.UpdateHandler().Body().Ptr(), self.UpdateHandler().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
-            && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            && usedFields.size() < GetSeqItemType(*self.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -1892,7 +1892,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             && !usedFields.empty()
             && HaveFieldsSubset(self.UpdateHandler().Body().Ptr(), self.UpdateHandler().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
-            && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            && usedFields.size() < GetSeqItemType(*self.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -1926,7 +1926,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             && !usedFields.empty()
             && HaveFieldsSubset(self.UpdateHandler().Body().Ptr(), self.UpdateHandler().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
-            && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            && usedFields.size() < GetSeqItemType(*self.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -1958,7 +1958,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         if ((
              HaveFieldsSubset(self.Lambda().Body().Ptr(), self.Lambda().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false) &&
              HaveFieldsSubset(self.Lambda().Body().Ptr(), self.Lambda().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
-            ) && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            ) && usedFields.size() < GetSeqItemType(*self.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -1990,7 +1990,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             && !usedFields.empty()
             && HaveFieldsSubset(self.PayloadSelector().Body().Ptr(), self.PayloadSelector().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
-            && usedFields.size() < GetSeqItemType(self.Stream().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            && usedFields.size() < GetSeqItemType(*self.Stream().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -2026,7 +2026,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             && !usedFields.empty()
             && HaveFieldsSubset(self.UpdateHandler().Body().Ptr(), self.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
-            && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+            && usedFields.size() < GetSeqItemType(*self.Input().Ref().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
         {
             TExprNode::TListType fields;
             fields.reserve(usedFields.size());
@@ -2057,8 +2057,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        const auto leftItemType = GetSeqItemType(self.LeftInput().Ref().GetTypeAnn());
-        if (ETypeAnnotationKind::Struct != leftItemType->GetKind()) {
+        const auto& leftItemType = GetSeqItemType(*self.LeftInput().Ref().GetTypeAnn());
+        if (ETypeAnnotationKind::Struct != leftItemType.GetKind()) {
             return node;
         }
 
@@ -2071,7 +2071,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 renamed.emplace_back(self.LeftRenames().Item(i).Ptr());
         }
 
-        if (leftFileldsSet.size() < leftItemType->Cast<TStructExprType>()->GetSize()) {
+        if (leftFileldsSet.size() < leftItemType.Cast<TStructExprType>()->GetSize()) {
             auto fields = self.LeftKeysColumns().Ptr();
             if (!renamed.empty()) {
                 auto children = fields->ChildrenList();

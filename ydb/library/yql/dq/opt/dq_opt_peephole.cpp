@@ -218,8 +218,8 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
         return renames;
     };
 
-    const auto itemTypeLeft = GetSeqItemType(mapJoin.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-    const auto itemTypeRight = GetSeqItemType(mapJoin.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
+    const auto itemTypeLeft = GetSeqItemType(*mapJoin.LeftInput().Ref().GetTypeAnn()).Cast<TStructExprType>();
+    const auto itemTypeRight = GetSeqItemType(*mapJoin.RightInput().Ref().GetTypeAnn()).Cast<TStructExprType>();
 
     TExprNode::TListType leftRenames = makeRenames(leftTableLabel, *itemTypeLeft);
     TExprNode::TListType rightRenames, rightPayloads;
@@ -254,7 +254,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
         if (mapJoin.JoinType().Value() == "Inner" || mapJoin.JoinType().Value() == "LeftSemi")
             return TExprBase(ctx.NewCallable(pos, "EmptyIterator", {ExpandType(pos, *type, ctx)}));
 
-        const auto structType = GetSeqItemType(type)->Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(*type).Cast<TStructExprType>();
         return TExprBase(ctx.Builder(pos)
             .Callable("Map")
                 .Add(0, std::move(leftInput))
@@ -327,7 +327,7 @@ TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
 
     TExprNodeList keys;
     auto collectKeys = [&ctx, &keys](const TExprBase& input, TStringBuf label, const TCoArgument& arg) {
-        for (auto key : GetSeqItemType(input.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems()) {
+        for (auto key : GetSeqItemType(*input.Ref().GetTypeAnn()).Cast<TStructExprType>()->GetItems()) {
             auto fqColumnName = GetColumnName(label, key);
             keys.emplace_back(
                 Build<TCoNameValueTuple>(ctx, input.Pos())
@@ -462,8 +462,8 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         << ", left: " << *joinDict.LeftInput().Ref().GetTypeAnn()
         << ", right: " << *joinDict.RightInput().Ref().GetTypeAnn();
 
-    const auto* leftRowType = GetSeqItemType(joinDict.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-    const auto* rightRowType = GetSeqItemType(joinDict.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
+    const auto* leftRowType = GetSeqItemType(*joinDict.LeftInput().Ref().GetTypeAnn()).Cast<TStructExprType>();
+    const auto* rightRowType = GetSeqItemType(*joinDict.RightInput().Ref().GetTypeAnn()).Cast<TStructExprType>();
 
     bool castKeyLeft = false, castKeyRight = false, badKey = false;
     TTypeAnnotationNode::TListType keyTypeItems;

@@ -1262,9 +1262,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             const auto& lambda = *node.Child(i + 1);
             const auto& lambdaArg = lambda.Head().Head();
             auto outputStreams = 1;
-            const auto streamItemType = GetSeqItemType(lambda.Tail().GetTypeAnn());
-            if (streamItemType->GetKind() == ETypeAnnotationKind::Variant) {
-                outputStreams = streamItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize();
+            const auto& streamItemType = GetSeqItemType(*lambda.Tail().GetTypeAnn());
+            if (streamItemType.GetKind() == ETypeAnnotationKind::Variant) {
+                outputStreams = streamItemType.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize();
             }
 
             if (node.ChildrenSize() > 4 || outputStreams != 1) {
@@ -1351,17 +1351,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto dict = MkqlBuildExpr(*node.Child(1), ctx);
         const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
 
-        const auto outputItemType = GetSeqItemType(node.GetTypeAnn());
+        const auto& outputItemType = GetSeqItemType(*node.GetTypeAnn());
         auto rightItemType = node.Child(1U)->GetTypeAnn()->Cast<TDictExprType>()->GetPayloadType();
         if (ETypeAnnotationKind::List == rightItemType->GetKind()) {
             rightItemType = rightItemType->Cast<TListExprType>()->GetItemType();
         }
 
         std::vector<ui32> leftKeyColumns, leftRenames, rightRenames;
-        switch (const auto inputItemType = GetSeqItemType(node.Head().GetTypeAnn()); inputItemType->GetKind()) {
+        switch (const auto& inputItemType = GetSeqItemType(*node.Head().GetTypeAnn()); inputItemType.GetKind()) {
             case ETypeAnnotationKind::Struct: {
-                const auto inputStructType = inputItemType->Cast<TStructExprType>();
-                const auto outputStructType = outputItemType->Cast<TStructExprType>();
+                const auto inputStructType = inputItemType.Cast<TStructExprType>();
+                const auto outputStructType = outputItemType.Cast<TStructExprType>();
 
                 node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*inputStructType, child.Content())); });
                 bool s = false;
@@ -1386,8 +1386,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 break;
             }
             case ETypeAnnotationKind::Tuple: {
-                const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-                const auto outputTupleType = outputItemType->Cast<TTupleExprType>();
+                const auto inputTupleType = inputItemType.Cast<TTupleExprType>();
+                const auto outputTupleType = outputItemType.Cast<TTupleExprType>();
 
                 node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*inputTupleType, child.Content())); });
                 bool s = false;
@@ -1412,8 +1412,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 break;
             }
             case ETypeAnnotationKind::Multi: {
-                const auto inputMultiType = inputItemType->Cast<TMultiExprType>();
-                const auto outputMultiType = outputItemType->Cast<TMultiExprType>();
+                const auto inputMultiType = inputItemType.Cast<TMultiExprType>();
+                const auto outputMultiType = outputItemType.Cast<TMultiExprType>();
 
                 node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*inputMultiType, child.Content())); });
                 bool s = false;
@@ -1438,7 +1438,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 break;
             }
             default:
-                ythrow TNodeException(node) << "Wrong MapJoinCore input item type: " << *inputItemType;
+                ythrow TNodeException(node) << "Wrong MapJoinCore input item type: " << inputItemType;
         }
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
@@ -1450,26 +1450,25 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto flowRight = MkqlBuildExpr(*node.Child(1), ctx);
         const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
 
-        const auto outputItemType = GetSeqItemType(node.GetTypeAnn());
+        const auto& outputItemType = GetSeqItemType(*node.GetTypeAnn());
 
         std::vector<ui32> leftKeyColumns, rightKeyColumns, leftRenames, rightRenames;
-        const auto leftItemType = GetSeqItemType(node.Child(0)->GetTypeAnn());
-        const auto rightItemType = GetSeqItemType(node.Child(1)->GetTypeAnn());
+        const auto& leftItemType = GetSeqItemType(*node.Child(0)->GetTypeAnn());
+        const auto& rightItemType = GetSeqItemType(*node.Child(1)->GetTypeAnn());
 
-        if (leftItemType->GetKind() != ETypeAnnotationKind::Multi ||
-            rightItemType->GetKind() != ETypeAnnotationKind::Multi ) {
-            ythrow TNodeException(node) << "Wrong GraceJoinCore input item type: " << *leftItemType << " " << *rightItemType;
-
-        }
-
-        if (outputItemType->GetKind() != ETypeAnnotationKind::Multi ) {
-            ythrow TNodeException(node) << "Wrong GraceJoinCore output item type: " << *outputItemType;
+        if (leftItemType.GetKind() != ETypeAnnotationKind::Multi ||
+            rightItemType.GetKind() != ETypeAnnotationKind::Multi ) {
+            ythrow TNodeException(node) << "Wrong GraceJoinCore input item type: " << leftItemType << " " << rightItemType;
 
         }
 
-        const auto leftTupleType = leftItemType->Cast<TMultiExprType>();
-        const auto rightTupleType = rightItemType->Cast<TMultiExprType>();
-        const auto outputTupleType = outputItemType->Cast<TMultiExprType>();
+        if (outputItemType.GetKind() != ETypeAnnotationKind::Multi ) {
+            ythrow TNodeException(node) << "Wrong GraceJoinCore output item type: " << outputItemType;
+        }
+
+        const auto leftTupleType = leftItemType.Cast<TMultiExprType>();
+        const auto rightTupleType = rightItemType.Cast<TMultiExprType>();
+        const auto outputTupleType = outputItemType.Cast<TMultiExprType>();
 
         node.Child(3)->ForEachChild([&](TExprNode& child){
             leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content()));
@@ -1496,10 +1495,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         std::vector<ui32> leftColumns, rightColumns, requiredColumns, keyColumns;
         ui32 tableIndexFieldPos;
-        switch (const auto inputItemType = GetSeqItemType(node.Head().GetTypeAnn()); inputItemType->GetKind()) {
+        switch (const auto& inputItemType = GetSeqItemType(*node.Head().GetTypeAnn()); inputItemType.GetKind()) {
             case ETypeAnnotationKind::Struct: {
-                const auto inputStructType = inputItemType->Cast<TStructExprType>();
-                const auto outputStructType = GetSeqItemType(node.GetTypeAnn())->Cast<TStructExprType>();
+                const auto inputStructType = inputItemType.Cast<TStructExprType>();
+                const auto outputStructType = GetSeqItemType(*node.GetTypeAnn()).Cast<TStructExprType>();
                 node.Child(2)->ForEachChild([&](const TExprNode& child){
                     leftColumns.emplace_back(*GetFieldPosition(*inputStructType, child.Content()));
                     leftColumns.emplace_back(*GetFieldPosition(*outputStructType, child.Content()));
@@ -1514,7 +1513,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 break;
             }
             case ETypeAnnotationKind::Tuple: {
-                const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+                const auto inputTupleType = inputItemType.Cast<TTupleExprType>();
                 ui32 i = 0U;
                 node.Child(2)->ForEachChild([&](const TExprNode& child){
                     leftColumns.emplace_back(*GetFieldPosition(*inputTupleType, child.Content()));
@@ -1530,7 +1529,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 break;
             }
             case ETypeAnnotationKind::Multi: {
-                const auto inputMultiType = inputItemType->Cast<TMultiExprType>();
+                const auto inputMultiType = inputItemType.Cast<TMultiExprType>();
                 ui32 i = 0U;
                 node.Child(2)->ForEachChild([&](const TExprNode& child){
                     leftColumns.emplace_back(*GetFieldPosition(*inputMultiType, child.Content()));
@@ -1546,7 +1545,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 break;
             }
             default:
-                ythrow TNodeException(node) << "Wrong CommonJoinCore input item type: " << *inputItemType;
+                ythrow TNodeException(node) << "Wrong CommonJoinCore input item type: " << inputItemType;
         }
 
         ui64 memLimit = 0U;

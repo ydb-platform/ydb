@@ -41,7 +41,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
         EffectiveCompact = false;
     }
 
-    OriginalRowType = GetSeqItemType(Node->Head().GetTypeAnn())->Cast<TStructExprType>();
+    OriginalRowType = GetSeqItemType(*Node->Head().GetTypeAnn()).Cast<TStructExprType>();
     RowItems = OriginalRowType->GetItems();
 
     ProcessSessionSetting(GetSetting(*settings, "session"));
@@ -244,7 +244,7 @@ TVector<const TTypeAnnotationNode*> TAggregateExpander::GetKeyItemTypes()
         YQL_ENSURE(index, "Unknown column: " << keyColumn->Content());
         auto type = RowType->GetItems()[*index]->GetItemType();
         keyItemTypes.push_back(type);
-        
+
     }
     return keyItemTypes;
 }
@@ -389,7 +389,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
                 .Arg("state")
             .Seal()
             .Build();
-        
+
         // Return state as-is
         auto uniqCombineSave = Ctx.Builder(Node->Pos())
             .Lambda()
@@ -1418,7 +1418,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePreprocessLambda(const TExprNode::TP
         YQL_ENSURE(SessionWindowParams.KeyType);
         YQL_ENSURE(SessionWindowParams.Init);
 
-        preprocessLambda = AddSessionParamsMemberLambda(Node->Pos(), SessionStartMemberName, "", keyExtractor, 
+        preprocessLambda = AddSessionParamsMemberLambda(Node->Pos(), SessionStartMemberName, "", keyExtractor,
             SessionWindowParams.Key, SessionWindowParams.Init, SessionWindowParams.Update, Ctx);
     } else {
         YQL_ENSURE(!SessionWindowParams.Key);

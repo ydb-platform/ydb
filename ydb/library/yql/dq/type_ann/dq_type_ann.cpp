@@ -401,20 +401,20 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         }
     }
 
-    auto leftInputItemType = GetSeqItemType(leftInputType);
-    if (!EnsureStructType(join.Pos(), *leftInputItemType, ctx)) {
+    const auto& leftInputItemType = GetSeqItemType(*leftInputType);
+    if (!EnsureStructType(join.Pos(), leftInputItemType, ctx)) {
         return nullptr;
     }
-    auto leftStructType = leftInputItemType->Cast<TStructExprType>();
+    auto leftStructType = leftInputItemType.Cast<TStructExprType>();
     auto leftTableLabel = join.LeftLabel().Maybe<TCoAtom>()
         ? join.LeftLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    auto rightInputItemType = GetSeqItemType(rightInputType);
-    if (!EnsureStructType(join.Pos(), *rightInputItemType, ctx)) {
+    const auto& rightInputItemType = GetSeqItemType(*rightInputType);
+    if (!EnsureStructType(join.Pos(), rightInputItemType, ctx)) {
         return nullptr;
     }
-    auto rightStructType = rightInputItemType->Cast<TStructExprType>();
+    auto rightStructType = rightInputItemType.Cast<TStructExprType>();
     auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");

@@ -71,13 +71,13 @@ TExprBase KqpRewriteSqlInCompactToJoin(const TExprBase& node, TExprContext& ctx)
             connection = replicate.Args().Get(index + 1);
         }
 
-        const auto itemType = GetSeqItemType(connection.Ptr()->GetTypeAnn());
-        YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct,
-            "Expected Struct, got " << itemType->GetKind()
+        const auto& itemType = GetSeqItemType(*connection.Ptr()->GetTypeAnn());
+        YQL_ENSURE(itemType.GetKind() == ETypeAnnotationKind::Struct,
+            "Expected Struct, got " << itemType.GetKind()
         );
-        renames.reserve(itemType->Cast<TStructExprType>()->GetSize());
+        renames.reserve(itemType.Cast<TStructExprType>()->GetSize());
 
-        for (const auto& column : itemType->Cast<TStructExprType>()->GetItems()) {
+        for (const auto& column : itemType.Cast<TStructExprType>()->GetItems()) {
             renames.emplace_back(
                 Build<TCoAtom>(ctx, node.Pos())
                     .Value(column->GetName())

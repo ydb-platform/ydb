@@ -3396,8 +3396,8 @@ namespace {
         }
 
 
-        const auto retItemType = GetSeqItemType(lambdaListHandler->GetTypeAnn());
-        input->SetTypeAnn(MakeSequenceType(input->Head().GetTypeAnn()->GetKind(), *retItemType, ctx.Expr));
+        const auto& retItemType = GetSeqItemType(*lambdaListHandler->GetTypeAnn());
+        input->SetTypeAnn(MakeSequenceType(input->Head().GetTypeAnn()->GetKind(), retItemType, ctx.Expr));
         return IGraphTransformer::TStatus::Ok;
     }
 

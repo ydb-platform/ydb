@@ -664,10 +664,10 @@ const TUniqueConstraintNode* TUniqueConstraintNode::RenameFields(TExprContext& c
     return sets.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets));
 }
 
-bool TUniqueConstraintNode::IsAppliesToType(const TTypeAnnotationNode& type) const {
-    const auto itemType = GetSeqItemType(&type);
-    return std::all_of(Sets_.cbegin(), Sets_.cend(), [itemType](const TSetType& set) {
-        return std::all_of(set.cbegin(), set.cend(), std::bind(&PathExistsInType, std::placeholders::_1, std::cref(*itemType)));
+bool TUniqueConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    const auto& itemType = GetSeqItemType(type);
+    return std::all_of(Sets_.cbegin(), Sets_.cend(), [&itemType](const TSetType& set) {
+        return std::all_of(set.cbegin(), set.cend(), std::bind(&PathExistsInType, std::placeholders::_1, std::cref(itemType)));
     });
 }
 

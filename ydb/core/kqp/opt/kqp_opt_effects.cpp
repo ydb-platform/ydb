@@ -125,8 +125,8 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input, TExprCont
     }
 
     // full key (not prefix)
-    auto* lookupKeyType = GetSeqItemType(read.LookupKeys().Ref().GetTypeAnn());
-    if (table.Metadata->KeyColumnNames.size() != lookupKeyType->Cast<TStructExprType>()->GetSize()) {
+    const auto& lookupKeyType = GetSeqItemType(*read.LookupKeys().Ref().GetTypeAnn());
+    if (table.Metadata->KeyColumnNames.size() != lookupKeyType.Cast<TStructExprType>()->GetSize()) {
         DBG << " --> not full key";
         return false;
     }

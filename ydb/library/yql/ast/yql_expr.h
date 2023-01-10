@@ -2774,6 +2774,7 @@ TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
 TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TSet<TString>* usedNames);
 
 const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq);
+const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& seq);
 
 } // namespace NYql
 

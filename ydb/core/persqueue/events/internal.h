@@ -123,6 +123,7 @@ struct TEvPQ {
         EvTxCommit,
         EvTxCommitDone,
         EvTxRollback,
+        EvPartitionConfigChanged,
         EvEnd
     };
 
@@ -462,6 +463,15 @@ struct TEvPQ {
 
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
+    };
+
+    struct TEvPartitionConfigChanged : public TEventLocal<TEvPartitionConfigChanged, EvPartitionConfigChanged> {
+        explicit TEvPartitionConfigChanged(ui32 partition) :
+            Partition(partition)
+        {
+        }
+
+        ui32 Partition;
     };
 
     struct TEvChangeCacheConfig : public TEventLocal<TEvChangeCacheConfig, EvChangeCacheConfig> {

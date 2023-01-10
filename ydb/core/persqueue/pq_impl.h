@@ -65,6 +65,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //client requests
     void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionConfigChanged::TPtr& ev, const TActorContext& ctx);
     void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
@@ -95,6 +96,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     TMaybe<TEvPQ::TEvDeregisterMessageGroup::TBody> MakeDeregisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
+
+    void OnAllPartitionConfigChanged(const TActorContext& ctx);
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
@@ -143,6 +146,7 @@ private:
     TSet<TChangeNotification> ChangeConfigNotification;
     NKikimrPQ::TPQTabletConfig NewConfig;
     bool NewConfigShouldBeApplied;
+    size_t ChangePartitionConfigInflight = 0;
 
     TString TopicName;
     TString TopicPath;

@@ -653,6 +653,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     for (auto& p : Partitions) { //change config for already created partitions
         ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
+    ChangePartitionConfigInflight += Partitions.size();
+
     for (const auto& partition : Config.GetPartitions()) {
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
@@ -669,21 +671,10 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
             ++PartitionsInited; //newly created partition is empty and ready to work
         }
     }
-    for (auto& p : ChangeConfigNotification) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
-                    << " Config applied version " << Config.GetVersion() << " actor " << p.Actor
-                    << " txId " << p.TxId << " config:\n" << Config.DebugString());
 
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
-        res->Record.SetStatus(NKikimrPQ::OK);
-        res->Record.SetTxId(p.TxId);
-        res->Record.SetOrigin(TabletID());
-        ctx.Send(p.Actor, res.Release());
+    if (!ChangePartitionConfigInflight) {
+        OnAllPartitionConfigChanged(ctx);
     }
-    ChangeConfigNotification.clear();
-    NewConfigShouldBeApplied = false;
-    NewConfig.Clear();
-
 }
 
 void TPersQueue::HandleConfigWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
@@ -1139,6 +1130,37 @@ void TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorCon
     ProcessUpdateConfigRequest(ev->Release(), ev->Sender, ctx);
 }
 
+
+void TPersQueue::Handle(TEvPQ::TEvPartitionConfigChanged::TPtr&, const TActorContext& ctx)
+{
+    Y_VERIFY(ChangePartitionConfigInflight > 0);
+    --ChangePartitionConfigInflight;
+
+    if (ChangePartitionConfigInflight) {
+        return;
+    }
+
+    OnAllPartitionConfigChanged(ctx);
+}
+
+void TPersQueue::OnAllPartitionConfigChanged(const TActorContext& ctx)
+{
+    for (auto& p : ChangeConfigNotification) {
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
+                    << " Config applied version " << Config.GetVersion() << " actor " << p.Actor
+                    << " txId " << p.TxId << " config:\n" << Config.DebugString());
+
+        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        res->Record.SetStatus(NKikimrPQ::OK);
+        res->Record.SetTxId(p.TxId);
+        res->Record.SetOrigin(TabletID());
+        ctx.Send(p.Actor, res.Release());
+    }
+
+    ChangeConfigNotification.clear();
+    NewConfigShouldBeApplied = false;
+    NewConfig.Clear();
+}
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
@@ -2265,6 +2287,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+        HFuncTraced(TEvPQ::TEvPartitionConfigChanged, Handle);
         default:
             return false;
     }

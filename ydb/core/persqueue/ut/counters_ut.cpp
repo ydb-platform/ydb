@@ -314,7 +314,7 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-        CheckLabeledCountersResponse(tc, 8, {NKikimr::JoinPath({"user/1", topicName})});
+        CheckLabeledCountersResponse(tc, 8, MakeTopics({"user/1"}));
 
         PQTabletPrepare({}, {}, tc);
         {

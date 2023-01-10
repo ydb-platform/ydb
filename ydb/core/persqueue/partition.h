@@ -45,8 +45,16 @@ struct TTransaction {
         Y_VERIFY(Tx);
     }
 
+    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig) :
+        ChangeConfig(changeConfig)
+    {
+        Y_VERIFY(ChangeConfig);
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
+
+    TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -195,6 +203,7 @@ private:
     void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
 
     void AddDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
+    void AddDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void RemoveDistrTx();
     void ProcessDistrTxs(const TActorContext& ctx);
     void ProcessDistrTx(const TActorContext& ctx);
@@ -226,6 +235,8 @@ private:
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
     void ScheduleReplyCommitDone(ui64 step, ui64 txId);
+    void ScheduleDropPartitionLabeledCounters(const TString& group);
+    void SchedulePartitionConfigChanged();
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                      const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
@@ -251,6 +262,21 @@ private:
     THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
     THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
+
+    bool BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,
+                          const TActorContext& ctx);
+    void EndTransaction(const TEvPQ::TEvTxCommit& event,
+                        const TActorContext& ctx);
+    void EndTransaction(const TEvPQ::TEvTxRollback& event,
+                        const TActorContext& ctx);
+
+    void BeginChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig& event,
+                                    const TActorContext& ctx);
+    void EndChangePartitionConfig(const TEvPQ::TEvChangePartitionConfig& event,
+                                  const TActorContext& ctx);
+
+    void InitPendingUserInfoForImportantClients(const TEvPQ::TEvChangePartitionConfig& event,
+                                                const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -490,6 +516,9 @@ private:
     std::deque<TTransaction> DistrTxs;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfo> PendingUsersInfo;
+    THashMap<TString, TInstant> PendingReadFromTimestamp;
+    THashMap<TString, bool> PendingSetImportant;
+    THashSet<TString> PendingHasReadRule;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
     bool UsersInfoWriteInProgress = false;
@@ -497,6 +526,7 @@ private:
     TMaybe<ui64> PlanStep;
     TMaybe<ui64> TxId;
     bool TxIdHasChanged = false;
+    TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     //
     //
     //

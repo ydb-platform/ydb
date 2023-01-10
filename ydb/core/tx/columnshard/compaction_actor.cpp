@@ -131,6 +131,9 @@ private:
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
 
             TxEvent->Blobs = NOlap::TColumnEngineForLogs::CompactBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
+            if (TxEvent->Blobs.empty()) {
+                TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
+            }
         }
         TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
         ui32 blobsSize = TxEvent->Blobs.size();

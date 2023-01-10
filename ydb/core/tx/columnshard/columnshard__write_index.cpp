@@ -315,10 +315,6 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
     auto& blobs = ev->Get()->Blobs;
-    bool isCompaction = ev->Get()->GranuleCompaction;
-    if (isCompaction && blobs.empty()) {
-        ev->Get()->PutStatus = NKikimrProto::OK;
-    }
 
     if (ev->Get()->PutStatus == NKikimrProto::UNKNOWN) {
         if (IsAnyChannelYellowStop()) {

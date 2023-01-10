@@ -2371,12 +2371,21 @@ void THive::Handle(TEvHive::TEvInvalidateStoragePools::TPtr& ev) {
         }
     }
 
-    auto reply = std::make_unique<TEvHive::TEvInvalidateStoragePoolsReply>();
-    auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), reply.release());
+    auto reply = std::make_unique<IEventHandle>(TEvHive::EvInvalidateStoragePoolsReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
     if (ev->InterconnectSession) {
-        handle->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+        reply->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
     }
-    TActivationContext::Send(handle.release());
+    TActivationContext::Send(reply.release());
+}
+
+void THive::Handle(TEvHive::TEvReassignOnDecommitGroup::TPtr& ev) {
+    const ui32 groupId = ev->Get()->Record.GetGroupId();
+    BLOG_D("THive::Handle(TEvReassignOnDecommitGroup) GroupId# " << groupId);
+    auto reply = std::make_unique<IEventHandle>(TEvHive::EvReassignOnDecommitGroupReply, 0, ev->Sender, SelfId(), nullptr, ev->Cookie);
+    if (ev->InterconnectSession) {
+        reply->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+    }
+    Execute(CreateReassignGroupsOnDecommit(groupId, std::move(reply)));
 }
 
 void THive::InitDefaultChannelBind(TChannelBind& bind) {
@@ -2476,6 +2485,7 @@ STFUNC(THive::StateWork) {
         hFunc(TEvHive::TEvRequestHiveNodeStats, Handle);
         hFunc(TEvHive::TEvRequestHiveStorageStats, Handle);
         hFunc(TEvHive::TEvInvalidateStoragePools, Handle);
+        hFunc(TEvHive::TEvReassignOnDecommitGroup, Handle);
         hFunc(TEvHive::TEvRequestTabletIdSequence, Handle);
         hFunc(TEvHive::TEvResponseTabletIdSequence, Handle);
         hFunc(TEvHive::TEvSeizeTablets, Handle);

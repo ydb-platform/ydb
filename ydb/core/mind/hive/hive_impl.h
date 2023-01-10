@@ -165,6 +165,7 @@ protected:
     friend class TTxDeleteTablet;
     friend class TTxDeleteOwnerTablets;
     friend class TTxReassignGroups;
+    friend class TTxReassignGroupsOnDecommit;
     friend class TTxStartTablet;
     friend class TTxCreateTablet;
     friend class TTxCutTabletHistory;
@@ -253,6 +254,7 @@ protected:
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
     ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo);
@@ -468,6 +470,7 @@ protected:
     void Handle(TEvHive::TEvRequestHiveNodeStats::TPtr&);
     void Handle(TEvHive::TEvRequestHiveStorageStats::TPtr&);
     void Handle(TEvHive::TEvInvalidateStoragePools::TPtr&);
+    void Handle(TEvHive::TEvReassignOnDecommitGroup::TPtr&);
     void Handle(TEvHive::TEvRequestTabletIdSequence::TPtr&);
     void Handle(TEvHive::TEvResponseTabletIdSequence::TPtr&);
     void Handle(TEvHive::TEvSeizeTablets::TPtr&);

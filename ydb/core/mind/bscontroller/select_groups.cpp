@@ -55,6 +55,7 @@ public:
                         reportedGroup->SetGroupID(group->ID);
                         reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
                         reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
+                        reportedGroup->SetDecommitted(group->IsDecommitted());
                         group->FillInGroupParameters(reportedGroup);
                     }
                 }

@@ -414,6 +414,13 @@ message TEvInvalidateStoragePools {
 message TEvInvalidateStoragePoolsReply {
 }
 
+message TEvReassignOnDecommitGroup {
+    optional uint32 GroupId = 1;
+}
+
+message TEvReassignOnDecommitGroupReply {
+}
+
 message TEvRequestTabletIdSequence {
     optional TTabletOwner Owner = 1;
     optional uint64 Size = 2;

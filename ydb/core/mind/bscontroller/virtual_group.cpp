@@ -343,6 +343,10 @@ namespace NKikimr::NBsController {
                 NTabletPipe::SendData(SelfId(), HivePipeId, invalidateEv.release());
             }
 
+            if (config.GetIsDecommittingGroup()) {
+                NTabletPipe::SendData(SelfId(), HivePipeId, new TEvHive::TEvReassignOnDecommitGroup(group->ID));
+            }
+
             auto ev = std::make_unique<TEvHive::TEvCreateTablet>(Self->TabletID(), group->ID, TTabletTypes::BlobDepot, bindings);
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG00, "sending TEvCreateTablet", (TabletId, Self->TabletID()),
                 (GroupId, group->ID), (HiveId, *group->HiveId), (Msg, ev->Record));
@@ -381,6 +385,11 @@ namespace NKikimr::NBsController {
 
         void Handle(TEvHive::TEvInvalidateStoragePoolsReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG06, "received TEvInvalidateStoragePoolsReply", (TabletId, Self->TabletID()),
+                (Msg, ev->Get()->Record));
+        }
+
+        void Handle(TEvHive::TEvReassignOnDecommitGroupReply::TPtr ev) {
+            STLOG(PRI_INFO, BS_CONTROLLER, BSCVG07, "received TEvReassignOnDecommitGroupReply", (TabletId, Self->TabletID()),
                 (Msg, ev->Get()->Record));
         }
 
@@ -470,6 +479,7 @@ namespace NKikimr::NBsController {
                 hFunc(TEvHive::TEvCreateTabletReply, Handle);
                 hFunc(TEvHive::TEvTabletCreationResult, Handle);
                 hFunc(TEvHive::TEvInvalidateStoragePoolsReply, Handle);
+                hFunc(TEvHive::TEvReassignOnDecommitGroupReply, Handle);
                 hFunc(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
                 default:

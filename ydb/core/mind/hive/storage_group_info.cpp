@@ -52,6 +52,9 @@ bool TStorageGroupInfo::IsMatchesParameters(const TGroupFilter& filter) const {
     if (filter.PhysicalGroupsOnly && GroupParameters.HasPhysicalGroup() && !GroupParameters.GetPhysicalGroup()) {
         return false;
     }
+    if (GroupParameters.GetDecommitted()) {
+        return false;
+    }
     if (StoragePool.GetSafeMode()) {
         return true;
     }

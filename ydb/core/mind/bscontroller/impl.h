@@ -804,6 +804,10 @@ public:
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        bool IsDecommitted() const {
+            return DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+        }
+
         void OnCommit();
     };
 

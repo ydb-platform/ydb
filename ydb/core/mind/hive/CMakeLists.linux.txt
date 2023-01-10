@@ -61,6 +61,7 @@ target_sources(core-mind-hive PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__process_boot_queue.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__process_pending_operations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__reassign_groups.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__reassign_groups_on_decommit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__register_node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__release_tablets.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__release_tablets_reply.cpp

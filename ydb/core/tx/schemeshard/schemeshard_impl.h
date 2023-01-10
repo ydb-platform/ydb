@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dedicated_pipe_pool.h"
+#include "operation_queue_timer.h"
 #include "schemeshard.h"
 #include "schemeshard_export.h"
 #include "schemeshard_import.h"
@@ -14,10 +16,7 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_utils.h"
 #include "schemeshard_schema.h"
-
 #include "schemeshard__operation.h"
-
-#include "operation_queue_timer.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -1127,26 +1126,7 @@ public:
 
     // do not share pipes with operations
     // also do not share pipes between IndexBuilds
-    struct TDedicatedPipePool {
-        using TMessage = std::pair<ui32, TIntrusivePtr<TEventSerializedData>>;
-        using TOwnerRec = std::pair<TIndexBuildId, TTabletId>;
-        NTabletPipe::TClientConfig PipeCfg;
-
-        TMap<TIndexBuildId, TMap<TTabletId, TActorId>> Pipes;
-        TMap<TActorId, TOwnerRec> Owners;
-
-        TDedicatedPipePool();
-
-        void Create(TIndexBuildId ownerTxId, TTabletId dst, THolder<IEventBase> message, const TActorContext& ctx);
-        void Close(TIndexBuildId ownerTxId, TTabletId dst, const TActorContext& ctx);
-        ui64 CloseAll(TIndexBuildId ownerTxId, const TActorContext& ctx);
-        void Shutdown(const TActorContext& ctx);
-
-        bool Has(TActorId actorId) const;
-        TTabletId GetTabletId(TActorId actorId) const;
-        TIndexBuildId GetOwnerId(TActorId actorId) const;
-    };
-    TDedicatedPipePool IndexBuildPipes;
+    TDedicatedPipePool<TIndexBuildId> IndexBuildPipes;
 
     void PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo::TPtr indexInfo);
     void PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo::TPtr indexInfo);

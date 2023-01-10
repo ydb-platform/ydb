@@ -133,6 +133,8 @@ class TUpsertActor : public TActorBootstrapped<TUpsertActor> {
     TString ConfingString;
 
     TActorId Pipe;
+    bool WasConnected = false;
+    ui64 ReconnectLimit = 10;
 
     TRequestsVector Requests;
     size_t CurrentRequest = 0;
@@ -185,6 +187,12 @@ public:
 private:
     void Connect(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id << " TUpsertActor Connect called");
+        --ReconnectLimit;
+        if (ReconnectLimit == 0) {
+            TStringStream ss;
+            ss << "Failed to set pipe to " << Target.GetTabletId();
+            return StopWithError(ctx, ss.Str());
+        }
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), Target.GetTabletId()));
     }
 
@@ -195,20 +203,25 @@ private:
             << " TUpsertActor Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
-            TStringStream ss;
-            ss << "Failed to connect to " << Target.GetTabletId() << ", status: " << msg->Status;
-            StopWithError(ctx, ss.Str());
-            return;
+            Pipe = {};
+            return Connect(ctx);
         }
 
         StartTs = TInstant::Now();
+        WasConnected = true;
         SendRows(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
             << " TUpsertActor Handle TEvClientDestroyed called");
-        StopWithError(ctx, "broken pipe");
+
+        // sanity check
+        if (!WasConnected) {
+            return Connect(ctx);
+        }
+
+        return StopWithError(ctx, "broken pipe");
     }
 
     void SendRows(const TActorContext &ctx) {

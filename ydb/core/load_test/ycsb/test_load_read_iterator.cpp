@@ -96,6 +96,8 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
     const TSubLoadId Id;
 
     TActorId Pipe;
+    bool WasConnected = false;
+    ui64 ReconnectLimit = 10;
 
     TInstant StartTs; // actor started to send requests
 
@@ -146,6 +148,12 @@ private:
     void Connect(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
             << " Connect to# " << TabletId << " called");
+        --ReconnectLimit;
+        if (ReconnectLimit == 0) {
+            TStringStream ss;
+            ss << "Failed to set pipe to " << TabletId;
+            return StopWithError(ctx, ss.Str());
+        }
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
     }
 
@@ -156,18 +164,24 @@ private:
             << " Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
-            TStringStream ss;
-            ss << "Failed to connect to " << TabletId << ", status: " << msg->Status;
-            return StopWithError(ctx, ss.Str());
+            Pipe = {};
+            return Connect(ctx);
         }
 
         StartTs = TInstant::Now();
+        WasConnected = true;
         SendRead(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
             << " Handle TEvClientDestroyed called");
+
+        // sanity check
+        if (!WasConnected) {
+            return Connect(ctx);
+        }
+
         return StopWithError(ctx, "broken pipe");
     }
 
@@ -263,6 +277,8 @@ class TReadIteratorScan : public TActorBootstrapped<TReadIteratorScan> {
     const ui64 SampleKeyCount;
 
     TActorId Pipe;
+    bool WasConnected = false;
+    ui64 ReconnectLimit = 10;
 
     TInstant StartTs;
     size_t Oks = 0;
@@ -296,6 +312,12 @@ private:
     void Connect(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
             << " Connect to# " << TabletId << " called");
+        --ReconnectLimit;
+        if (ReconnectLimit == 0) {
+            TStringStream ss;
+            ss << "Failed to set pipe to " << TabletId;
+            return StopWithError(ctx, ss.Str());
+        }
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
     }
 
@@ -306,18 +328,23 @@ private:
             << " Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
-            TStringStream ss;
-            ss << "Failed to connect to " << TabletId << ", status: " << msg->Status;
-            return StopWithError(ctx, ss.Str());
+            return Connect(ctx);
         }
 
         StartTs = TInstant::Now();
+        WasConnected = true;
         NTabletPipe::SendData(ctx, Pipe, Request.release());
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
             << " Handle TEvClientDestroyed called");
+
+        // sanity check
+        if (!WasConnected) {
+            return Connect(ctx);
+        }
+
         return StopWithError(ctx, "broken pipe");
     }
 

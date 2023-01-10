@@ -1659,6 +1659,61 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithPartitionAtKeysSimple(true);
     }
 
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysSigned) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPartitionAtKeysSigned";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key1 Int64,
+                Key2 String,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            )
+            WITH (
+                PARTITION_AT_KEYS = ( 0, 10, 10000 )
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable(tableName,
+            TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
+
+        auto extractValue = [](const TValue& val) {
+            auto parser = TValueParser(val);
+            parser.OpenTuple();
+            UNIT_ASSERT(parser.TryNextElement());
+            return parser.GetOptionalInt64().GetRef();
+        };
+
+        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+
+        size_t n = 0;
+        const TVector<i64> expectedRanges = { 0l, 10l, 10000l };
+
+        for (const auto& range : keyRanges) {
+            if (n == 0) {
+                UNIT_ASSERT(!range.From());
+            } else {
+                UNIT_ASSERT(range.From()->IsInclusive());
+                auto left = extractValue(range.From()->GetValue());
+                UNIT_ASSERT_VALUES_EQUAL(left, expectedRanges[n - 1]);
+            }
+            if (n == expectedRanges.size()) {
+                UNIT_ASSERT(!range.To());
+            } else {
+                UNIT_ASSERT(!range.To()->IsInclusive());
+                auto right = extractValue(range.To()->GetValue());
+                UNIT_ASSERT_VALUES_EQUAL(right, expectedRanges[n]);
+            }
+            ++n;
+        }
+    }
+
     Y_UNIT_TEST(CreateTableWithPartitionAtKeysComplex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -2218,6 +2218,10 @@ private:
             toType->set_type_id(Ydb::Type::UINT32);
             toValue->set_uint32_value(FromString<ui32>(fromValue));
             break;
+        case NYql::EDataSlot::Int64:
+            toType->set_type_id(Ydb::Type::INT64);
+            toValue->set_int64_value(FromString<i64>(fromValue));
+            break;
         case NYql::EDataSlot::Uint64:
             toType->set_type_id(Ydb::Type::UINT64);
             toValue->set_uint64_value(FromString<ui64>(fromValue));

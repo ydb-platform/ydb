@@ -44,7 +44,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    if (column.GetNotNull()) {
+    if (column.GetNotNull() || protoType == NScheme::NTypeIds::Pg) {
         columnType = newColumn->mutable_type();
     } else {
         columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
@@ -103,6 +103,10 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
     for (const auto& column : in.GetColumns()) {
         auto newColumn = out.add_columns();
+        Y_ENSURE(
+            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
+            "It is not allowed to create NOT NULL column with pg type"
+        );
         Ydb::Type* columnType = AddColumn(newColumn, column);
 
         if (columnIdToKeyPos.count(column.GetId())) {
@@ -136,6 +140,10 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
+        Y_ENSURE(
+            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
+            "It is not allowed to create NOT NULL column with pg type"
+        );
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
     }
@@ -225,7 +233,9 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
                 return false;
             }
 
-            cd->SetNotNull(true);
+            if (!column.type().has_pg_type()) {
+                cd->SetNotNull(true);
+            }
         }
 
         NScheme::TTypeInfo typeInfo;

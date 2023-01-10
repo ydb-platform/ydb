@@ -13,12 +13,14 @@ struct TKqpTableColumn {
     TString Name;
     NUdf::TDataTypeId Type;
     bool NotNull;
+    void* TypeDesc;
 
-    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull)
+    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, void* typeDesc)
         : Id(id)
         , Name(name)
         , Type(type)
-        , NotNull(notNull) {}
+        , NotNull(notNull)
+        , TypeDesc(typeDesc) {}
 };
 
 using TKqpKeyTuple = TVector<TRuntimeNode>;

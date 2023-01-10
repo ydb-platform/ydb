@@ -19,6 +19,7 @@ target_link_libraries(core-engine-minikql PUBLIC
   ydb-core-engine
   ydb-core-formats
   ydb-core-tablet_flat
+  parser-pg_wrapper-interface
 )
 target_sources(core-engine-minikql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/engine/minikql/flat_local_tx_factory.cpp

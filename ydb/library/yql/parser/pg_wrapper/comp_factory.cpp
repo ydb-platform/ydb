@@ -2330,13 +2330,15 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret) {
 
 } // NYql
 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 using namespace NYql;
 
-ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
-    const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
+    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
+
     if (typeDesc.TypeLen >= 0) {
         return typeDesc.TypeLen;
     }
@@ -2349,6 +2351,10 @@ ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
         const auto x = (const char*)PointerDatumFromPod(value);
         return strlen(x);
     }
+}
+
+ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
+    return PgValueSize(type->GetTypeId(), value);
 }
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {

@@ -70,6 +70,12 @@ extern bool lc_ctype_is_c(Oid collation);
  */
 extern struct lconv *PGLC_localeconv(void);
 
+/*
+ * Free thread_local lconv struct
+ */
+extern void free_current_locale_conv();
+
+
 extern void cache_locale_time(void);
 
 

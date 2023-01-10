@@ -23,12 +23,15 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         ui32 columnId = 0;
         ui32 columnType = 0;
         bool notNull = false;
+        void* columnTypeDesc = nullptr;
 
         auto columnData = table.Columns.FindPtr(name);
         if (columnData) {
             columnId = columnData->Id;
-            // TODO: support pg types
             columnType = columnData->TypeInfo.GetTypeId();
+            if (columnType == NScheme::NTypeIds::Pg) {
+                columnTypeDesc = columnData->TypeInfo.GetTypeDesc();
+            }
             notNull = columnData->NotNull;
         } else if (allowSystemColumns) {
             auto systemColumn = GetSystemColumns().find(name);
@@ -38,7 +41,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << name);
-        pgmColumns.emplace_back(columnId, name, columnType, notNull);
+        pgmColumns.emplace_back(columnId, name, columnType, notNull, columnTypeDesc);
     }
 
     return pgmColumns;

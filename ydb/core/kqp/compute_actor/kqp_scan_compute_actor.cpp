@@ -135,8 +135,15 @@ public:
         YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
 
         KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
-        for (auto typeId : Meta.GetKeyColumnTypes()) {
-            KeyColumnTypes.push_back(NScheme::TTypeInfo((NScheme::TTypeId)typeId));
+        for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
+            auto typeId = Meta.GetKeyColumnTypes().at(i);
+            KeyColumnTypes.push_back(NScheme::TTypeInfo(
+                (NScheme::TTypeId)typeId,
+                (typeId == NScheme::NTypeIds::Pg) ?
+                    NPg::TypeDescFromPgTypeId(
+                        Meta.GetKeyColumnTypeInfos().at(i).GetPgTypeId()
+                    ) : nullptr
+            ));
         }
     }
 

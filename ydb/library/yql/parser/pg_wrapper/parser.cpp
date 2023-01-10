@@ -52,6 +52,7 @@ extern "C" {
 
 extern __thread Latch LocalLatchData;
 extern void destroy_timezone_hashtable();
+extern void free_current_locale_conv();
 const char *progname;
 
 #define STDERR_BUFFER_LEN 4096
@@ -301,6 +302,7 @@ extern "C" void setup_pg_thread_cleanup() {
     struct TThreadCleanup {
         ~TThreadCleanup() {
             destroy_timezone_hashtable();
+            free_current_locale_conv();
             ResourceOwnerDelete(CurrentResourceOwner);
             MemoryContextDelete(TopMemoryContext);
         }

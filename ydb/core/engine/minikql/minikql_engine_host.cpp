@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/flat_table_stats.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 #include <ydb/core/tx/datashard/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -1087,8 +1088,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     }
 
     if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        // TODO: support pg types
-        Y_VERIFY(false, "pg types are not supported");
+        return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
     }
 
     Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type.GetTypeId());

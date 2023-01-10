@@ -1172,13 +1172,14 @@ public:
             return {};
         }
 
-        auto p = Settings.ClusterMapping.FindPtr(value->schemaname);
+        const char* schemaname = (value->schemaname) ? value->schemaname : Settings.DefaultCluster.Data();
+        auto p = Settings.ClusterMapping.FindPtr(schemaname);
         if (!p) {
-            AddError(TStringBuilder() << "Unknown cluster: " << value->schemaname);
+            AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
             return {};
         }
 
-        auto sink = L(A("DataSink"), QAX(*p), QAX(value->schemaname));
+        auto sink = L(A("DataSink"), QAX(*p), QAX(schemaname));
         auto key = L(A("Key"), QL(QA("table"), L(A("String"), QAX(value->relname))));
         return { sink, key };
     }
@@ -1204,14 +1205,10 @@ public:
                     break;
                 }
             }
-
             if (!view) {
                 auto viewIt = Views.find(value->relname);
                 if (viewIt != Views.end()) {
                     view = &viewIt->second;
-                } else {
-                    AddError(TStringBuilder() << "View or CTE not found: '" << value->relname << "'");
-                    return {};
                 }
             }
         }
@@ -1238,13 +1235,14 @@ public:
             return { s, alias, colnames, true };
         }
 
-        auto p = Settings.ClusterMapping.FindPtr(value->schemaname);
+        const char* schemaname = (value->schemaname) ? value->schemaname : Settings.DefaultCluster.Data();
+        auto p = Settings.ClusterMapping.FindPtr(schemaname);
         if (!p) {
-            AddError(TStringBuilder() << "Unknown cluster: " << value->schemaname);
+            AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
             return {};
         }
 
-        auto source = L(A("DataSource"), QAX(*p), QAX(value->schemaname));
+        auto source = L(A("DataSource"), QAX(*p), QAX(schemaname));
         return { L(A("Read!"), A("world"), source, L(A("Key"),
             QL(QA("table"), L(A("String"), QAX(TablePathPrefix + value->relname)))),
             L(A("Void")),
@@ -1347,7 +1345,7 @@ public:
             AddError("RangeFunction: expected pair");
             return {};
         }
-        
+
         TExprSettings settings;
         settings.AllowColumns = false;
         settings.AllowReturnSet = true;
@@ -1678,7 +1676,7 @@ public:
 
         return VL(args.data(), args.size());
     }
-    
+
 
     TAstNode* ParseSubLinkExpr(const SubLink* value, const TExprSettings& settings) {
         AT_LOCATION(value);

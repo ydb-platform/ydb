@@ -149,14 +149,21 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
     std::map<ui32, TString, std::less<ui32>> columnOrder;
     for (auto& pair : entry.Columns) {
         const auto& columnDesc = pair.second;
-
         TString typeName;
-        // TODO: support pg types
-        YQL_ENSURE(columnDesc.PType.GetTypeId() != NScheme::NTypeIds::Pg);
-        YQL_ENSURE(NScheme::TryGetTypeName(columnDesc.PType.GetTypeId(), typeName));
         auto notNull = entry.NotNullColumns.contains(columnDesc.Name);
-        tableMeta->Columns.emplace(columnDesc.Name, NYql::TKikimrColumnMetadata(
-            columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType));
+        if (columnDesc.PType.GetTypeId() != NScheme::NTypeIds::Pg) {
+            YQL_ENSURE(NScheme::TryGetTypeName(columnDesc.PType.GetTypeId(), typeName));
+        } else {
+            Y_VERIFY(columnDesc.PType.GetTypeDesc(), "no pg type descriptor");
+            Y_VERIFY(!notNull, "pg not null types are not allowed");
+            typeName = NPg::PgTypeNameFromTypeDesc(columnDesc.PType.GetTypeDesc());
+        }
+        tableMeta->Columns.emplace(
+            columnDesc.Name,
+            NYql::TKikimrColumnMetadata(
+                columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType
+            )
+        );
         if (columnDesc.KeyOrder >= 0) {
             keyColumns[columnDesc.KeyOrder] = columnDesc.Name;
         }

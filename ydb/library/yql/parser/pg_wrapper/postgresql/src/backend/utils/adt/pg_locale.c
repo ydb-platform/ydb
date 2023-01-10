@@ -102,6 +102,8 @@ __thread char	   *localized_full_months[12 + 1];
 /* indicates whether locale information cache is valid */
 static __thread bool CurrentLocaleConvValid = false;
 static __thread bool CurrentLCTimeValid = false;
+static __thread struct lconv CurrentLocaleConv;
+static __thread bool CurrentLocaleConvAllocated = false;
 
 /* Cache for collation-related knowledge */
 
@@ -396,6 +398,14 @@ free_struct_lconv(struct lconv *s)
 		free(s->negative_sign);
 }
 
+void free_current_locale_conv()
+{
+	if (CurrentLocaleConvAllocated)
+	{
+		free_struct_lconv(&CurrentLocaleConv);
+		CurrentLocaleConvAllocated = false;
+	}
+}
 /*
  * Check that all fields of a struct lconv (or at least, the ones we care
  * about) are non-NULL.  The field list must match free_struct_lconv().
@@ -464,8 +474,6 @@ db_encoding_convert(int encoding, char **str)
 struct lconv *
 PGLC_localeconv(void)
 {
-	static __thread struct lconv CurrentLocaleConv;
-	static __thread bool CurrentLocaleConvAllocated = false;
 	struct lconv *extlconv;
 	struct lconv worklconv;
 	char	   *save_lc_monetary;

@@ -261,8 +261,7 @@ private:
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
 
             if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
-                auto pgType = meta->mutable_type()->mutable_optional_type()->mutable_item()
-                    ->mutable_pg_type();
+                auto pgType = meta->mutable_type()->mutable_pg_type();
                 pgType->set_oid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
             } else {
                 auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());

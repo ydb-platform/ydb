@@ -4,6 +4,7 @@
 #include "mkql_node_visitor.h"
 #include "mkql_node_printer.h"
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>
@@ -362,6 +363,8 @@ TDataType::TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env)
 TDataType* TDataType::Create(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env) {
     MKQL_ENSURE(schemeType, "Null type isn't allowed.");
     MKQL_ENSURE(schemeType != NUdf::TDataType<NUdf::TDecimal>::Id, "Can't' create Decimal.");
+    MKQL_ENSURE(schemeType != NKikimr::NScheme::NTypeIds::Pg, "Can't create Pg.");
+    MKQL_ENSURE(schemeType != 0, "0 type");
     return ::new(env.Allocate<TDataType>()) TDataType(schemeType, env);
 }
 
@@ -479,6 +482,7 @@ TPgType::TPgType(ui32 typeId, const TTypeEnvironment& env)
 }
 
 TPgType* TPgType::Create(ui32 typeId, const TTypeEnvironment& env) {
+    MKQL_ENSURE(typeId != 0, "0 type");
     return ::new(env.Allocate<TPgType>()) TPgType(typeId, env);
 }
 

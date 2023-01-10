@@ -130,6 +130,12 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
     Y_UNUSED(type);
     Y_UNUSED(value);

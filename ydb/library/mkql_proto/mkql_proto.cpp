@@ -480,7 +480,7 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
                 return;
             }
             auto pgType = static_cast<TPgType*>(type);
-            auto textValue = NYql::NCommon::PgValueToString(value, pgType->GetTypeId());
+            auto textValue = NYql::NCommon::PgValueToNativeText(value, pgType->GetTypeId());
             res.SetText(textValue);
             break;
         }
@@ -587,7 +587,7 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
                 return;
             }
             auto pgType = static_cast<TPgType*>(type);
-            auto textValue = NYql::NCommon::PgValueToString(value, pgType->GetTypeId());
+            auto textValue = NYql::NCommon::PgValueToNativeText(value, pgType->GetTypeId());
             res.set_text_value(textValue);
             break;
         }

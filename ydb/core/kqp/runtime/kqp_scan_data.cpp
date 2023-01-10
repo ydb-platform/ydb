@@ -5,6 +5,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr {
@@ -59,9 +60,15 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::
             }
         }
 
-        case NTypeIds::Pg:
-            // TODO: support pg types
-            YQL_ENSURE(false, "pg types are not supported");
+        case NTypeIds::Pg: {
+            return {
+                sizeof(NUdf::TUnboxedValue),
+                NKikimr::NMiniKQL::PgValueSize(
+                    NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()), //extra typeDesc resolve
+                    value
+                )
+            };
+        }
 
         default:
             Y_VERIFY_DEBUG_S(false, "Unsupported type " << NScheme::TypeName(type.GetTypeId()));

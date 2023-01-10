@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 
@@ -163,15 +164,19 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         // is passed with no params. It's known to always be Decimal(22,9),
         // so we transform Decimal type here.
         const TTypeAnnotationNode *type;
-        if (to_lower(column.Type) == "decimal")
+        if (to_lower(column.Type) == "decimal") {
             type = ctx.MakeType<TDataExprParamsType>(
                 NKikimr::NUdf::GetDataSlot(column.Type),
                 ToString(NKikimr::NScheme::DECIMAL_PRECISION),
                 ToString(NKikimr::NScheme::DECIMAL_SCALE));
-        else
-            type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
-
-        if (!column.NotNull) {
+        } else {
+            if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
+                type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
+            } else {
+                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
+            }
+        }
+        if (!column.NotNull && column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
             type = ctx.MakeType<TOptionalExprType>(type);
         }
 

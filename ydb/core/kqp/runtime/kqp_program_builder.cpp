@@ -15,13 +15,28 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
     TStructTypeBuilder rowTypeBuilder(builder.GetTypeEnvironment());
     for (auto& column : columns) {
         TType* type = nullptr;
-        if (column.Type == NUdf::TDataType<NUdf::TDecimal>::Id) {
-            type = TDataDecimalType::Create(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE, builder.GetTypeEnvironment());
-        } else {
-            type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
+        switch (column.Type) {
+            case NUdf::TDataType<NUdf::TDecimal>::Id: {
+                type = TDataDecimalType::Create(
+                    NScheme::DECIMAL_PRECISION,
+                    NScheme::DECIMAL_SCALE,
+                    builder.GetTypeEnvironment()
+                );
+                break;
+            }
+            case NKikimr::NScheme::NTypeIds::Pg: {
+                Y_VERIFY(column.TypeDesc, "No pg type description");
+                Y_VERIFY(!column.NotNull, "pg not null types are not allowed");
+                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeDesc), builder.GetTypeEnvironment());
+                break;
+            }
+            default: {
+                type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
+                break;
+            }
         }
 
-        if (!column.NotNull) {
+        if (!column.NotNull && column.Type != NKikimr::NScheme::NTypeIds::Pg) {
             type = TOptionalType::Create(type, builder.GetTypeEnvironment());
         }
 

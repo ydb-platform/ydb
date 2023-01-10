@@ -89,7 +89,14 @@ private:
         for (const auto sinkId : ev->Get()->SinkIds) {
             sinkStats[sinkId] = TaskRunner->GetSink(sinkId)->GetStats();
         }
-        ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinkStats));
+
+        THashMap<ui32, const TDqAsyncInputBufferStats*> inputTransformStats;
+        for (const auto inputTransformId : ev->Get()->InputTransformIds) {
+            inputTransformStats[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId).second->GetStats();
+        }
+
+        ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinkStats),
+            std::move(inputTransformStats));
         Send(
             ev->Sender,
             ev->Release().Release(),
@@ -215,14 +222,20 @@ private:
         }
 
         {
-            auto st = MakeHolder<TEvStatistics>(std::move(ev->Get()->SinkIds));
+            auto st = MakeHolder<TEvStatistics>(std::move(ev->Get()->SinkIds), std::move(ev->Get()->InputTransformIds));
 
             TaskRunner->UpdateStats();
             THashMap<ui32, const TDqAsyncOutputBufferStats*> sinkStats;
             for (const auto sinkId : st->SinkIds) {
                 sinkStats[sinkId] = TaskRunner->GetSink(sinkId)->GetStats();
             }
-            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinkStats));
+
+            THashMap<ui32, const TDqAsyncInputBufferStats*> inputTransformStats;
+            for (const auto inputTransformId : st->InputTransformIds) { // TODO
+                inputTransformStats[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId).second->GetStats();
+            }
+
+            st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinkStats), std::move(inputTransformStats));
             Send(ev->Sender, st.Release());
         }
 

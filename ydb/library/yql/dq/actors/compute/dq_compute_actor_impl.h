@@ -1843,6 +1843,11 @@ private:
         return sinkInfo.Buffer ? sinkInfo.Buffer->GetStats() : nullptr;
     }
 
+    virtual const TDqAsyncInputBufferStats* GetInputTransformStats(ui64 inputIdx, const TAsyncInputTransformInfo& inputTransformInfo) const {
+        Y_UNUSED(inputIdx);
+        return inputTransformInfo.Buffer ? inputTransformInfo.Buffer->GetStats() : nullptr;
+    }
+
 public:
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (!BasicStats) {
@@ -1918,6 +1923,24 @@ public:
                         protoSink->SetMaxMemoryUsage(sinkStats->MaxMemoryUsage);
                         protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
                     }
+                }
+            }
+
+            for (auto& [inputIndex, transformInfo] : InputTransformsMap) {
+                auto* transformStats = GetInputTransformStats(inputIndex, transformInfo);
+                if (transformStats && GetProfileStats()) {
+                    YQL_ENSURE(transformStats);
+                    ui64 ingressBytes = transformInfo.AsyncInput ? transformInfo.AsyncInput->GetIngressBytes() : 0;
+
+                    auto* protoTransform = protoTask->AddInputTransforms();
+                    protoTransform->SetInputIndex(inputIndex);
+                    protoTransform->SetChunks(transformStats->Chunks);
+                    protoTransform->SetBytes(transformStats->Bytes);
+                    protoTransform->SetRowsIn(transformStats->RowsIn);
+                    protoTransform->SetRowsOut(transformStats->RowsOut);
+                    protoTransform->SetIngressBytes(ingressBytes);
+
+                    protoTransform->SetMaxMemoryUsage(transformStats->MaxMemoryUsage);
                 }
             }
 

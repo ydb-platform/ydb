@@ -188,10 +188,12 @@ public:
         , IsDefined(true) {
     }
 
-    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const TDqAsyncOutputBufferStats*>&& sinkStats)
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const TDqAsyncOutputBufferStats*>&& sinkStats,
+        THashMap<ui32, const TDqAsyncInputBufferStats*>&& inputTransformStats)
         : StatsPtr(stats)
         , IsDefined(true)
-        , SinkStats(std::move(sinkStats)) {
+        , SinkStats(std::move(sinkStats))
+        , InputTransformStats(std::move(inputTransformStats)) {
     }
 
     const TTaskRunnerStatsBase* Get() {
@@ -209,10 +211,15 @@ public:
         return SinkStats.at(sinkId);
     }
 
+    const TDqAsyncInputBufferStats* GetInputTransformStats(ui32 inputTransformId) const {
+        return InputTransformStats.at(inputTransformId);
+    }
+
 private:
     const TDqTaskRunnerStats* StatsPtr;
     bool IsDefined;
     THashMap<ui32, const TDqAsyncOutputBufferStats*> SinkStats;
+    THashMap<ui32, const TDqAsyncInputBufferStats*> InputTransformStats;
 };
 
 struct TDqTaskRunnerContext {

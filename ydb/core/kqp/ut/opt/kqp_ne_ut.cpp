@@ -3297,7 +3297,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
 
         TExecDataQuerySettings querySettings;
-        querySettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -3314,6 +3314,13 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
             auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
             UNIT_ASSERT(streamLookup.IsDefined());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/KeyValue");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
         }
 
         {
@@ -3341,6 +3348,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
             auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
             UNIT_ASSERT(streamLookup.IsDefined());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/KeyValue");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
         }
 
         {
@@ -3357,6 +3370,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
             auto streamLookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
             UNIT_ASSERT(streamLookup.IsDefined());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/KeyValue");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
         }
     }
 

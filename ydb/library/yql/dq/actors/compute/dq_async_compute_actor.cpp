@@ -124,7 +124,7 @@ private:
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
         if (!SentStatsRequest) {
-            Send(TaskRunnerActorId, new NTaskRunnerActor::TEvStatistics(GetIds(SinksMap)));
+            Send(TaskRunnerActorId, new NTaskRunnerActor::TEvStatistics(GetIds(SinksMap), GetIds(InputTransformsMap)));
             SentStatsRequest = true;
         }
         WaitingForStateResponse.push_back({ev->Sender, ev->Cookie});
@@ -185,6 +185,11 @@ private:
     const TDqAsyncOutputBufferStats* GetSinkStats(ui64 outputIdx, const TAsyncOutputInfoBase& sinkInfo) const override {
         Y_UNUSED(sinkInfo);
         return TaskRunnerStats.GetSinkStats(outputIdx);
+    }
+
+    const TDqAsyncInputBufferStats* GetInputTransformStats(ui64 inputIdx, const TAsyncInputTransformInfo& inputTransformInfo) const override {
+        Y_UNUSED(inputTransformInfo);
+        return TaskRunnerStats.GetInputTransformStats(inputIdx);
     }
 
     void DrainOutputChannel(TOutputChannelInfo& outputChannel, const TDqComputeActorChannels::TPeerState& peerState) override {
@@ -809,6 +814,7 @@ private:
 
     void AskContinueRun(std::unique_ptr<NTaskRunnerActor::TEvContinueRun> continueRunEvent) {
         continueRunEvent->SinkIds = GetIds(SinksMap);
+        continueRunEvent->InputTransformIds = GetIds(InputTransformsMap);
 
         if (!UseCpuQuota()) {
             Send(TaskRunnerActorId, continueRunEvent.release());

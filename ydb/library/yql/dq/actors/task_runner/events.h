@@ -335,6 +335,7 @@ struct TEvContinueRun
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;
     TVector<ui32> SinkIds;
+    TVector<ui32> InputTransformIds;
 };
 
 struct TEvAsyncInputPushFinished
@@ -403,10 +404,14 @@ struct TEvLoadTaskRunnerFromStateDone : NActors::TEventLocal<TEvLoadTaskRunnerFr
 
 struct TEvStatistics : NActors::TEventLocal<TEvStatistics, TTaskRunnerEvents::ES_STATISTICS>
 {
-    explicit TEvStatistics(TVector<ui32>&& sinkIds) : SinkIds(std::move(sinkIds)), Stats() {
+    explicit TEvStatistics(TVector<ui32>&& sinkIds, TVector<ui32>&& inputTransformIds)
+        : SinkIds(std::move(sinkIds))
+        , InputTransformIds(std::move(inputTransformIds))
+        , Stats() {
     }
 
     TVector<ui32> SinkIds;
+    TVector<ui32> InputTransformIds;
     NDq::TDqTaskRunnerStatsView Stats;
 };
 

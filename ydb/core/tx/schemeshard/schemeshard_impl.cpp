@@ -3954,6 +3954,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         ctx.Send(SVPMigrator, new TEvents::TEvPoisonPill());
     }
 
+    IndexBuildPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);
 
@@ -6282,6 +6283,15 @@ ui64 TSchemeShard::TDedicatedPipePool::CloseAll(TIndexBuildId ownerTxId, const T
     }
 
     return tables.size();
+}
+
+void TSchemeShard::TDedicatedPipePool::Shutdown(const TActorContext& ctx) {
+    for (const auto& [clientId, _] : Owners) {
+        NTabletPipe::CloseClient(ctx, clientId);
+    }
+
+    Pipes.clear();
+    Owners.clear();
 }
 
 TIndexBuildId TSchemeShard::TDedicatedPipePool::GetOwnerId(TActorId actorId) const {

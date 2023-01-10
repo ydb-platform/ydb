@@ -1140,6 +1140,7 @@ public:
         void Create(TIndexBuildId ownerTxId, TTabletId dst, THolder<IEventBase> message, const TActorContext& ctx);
         void Close(TIndexBuildId ownerTxId, TTabletId dst, const TActorContext& ctx);
         ui64 CloseAll(TIndexBuildId ownerTxId, const TActorContext& ctx);
+        void Shutdown(const TActorContext& ctx);
 
         bool Has(TActorId actorId) const;
         TTabletId GetTabletId(TActorId actorId) const;

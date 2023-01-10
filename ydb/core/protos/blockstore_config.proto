@@ -110,6 +110,9 @@ message TVolumeConfig {
 
     // Encryption description.
     optional TEncryptionDesc EncryptionDesc = 44;
+
+    // Placement partition id.
+    optional string PlacementPartitionId = 45;
 }
 
 message TUpdateVolumeConfig {

@@ -45,6 +45,12 @@ message TEvYCSBTestLoadRequest {
 
         // Specifies the format for result data in TEvReadResult
         optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 5;
+
+        // special mode: actor reads RowCount rows again and again
+        // implies no full scan and only first inflight will be used
+        optional bool Infinite = 6;
+
+        optional bool NoFullScan = 7;
     }
 
     message TTableSetup {

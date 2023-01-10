@@ -101,6 +101,7 @@ class TReadIteratorPoints : public TActorBootstrapped<TReadIteratorPoints> {
 
     TVector<TOwnedCellVec> Points;
     ui64 ReadCount = 0;
+    const bool Infinite;
     size_t CurrentPoint = 0;
     THPTimer RequestTimer;
 
@@ -112,7 +113,8 @@ public:
                         const TActorId& parent,
                         const TSubLoadId& id,
                         const TVector<TOwnedCellVec>& points,
-                        ui64 readCount)
+                        ui64 readCount,
+                        bool infinite)
         : BaseRequest(request)
         , Format(BaseRequest->Record.GetResultFormat())
         , TabletId(tablet)
@@ -120,6 +122,7 @@ public:
         , Id(id)
         , Points(points)
         , ReadCount(readCount)
+        , Infinite(infinite)
     {
         RequestTimes.reserve(Points.size());
     }
@@ -208,6 +211,10 @@ private:
         }
 
         RequestTimes.push_back(TDuration::Seconds(RequestTimer.Passed()));
+
+        if (Infinite && CurrentPoint >= Points.size()) {
+            CurrentPoint = 0;
+        }
 
         if (CurrentPoint < Points.size()) {
             SendRead(ctx);
@@ -487,6 +494,10 @@ public:
             }
         }
 
+        if (Config.GetNoFullScan() || Config.GetInfinite()) {
+            ChunkSizes.clear();
+        }
+
         if (Config.HasReadCount()) {
             ReadCount = Config.GetReadCount();
         } else {
@@ -560,7 +571,11 @@ private:
             << Target.GetWorkingDir() << "/" << Target.GetTableName()
             << " with columnsCount# " << AllColumnIds.size() << ", keyColumnCount# " << KeyColumnIds.size());
 
-        State = EState::FullScan;
+        if (!ChunkSizes.empty()) {
+            State = EState::FullScan;
+        } else {
+            State = EState::FullScanGetKeys;
+        }
         Run(ctx);
     }
 
@@ -703,7 +718,8 @@ private:
             SelfId(),
             subId,
             Keys,
-            ReadCount);
+            ReadCount,
+            Config.GetInfinite());
 
         StartedActors.emplace_back(ctx.Register(readActor));
 

@@ -153,7 +153,13 @@ private:
                 << " send request# " << CurrentRequest
                 << " to proxy# " << kqpProxy << ": " << request->ToString());
 
-            ctx.Send(kqpProxy, Requests[CurrentRequest].release());
+            if (!Config.GetInfinite()) {
+                ctx.Send(kqpProxy, Requests[CurrentRequest].release());
+            } else {
+                auto requestCopy = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+                requestCopy->Record = request->Record;
+                ctx.Send(kqpProxy, requestCopy.release());
+            }
 
             ++CurrentRequest;
             ++Inflight;
@@ -161,6 +167,10 @@ private:
     }
 
     void OnRequestDone(const TActorContext& ctx) {
+        if (Config.GetInfinite() && CurrentRequest >= Requests.size()) {
+            CurrentRequest = 0;
+        }
+
         if (CurrentRequest < Requests.size()) {
             SendRows(ctx);
         } else if (Inflight == 0) {

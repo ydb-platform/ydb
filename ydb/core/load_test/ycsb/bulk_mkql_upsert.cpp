@@ -214,15 +214,39 @@ private:
     void SendRows(const TActorContext &ctx) {
         while (Inflight < Config.GetInflight() && CurrentRequest < Requests.size()) {
             const auto* request = Requests[CurrentRequest].get();
-            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
-                << "TUpsertActor# " << Id << " send request# " << CurrentRequest << ": " << request->ToString());
-            NTabletPipe::SendData(ctx, Pipe, Requests[CurrentRequest].release());
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TUpsertActor# " << Id
+                << " send request# " << CurrentRequest << ": " << request->ToString());
+
+            if (!Config.GetInfinite()) {
+                NTabletPipe::SendData(ctx, Pipe, Requests[CurrentRequest].release());
+            } else {
+                switch (RequestType) {
+                case ERequestType::UpsertBulk: {
+                    const auto& casted = static_cast<const TEvDataShard::TEvUploadRowsRequest*>(request);
+                    auto requestCopy = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+                    requestCopy->Record = casted->Record;
+                    NTabletPipe::SendData(ctx, Pipe, requestCopy.release());
+                    break;
+                } case ERequestType::UpsertLocalMkql: {
+                    const auto& casted = static_cast<const TEvTablet::TEvLocalMKQL*>(request);
+                    auto requestCopy = std::make_unique<TEvTablet::TEvLocalMKQL>();
+                    requestCopy->Record = casted->Record;
+                    NTabletPipe::SendData(ctx, Pipe, requestCopy.release());
+                    break;
+                }
+                }
+            }
+
             ++CurrentRequest;
             ++Inflight;
         }
     }
 
     void OnRequestDone(const TActorContext& ctx) {
+        if (Config.GetInfinite() && CurrentRequest >= Requests.size()) {
+            CurrentRequest = 0;
+        }
+
         if (CurrentRequest < Requests.size()) {
             SendRows(ctx);
         } else if (Inflight == 0) {

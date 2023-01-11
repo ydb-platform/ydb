@@ -183,9 +183,24 @@ struct HashMethodKeysFixed
     }
 #endif
 
-    HashMethodKeysFixed(const ColumnRawPtrs & key_columns, const Sizes & /*key_sizes_*/, const HashMethodContextPtr &)
+    HashMethodKeysFixed(const ColumnRawPtrs & key_columns, const Sizes & key_sizes_, const HashMethodContextPtr &)
         : Base(key_columns), /*key_sizes(key_sizes_),*/ keys_size(key_columns.size())
     {
+        {   // patch: there's no such logic in original CH
+            // It's a protection for coverity generated out-of-bounds access in packFixed() called from getKeyHolder()
+            // Check if we have enough memory in Key type to store a key from key_columns
+            // GROUP BY key is sum(key_sizes_) long with additional bitmap for nulls
+
+            size_t key_sum_size = has_nullable_keys ? std::tuple_size<KeysNullMap<Key>>::value : 0;
+            if constexpr (has_nullable_keys)
+                if (!key_sum_size)
+                    throw Exception("Empty bitmap for nullable GROUP BY key");
+
+            for (auto size : key_sizes_)
+                key_sum_size += size;
+            if (key_sum_size > sizeof(Key))
+                throw Exception("Wrong fixed size key");
+        }
 #if 0
         if (usePreparedKeys(key_sizes))
             packFixedBatch(keys_size, Base::getActualColumns(), key_sizes, prepared_keys);

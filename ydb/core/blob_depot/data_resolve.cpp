@@ -41,7 +41,7 @@ namespace NKikimr::NBlobDepot {
             return sendResult(std::make_unique<TEvBlobDepot::TEvResolveResult>(status, std::move(errorReason)));
         }
 
-        size_t lastResponseSize;
+        size_t lastResponseSize = 0;
         std::unique_ptr<TEvBlobDepot::TEvResolveResult> ev;
 
         size_t index = 0;

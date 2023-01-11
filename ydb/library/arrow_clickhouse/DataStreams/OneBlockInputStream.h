@@ -18,8 +18,9 @@ public:
     explicit OneBlockInputStream(Block block_)
         : block(std::move(block_))
     {
-        if (!block->Validate().ok())
-            throw Exception("Bad batch in OneBlockInputStream");
+        auto status = block->Validate();
+        if (!status.ok())
+            throw Exception(std::string("Bad batch in OneBlockInputStream: ") + status.ToString());
     }
 
     String getName() const override { return "One"; }

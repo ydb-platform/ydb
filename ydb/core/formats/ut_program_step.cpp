@@ -46,13 +46,17 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     step->Assignes = {TAssign("res1", op1, {"x"}), TAssign("res2", op2, {"res1", "z"})};
     step->Filters = {"res2"};
     step->Projection = {"res1", "res2"};
-    UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
+    auto status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
+    if (!status.ok()) {
+        Cerr << status.ToString() << "\n";
+    }
+    UNIT_ASSERT(status.ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
     UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
     return batch->num_rows();
 }
 
-void SumGroupBy(bool nullable, ui32 numKeys = 1) {
+void SumGroupBy(bool nullable, ui32 numKeys = 1, bool emptySrc = false) {
     std::optional<double> null;
     if (nullable) {
         null = 0;
@@ -61,8 +65,14 @@ void SumGroupBy(bool nullable, ui32 numKeys = 1) {
     auto schema = std::make_shared<arrow::Schema>(std::vector{
                                                 std::make_shared<arrow::Field>("x", arrow::int16()),
                                                 std::make_shared<arrow::Field>("y", arrow::uint32())});
-    auto batch = arrow::RecordBatch::Make(schema, 4, std::vector{NumVecToArray(arrow::int16(), {-1, 0, 0, -1}, null),
-                                                                 NumVecToArray(arrow::uint32(), {1, 0, 0, 1}, null)});
+    std::shared_ptr<arrow::RecordBatch> batch;
+    if (emptySrc) {
+        batch = arrow::RecordBatch::Make(schema, 0, std::vector{NumVecToArray(arrow::int16(), {}),
+                                                                NumVecToArray(arrow::uint32(), {})});
+    } else {
+        batch = arrow::RecordBatch::Make(schema, 4, std::vector{NumVecToArray(arrow::int16(), {-1, 0, 0, -1}, null),
+                                                                NumVecToArray(arrow::uint32(), {1, 0, 0, 1}, null)});
+    }
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
@@ -75,15 +85,23 @@ void SumGroupBy(bool nullable, ui32 numKeys = 1) {
         step->GroupByKeys.push_back("y");
     }
 
-    UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
+    auto status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
+    if (!status.ok()) {
+        Cerr << status.ToString() << "\n";
+    }
+    UNIT_ASSERT(status.ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
     UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), numKeys + 2);
-    UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), (emptySrc ? 0 : 2));
     UNIT_ASSERT_EQUAL(batch->column(0)->type_id(), arrow::Type::INT64);
     UNIT_ASSERT_EQUAL(batch->column(1)->type_id(), arrow::Type::UINT64);
     UNIT_ASSERT_EQUAL(batch->column(2)->type_id(), arrow::Type::INT16);
     if (numKeys == 2) {
         UNIT_ASSERT_EQUAL(batch->column(3)->type_id(), arrow::Type::UINT32);
+    }
+
+    if (emptySrc) {
+        return;
     }
 
     auto& sumX = static_cast<arrow::Int64Array&>(*batch->column(0));
@@ -310,10 +328,16 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
     Y_UNIT_TEST(SumGroupBy) {
         SumGroupBy(true);
         SumGroupBy(true, 2);
+
+        SumGroupBy(true, 1, true);
+        SumGroupBy(true, 2, true);
     }
 
     Y_UNIT_TEST(SumGroupByNotNull) {
         SumGroupBy(false);
         SumGroupBy(false, 2);
+
+        SumGroupBy(false, 1, true);
+        SumGroupBy(false, 2, true);
     }
 }

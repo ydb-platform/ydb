@@ -68,6 +68,8 @@ public:
         }
 
         auto batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), num_rows, columns);
+        if (!batch)
+            return arrow::Status::Invalid("Wrong aggregation arguments: cannot make batch");
 
         AggregateDescription description {
             .function = getHouseFunction(types),
@@ -141,8 +143,9 @@ public:
             columns.reserve(needed_columns.size());
             fields.reserve(needed_columns.size());
 
-            int64_t num_rows = 0;
-            for (int i = 0; i < opts->schema->num_fields(); ++i) {
+            std::optional<int64_t> num_rows;
+            for (int i = 0; i < opts->schema->num_fields(); ++i)
+            {
                 auto& datum = args[i];
                 auto& field = opts->schema->field(i);
 
@@ -151,7 +154,7 @@ public:
 
                 if (datum.is_array())
                 {
-                    if (num_rows && num_rows != datum.mutable_array()->length)
+                    if (num_rows && *num_rows != datum.mutable_array()->length)
                         return arrow::Status::Invalid("Arrays have different length");
                     num_rows = datum.mutable_array()->length;
                 }
@@ -161,7 +164,8 @@ public:
             if (!num_rows) // All datums are scalars
                 num_rows = 1;
 
-            for (int i = 0; i < opts->schema->num_fields(); ++i) {
+            for (int i = 0; i < opts->schema->num_fields(); ++i)
+            {
                 auto& datum = args[i];
                 auto& field = opts->schema->field(i);
 
@@ -171,9 +175,9 @@ public:
                 if (datum.is_scalar())
                 {
                     // TODO: better GROUP BY over scalars
-                    auto res = arrow::MakeArrayFromScalar(*datum.scalar(), num_rows);
+                    auto res = arrow::MakeArrayFromScalar(*datum.scalar(), *num_rows);
                     if (!res.ok())
-                        return arrow::Status::Invalid("Bad scalar: '" + field->name() + "'");
+                        return arrow::Status::Invalid("Bad scalar for '" + field->name() + "', " + res.status().ToString());
                     columns.push_back(*res);
                 }
                 else
@@ -182,7 +186,7 @@ public:
                 fields.push_back(field);
             }
 
-            batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), num_rows, columns);
+            batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), *num_rows, columns);
             if (!batch)
                 return arrow::Status::Invalid("Wrong GROUP BY arguments: cannot make batch");
         }
@@ -240,7 +244,7 @@ public:
         AggregatingBlockInputStream agg_stream(input_stream, agg_params, true);
 
         auto result_batch = agg_stream.read();
-        if (!result_batch || result_batch->num_rows() == 0)
+        if (!result_batch || (batch->num_rows() && !result_batch->num_rows()))
             return arrow::Status::Invalid("unexpected arrgerate result");
         if (agg_stream.read())
             return arrow::Status::Invalid("unexpected second batch in aggregate result");

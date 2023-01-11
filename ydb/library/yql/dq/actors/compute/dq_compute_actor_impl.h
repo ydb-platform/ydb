@@ -189,8 +189,8 @@ protected:
         , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
-        , MemoryQuota(ownMemoryQuota ? InitMemoryQuota() : nullptr)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
+        , TaskCounters(taskCounters)
         , DqComputeActorMetrics(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
         , Running(!Task.GetCreateSuspended())
@@ -199,8 +199,11 @@ protected:
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
         }
-        InitializeTask();
         InitMonCounters(taskCounters);
+        InitializeTask();
+        if (ownMemoryQuota) {
+            MemoryQuota = InitMemoryQuota();
+        }
         InitializeWatermarks();
     }
 
@@ -219,8 +222,8 @@ protected:
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FunctionRegistry(functionRegistry)
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
-        , MemoryQuota(InitMemoryQuota())
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
+        , TaskCounters(taskCounters)
         , DqComputeActorMetrics(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
         , Running(!Task.GetCreateSuspended())
@@ -228,23 +231,16 @@ protected:
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
         }
-        InitializeTask();
         InitMonCounters(taskCounters);
+        InitializeTask();
+        MemoryQuota = InitMemoryQuota();
         InitializeWatermarks();
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
         if (taskCounters) {
-            MkqlMemoryUsage = taskCounters->GetSubgroup("subsystem", "mkql")->GetCounter("MemoryUsage");
-            MkqlMemoryLimit = taskCounters->GetSubgroup("subsystem", "mkql")->GetCounter("MemoryLimit");
-            MonCountersProvided = true;
-        }
-    }
-
-    void UpdateMonCounters() {
-        if (MonCountersProvided) {
-            *MkqlMemoryUsage = GetProfileStats()->MkqlMaxUsedMemory;
-            *MkqlMemoryLimit = GetMkqlMemoryLimit();
+            MkqlMemoryQuota = taskCounters->GetCounter("MkqlMemoryQuota");
+            OutputChannelSize = taskCounters->GetCounter("OutputChannelSize");
         }
     }
 
@@ -316,6 +312,7 @@ protected:
 protected:
     THolder<TDqMemoryQuota> InitMemoryQuota() {
         return MakeHolder<TDqMemoryQuota>(
+            MkqlMemoryQuota,
             CalcMkqlMemoryLimit(),
             MemoryLimits,
             TxId,
@@ -541,6 +538,10 @@ protected:
                 if (transform.Actor) {
                     transform.AsyncOutput->PassAway();
                 }
+            }
+
+            if (OutputChannelSize) {
+                OutputChannelSize->Sub(OutputChannelsMap.size() * MemoryLimits.ChannelBufferSize);
             }
 
             for (auto& [_, outputChannel] : OutputChannelsMap) {
@@ -1502,7 +1503,8 @@ protected:
                         .TaskParams = taskParams,
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
-                        .HolderFactory = holderFactory
+                        .HolderFactory = holderFactory,
+                        .TaskCounters = TaskCounters
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -1808,6 +1810,10 @@ private:
                 }
             }
         }
+
+        if (OutputChannelSize) {
+            OutputChannelSize->Add(OutputChannelsMap.size() * MemoryLimits.ChannelBufferSize);
+        }
     }
 
     void InitializeWatermarks() {
@@ -2074,6 +2080,7 @@ protected:
 
     THolder<TDqMemoryQuota> MemoryQuota;
     TDqComputeActorWatermarks WatermarksTracker;
+    ::NMonitoring::TDynamicCounterPtr TaskCounters;
     TDqComputeActorMetrics DqComputeActorMetrics;
     NWilson::TSpan ComputeActorSpan;
 private:
@@ -2081,9 +2088,8 @@ private:
     TInstant LastSendStatsTime;
     bool PassExceptions = false;
 protected:
-    bool MonCountersProvided = false;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryUsage;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryLimit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
     THolder<NYql::TCounters> Stat;
 };
 

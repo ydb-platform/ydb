@@ -16,23 +16,21 @@ void RegisterS3ReadActorFactory(
         IHTTPGateway::TPtr gateway,
         const IRetryPolicy<long>::TPtr& retryPolicy,
         const TS3ReadActorFactoryConfig& cfg,
-        ::NMonitoring::TDynamicCounterPtr counters,
-        ::NMonitoring::TDynamicCounterPtr taskCounters) {
+        ::NMonitoring::TDynamicCounterPtr counters) {
 #if defined(_linux_) || defined(_darwin_)
     NDB::registerFormats();
     factory.RegisterSource<NS3::TSource>("S3Source",
-        [credentialsFactory, gateway, retryPolicy, cfg, counters, taskCounters](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+        [credentialsFactory, gateway, retryPolicy, cfg, counters](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, gateway,
                 std::move(settings), args.InputIndex, args.TxId, args.SecureParams,
                 args.TaskParams, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                counters, taskCounters ? taskCounters->GetSubgroup("operation", ToString(args.TxId)) : nullptr);
+                counters, args.TaskCounters);
         });
 #else
     Y_UNUSED(factory);
     Y_UNUSED(credentialsFactory);
     Y_UNUSED(gateway);
     Y_UNUSED(counters);
-    Y_UNUSED(taskCounters);
 #endif
 }
 

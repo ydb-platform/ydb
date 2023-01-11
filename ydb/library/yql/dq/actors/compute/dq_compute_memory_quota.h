@@ -26,8 +26,9 @@ namespace NYql::NDq {
 
     class TDqMemoryQuota {
     public:
-        TDqMemoryQuota(ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory, NActors::TActorSystem* actorSystem)
-            : InitialMkqlMemoryLimit(initialMkqlMemoryLimit)
+        TDqMemoryQuota(::NMonitoring::TDynamicCounters::TCounterPtr& mkqlMemoryQuota, ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory, NActors::TActorSystem* actorSystem)
+            : MkqlMemoryQuota(mkqlMemoryQuota)
+            , InitialMkqlMemoryLimit(initialMkqlMemoryLimit)
             , MkqlMemoryLimit(initialMkqlMemoryLimit)
             , MemoryLimits(memoryLimits)
             , TxId(txId)
@@ -35,6 +36,9 @@ namespace NYql::NDq {
             , ProfileStats(profileStats ? MakeHolder<TProfileStats>() : nullptr)
             , CanAllocateExtraMemory(canAllocateExtraMemory)
             , ActorSystem(actorSystem) {
+                if (MkqlMemoryQuota) {
+                    MkqlMemoryQuota->Add(MkqlMemoryLimit);
+                }
         }
 
         ui64 GetMkqlMemoryLimit() const {
@@ -59,6 +63,9 @@ namespace NYql::NDq {
                         MkqlMemoryLimit = newLimit;
                         alloc->SetLimit(newLimit);
                         MemoryLimits.FreeMemoryFn(TxId, TaskId, freedSize);
+                        if (MkqlMemoryQuota) {
+                            MkqlMemoryQuota->Sub(freedSize);
+                        }
                         CAMQ_LOG_D("[Mem] memory shrinked, new limit: " << MkqlMemoryLimit);
                     }
                 }
@@ -89,6 +96,9 @@ namespace NYql::NDq {
         void TryReleaseQuota() {
             if (MkqlMemoryLimit && MemoryLimits.FreeMemoryFn) {
                 MemoryLimits.FreeMemoryFn(TxId, TaskId, MkqlMemoryLimit);
+                if (MkqlMemoryQuota) {
+                    MkqlMemoryQuota->Sub(MkqlMemoryLimit);
+                }
                 MkqlMemoryLimit = 0;
             }
         }
@@ -111,6 +121,9 @@ namespace NYql::NDq {
 
             if (MemoryLimits.AllocateMemoryFn(TxId, TaskId, memory)) {
                 MkqlMemoryLimit += memory;
+                if (MkqlMemoryQuota) {
+                    MkqlMemoryQuota->Add(memory);
+                }
                 CAMQ_LOG_D("[Mem] memory " << memory << " granted, new limit: " << MkqlMemoryLimit);
                 alloc->SetLimit(MkqlMemoryLimit);
             } else {
@@ -132,6 +145,7 @@ namespace NYql::NDq {
         }
 
     private:
+        ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
         const ui64 InitialMkqlMemoryLimit;
         ui64 MkqlMemoryLimit;
         const TComputeMemoryLimits MemoryLimits;

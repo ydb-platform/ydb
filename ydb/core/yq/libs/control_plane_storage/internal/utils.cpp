@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <library/cpp/json/yson/json2yson.h>
+
 #include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/metering.h>
 
@@ -163,6 +165,55 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, const TString
     }
 
     return result;
+}
+
+void RemapValue(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& key) {
+    ui64 value = 0;
+    if (auto* keyNode = node.GetValueByPath(key)) {
+        value = keyNode->GetInteger();
+    }
+    writer.OnKeyedItem(key);
+    writer.OnInt64Scalar(value);
+}
+
+void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& path, const TString& key) {
+    if (auto* subNode = node.GetValueByPath(path)) {
+        writer.OnKeyedItem(key);
+        writer.OnBeginMap();
+            RemapValue(writer, *subNode, "sum");
+            RemapValue(writer, *subNode, "count");
+            RemapValue(writer, *subNode, "avg");
+            RemapValue(writer, *subNode, "max");
+            RemapValue(writer, *subNode, "min");
+        writer.OnEndMap();
+    }
+}
+
+TString GetPrettyStatistics(const TString& statistics) {
+    TStringStream out;
+    NYson::TYsonWriter writer(&out);
+    writer.OnBeginMap();
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue stat;
+    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+        for (const auto& p : stat.GetMap()) {
+            if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
+                writer.OnKeyedItem(p.first);
+                writer.OnBeginMap();
+                    RemapNode(writer, p.second, "StagesCount", "StagesCount");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.TasksCount", "TasksCount");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.BuildCpuTimeUs", "BuildCpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ComputeCpuTimeUs", "ComputeCpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressS3SourceBytes", "IngressObjectStorageBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressS3SinkBytes", "EgressObjectStorageBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Source=0.Stage=Total.RowsIn", "IngressRows");
+                writer.OnEndMap();
+            }
+        }
+    }
+    writer.OnEndMap();
+    return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
 };

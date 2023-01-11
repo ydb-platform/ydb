@@ -12,7 +12,7 @@ message TS3ReadActorFactoryConfig {
     NYql.NS3.TRetryConfig RetryConfig = 1;
     uint64 RowsInBatch = 2; // Default = 1000
     uint64 MaxInflight = 3; // Default = 20
-    uint64 DataInflight = 4; // Default = 1 GB
+    uint64 DataInflight = 4; // Default = 200 MB
 }
 
 message TPqReadActorFactoryConfig {

@@ -211,20 +211,18 @@ private:
         YQL_CLOG(DEBUG, ProviderDq) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
         TFailureInjector::Reach("allocate_workers_failure", [] { ::_exit(1); });
 
-        auto& allocationInfo = AllocatedWorkers[resourceId];
         auto traceId = ev->Get()->Record.GetTraceId();
-        allocationInfo.TxId = traceId;
-
         auto count = ev->Get()->Record.GetCount();
-
         Y_VERIFY(count > 0);
 
         bool canAllocate = MemoryQuoter->Allocate(traceId, 0, count * Options.MkqlInitialMemoryLimit);
-
         if (!canAllocate) {
             Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Not enough memory to allocate tasks", NYql::NDqProto::StatusIds::OVERLOADED), 0, ev->Cookie);
             return;
         }
+
+        auto& allocationInfo = AllocatedWorkers[resourceId];
+        allocationInfo.TxId = traceId;
 
         if (allocationInfo.WorkerActors.empty()) {
             allocationInfo.WorkerActors.reserve(count);
@@ -240,15 +238,23 @@ private:
                 Y_VERIFY(static_cast<int>(tasks.size()) == static_cast<int>(count));
             }
             auto resultId = ActorIdFromProto(ev->Get()->Record.GetResultActorId());
+            ::NMonitoring::TDynamicCounterPtr taskCounters;
+
+            if (createComputeActor && Options.DqTaskCounters) {
+                auto& info = TaskCountersMap[traceId];
+                if (!info.TaskCounters) {
+                    info.TaskCounters = Options.DqTaskCounters->GetSubgroup("operation", traceId);
+                }
+                info.ReferenceCount += count;
+                taskCounters = info.TaskCounters;
+            }
 
             for (ui32 i = 0; i < count; i++) {
                 THolder<NActors::IActor> actor;
 
                 if (createComputeActor) {
-                    auto id = tasks[i].GetId();
-                    auto stageId = tasks[i].GetStageId();
                     YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
-                    auto taskCounters = Options.DqTaskCounters ? Options.DqTaskCounters->GetSubgroup("operation", traceId)->GetSubgroup("stage", ToString(stageId))->GetSubgroup("id", ToString(id)) : nullptr;
+
                     actor.Reset(NYql::CreateComputeActor(
                         Options,
                         Options.MkqlTotalMemoryLimit ? AllocateMemoryFn : nullptr,
@@ -306,6 +312,20 @@ private:
             }
 
             MemoryQuoter->Free(it->second.TxId, 0);
+
+            auto traceId = std::get<TString>(it->second.TxId);
+            auto itt = TaskCountersMap.find(traceId);
+            if (itt != TaskCountersMap.end()) {
+                if (itt->second.ReferenceCount <= it->second.WorkerActors.size()) {
+                    if (Options.DqTaskCounters) {
+                        Options.DqTaskCounters->RemoveSubgroup("operation", traceId);
+                    }
+                    TaskCountersMap.erase(itt);
+                } else {
+                    itt->second.ReferenceCount -= it->second.WorkerActors.size();
+                }
+            }
+
             Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.size());
             AllocatedWorkers.erase(it);
         }
@@ -341,6 +361,13 @@ private:
     NDq::TAllocateMemoryCallback AllocateMemoryFn;
     NDq::TFreeMemoryCallback FreeMemoryFn;
     std::shared_ptr<NDq::TResourceQuoter> MemoryQuoter;
+
+    struct TCountersInfo {
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
+        ui64 ReferenceCount;
+    };
+
+    TMap<TString, TCountersInfo> TaskCountersMap;
 };
 
 

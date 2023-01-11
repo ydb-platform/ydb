@@ -97,8 +97,10 @@ public:
 
     void InitExtraMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
         if (taskCounters && UseCpuQuota()) {
-            CpuTimeGetQuotaLatency = taskCounters->GetSubgroup("subsystem", "mkql")->GetHistogram("CpuTimeGetQuotaLatencyMs", NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 5000, 10'000, 60'000, 600'000}));
-            CpuTimeQuotaWaitDelay = taskCounters->GetSubgroup("subsystem", "mkql")->GetHistogram("CpuTimeQuotaWaitDelayMs", NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 5000, 10'000, 60'000, 600'000}));
+            CpuTimeGetQuotaLatency = taskCounters->GetHistogram("CpuTimeGetQuotaLatencyMs", NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000}));
+            CpuTimeQuotaWaitDelay = taskCounters->GetHistogram("CpuTimeQuotaWaitDelayMs", NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000}));
+            CpuTime = taskCounters->GetCounter("CpuTimeMs", true);
+            CpuTime->Add(0);
         }
     }
 
@@ -352,6 +354,9 @@ private:
             TaskRunnerActor->PassAway();
         }
         if (UseCpuQuota() && CpuTimeSpent.MilliSeconds()) {
+            if (CpuTime) {
+                CpuTime->Add(CpuTimeSpent.MilliSeconds());
+            }
             // Send the rest of CPU time that we haven't taken into account
             Send(QuoterServiceActorId,
                 new NKikimr::TEvQuota::TEvRequest(
@@ -802,6 +807,9 @@ private:
         Y_VERIFY(!CpuTimeQuotaAsked);
         if (CpuTimeSpent >= MIN_QUOTED_CPU_TIME) {
             CA_LOG_T("Ask CPU quota: " << CpuTimeSpent.MilliSeconds() << "ms");
+            if (CpuTime) {
+                CpuTime->Add(CpuTimeSpent.MilliSeconds());
+            }
             Send(QuoterServiceActorId,
                 new NKikimr::TEvQuota::TEvRequest(
                     NKikimr::TEvQuota::EResourceOperator::And,
@@ -903,6 +911,7 @@ private:
     bool ContinueRunInflight = false;
     NMonitoring::THistogramPtr CpuTimeGetQuotaLatency;
     NMonitoring::THistogramPtr CpuTimeQuotaWaitDelay;
+    NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
 };
 
 

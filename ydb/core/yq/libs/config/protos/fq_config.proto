@@ -50,4 +50,5 @@ message TConfig {
     THealthConfig Health = 20;
     TQuotasManagerConfig QuotasManager = 21;
     TRateLimiterConfig RateLimiter = 22;
+    bool EnableTaskCounters = 23;
 }

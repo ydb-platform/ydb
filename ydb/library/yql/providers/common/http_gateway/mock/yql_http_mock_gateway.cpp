@@ -69,15 +69,20 @@ public:
         }
     }
 
-     TCancelHook Download(
-            TString ,
-            THeaders ,
-            std::size_t ,
-            std::size_t ,
-            TOnDownloadStart ,
-            TOnNewDataPart ,
-            TOnDownloadFinish ) final {
+    TCancelHook Download(
+            TString,
+            THeaders,
+            std::size_t,
+            std::size_t,
+            TOnDownloadStart,
+            TOnNewDataPart,
+            TOnDownloadFinish,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr&) final {
         return {};
+    }
+
+    ui64 GetBuffersSizePerStream() final {
+        return 0;
     }
 
     void AddDefaultResponse(TDataDefaultResponse response) {

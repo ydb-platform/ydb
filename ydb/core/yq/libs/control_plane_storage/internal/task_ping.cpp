@@ -177,8 +177,15 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (request.statistics()) {
-            *query.mutable_statistics()->mutable_json() = request.statistics();
-            *job.mutable_statistics()->mutable_json() = request.statistics();
+            TString statistics;
+            try {
+                statistics = GetPrettyStatistics(request.statistics());
+            } catch (const std::exception&) {
+                CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
+                statistics = request.statistics();
+            }
+            *query.mutable_statistics()->mutable_json() = statistics;
+            *job.mutable_statistics()->mutable_json() = statistics;
         }
 
         if (!request.result_set_meta().empty()) {
@@ -380,8 +387,8 @@ TPingTaskParams ConstructHardPingTask(
     if (IsTerminalStatus(request.status()) && request.statistics()) {
         try {
             meteringRecords = GetMeteringRecords(request.statistics(), request.query_id().value(), request.scope(), HostName());
-        } catch (yexception &e) {
-            CPS_LOG_E(e.what());
+        } catch (const std::exception&) {
+            CPS_LOG_E("Error on statistics meterification: " << CurrentExceptionMessage());
         }
     }
 

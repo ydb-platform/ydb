@@ -15,7 +15,7 @@ namespace NYql::NDq {
 struct TS3ReadActorFactoryConfig {
     ui64 RowsInBatch = 1000;
     ui64 MaxInflight = 20;
-    ui64 DataInflight = 1_GB;
+    ui64 DataInflight = 200_MB;
 };
 
 void RegisterS3ReadActorFactory(
@@ -24,7 +24,6 @@ void RegisterS3ReadActorFactory(
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),
     const IRetryPolicy<long>::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
     const TS3ReadActorFactoryConfig& = {},
-    ::NMonitoring::TDynamicCounterPtr counters = nullptr,
-    ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);
+    ::NMonitoring::TDynamicCounterPtr counters = nullptr);
 
 }

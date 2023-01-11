@@ -169,6 +169,7 @@ public:
         const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
     };
 
     struct TSinkArguments {

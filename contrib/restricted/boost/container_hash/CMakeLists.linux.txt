@@ -14,11 +14,8 @@ target_include_directories(restricted-boost-container_hash INTERFACE
 target_link_libraries(restricted-boost-container_hash INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  restricted-boost-assert
   restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-integer
-  restricted-boost-static_assert
+  restricted-boost-describe
+  restricted-boost-mp11
   restricted-boost-type_traits
 )

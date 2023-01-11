@@ -76,6 +76,13 @@ public:
         CurrLen++;
     }
 
+    void Add(TBlockItem value) final {
+        Y_VERIFY(CurrLen < MaxLen);
+        DoAdd(value);
+        CurrLen++;
+    }
+
+
     void AddDefault() {
         Y_VERIFY(CurrLen < MaxLen);
         DoAddDefault();
@@ -118,6 +125,7 @@ public:
     }
 protected:
     virtual void DoAdd(NUdf::TUnboxedValuePod value) = 0;
+    virtual void DoAdd(TBlockItem value) = 0;
     virtual void DoAddDefault() = 0;
     virtual void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) = 0;
     virtual TBlockArrayTree::Ptr DoBuildTree(bool finish) = 0;
@@ -200,6 +208,15 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
+                return DoAdd(TBlockItem{});
+            }
+        }
+        DoAdd(TBlockItem(value.Get<T>()));
+    }
+
+    void DoAdd(TBlockItem value) final {
+        if constexpr (Nullable) {
+            if (!value) {
                 NullBuilder->UnsafeAppend(0);
                 DataBuilder->UnsafeAppend(T{});
                 return;
@@ -207,7 +224,7 @@ public:
             NullBuilder->UnsafeAppend(1);
         }
 
-        DataBuilder->UnsafeAppend(value.Get<T>());
+        DataBuilder->UnsafeAppend(value.As<T>());
     }
 
     void DoAddDefault() final {
@@ -285,13 +302,23 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
+                return DoAdd(TBlockItem{});
+            }
+        }
+
+        DoAdd(TBlockItem(value.AsStringRef()));
+    }
+
+    void DoAdd(TBlockItem value) final {
+        if constexpr (Nullable) {
+            if (!value) {
                 NullBuilder->UnsafeAppend(0);
                 AppendCurrentOffset();
                 return;
             }
         }
 
-        const TStringBuf str = value.AsStringRef();
+        const std::string_view str = value.AsStringRef();
 
         size_t currentLen = DataBuilder->Length();
         // empty string can always be appended
@@ -310,6 +337,7 @@ public:
             NullBuilder->UnsafeAppend(1);
         }
     }
+
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
@@ -489,6 +517,25 @@ public:
         }
     }
 
+    void DoAdd(TBlockItem value) final {
+        TTupleType* tupleType = AS_TYPE(TTupleType, Type);
+        if constexpr (Nullable) {
+            if (!value) {
+                NullBuilder->UnsafeAppend(0);
+                for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+                    Children[i]->AddDefault();
+                }
+                return;
+            }
+            NullBuilder->UnsafeAppend(1);
+        }
+
+        auto elements = value.AsTuple();
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            Children[i]->Add(elements[i]);
+        }
+    }
+
     void DoAddDefault() final {
         TTupleType* tupleType = AS_TYPE(TTupleType, Type);
         if constexpr (Nullable) {
@@ -567,6 +614,17 @@ public:
     }
 
     void DoAdd(NUdf::TUnboxedValuePod value) final {
+        if (!value) {
+            NullBuilder->UnsafeAppend(0);
+            Inner->AddDefault();
+            return;
+        }
+
+        NullBuilder->UnsafeAppend(1);
+        Inner->Add(value.GetOptionalValue());
+    }
+
+    void DoAdd(TBlockItem value) final {
         if (!value) {
             NullBuilder->UnsafeAppend(0);
             Inner->AddDefault();

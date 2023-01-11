@@ -12,172 +12,163 @@ namespace NMiniKQL {
 
 namespace {
 
-class TBlockReaderBase : public IBlockReader {
-public:
-    using Ptr = std::unique_ptr<TBlockReaderBase>;
-
-    void Reset(const arrow::Datum& datum) final {
-        Index = 0;
-        ArrayValues.clear();
-        if (datum.is_scalar()) {
-            ScalarValue = GetScalar(*datum.scalar());
-        } else {
-            Y_VERIFY(datum.is_arraylike());
-            ScalarValue = {};
-            for (auto& arr : datum.chunks()) {
-                ArrayValues.push_back(arr->data());
-            }
-        }
-    }
-
-    TMaybe<NUdf::TUnboxedValuePod> GetNextValue() final {
-        if (ScalarValue.Defined()) {
-            return ScalarValue;
-        }
-
-        TMaybe<NUdf::TUnboxedValuePod> result;
-        while (!ArrayValues.empty()) {
-            if (Index < ArrayValues.front()->length) {
-                result = Get(*ArrayValues.front(), Index++);
-                break;
-            }
-            ArrayValues.pop_front();
-            Index = 0;
-        }
-        return result;
-    }
-
-    virtual NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) = 0;
-    virtual NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) = 0;
-
-private:
-    std::deque<std::shared_ptr<arrow::ArrayData>> ArrayValues;
-    TMaybe<NUdf::TUnboxedValuePod> ScalarValue;
-    size_t Index = 0;
-};
+inline bool IsNull(const arrow::ArrayData& data, size_t index) {
+    return data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
+}
 
 template <typename T>
-class TFixedSizeBlockReader : public TBlockReaderBase {
+class TFixedSizeBlockReader : public IBlockReader {
 public:
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
-        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+        if (IsNull(data, index)) {
             return {};
         }
     
-        return NUdf::TUnboxedValuePod(data.GetValues<T>(1)[index]);
+        return TBlockItem(data.GetValues<T>(1)[index]);
     }
 
-    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
         if (!scalar.is_valid) {
             return {};
         }
 
-        return NUdf::TUnboxedValuePod(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        return TBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+    }
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        return item ? NUdf::TUnboxedValuePod(item.As<T>()) : NUdf::TUnboxedValuePod{};
     }
 };
 
-class TStringBlockReader : public TBlockReaderBase {
+template<typename TStringType>
+class TStringBlockReader : public IBlockReader {
 public:
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
+    using TOffset = typename TStringType::offset_type;
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         Y_VERIFY_DEBUG(data.buffers.size() == 3);
-        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
+        if (IsNull(data, index)) {
             return {};
         }
 
-        arrow::util::string_view result;
-        if (data.type->id() == arrow::Type::BINARY) {
-            arrow::BinaryArray arr(std::make_shared<arrow::ArrayData>(data));
-            result = arr.GetView(index);
-        } else {
-            Y_VERIFY(data.type->id() == arrow::Type::STRING);
-            arrow::StringArray arr(std::make_shared<arrow::ArrayData>(data));
-            result = arr.GetView(index);
-        }
+        const TOffset* offsets = data.GetValues<TOffset>(1);
+        const char* strData = data.GetValues<char>(2, 0);
 
-        return MakeString(NUdf::TStringRef(result.data(), result.size()));
+        std::string_view str(strData + offsets[index], offsets[index + 1] - offsets[index]);
+        return TBlockItem(str);
     }
 
-    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
         if (!scalar.is_valid) {
             return {};
         }
 
         auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
-        return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(buffer->data()), buffer->size()));
+        std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+        return TBlockItem(str);
+    }
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if (!item) {
+            return {};
+        }
+        return MakeString(item.AsStringRef());
     }
 };
 
-class TTupleBlockReader : public TBlockReaderBase {
+class TTupleBlockReader : public IBlockReader {
 public:
-    TTupleBlockReader(TVector<std::unique_ptr<TBlockReaderBase>>&& children, const THolderFactory& holderFactory)
+    TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
         : Children(std::move(children))
-        , HolderFactory(holderFactory)
+        , Items(Children.size())
     {}
 
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
-        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+        if (IsNull(data, index)) {
             return {};
         }
 
-        NUdf::TUnboxedValue* items;
-        auto result = Cache.NewArray(HolderFactory, Children.size(), items);
         for (ui32 i = 0; i < Children.size(); ++i) {
-            items[i] = Children[i]->Get(*data.child_data[i], index);
+            Items[i] = Children[i]->GetItem(*data.child_data[i], index);
         }
 
-        return result;
+        return TBlockItem(Items.data());
     }
 
-    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
         if (!scalar.is_valid) {
             return {};
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
 
-        NUdf::TUnboxedValue* items;
-        auto result = Cache.NewArray(HolderFactory, Children.size(), items);
         for (ui32 i = 0; i < Children.size(); ++i) {
-            items[i] = Children[i]->GetScalar(*structScalar.value[i]);
+            Items[i] = Children[i]->GetScalarItem(*structScalar.value[i]);
+        }
+
+        return TBlockItem(Items.data());
+    }
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        if (!item) {
+            return {};
+        }
+
+        NUdf::TUnboxedValue* values;
+        auto result = Cache.NewArray(holderFactory, Children.size(), values);
+        const TBlockItem* childItems = item.AsTuple();
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            values[i] = Children[i]->MakeValue(childItems[i], holderFactory);
         }
 
         return result;
     }
 
 private:
-    TVector<std::unique_ptr<TBlockReaderBase>> Children;
-    const THolderFactory& HolderFactory;
-    TPlainContainerCache Cache;
+    const TVector<std::unique_ptr<IBlockReader>> Children;
+    TVector<TBlockItem> Items;
+    mutable TPlainContainerCache Cache;
 };
 
-class TExternalOptionalBlockReader : public TBlockReaderBase {
+class TExternalOptionalBlockReader : public IBlockReader {
 public:
-    TExternalOptionalBlockReader(std::unique_ptr<TBlockReaderBase>&& inner)
+    TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
         : Inner(std::move(inner))
     {}
 
-    NUdf::TUnboxedValuePod Get(const arrow::ArrayData& data, size_t index) final {
-        if (data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset)) {
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+        if (IsNull(data, index)) {
             return {};
         }
 
-        return Inner->Get(*data.child_data[0], index).MakeOptional();
+        return Inner->GetItem(*data.child_data[0], index).MakeOptional();
     }
 
-    NUdf::TUnboxedValuePod GetScalar(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
         if (!scalar.is_valid) {
             return {};
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-        return Inner->GetScalar(*structScalar.value[0]).MakeOptional();
+        return Inner->GetScalarItem(*structScalar.value[0]).MakeOptional();
+    }
+
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        if (!item) {
+            return {};
+        }
+        return Inner->MakeValue(item.GetOptionalValue(), holderFactory).MakeOptional();
     }
 
 private:
-    std::unique_ptr<TBlockReaderBase> Inner;
+    const std::unique_ptr<IBlockReader> Inner;
 };
 
-std::unique_ptr<TBlockReaderBase> MakeBlockReaderBase(TType* type, const THolderFactory& holderFactory) {
+} // namespace
+
+std::unique_ptr<IBlockReader> MakeBlockReader(TType* type) {
     TType* unpacked = type;
     if (type->IsOptional()) {
         unpacked = AS_TYPE(TOptionalType, type)->GetItemType();
@@ -194,7 +185,7 @@ std::unique_ptr<TBlockReaderBase> MakeBlockReaderBase(TType* type, const THolder
             currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
         } while (currentType->IsOptional());
 
-        std::unique_ptr<TBlockReaderBase> reader = MakeBlockReaderBase(previousType, holderFactory);
+        std::unique_ptr<IBlockReader> reader = MakeBlockReader(previousType);
         for (ui32 i = 1; i < nestLevel; ++i) {
             reader = std::make_unique<TExternalOptionalBlockReader>(std::move(reader));
         }
@@ -206,12 +197,12 @@ std::unique_ptr<TBlockReaderBase> MakeBlockReaderBase(TType* type, const THolder
 
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
-        TVector<std::unique_ptr<TBlockReaderBase>> children;
+        TVector<std::unique_ptr<IBlockReader>> children;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            children.emplace_back(MakeBlockReaderBase(tupleType->GetElementType(i), holderFactory));
+            children.emplace_back(MakeBlockReader(tupleType->GetElementType(i)));
         }
 
-        return std::make_unique<TTupleBlockReader>(std::move(children), holderFactory);
+        return std::make_unique<TTupleBlockReader>(std::move(children));
     }
 
     if (type->IsData()) {
@@ -243,8 +234,9 @@ std::unique_ptr<TBlockReaderBase> MakeBlockReaderBase(TType* type, const THolder
         case NUdf::EDataSlot::Double:
             return std::make_unique<TFixedSizeBlockReader<double>>();
         case NUdf::EDataSlot::String:
+            return std::make_unique<TStringBlockReader<arrow::BinaryType>>();
         case NUdf::EDataSlot::Utf8:
-            return std::make_unique<TStringBlockReader>();
+            return std::make_unique<TStringBlockReader<arrow::StringType>>();
         default:
             MKQL_ENSURE(false, "Unsupported data slot");
         }
@@ -252,14 +244,6 @@ std::unique_ptr<TBlockReaderBase> MakeBlockReaderBase(TType* type, const THolder
 
     MKQL_ENSURE(false, "Unsupported type");
 }
-
-
-} // namespace
-
-std::unique_ptr<IBlockReader> MakeBlockReader(TType* type, const THolderFactory& holderFactory) {
-    return MakeBlockReaderBase(type, holderFactory);
-}
-
 
 } // namespace NMiniKQL
 } // namespace NKikimr

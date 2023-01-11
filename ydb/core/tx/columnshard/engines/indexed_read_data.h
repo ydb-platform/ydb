@@ -176,6 +176,8 @@ struct TPartialReadResult {
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<arrow::RecordBatch> LastReadKey;
+
+    std::string ErrorString;
 };
 
 class TIndexedReadData {

@@ -363,7 +363,9 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
     bool requireResult = !HasIndexRead(); // not indexed or the last indexed read (even if it's emply)
     auto out = MakeResult(ReadyToOut(), maxRowsInBatch);
     if (requireResult && out.empty()) {
-        out.push_back({NArrow::MakeEmptyBatch(ReadMetadata->ResultSchema), nullptr});
+        out.push_back(TPartialReadResult{
+            .ResultBatch = NArrow::MakeEmptyBatch(ReadMetadata->ResultSchema)
+        });
     }
     return out;
 }
@@ -520,14 +522,19 @@ TIndexedReadData::MakeResult(TVector<std::vector<std::shared_ptr<arrow::RecordBa
 
             // Leave only requested columns
             auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->ResultSchema);
-            out.emplace_back(TPartialReadResult{std::move(resultBatch), std::move(lastKey)});
+            out.emplace_back(TPartialReadResult{
+                .ResultBatch = std::move(resultBatch),
+                .LastReadKey = std::move(lastKey)
+            });
         }
     }
 
     if (ReadMetadata->Program) {
-        for (auto& batch : out) {
-            auto status = ApplyProgram(batch.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
-            Y_VERIFY_S(status.ok(), status.message());
+        for (auto& result : out) {
+            auto status = ApplyProgram(result.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
+            if (!status.ok()) {
+                result.ErrorString = status.message();
+            }
         }
     }
     return out;

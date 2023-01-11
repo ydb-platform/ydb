@@ -4608,9 +4608,9 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
         auto children = node->ChildrenList();
         const auto keysAndStateSize = children[5]->Head().ChildrenSize();
-        const auto keysWidth = children[2]->ChildrenSize() - 1;
+        const auto itemsWidth = children[2]->Head().ChildrenSize();
 
-        std::vector<ui32> map(keysAndStateSize);
+        std::vector<ui32> map(itemsWidth + keysAndStateSize);
         std::iota(map.begin(), map.end(), 0U);
         std::for_each(dedups.cbegin(), dedups.cend(), [&](const std::pair<ui32, ui32>& it) { map[it.first] = it.second; });
 
@@ -4633,8 +4633,8 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
                 .Seal().Build();
         };
 
-        children[3] = buildRemappedLambda(*children[3], keysWidth);
-        children[4] = buildRemappedLambda(*children[4], keysWidth);
+        children[3] = buildRemappedLambda(*children[3], itemsWidth);
+        children[4] = buildRemappedLambda(*children[4], itemsWidth);
         children[5] = buildRemappedLambda(*children[5], 0);
 
         return ctx.ChangeChildren(*node, std::move(children));

@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${city}/${device_id}/"
             }
-        )", {"city"}), yexception, "Colum named device_id does not exist for template ${city}/${device_id}/");
+        )", {"city"}), yexception, "Partitioned by column named device_id does not exist for template ${city}/${device_id}/");
     }
 
     Y_UNIT_TEST(StartSubstition) {
@@ -97,19 +97,30 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
                 "projection.city.values" : "MSK,SPB",
+                "projection.device_id.type" : "enum",
+                "projection.device_id.values" : "3f75",
                 "storage.location.template" : "/${city}/${device_id}/"
             }
         )", {"city", "device_id"});
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
         UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/${device_id}/");
-        UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
-        const auto& rule = result.Rules.front();
-        UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
-        UNIT_ASSERT_VALUES_EQUAL(rule.Name, "city");
-        UNIT_ASSERT_VALUES_EQUAL(rule.Values.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(rule.Values.front(), "MSK");
-        UNIT_ASSERT_VALUES_EQUAL(rule.Values.back(), "SPB");
+        UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 2);
+        {
+            const auto& rule = result.Rules.front();
+            UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
+            UNIT_ASSERT_VALUES_EQUAL(rule.Name, "city");
+            UNIT_ASSERT_VALUES_EQUAL(rule.Values.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(rule.Values.front(), "MSK");
+            UNIT_ASSERT_VALUES_EQUAL(rule.Values.back(), "SPB");
+        }
+        {
+            const auto& rule = result.Rules.back();
+            UNIT_ASSERT_VALUES_EQUAL(rule.Type, IPathGenerator::EType::ENUM);
+            UNIT_ASSERT_VALUES_EQUAL(rule.Name, "device_id");
+            UNIT_ASSERT_VALUES_EQUAL(rule.Values.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rule.Values.front(), "3f75");
+        }
     }
 
     Y_UNIT_TEST(InvalidValuesType) {

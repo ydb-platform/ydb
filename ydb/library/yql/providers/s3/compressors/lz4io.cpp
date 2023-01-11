@@ -214,12 +214,13 @@ private:
     }
 
     void DoCompression() {
-        while (true) {
+        while (!InputQueue.Empty() || !TOutputQueue::IsSealed()) {
             const auto& pop = InputQueue.Pop();
-            if (pop.empty())
+            const bool done = InputQueue.IsSealed() && InputQueue.Empty();
+            if (pop.empty() && !done)
                 break;
 
-            if (IsFirstBlock && InputQueue.IsSealed() && InputQueue.Empty()) {
+            if (IsFirstBlock && done) {
                 const auto cSize = LZ4F_compressFrame_usingCDict(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr, &Prefs);
                 YQL_ENSURE(!LZ4F_isError(cSize), "Compression failed: " << LZ4F_getErrorName(cSize));
                 TOutputQueue::Push(TString(OutputBuffer.get(), cSize));
@@ -233,11 +234,13 @@ private:
                     IsFirstBlock = false;
                 }
 
-                const auto outSize = LZ4F_compressUpdate(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr);
-                YQL_ENSURE(!LZ4F_isError(outSize), "Compression failed: " << LZ4F_getErrorName(outSize));
-                TOutputQueue::Push(TString(OutputBuffer.get(), outSize));
+                if (!pop.empty()) {
+                    const auto outSize = LZ4F_compressUpdate(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr);
+                    YQL_ENSURE(!LZ4F_isError(outSize), "Compression failed: " << LZ4F_getErrorName(outSize));
+                    TOutputQueue::Push(TString(OutputBuffer.get(), outSize));
+                }
 
-                if (InputQueue.IsSealed() && InputQueue.Empty()) {
+                if (done) {
                     const auto endSize = LZ4F_compressEnd(Ctx, OutputBuffer.get(), OutputBufferSize, nullptr);
                     YQL_ENSURE(!LZ4F_isError(endSize), "End of frame error: " << LZ4F_getErrorName(endSize));
                     TOutputQueue::Push(TString(OutputBuffer.get(), endSize));

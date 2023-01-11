@@ -93,7 +93,7 @@ private:
     }
 
     void DoCompression() {
-        while (!InputQueue.Empty()) {
+        while (!InputQueue.Empty() || !TOutputQueue::IsSealed()) {
             const auto& pop = InputQueue.Pop();
             const bool done = InputQueue.IsSealed() && InputQueue.Empty();
             if (pop.empty() && !done)

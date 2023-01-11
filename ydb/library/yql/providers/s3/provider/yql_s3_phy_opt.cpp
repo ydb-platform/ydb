@@ -168,7 +168,7 @@ public:
         }
 
         const TStringBuf format = targetNode.Format();
-        if (format != "raw" || format != "json_list") { // multipart
+        if (format != "raw" && format != "json_list") { // multipart
             {
                 TExprNode::TListType pair;
                 pair.push_back(ctx.NewAtom(targetNode.Pos(), "multipart"));

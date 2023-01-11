@@ -145,22 +145,27 @@ public:
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
         LOG_D("TS3FileWriteActor", __func__ << " by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
-        if (Parts->IsSealed() && 1U == Parts->Size()) {
-            const auto size = Parts->Volume();
+        if (Parts->IsSealed() && Parts->Size() <= 1) {
+            Become(&TS3FileWriteActor::SinglepartWorkingStateFunc);
+            const size_t size = Max<size_t>(Parts->Volume(), 1);
             InFlight += size;
             SentSize += size;
-            Gateway->Upload(Url, MakeHeaders(RequestId), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1), true, RetryPolicy);
+            Gateway->Upload(Url, MakeHeaders(RequestId), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, size, std::placeholders::_1), true, RetryPolicy);
         } else {
-            Become(&TS3FileWriteActor::InitialStateFunc);
+            Become(&TS3FileWriteActor::MultipartInitialStateFunc);
             Gateway->Upload(Url + "?uploads", MakeHeaders(RequestId), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1), false, RetryPolicy);
         }
     }
 
     static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
 
+    void Handle(TEvPrivate::TEvUploadFinished::TPtr& ev) {
+        InFlight -= ev->Get()->UploadSize;
+    }
+
     void PassAway() override {
         if (InFlight || !Parts->Empty()) {
-            LOG_W("TS3FileWriteActor", "PassAway: but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size() << ", request id: [" << RequestId << "]");
+            LOG_W("TS3FileWriteActor", "PassAway: but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size() << ", Sealed: " << Parts->IsSealed() << ", request id: [" << RequestId << "]");
         } else {
             LOG_D("TS3FileWriteActor", "PassAway: request id: [" << RequestId << "]");
         }
@@ -182,11 +187,13 @@ public:
 
     void Finish() {
         Parts->Seal();
-        if (!UploadId.empty())
-            StartUploadParts();
 
-        if (!InFlight && Parts->Empty())
-            CommitUploadedParts();
+        if (!UploadId.empty()) {
+            if (!Parts->Empty())
+                StartUploadParts();
+            else if (!InFlight && Parts->Empty())
+                CommitUploadedParts();
+        }
     }
 
     bool IsFinishing() const { return Parts->IsSealed(); }
@@ -197,12 +204,16 @@ public:
         return InFlight + Parts->Volume();
     }
 private:
-    STRICT_STFUNC(InitialStateFunc,
+    STRICT_STFUNC(MultipartInitialStateFunc,
         hFunc(TEvPrivate::TEvUploadStarted, Handle);
     )
 
-    STRICT_STFUNC(WorkingStateFunc,
+    STRICT_STFUNC(MultipartWorkingStateFunc,
         hFunc(TEvPrivate::TEvUploadPartFinished, Handle);
+    )
+
+    STRICT_STFUNC(SinglepartWorkingStateFunc,
+        hFunc(TEvPrivate::TEvUploadFinished, Handle);
     )
 
     static void OnUploadsCreated(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& requestId, IHTTPGateway::TResult&& result) {
@@ -294,6 +305,7 @@ private:
                     actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(content.HttpResponseCode, TStringBuilder{} << errorText << ", request id: [" << requestId << "]")));
                 }
             } else {
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             }
             break;
@@ -310,7 +322,7 @@ private:
 
     void Handle(TEvPrivate::TEvUploadStarted::TPtr& result) {
         UploadId = result->Get()->UploadId;
-        Become(&TS3FileWriteActor::WorkingStateFunc);
+        Become(&TS3FileWriteActor::MultipartWorkingStateFunc);
         StartUploadParts();
     }
 
@@ -600,10 +612,10 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         credentialsProviderFactory->CreateProvider(),
         randomProvider, params.GetUrl(),
         params.GetPath(),
-        params.HasExtension() ? params.GetExtension() : "",
+        params.GetExtension(),
         std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()),
         params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
-        params.HasCompression() ? params.GetCompression() : "",
+        params.GetCompression(),
         params.GetMultipart(),
         callbacks,
         retryPolicy);

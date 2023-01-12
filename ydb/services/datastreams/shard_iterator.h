@@ -14,7 +14,7 @@ static constexpr ui64 LIFETIME_MS = TDuration::Minutes(5).MilliSeconds();
 TShardIterator(const TString& iteratorStr) : Expired{false}, Valid{true} {
     try {
         TString decoded;
-        Base64Decode(iteratorStr, decoded);
+        Base64StrictDecode(iteratorStr, decoded);
         Valid = Proto.ParseFromString(decoded) && IsAlive(TInstant::Now().MilliSeconds());
         Expired = !IsAlive(TInstant::Now().MilliSeconds());
     } catch (std::exception&) {

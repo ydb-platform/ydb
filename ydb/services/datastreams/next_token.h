@@ -14,7 +14,7 @@ TNextToken(const TString& nextToken): Expired{false}, Valid{true}
 {
     try {
         TString decoded;
-        Base64Decode(nextToken, decoded);
+        Base64StrictDecode(nextToken, decoded);
         Valid = Proto.ParseFromString(decoded) && IsAlive(TInstant::Now().MilliSeconds());
         Expired = !IsAlive(TInstant::Now().MilliSeconds());
     } catch (std::exception&) {

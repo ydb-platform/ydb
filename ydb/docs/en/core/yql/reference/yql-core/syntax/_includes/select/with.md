@@ -15,7 +15,12 @@ The following values are supported:
 * `IGNORETYPEV3`, `IGNORE_TYPE_V3`: Sets the flag to ignore type_v3 types in the table. The behavior is similar to the [yt.IgnoreTypeV3 pragma](../../pragma.md#ignoretypev3), but for a specific data source.
 
 When setting the `SCHEMA` and `COLUMNS` hints, the type must be a [structure](../../../types/containers.md).
+
+{% if feature_bulk_tables %}
+
 If you use the `SCHEMA` hint, then with the table functions [EACH](#each), [RANGE](#range), [LIKE](#like), [REGEXP](#regexp), [FILTER](#filter) you can use an empty list of tables that is treated as an empty table with columns defined in the `SCHEMA`.
+
+{% endif %}
 
 **Examples:**
 

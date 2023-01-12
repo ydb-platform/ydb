@@ -1,4 +1,5 @@
 #include "mkql_wide_combine.h"
+#include "mkql_rh_hash.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -149,46 +150,121 @@ struct TCombinerNodes {
 
 class TState : public TComputationValue<TState> {
     typedef TComputationValue<TState> TBase;
+private:
+    using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TRow = std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>>;
+    using TStorage = std::deque<TRow, TMKQLAllocator<TRow>>;
+
+    class TStorageIterator {
+    private:
+        TStorage& Storage;
+        const ui32 RowSize = 0;
+        const ui64 Count = 0;
+        ui64 Ready = 0;
+        TStorage::iterator ItStorage;
+        TRow::iterator ItRow;
+    public:
+        TStorageIterator(TStorage& storage, const ui32 rowSize, const ui64 count)
+            : Storage(storage)
+            , RowSize(rowSize)
+            , Count(count)
+        {
+            ItStorage = Storage.begin();
+            if (ItStorage != Storage.end()) {
+                ItRow = ItStorage->begin();
+            }
+        }
+
+        bool IsValid() {
+            return Ready < Count;
+        }
+
+        bool Next() {
+            if (++Ready >= Count) {
+                return false;
+            }
+            ItRow += RowSize;
+            if (ItRow == ItStorage->end()) {
+                ++ItStorage;
+                ItRow = ItStorage->begin();
+            }
+
+            return true;
+        }
+
+        NUdf::TUnboxedValuePod* GetValuePtr() const {
+            return &*ItRow;
+        }
+    };
+
+    static constexpr ui32 CountRowsOnPage = 128;
+
+    ui32 RowSize() const {
+        return KeyWidth + StateWidth;
+    }
 public:
     TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), States(0, hash, equal) {
-        Storage.emplace_back(KeyWidth + StateWidth, NUdf::TUnboxedValuePod());
-        Tongue = Storage.back().data();
+        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), States(CountRowsOnPage, hash, equal) {
+        CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
+        CurrentPosition = 0;
+        Tongue = CurrentPage->data();
     }
 
     bool TasteIt() {
-        const auto ins = States.emplace(Tongue);
-        if (ins.second) {
-            Storage.emplace_back(KeyWidth + StateWidth, NUdf::TUnboxedValuePod());
-            Tongue = Storage.back().data();
+        Y_VERIFY(!ExtractIt);
+        bool isNew = false;
+        auto itInsert = States.Insert(Tongue, isNew);
+        if (isNew) {
+            CurrentPosition += RowSize();
+            if (CurrentPosition == CurrentPage->size()) {
+                CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
+                CurrentPosition = 0;
+            }
+            Tongue = CurrentPage->data() + CurrentPosition;
         }
-        Throat = *ins.first + KeyWidth;
-        return ins.second;
+        Throat = States.GetKey(itInsert) + KeyWidth;
+        if (isNew) {
+            States.CheckGrow();
+        }
+        return isNew;
     }
 
     bool IsEmpty() {
-        if (!States.empty())
+        if (!States.Empty())
             return false;
 
-        if (Storage.size() > 1U) {
-            Storage.clear();
-            Storage.emplace_back(KeyWidth + StateWidth, NUdf::TUnboxedValuePod());
-            Tongue = Storage.back().data();
+        {
+            TStorage localStorage;
+            std::swap(localStorage, Storage);
         }
+        CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
+        CurrentPosition = 0;
+        Tongue = CurrentPage->data();
 
         CleanupCurrentContext();
         return true;
     }
 
     void PushStat(IStatsRegistry* stats) const {
-        if (!States.empty()) {
-            MKQL_SET_MAX_STAT(stats, Combine_MaxRowsCount, static_cast<i64>(States.size()));
+        if (!States.Empty()) {
+            MKQL_SET_MAX_STAT(stats, Combine_MaxRowsCount, static_cast<i64>(States.GetSize()));
             MKQL_INC_STAT(stats, Combine_FlushesCount);
         }
     }
 
     NUdf::TUnboxedValuePod* Extract() {
-        return States.empty() ? nullptr : States.extract(States.cbegin()).value();
+        if (!ExtractIt) {
+            ExtractIt.emplace(Storage, RowSize(), States.GetSize());
+        } else {
+            ExtractIt->Next();
+        }
+        if (!ExtractIt->IsValid()) {
+            ExtractIt.reset();
+            States.Clear();
+            return nullptr;
+        }
+        NUdf::TUnboxedValuePod* result = ExtractIt->GetValuePtr();
+        return result;
     }
 
     EFetchResult InputStatus = EFetchResult::One;
@@ -196,10 +272,12 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
 private:
+    std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
-    using TRow = std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>>;
-    std::deque<TRow, TMKQLAllocator<TRow>> Storage;
-    std::unordered_set<NUdf::TUnboxedValuePod*, THashFunc, TEqualsFunc, TMKQLAllocator<NUdf::TUnboxedValuePod*>> States;
+    ui64 CurrentPosition = 0;
+    TRow* CurrentPage = nullptr;
+    TStorage Storage;
+    TStates States;
 };
 
 template <bool TrackRss>
@@ -227,7 +305,8 @@ public:
         while (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
             if (ptr->IsEmpty()) {
                 switch (ptr->InputStatus) {
-                    case EFetchResult::One: break;
+                    case EFetchResult::One:
+                        break;
                     case EFetchResult::Yield:
                         ptr->InputStatus = EFetchResult::One;
                         return EFetchResult::Yield;

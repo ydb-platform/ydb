@@ -14,10 +14,14 @@ namespace NMiniKQL {
 template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv>
 class TRobinHoodHashBase {
 protected:
+    THash HashLocal;
+    TEqual EqualLocal;
     using TPSLStorage = i32;
 
-    explicit TRobinHoodHashBase(ui64 initialCapacity = 1u << 8)
-        : Capacity(initialCapacity)
+    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
+        : HashLocal(std::move(hash))
+        , EqualLocal(std::move(equal))
+        , Capacity(initialCapacity)
         , Allocator()
         , SelfHash(GetSelfHash(this))
     {
@@ -48,6 +52,19 @@ public:
         if (Size * 2 >= Capacity) {
             Grow();
         }
+    }
+
+    void Clear() {
+        char* ptr = Data;
+        for (ui64 i = 0; i < Capacity; ++i) {
+            GetPSL(ptr) = -1;
+            ptr += AsDeriv().GetCellSize();
+        }
+        Size = 0;
+    }
+
+    bool Empty() const {
+        return !Size;
     }
 
     ui64 GetSize() const {
@@ -109,7 +126,7 @@ public:
 private:
     Y_FORCE_INLINE char* InsertImpl(TKey key, bool& isNew, ui64 capacity, char* data, char* dataEnd) {
         isNew = false;
-        ui64 bucket = (SelfHash ^ THash()(key)) & (capacity - 1);
+        ui64 bucket = (SelfHash ^ HashLocal(key)) & (capacity - 1);
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         TPSLStorage distance = 0;
         char* returnPtr;
@@ -122,7 +139,7 @@ private:
                 return ptr;
             }
 
-            if (TEqual()(GetKey(ptr), key)) {
+            if (EqualLocal(GetKey(ptr), key)) {
                 return ptr;
             }
 
@@ -240,7 +257,7 @@ public:
     using TPayloadStore = int;
 
     explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity)
+        : TBase(initialCapacity, THash(), TEqual())
         , CellSize(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
         , PayloadSize(payloadSize)
     {
@@ -297,7 +314,7 @@ public:
     using TPayloadStore = TPayload;
 
     explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity)
+        : TBase(initialCapacity, THash(), TEqual())
     {
         TBase::Init();
     }
@@ -338,9 +355,13 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
     using TPayloadStore = int;
 
+    explicit TRobinHoodHashSet(ui64 initialCapacity, THash hash, TEqual equal)
+        : TBase(initialCapacity, hash, equal) {
+        TBase::Init();
+    }
+
     explicit TRobinHoodHashSet(ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity)
-    {
+        : TBase(initialCapacity, THash(), TEqual()) {
         TBase::Init();
     }
 

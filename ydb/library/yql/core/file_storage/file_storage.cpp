@@ -328,7 +328,7 @@ private:
         }
         auto logCtx = NLog::CurrentLogContextPath();
         return NThreading::Async([logCtx, fs = Inner_, action]() {
-            YQL_LOG_CTX_ROOT_SCOPE(logCtx);
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             return action(fs);
         }, *MtpQueue);
     }

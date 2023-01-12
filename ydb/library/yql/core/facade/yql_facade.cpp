@@ -553,7 +553,7 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
     }
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -608,7 +608,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -680,7 +680,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -751,7 +751,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -833,7 +833,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -905,7 +905,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
         try {
             f.GetValue();
         } catch (const std::exception& e) {
@@ -1236,7 +1236,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
 }
 
 TProgram::TFutureStatus TProgram::ContinueAsync() {
-    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+    YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
     return AsyncTransformWithFallback(true);
 }
 
@@ -1246,7 +1246,7 @@ void TProgram::Abort()
 }
 
 void TProgram::CleanupLastSession() {
-    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+    YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
     TString sessionId = GetSessionId();
     if (sessionId.empty()) {
@@ -1261,7 +1261,7 @@ void TProgram::CleanupLastSession() {
 }
 
 void TProgram::CloseLastSession() {
-    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+    YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
     TString sessionId = TakeSessionId();
     if (sessionId.empty()) {

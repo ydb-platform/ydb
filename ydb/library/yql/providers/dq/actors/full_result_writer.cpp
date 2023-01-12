@@ -46,7 +46,7 @@ private:
     })
 
     void PassAway() override {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceID);
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         try {
             FullResultWriter->Abort();
@@ -62,7 +62,7 @@ private:
     }
 
     void OnStatusRequest(TEvFullResultWriterStatusRequest::TPtr&, const NActors::TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceID);
         NDqProto::TFullResultWriterStatusResponse response;
         response.SetBytesReceived(BytesReceived);
         if (ErrorMessage) {
@@ -72,7 +72,7 @@ private:
     }
 
     void OnWriteRequest(TEvFullResultWriterWriteRequest::TPtr& ev, const NActors::TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceID);
         auto& request = ev->Get()->Record;
         if (request.GetFinish()) {
             Finish();

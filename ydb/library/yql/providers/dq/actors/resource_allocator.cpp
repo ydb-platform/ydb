@@ -133,7 +133,7 @@ private:
 
     void OnAllocateWorkersResponse(TEvAllocateWorkersResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId, SelfId().ToString());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId, SelfId().ToString());
         Y_UNUSED(ctx);
 
         YQL_CLOG(DEBUG, ProviderDq) << "TEvAllocateWorkersResponse " << ev->Sender.NodeId();
@@ -219,7 +219,7 @@ private:
 
     void DoPassAway() override
     {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId, SelfId().ToString());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId, SelfId().ToString());
         for (const auto& group : AllocatedWorkers) {
             for (const auto& actorIdProto : group.GetWorkerActor()) {
                 auto actorNode = NActors::ActorIdFromProto(actorIdProto).NodeId();
@@ -269,7 +269,7 @@ private:
     }
 
     void Fail(const ui64 cookie, const TString& reason) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId, SelfId().ToString());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId, SelfId().ToString());
         if (FailState) {
             return;
         }

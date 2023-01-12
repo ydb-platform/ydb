@@ -14,7 +14,7 @@ struct TThrowedLogContext {
 
 } // namspace
 
-void OutputLogCtx(IOutputStream* out, bool withBraces) {
+void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId) {
     const NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
 
     if (ctxList->HasNext()) {
@@ -25,22 +25,17 @@ void OutputLogCtx(IOutputStream* out, bool withBraces) {
         // skip header stub element
         NImpl::TLogContextListItem* ctxItem = ctxList->Next;
 
-        { // special case for outputing the first element
-            const TString* it = ctxItem->begin();
-            const TString* end = ctxItem->end();
-
-            (*out) << *it++;
-            for (; it != end; ++it) {
-                (*out) << '/' << *it;
-            }
-
-            ctxItem = ctxItem->Next;
-        }
-
-        // output remaining elements
+        bool isFirst = true;
         while (ctxItem != ctxList) {
             for (const TString& name: *ctxItem) {
-                (*out) << '/' << name;
+                if (!skipSessionId && !name.empty()) {
+                    if (!isFirst) {
+                        (*out) << '/';
+                    }
+                    (*out) << name;
+                    isFirst = false;
+                }
+                skipSessionId = false;
             }
             ctxItem = ctxItem->Next;
         }
@@ -55,16 +50,25 @@ NImpl::TLogContextListItem* NImpl::GetLogContextList() {
     return FastTlsSingleton<NImpl::TLogContextListItem>();
 }
 
-TString CurrentLogContextPath() {
+std::pair<TString, TString> CurrentLogContextPath() {
+    TString sessionId;
+    const NImpl::TLogContextListItem* possibleRootLogCtx = NImpl::GetLogContextList()->Next;
+    if (auto rootLogCtx = dynamic_cast<const NImpl::TLogContextSessionItem*>(possibleRootLogCtx)) {
+        if (rootLogCtx->HasSessionId()) {
+            sessionId = (*rootLogCtx->begin());
+        }
+    }
+
     TStringStream ss;
-    OutputLogCtx(&ss, false);
-    return ss.Str();
+    OutputLogCtx(&ss, false, !sessionId.empty());
+    return std::make_pair(sessionId, ss.Str());
 }
 
 TString ThrowedLogContextPath() {
     TThrowedLogContext* tlc = FastTlsSingleton<TThrowedLogContext>();
     return std::move(tlc->LocationWithLogContext);
 }
+
 
 TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(
         TAutoPtr<TLogElement> element)

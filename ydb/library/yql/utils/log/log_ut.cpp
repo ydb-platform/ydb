@@ -195,22 +195,22 @@ Y_UNIT_TEST_SUITE(TLogTest)
         TStringStream out;
         YqlLoggerScope logger(&out);
 
-        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
+        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
         YQL_LOG(INFO) << "level0 - begin";
         {
             YQL_LOG_CTX_SCOPE("ctx1");
-            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1");
             YQL_LOG(INFO) << "level1 - begin";
 
             YQL_LOG_CTX_BLOCK(TStringBuf("ctx2")) {
-                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1/ctx2");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1/ctx2");
                 YQL_LOG(WARN) << "level2";
             }
 
-            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1");
             YQL_LOG(INFO) << "level1 - end";
         }
-        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
+        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
         YQL_LOG(INFO) << "level0 - end";
 
         TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
@@ -245,6 +245,138 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
             UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level0 - end");
+        }
+    }
+
+    Y_UNIT_TEST(UnknownSessionContexts) {
+        TStringStream out;
+        YqlLoggerScope logger(&out);
+
+        {
+            YQL_LOG_CTX_ROOT_SCOPE("ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+            YQL_LOG(INFO) << "level0 - begin";
+
+            {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(CurrentLogContextPath());
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+
+                YQL_LOG(INFO) << "level1 - begin";
+                YQL_LOG_CTX_BLOCK("ctx1") {
+                    UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "");
+                    UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx/ctx1");
+
+                    YQL_LOG(WARN) << "level2";
+                }
+
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+                YQL_LOG(INFO) << "level1 - end";
+            }
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+            YQL_LOG(INFO) << "level0 - end";
+        }
+
+        TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+        Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
+        {
+            TLogRow logRow = ParseLogRow(row1Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level0 - begin");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row2Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level1 - begin");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row3Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx/ctx1} level2");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row4Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level1 - end");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row5Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level0 - end");
+        }
+    }
+
+    Y_UNIT_TEST(SessionContexts) {
+        TStringStream out;
+        YqlLoggerScope logger(&out);
+
+        {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE("sessionId", "ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "sessionId");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+            YQL_LOG(INFO) << "level0 - begin";
+
+            {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(CurrentLogContextPath());
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "sessionId");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+
+                YQL_LOG(INFO) << "level1 - begin";
+                YQL_LOG_CTX_BLOCK("ctx1") {
+                    UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "sessionId");
+                    UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx/ctx1");
+
+                    YQL_LOG(WARN) << "level2";
+                }
+
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "sessionId");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+                YQL_LOG(INFO) << "level1 - end";
+            }
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().first, "sessionId");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx");
+            YQL_LOG(INFO) << "level0 - end";
+        }
+
+        TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
+        Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);
+        {
+            TLogRow logRow = ParseLogRow(row1Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level0 - begin");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row2Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level1 - begin");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row3Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx/ctx1} level2");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row4Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level1 - end");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row5Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level0 - end");
         }
     }
 
@@ -284,30 +416,30 @@ Y_UNIT_TEST_SUITE(TLogTest)
         TStringStream out;
         YqlLoggerScope logger(&out);
 
-        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
+        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
         {
             YQL_LOG_CTX_SCOPE("ctx1");
-            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1");
             YQL_LOG(INFO) << "level1 - begin";
 
             YQL_LOG_CTX_BLOCK(TStringBuf("ctx2")) {
-                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1/ctx2");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1/ctx2");
                 YQL_LOG(WARN) << "level2 - begin";
 
                 {
                     YQL_LOG_CTX_ROOT_SCOPE("ctx3");
-                    UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx3");
+                    UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx3");
                     YQL_LOG(ERROR) << "level3";
                 }
 
-                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1/ctx2");
+                UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1/ctx2");
                 YQL_LOG(WARN) << "level2 - end";
             }
 
-            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "ctx1");
             YQL_LOG(INFO) << "level1 - end";
         }
-        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
+        UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
 
         TString row1Str, row2Str, row3Str, row4Str, row5Str, _;
         Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, row5Str, _);

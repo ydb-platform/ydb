@@ -106,7 +106,7 @@ private:
     }
 
     void OnAbortExecution(NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         auto statusCode = ev->Get()->Record.GetStatusCode();
         TIssues issues = ev->Get()->GetIssues();
         YQL_CLOG(DEBUG, ProviderDq) << "AbortExecution from " << ev->Sender << ":" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << " " << issues.ToOneLineString();
@@ -122,7 +122,7 @@ private:
         TActorId computeActor = ev->Sender;
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(TRACE, ProviderDq)
             << SelfId()
             << " EvState TaskId: " << taskId
@@ -473,7 +473,7 @@ private:
     }
 
     void OnReadyState(TEvReadyState::TPtr& ev) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
 
         TaskStat.AddCounters(ev->Get()->Record);
 
@@ -536,7 +536,7 @@ private:
 
     void OnResultFailure(TEvDqFailure::TPtr& ev) {
         if (Finished) {
-            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(WARN, ProviderDq) << "TEvDqFailure IGNORED when Finished from " << ev->Sender;
         } else {
             FinalStat().FlushCounters(ev->Get()->Record); // histograms will NOT be reported
@@ -546,10 +546,10 @@ private:
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << "OnError " << issues.ToOneLineString() << " " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode);
         if (Finished) {
-            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(WARN, ProviderDq) << "OnError IGNORED when Finished";
         } else {
             auto req = MakeHolder<TEvDqFailure>(statusCode, issues);

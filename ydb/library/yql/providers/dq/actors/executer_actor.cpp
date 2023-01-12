@@ -82,7 +82,7 @@ private:
         HFunc(TEvQueryResponse, OnQueryResponse);
         // execution timeout
         cFunc(TEvents::TEvBootstrap::EventType, [this]() {
-            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(DEBUG, ProviderDq) << "Execution timeout";
             auto issue = TIssue("Execution timeout");
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
@@ -129,7 +129,7 @@ private:
     }
 
     void OnGraph(TEvGraphRequest::TPtr& ev, const NActors::TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         Y_VERIFY(!ControlId);
         Y_VERIFY(!ResultId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::OnGraph";
@@ -264,7 +264,7 @@ private:
 
     void OnFailure(TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
         if (!Finished) {
-            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__
                             << ", status=" << static_cast<int>(ev->Get()->Record.GetStatusCode())
                             << ", issues size=" << ev->Get()->Record.IssuesSize()
@@ -282,7 +282,7 @@ private:
     }
 
     void OnGraphFinished(TEvGraphFinished::TPtr&, const NActors::TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         if (!Finished) {
             try {
@@ -299,14 +299,14 @@ private:
     // TBD: wait for PoisonTaken from CheckPointCoordinator before send TEvQueryResponse to PrinterId
 
     void OnQueryResponse(TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " status=" << static_cast<int>(ev->Get()->Record.GetStatusCode()) << " issuses_size=" << ev->Get()->Record.IssuesSize();
         Send(PrinterId, ev->Release().Release());
         PassAway();
     }
 
     void OnDqStats(TEvDqStats::TPtr& ev) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         Send(PrinterId, ev->Release().Release());
     }
@@ -316,7 +316,7 @@ private:
     }
 
     void OnAllocateWorkersResponse(TEvAllocateWorkersResponse::TPtr& ev, const NActors::TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::TEvAllocateWorkersResponse";
 
         AddCounters(ev->Get()->Record);

@@ -207,7 +207,7 @@ private:
             return;
         }
 
-        YQL_LOG_CTX_ROOT_SCOPE(ev->Get()->Record.GetTraceId());
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(ev->Get()->Record.GetTraceId());
         YQL_CLOG(DEBUG, ProviderDq) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
         TFailureInjector::Reach("allocate_workers_failure", [] { ::_exit(1); });
 

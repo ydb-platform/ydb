@@ -33,8 +33,8 @@ TProfilingScope::~TProfilingScope() {
                 << TStringBuf("] took ") << Prec(elapsed, 3) << unit;
     };
 
-    if (!LogCtxPath_.empty()) {
-        YQL_LOG_CTX_ROOT_SCOPE(LogCtxPath_);
+    if (!LogCtxPath_.first.empty() || !LogCtxPath_.second.empty()) {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(LogCtxPath_);
         doLog();
     } else {
         doLog();

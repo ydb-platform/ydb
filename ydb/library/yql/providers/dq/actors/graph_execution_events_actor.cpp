@@ -30,11 +30,11 @@ private:
     })
 
     void DoPassAway() override {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceID);
     }
 
     void OnEvent(NDqs::TEvGraphExecutionEvent::TPtr& ev, const NActors::TActorContext&) {
-        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceID);
         YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__ << ' ' << NYql::NDqProto::EGraphExecutionEventType_Name(ev->Get()->Record.GetEventType());
 
         try {

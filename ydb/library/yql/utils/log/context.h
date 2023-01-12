@@ -5,7 +5,7 @@
 #include <util/stream/output.h>
 #include <util/system/src_location.h>
 #include <util/system/yassert.h>
-
+#include <array>
 
 // continues existing contexts chain
 
@@ -22,8 +22,12 @@
 // starts new contexts chain, after leaving current scope restores
 // previous contexts chain
 
+#define YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId, ...) \
+    auto Y_CAT(c, __LINE__) = ::NYql::NLog::MakeRootCtx(sessionId, ##__VA_ARGS__); \
+    Y_UNUSED(Y_CAT(c, __LINE__))
+
 #define YQL_LOG_CTX_ROOT_SCOPE(...)  \
-    auto Y_CAT(c, __LINE__) = ::NYql::NLog::MakeRootCtx(__VA_ARGS__); \
+    auto Y_CAT(c, __LINE__) = ::NYql::NLog::MakeRootCtx("", __VA_ARGS__); \
     Y_UNUSED(Y_CAT(c, __LINE__))
 
 #define YQL_LOG_CTX_ROOT_BLOCK(...) \
@@ -45,21 +49,30 @@ namespace NImpl {
 /**
  * @brief Represents item of logging context list.
  */
-struct TLogContextListItem {
+class TLogContextListItem {
+public:
     TLogContextListItem* Next;
     TLogContextListItem* Prev;
     size_t NamesCount;
 
-    explicit TLogContextListItem(size_t namesCount = 0)
+    explicit TLogContextListItem(size_t namesCount = 0, size_t headerSize = 0)
         : Next(this)
         , Prev(this)
         , NamesCount(namesCount)
+        , HeaderSize_(headerSize)
     {
+        // initialize HeaderSize_ if child didn't
+        if (headerSize == 0) {
+            HeaderSize_ = sizeof(*this);
+        }
+    }
+
+    virtual ~TLogContextListItem() {
     }
 
     const TString* begin() const {
         auto* ptr = reinterpret_cast<const ui8*>(this);
-        return reinterpret_cast<const TString*>(ptr + sizeof(*this));
+        return reinterpret_cast<const TString*>(ptr + HeaderSize_);
     }
 
     const TString* end() const {
@@ -85,12 +98,34 @@ struct TLogContextListItem {
         Next->Prev = Prev;
         Next = Prev = this;
     }
+
+private:
+    // Additional memory before Names_ used in child class 
+    size_t HeaderSize_;
 };
 
 /**
  * @brief Returns pointer to thread local log context list.
  */
 TLogContextListItem* GetLogContextList();
+
+/**
+ * @brief Context element with stored SessionId.
+*/
+class TLogContextSessionItem : public TLogContextListItem {
+public:
+    TLogContextSessionItem(size_t size, bool hasSessionId_)
+        :  TLogContextListItem(size, sizeof(*this)) {
+        HasSessionId_ = hasSessionId_;
+    }
+
+    bool HasSessionId() const {
+        return HasSessionId_;
+    }
+
+private:
+    bool HasSessionId_;
+};
 
 } // namspace NImpl
 
@@ -125,12 +160,12 @@ private:
  *        list head by itself and restores previous one on destruction.
  */
 template <size_t Size>
-class TRootLogContext: public NImpl::TLogContextListItem {
+class TRootLogContext: public NImpl::TLogContextSessionItem {
 public:
     template <typename... TArgs>
-    TRootLogContext(TArgs... args)
-        : TLogContextListItem(Size)
-        , Names_{{ TString{std::forward<TArgs>(args)}... }}
+    TRootLogContext(const TString& sessionId, TArgs... args)
+        : TLogContextSessionItem(Size, !sessionId.empty())
+        , Names_{{ sessionId, TString{std::forward<TArgs>(args)}... }}
     {
         NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
         PrevLogContextHead_.Prev = ctxList->Prev;
@@ -160,20 +195,25 @@ private:
  *        arguments list.
  */
 template <typename... TArgs>
-auto MakeCtx(TArgs&&... args) -> TLogContext<sizeof...(args)> {
+inline auto MakeCtx(TArgs&&... args) -> TLogContext<sizeof...(args)> {
     return TLogContext<sizeof...(args)>(std::forward<TArgs>(args)...);
 }
 
 template <typename... TArgs>
-auto MakeRootCtx(TArgs&&... args) -> TRootLogContext<sizeof...(args)> {
-    return TRootLogContext<sizeof...(args)>(std::forward<TArgs>(args)...);
+inline auto MakeRootCtx(const TString& sessionId, TArgs&&... args) -> TRootLogContext<sizeof...(args) + 1> {
+    return TRootLogContext<sizeof...(args) + 1>(sessionId, std::forward<TArgs>(args)...);
+}
+
+inline auto MakeRootCtx(const std::pair<TString, TString>& ctx) -> TRootLogContext<2> {
+    return TRootLogContext<2>(ctx.first, ctx.second);
 }
 
 /**
- * @brief Returns current logger contexts path as string. Each element
+ * @brief Returns pair with sessionId and
+ *        current logger contexts path as string. Each element
  *        is separated with '/'.
  */
-TString CurrentLogContextPath();
+std::pair<TString, TString> CurrentLogContextPath();
 
 /**
  * @brief If last throwing exception was performed with YQL_LOG_CTX_THROW
@@ -191,7 +231,7 @@ struct TContextPreprocessor {
 /**
  * @brief Outputs current logger context into stream
  */
-void OutputLogCtx(IOutputStream* out, bool withBraces);
+void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId = false);
 
 /**
  * @brief Outputs current logger context into exception message.

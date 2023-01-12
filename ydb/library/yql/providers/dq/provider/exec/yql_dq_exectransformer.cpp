@@ -1516,7 +1516,7 @@ private:
                 YQL_CLOG(DEBUG, ProviderDq) << "Freezing files for " << input->Content();
                 if (filesRes.first.Level == TStatus::Async) {
                     filesRes.second.Subscribe([execState = ExecState, node = input.Get(), logCtx](const TAsyncTransformCallbackFuture& future) {
-                        YQL_LOG_CTX_ROOT_SCOPE(logCtx);
+                        YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                         YQL_ENSURE(!future.HasException());
                         YQL_CLOG(DEBUG, ProviderDq) << "Finishing freezing files";
                         CompleteNode(execState, node, future.GetValue());
@@ -1635,7 +1635,7 @@ private:
 
             bool neverFallback = settings->FallbackPolicy.Get().GetOrElse("default") == "never";
             future.Subscribe([publicIds, state = State, startTime, execState = ExecState, node = input.Get(), neverFallback, logCtx](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
-                YQL_LOG_CTX_ROOT_SCOPE(logCtx);
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 YQL_ENSURE(!completedFuture.HasException());
                 const IDqGateway::TResult& res = completedFuture.GetValueSync();
 

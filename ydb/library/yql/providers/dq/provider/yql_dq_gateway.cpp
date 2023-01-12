@@ -50,7 +50,7 @@ public:
     template<typename RespType>
     void OnResponse(TPromise<TResult> promise, TString sessionId, NGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false)
     {
-        YQL_LOG_CTX_ROOT_SCOPE(sessionId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
 
         TResult result;
@@ -238,7 +238,7 @@ public:
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
                 bool discard)
     {
-        YQL_LOG_CTX_ROOT_SCOPE(sessionId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
 
         Yql::DqsProto::ExecuteGraphRequest queryPB;
         for (const auto& task : plan.Tasks) {
@@ -311,7 +311,7 @@ public:
     }
 
     TFuture<void> OpenSession(const TString& sessionId, const TString& username) {
-        YQL_LOG_CTX_ROOT_SCOPE(sessionId);
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         YQL_CLOG(INFO, ProviderDq) << "OpenSession";
         Yql::DqsProto::OpenSessionRequest request;
         request.SetSession(sessionId);
@@ -331,7 +331,7 @@ public:
         auto self = weak_from_this();
         auto callback = [self, promise, sessionId](NGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
             Y_UNUSED(resp);
-            YQL_LOG_CTX_ROOT_SCOPE(sessionId);
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
             auto this_ = self.lock();
             if (!this_) {
                 YQL_CLOG(DEBUG, ProviderDq) << "Gateway was closed: " << sessionId;

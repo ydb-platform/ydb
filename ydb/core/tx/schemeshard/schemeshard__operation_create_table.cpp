@@ -193,8 +193,6 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
-
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
             TTabletId datashardId = context.SS->ShardInfos[shardIdx].TabletID;
@@ -212,17 +210,10 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
             context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
 
-            TString txBody;
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
-
-            auto event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
-                NKikimrTxDataShard::TX_KIND_SCHEME,
-                context.SS->TabletID(),
-                subDomainPathId,
-                context.Ctx.SelfID,
-                ui64(OperationId.GetTxId()),
-                txBody,
-                context.SS->SelectProcessingParams(txState->TargetPathId));
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
+                event->Record.SetSubDomainPathId(subDomainPathId);
+            }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"
@@ -230,7 +221,7 @@ public:
                                     << " datashardId: " << datashardId
                                     << " message: " << event->Record.ShortDebugString());
 
-            context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx,  event.Release());
+            context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
 
         txState->UpdateShardsInProgress();

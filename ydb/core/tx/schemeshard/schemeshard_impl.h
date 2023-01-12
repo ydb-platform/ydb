@@ -327,6 +327,8 @@ public:
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+    THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
+        const TString& body, const TActorContext& ctx) const;
 
     TPathId RootPathId() const {
         return MakeLocalId(TPathElement::RootPathId);

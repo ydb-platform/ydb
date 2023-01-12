@@ -19,13 +19,10 @@ struct TRestore {
 
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         const auto& pathId = txState.TargetPathId;
-
-        const auto seqNo = context.SS->StartRound(txState);
-        const auto& processingParams = context.SS->SelectProcessingParams(pathId);
-
         Y_VERIFY(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
+        const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             const auto& idx = txState.Shards[i].Idx;
             const auto& datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -43,15 +40,7 @@ struct TRestore {
             restore.SetTableId(pathId.LocalPathId);
             restore.SetShardNum(i);
 
-            auto ev = MakeHolder<TEvDataShard::TEvProposeTransaction>(
-                NKikimrTxDataShard::TX_KIND_SCHEME,
-                context.SS->TabletID(),
-                context.Ctx.SelfID,
-                ui64(opId.GetTxId()),
-                tx.SerializeAsString(),
-                processingParams
-            );
-
+            auto ev = context.SS->MakeDataShardProposal(pathId, opId, tx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(opId, datashardId, idx, ev.Release());
         }
     }

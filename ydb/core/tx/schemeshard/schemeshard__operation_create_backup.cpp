@@ -18,13 +18,12 @@ struct TBackup {
     }
 
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
-        auto seqNo = context.SS->StartRound(txState);
-        const auto& processingParams = context.SS->SelectProcessingParams(txState.TargetPathId);
-
-        Y_VERIFY(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
+        const auto& pathId = txState.TargetPathId;
+        Y_VERIFY(context.SS->Tables.contains(pathId));
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
 
+        const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             auto idx = txState.Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -35,15 +34,8 @@ struct TBackup {
                             << " txid " <<  opId
                             << " at schemeshard " << context.SS->SelfTabletId());
 
-            TString txBody = context.SS->FillBackupTxBody(txState.TargetPathId, backup, i, seqNo);
-            auto event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
-                NKikimrTxDataShard::TX_KIND_SCHEME,
-                context.SS->TabletID(),
-                context.Ctx.SelfID,
-                ui64(opId.GetTxId()),
-                txBody,
-                processingParams);
-
+            const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo);
+            auto event = context.SS->MakeDataShardProposal(pathId, opId, txBody, context.Ctx);
             context.OnComplete.BindMsgToPipe(opId, datashardId, idx, event.Release());
 
             backup.ClearTable();

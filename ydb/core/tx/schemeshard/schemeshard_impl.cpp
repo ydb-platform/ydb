@@ -214,6 +214,16 @@ struct TAttachOrder {
     }
 };
 
+THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal(
+        const TPathId& pathId, const TOperationId& opId,
+        const TString& body, const TActorContext& ctx) const
+{
+    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
+        NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
+        ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
+    );
+}
+
 TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     TTxId txId = InvalidTxId;
     if (CachedTxIds) {

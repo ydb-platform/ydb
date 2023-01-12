@@ -273,16 +273,9 @@ public:
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Propose modify scheme on datashard " << datashardId << " txid: " << OperationId << " at schemeshard" << ssId);
 
-            auto seqNo = context.SS->StartRound(*txState);
-            TString txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
-            THolder<TEvDataShard::TEvProposeTransaction> event =
-                MakeHolder<TEvDataShard::TEvProposeTransaction>(NKikimrTxDataShard::TX_KIND_SCHEME,
-                                                        ui64(ssId), //owner schemeshard tablet id
-                                                        context.Ctx.SelfID,
-                                                        ui64(OperationId.GetTxId()),
-                                                        txBody,
-                                                        context.SS->SelectProcessingParams(txState->TargetPathId));
-
+            const auto seqNo = context.SS->StartRound(*txState);
+            const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 

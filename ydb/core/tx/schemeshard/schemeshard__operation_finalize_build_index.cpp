@@ -80,9 +80,6 @@ public:
 
             context.SS->FillSeqNo(tx, seqNo);
 
-            TString txBody;
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
-
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"
                                     << " SEND TFlatSchemeTransaction to datashard: " << datashardId
@@ -91,16 +88,8 @@ public:
                                     << " seqNo: " << seqNo
                                     << " at schemeshard: " << ssId);
 
-
-            auto event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
-                NKikimrTxDataShard::TX_KIND_SCHEME,
-                context.SS->TabletID(),
-                context.Ctx.SelfID,
-                ui64(OperationId.GetTxId()),
-                txBody,
-                context.SS->SelectProcessingParams(txState->TargetPathId));
-
-            context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx,  event.Release());
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
 
         txState->UpdateShardsInProgress();

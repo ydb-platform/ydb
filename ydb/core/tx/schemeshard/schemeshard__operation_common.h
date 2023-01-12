@@ -1085,22 +1085,13 @@ public:
         context.SS->FillSeqNo(tx, context.SS->StartRound(*txState));
         FillNotice(pathId, tx, context);
 
-        TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
-
         txState->ClearShardsInProgress();
         Y_VERIFY(txState->Shards.size());
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             const auto& idx = txState->Shards[i].Idx;
             const auto datashardId = context.SS->ShardInfos[idx].TabletID;
-
-            auto ev = MakeHolder<TEvDataShard::TEvProposeTransaction>(
-                NKikimrTxDataShard::TX_KIND_SCHEME, context.SS->TabletID(), context.Ctx.SelfID,
-                ui64(OperationId.GetTxId()), txBody,
-                context.SS->SelectProcessingParams(pathId)
-            );
-
+            auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, tx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, ev.Release());
         }
 

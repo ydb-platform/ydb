@@ -3,7 +3,6 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/dq/backtrace/backtrace.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -293,7 +292,7 @@ public:
     {
         FunctionRegistry = QueryStat.Measure<TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry>>("CreateFunctionRegistry", [&]() {
             auto ret = NKikimr::NMiniKQL::CreateFunctionRegistry(
-                &KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {})->Clone();
+                &NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {})->Clone();
             NKikimr::NMiniKQL::FillStaticModules(*ret);
             return ret;
         });

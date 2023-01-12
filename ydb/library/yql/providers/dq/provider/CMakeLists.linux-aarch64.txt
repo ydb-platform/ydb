@@ -22,6 +22,7 @@ target_link_libraries(providers-dq-provider PUBLIC
   public-lib-yson_value
   cpp-client-ydb_driver
   library-yql-core
+  yql-utils-backtrace
   yql-dq-transform
   yql-dq-tasks
   yql-dq-type_ann
@@ -31,7 +32,6 @@ target_link_libraries(providers-dq-provider PUBLIC
   providers-common-transform
   dq-api-grpc
   dq-api-protos
-  providers-dq-backtrace
   providers-dq-common
   providers-dq-config
   providers-dq-expr_nodes

@@ -8,7 +8,6 @@
 
 add_subdirectory(actors)
 add_subdirectory(api)
-add_subdirectory(backtrace)
 add_subdirectory(common)
 add_subdirectory(config)
 add_subdirectory(counters)

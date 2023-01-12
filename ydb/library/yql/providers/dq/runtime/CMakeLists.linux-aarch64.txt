@@ -20,12 +20,12 @@ target_link_libraries(providers-dq-runtime PUBLIC
   yql-minikql-invoke_builtins
   library-yql-utils
   yql-utils-log
+  yql-utils-backtrace
   yql-core-expr_nodes
   yql-dq-common
   yql-dq-runtime
   providers-common-proto
   dq-api-protos
-  providers-dq-backtrace
   providers-dq-common
   providers-dq-counters
   providers-dq-interface

@@ -1,4 +1,5 @@
 #include "backtrace.h"
+#include "symbolizer.h"
 
 #ifdef _linux_
 #include <llvm/DebugInfo/Symbolize/Symbolize.h>

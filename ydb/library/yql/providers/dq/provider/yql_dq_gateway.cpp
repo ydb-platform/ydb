@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
-#include <ydb/library/yql/providers/dq/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>

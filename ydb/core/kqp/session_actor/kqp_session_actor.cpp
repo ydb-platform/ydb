@@ -654,7 +654,7 @@ public:
             QueryState ? std::move(QueryState->Orbit) : NLWTrace::TOrbit(),
             QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId());
 
-        TlsActivationContext->ExecutorThread.RegisterActor(compileRequestActor);
+        RegisterWithSameMailbox(compileRequestActor);
 
         Become(&TKqpSessionActor::CompileState);
     }
@@ -727,7 +727,7 @@ public:
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
-        auto snapMgrActorId = TlsActivationContext->ExecutorThread.RegisterActor(snapMgr);
+        auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
         THashSet<TString> tablesSet;
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
@@ -763,7 +763,7 @@ public:
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
-        auto snapMgrActorId = TlsActivationContext->ExecutorThread.RegisterActor(snapMgr);
+        auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
         auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>();
         Send(snapMgrActorId, ev.release());
@@ -1331,17 +1331,13 @@ public:
                 (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
                 RequestCounters);
 
+        auto exId = RegisterWithSameMailbox(executerActor);
+        LOG_D("Created new KQP executer: " << exId);
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
+        Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
             Y_VERIFY(!ExecuterId);
-            ExecuterId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
-            LOG_D("Created new KQP executer: " << ExecuterId);
-            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(ExecuterId);
-            Send(MakeTxProxyID(), ev.release());
-        } else {
-            auto exId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
-            LOG_D("Created new KQP executer: " << exId);
-            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
-            Send(MakeTxProxyID(), ev.release());
+            ExecuterId = exId;
         }
     }
 

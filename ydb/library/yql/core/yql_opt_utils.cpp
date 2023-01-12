@@ -28,6 +28,19 @@ TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx) {
    return ctx.NewCallable(position, "Null", {});
 }
 
+TExprNode::TPtr MakeEmptyContainer(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    switch (const auto kind = type.GetKind()) {
+        case ETypeAnnotationKind::Null:
+            return ctx.NewCallable(position, "Null", {});
+        case ETypeAnnotationKind::EmptyDict:
+            return ctx.NewCallable(position, "EmptyDict", {});
+        case ETypeAnnotationKind::EmptyList:
+            return ctx.NewCallable(position, "EmptyList", {});
+        default:
+            return ctx.NewCallable(position, GetEmptyCollectionName(kind), {ExpandType(position, type, ctx)});
+    }
+}
+
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input,
    const TExprNode::TPtr& value, TExprContext& ctx) {
    return ctx.Builder(position)

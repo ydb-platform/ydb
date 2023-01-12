@@ -96,7 +96,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         switch (sourceType.GetKind()) {
             case ETypeAnnotationKind::List:
             case ETypeAnnotationKind::Flow:
-            if (const auto itemType = expectedType.Cast<TStreamExprType>()->GetItemType(); IsSameAnnotation(*itemType, *GetSeqItemType(&sourceType))) {
+            if (const auto itemType = expectedType.Cast<TStreamExprType>()->GetItemType(); IsSameAnnotation(*itemType, GetSeqItemType(sourceType))) {
                 node = ctx.NewCallable(node->Pos(), "ToStream", {std::move(node)});
                 return IGraphTransformer::TStatus::Repeat;
             }
@@ -1010,12 +1010,12 @@ NUdf::TCastResultOptions CastResult(const TTupleExprType* source, const TTupleEx
     for (size_t i = 0U; i < std::max(sItems.size(), tItems.size()); ++i) {
         if (i >= sItems.size()) {
             if constexpr (AllOrAnyElements) {
-                if (!tItems[i]->IsOptionalOrNull())
-                    return NUdf::ECastOptions::Impossible;
+                if (!(tItems[i]->IsNullOrEmpty() || tItems[i]->IsCanBeEmpty()))
+                    return Strong ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::MayFail;
             }
         } else if (i >= tItems.size()) {
-            if (sItems[i]->GetKind() != ETypeAnnotationKind::Null) {
-                if (sItems[i]->IsOptionalOrNull()) {
+            if (!sItems[i]->IsNullOrEmpty()) {
+                if (sItems[i]->IsCanBeEmpty()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
                     if constexpr (Strong && AllOrAnyElements) {
@@ -1046,12 +1046,12 @@ NUdf::TCastResultOptions CastResult(const TStructExprType* source, const TStruct
     for (const auto& field : fields) {
         if (!field.second.front()) {
             if constexpr (AllOrAnyMembers) {
-                if (!field.second.back()->IsOptionalOrNull())
-                    return NUdf::ECastOptions::Impossible;
+                if (!(field.second.back()->IsNullOrEmpty() || field.second.back()->IsCanBeEmpty()))
+                    return  Strong ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::MayFail;
             }
         } else if (!field.second.back()) {
-            if (field.second.front()->GetKind() != ETypeAnnotationKind::Null) {
-                if (field.second.front()->IsOptionalOrNull()) {
+            if (!field.second.front()->IsNullOrEmpty()) {
+                if (field.second.front()->IsCanBeEmpty()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
                     if constexpr (Strong && AllOrAnyMembers) {
@@ -1504,20 +1504,24 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
                     NUdf::ECastOptions::Impossible;
             default: break;
         }
-    } else if (sKind == ETypeAnnotationKind::Null) {
-        return tKind == ETypeAnnotationKind::Optional ? NUdf::ECastOptions::Complete : Strong ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::MayFail;
-    } else if (tKind == ETypeAnnotationKind::Null) {
-        return sKind == ETypeAnnotationKind::Optional ?
-            Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData:
-            Strong ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::AnywayLoseData;
+    } else if (source->IsNullOrEmpty()) {
+        if (target->IsNullOrEmpty() || target->IsCanBeEmpty())
+            return NUdf::ECastOptions::Complete;
+        else if constexpr (Strong)
+            return NUdf::ECastOptions::Impossible;
+        else
+            return NUdf::ECastOptions::MayFail;
+    } else if (target->IsNullOrEmpty()) {
+        if (source->IsNullOrEmpty())
+            return NUdf::ECastOptions::Complete;
+        else if constexpr (Strong)
+            return source->IsCanBeEmpty() ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::Impossible;
+        else
+            return source->IsCanBeEmpty() ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::AnywayLoseData;
     } else if (tKind == ETypeAnnotationKind::Optional) {
         return ReduceCastResult<Strong>(CastResult<Strong>(source, target->Cast<TOptionalExprType>()->GetItemType()));
     } else if (sKind == ETypeAnnotationKind::Optional) {
         return NUdf::ECastOptions::MayFail | CastResult<Strong>(source->Cast<TOptionalExprType>()->GetItemType(), target);
-    } else if (tKind == ETypeAnnotationKind::List && sKind == ETypeAnnotationKind::EmptyList) {
-        return NUdf::ECastOptions::Complete;
-    } else if (tKind == ETypeAnnotationKind::Dict && sKind == ETypeAnnotationKind::EmptyDict) {
-        return NUdf::ECastOptions::Complete;
     }
 
     return NUdf::ECastOptions::Impossible;

@@ -4165,8 +4165,8 @@ namespace NTypeAnnImpl {
         const auto options = CastResult<Strong>(sourceType, targetType);
         if (!(options & NKikimr::NUdf::ECastOptions::Impossible)) {
             auto type = targetType;
-            if (ETypeAnnotationKind::Null == type->GetKind()) {
-                output = ctx.Expr.NewCallable(input->Tail().Pos(), "Null", {});
+            if (targetType->IsNullOrEmpty() && !(options & NKikimr::NUdf::ECastOptions::MayFail)) {
+                output = MakeEmptyContainer(input->Head().Pos(), *type, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;
             }
 
@@ -4180,7 +4180,7 @@ namespace NTypeAnnImpl {
             }
 
             if (IsNull(input->Head())) {
-                output = ctx.Expr.NewCallable(input->Head().Pos(), "Nothing", {ExpandType(input->Tail().Pos(), *type, ctx.Expr)});
+                output = MakeEmptyContainer(input->Head().Pos(), *type, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;
             }
 
@@ -7752,7 +7752,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
         }
-        
+
         TExprNode::TPtr runConfig;
         if (input->ChildrenSize() > 4) {
             runConfig = input->Child(4);

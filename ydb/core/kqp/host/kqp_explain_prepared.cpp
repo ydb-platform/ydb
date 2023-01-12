@@ -15,10 +15,11 @@ using namespace NThreading;
 class TKqpExplainPreparedTransformer : public NYql::TGraphTransformerBase {
 public:
     TKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
-        TIntrusivePtr<TKqlTransformContext> transformCtx)
+        TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry)
         : Gateway(gateway)
         , Cluster(cluster)
         , TransformCtx(transformCtx)
+        , FuncRegistry(funcRegistry)
         , CurrentTxIndex(0)
     {
         TxAlloc = TransformCtx->QueryCtx->QueryData->GetAllocState();
@@ -26,30 +27,19 @@ public:
 
     TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override {
         output = input;
-
-        auto pure = [](const auto& tx) {
-            if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
-                return false;
-            }
-
-            for (const auto& stage : tx.GetStages()) {
-                if (stage.InputsSize() != 0) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
+        auto preparedQueryCopy = std::make_unique<NKikimrKqp::TPreparedQuery>(*TransformCtx->QueryCtx->PreparingQuery);
+        TPreparedQueryHolder::TConstPtr queryConstPtr = std::make_shared<TPreparedQueryHolder>(
+            preparedQueryCopy.release(), FuncRegistry);
 
         auto& query = *TransformCtx->QueryCtx->PreparingQuery->MutablePhysicalQuery();
         TxResults.resize(query.TransactionsSize());
         while (CurrentTxIndex < query.TransactionsSize()) {
-            auto tx = std::make_shared<NKqpProto::TKqpPhyTx>(query.GetTransactions(CurrentTxIndex));
-            bool prepared = PrepareParameters(*tx);
+            const auto& tx = queryConstPtr->GetPhyTx(CurrentTxIndex);
+            bool prepared = PrepareParameters(tx);
 
-            if (pure(*tx) && prepared) {
+            if (tx->IsPureTx() && prepared) {
                 IKqpGateway::TExecPhysicalRequest request(TxAlloc);
-                request.Transactions.emplace_back(std::move(tx), TransformCtx->QueryCtx->QueryData);
+                request.Transactions.emplace_back(tx, TransformCtx->QueryCtx->QueryData);
                 request.NeedTxId = false;
 
                 ExecuteFuture = Gateway->ExecutePure(std::move(request), TransformCtx->QueryCtx->QueryData);
@@ -101,8 +91,8 @@ public:
     }
 
 private:
-    bool PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
-        for (const auto& paramBinding : tx.GetParamBindings()) {
+    bool PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx) {
+        for (const auto& paramBinding : tx->GetParamBindings()) {
             bool res = TransformCtx->QueryCtx->QueryData->MaterializeParamValue(/*ensure*/ false,
                 paramBinding);
             if (!res) {
@@ -117,6 +107,7 @@ private:
     TString Cluster;
     TVector<TVector<NKikimrMiniKQL::TResult>> TxResults;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
+    const NMiniKQL::IFunctionRegistry* FuncRegistry;
     ui32 CurrentTxIndex;
     NThreading::TFuture<IKqpGateway::TExecPhysicalResult> ExecuteFuture;
     NThreading::TPromise<void> Promise;
@@ -130,8 +121,7 @@ TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IK
 {
     Y_UNUSED(randomProvider);
     Y_UNUSED(timeProvider);
-    Y_UNUSED(funcRegistry);
-    return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx);
+    return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry);
 }
 
 } // namespace NKqp

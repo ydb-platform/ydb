@@ -80,7 +80,7 @@ public:
             return;
         }
 
-        if (!NavigateTables(*compileResult->PreparedQuery, compileResult->Query->Database, ctx)) {
+        if (!NavigateTables(compileResult->PreparedQuery, compileResult->Query->Database, ctx)) {
 
             if (CompileRequestSpan) {
                 CompileRequestSpan.End();
@@ -165,12 +165,12 @@ private:
         }
     }
 
-    bool NavigateTables(const NKikimrKqp::TPreparedQuery& query, const TString& database, const TActorContext& ctx) {
+    bool NavigateTables(const TPreparedQueryHolder::TConstPtr& query, const TString& database, const TActorContext& ctx) {
         TableVersions.clear();
 
-        switch (query.GetVersion()) {
+        switch (query->GetVersion()) {
             case NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1:
-                for (const auto& tx : query.GetPhysicalQuery().GetTransactions()) {
+                for (const auto& tx : query->GetPhysicalQuery().GetTransactions()) {
                     FillTables(tx);
                 }
                 break;
@@ -179,7 +179,7 @@ private:
                 LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_REQUEST,
                     "Unexpected prepared query version"
                     << ", self: " << ctx.SelfID
-                    << ", version: " << (ui32)query.GetVersion());
+                    << ", version: " << (ui32)query->GetVersion());
                 return false;
         }
 

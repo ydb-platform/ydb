@@ -119,8 +119,8 @@ public:
                 TasksGraph.AddTask(stageInfo);
             }
 
-            ResponseEv->InitTxResult(*tx.Body);
-            BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, txIdx);
+            ResponseEv->InitTxResult(tx.Body);
+            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {

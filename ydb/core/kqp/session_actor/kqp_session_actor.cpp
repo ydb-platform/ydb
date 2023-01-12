@@ -130,7 +130,7 @@ struct TKqpQueryState {
     ui64 ProxyRequestId = 0;
     NKikimrKqp::TQueryRequest Request;
     ui64 ParametersSize = 0;
-    TPreparedQueryConstPtr PreparedQuery;
+    TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
     NKqpProto::TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
@@ -178,7 +178,6 @@ struct TKqpQueryState {
 struct TKqpCleanupCtx {
     ui64 AbortedTransactionsCount = 0;
     ui64 TransactionsToBeAborted = 0;
-    std::vector<IKqpGateway::TExecPhysicalRequest> ExecuterAbortRequests;
     bool IsWaitingForWorkerToClose = false;
     bool Final = false;
     TInstant Start = TInstant::Now();
@@ -1029,7 +1028,7 @@ public:
         return request;
     }
 
-    IKqpGateway::TExecPhysicalRequest PrepareRequest(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool pure,
+    IKqpGateway::TExecPhysicalRequest PrepareRequest(const TKqpPhyTxHolder::TConstPtr& tx, bool pure,
         TKqpQueryState *queryState)
     {
         if (pure) {
@@ -1077,13 +1076,13 @@ public:
         }
     }
 
-    TQueryData::TPtr PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
+    TQueryData::TPtr PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx) {
         for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
             ValidateParameter(paramDesc.GetName(), paramDesc.GetType());
         }
 
         try {
-            for(const auto& paramBinding: tx.GetParamBindings()) {
+            for(const auto& paramBinding: tx->GetParamBindings()) {
                 QueryState->QueryData->MaterializeParamValue(true, paramBinding);
             }
         } catch (const yexception& ex) {
@@ -1125,8 +1124,8 @@ public:
         return true;
     }
 
-    TQueryData::TPtr CreateKqpValueMap(const NKqpProto::TKqpPhyTx& tx) {
-        for (const auto& paramBinding : tx.GetParamBindings()) {
+    TQueryData::TPtr CreateKqpValueMap(const TKqpPhyTxHolder::TConstPtr& tx) {
+        for (const auto& paramBinding : tx->GetParamBindings()) {
             QueryState->QueryData->MaterializeParamValue(true, paramBinding);
         }
         return QueryState->QueryData;
@@ -1172,20 +1171,14 @@ public:
 
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
-        std::shared_ptr<const NKqpProto::TKqpPhyTx> tx;
-        if (QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()) {
-            tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery, &phyQuery.GetTransactions(QueryState->CurrentTx));
-        }
-
+        auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
         if (!Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
             while (tx && tx->GetHasEffects()) {
-                YQL_ENSURE(txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx)));
+                YQL_ENSURE(txCtx.AddDeferredEffect(tx, CreateKqpValueMap(tx)));
                 LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
-
                 if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
                     ++QueryState->CurrentTx;
-                    tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
-                         &phyQuery.GetTransactions(QueryState->CurrentTx));
+                    tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
                 } else {
                     tx = nullptr;
                     break;
@@ -1206,7 +1199,7 @@ public:
         }
 
         if (tx || commit) {
-            bool replied = ExecutePhyTx(&phyQuery, std::move(tx), commit);
+            bool replied = ExecutePhyTx(&phyQuery, tx, commit);
             if (!replied) {
                 ++QueryState->CurrentTx;
             }
@@ -1215,24 +1208,10 @@ public:
         }
     }
 
-    bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit) {
+    bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         auto& txCtx = *QueryState->TxCtx;
 
-        auto calcPure = [](const auto& tx) {
-            if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
-                return false;
-            }
-
-            for (const auto& stage : tx.GetStages()) {
-                if (stage.InputsSize() != 0) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
-
-        bool pure = tx && calcPure(*tx);
+        bool pure = tx && tx->IsPureTx();
         auto request = PrepareRequest(tx, pure, QueryState.get());
 
         LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " commit: " << commit
@@ -1255,7 +1234,7 @@ public:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
             }
 
-            request.Transactions.emplace_back(tx, PrepareParameters(*tx));
+            request.Transactions.emplace_back(tx, PrepareParameters(tx));
             txCtx.HasImmediateEffects = txCtx.HasImmediateEffects || tx->GetHasEffects();
         } else {
             YQL_ENSURE(commit);
@@ -1449,6 +1428,7 @@ public:
         {
             auto g = QueryState->QueryData->TypeEnv().BindAllocator();
             QueryState->QueryData->AddTxResults(std::move(ev->GetTxResults()));
+            QueryState->QueryData->AddTxHolders(std::move(ev->GetTxHolders()));
         }
 
         if (ev->LockHandle) {
@@ -1681,11 +1661,7 @@ public:
             TString queryId;
             if (QueryState->CompileResult) {
                 queryId = QueryState->CompileResult->Uid;
-            } else {
-                YQL_ENSURE(!Settings.LongSession);
-                Y_PROTOBUF_SUPPRESS_NODISCARD QueryState->PreparedQuery->SerializeToString(&queryId);
             }
-
             response->SetPreparedQuery(queryId);
         }
 

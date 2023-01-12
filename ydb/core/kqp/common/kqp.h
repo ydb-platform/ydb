@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_event_ids.h"
+#include "kqp_prepared_query.h"
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -205,8 +206,6 @@ public:
     }
 };
 
-using TPreparedQueryConstPtr = std::shared_ptr<const NKikimrKqp::TPreparedQuery>;
-
 struct TKqpCompileResult {
     using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
 
@@ -245,7 +244,7 @@ struct TKqpCompileResult {
 
     ETableReadType MaxReadType;
 
-    TPreparedQueryConstPtr PreparedQuery;
+    TPreparedQueryHolder::TConstPtr PreparedQuery;
 };
 
 struct TEvKqp {

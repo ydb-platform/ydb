@@ -98,9 +98,9 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
     }
 }
 
-void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const NKqpProto::TKqpPhyTx& tx, ui64 txIdx) {
-    for (ui32 i = 0; i < tx.ResultsSize(); ++i) {
-        const auto& result = tx.GetResults(i);
+void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx) {
+    for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
+        const auto& result = tx->GetResults(i);
         const auto& connection = result.GetConnection();
         const auto& inputStageInfo = tasksGraph.GetStageInfo(TStageId(txIdx, connection.GetStageIndex()));
         const auto& outputIdx = connection.GetOutputIndex();

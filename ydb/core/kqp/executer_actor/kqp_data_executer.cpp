@@ -1445,8 +1445,8 @@ private:
                 BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, /* enableSpilling */ false);
             }
 
-            ResponseEv->InitTxResult(*tx.Body);
-            BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, txIdx);
+            ResponseEv->InitTxResult(tx.Body);
+            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
         }
 
         TIssue validateIssue;

@@ -15,31 +15,11 @@ namespace NKqp {
 
 using namespace NYql;
 
-void TEvKqpExecuter::TEvTxResponse::InitTxResult(const NKqpProto::TKqpPhyTx& tx) {
-    ui32 i = TxResults.size();
-    TxResults.resize(TxResults.size() + tx.GetResults().size());
-
-    for (const auto& txResult : tx.GetResults()) {
-        auto& result = TxResults[i++];
-        result.IsStream = txResult.GetIsStream();
-        result.MkqlItemType = ImportTypeFromProto(txResult.GetItemType(), AllocState->TypeEnv);
-
-        if (txResult.ColumnHintsSize() > 0) {
-            result.ColumnOrder.reserve(txResult.GetColumnHints().size());
-            auto* structType = static_cast<NKikimr::NMiniKQL::TStructType*>(result.MkqlItemType);
-            THashMap<TString, ui32> memberIndices;
-            for(ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                memberIndices[TString(structType->GetMemberName(i))] = i;
-            }
-
-            NKikimrMiniKQL::TType resultItemType;
-            resultItemType.SetKind(NKikimrMiniKQL::Struct);
-            for(auto& name: txResult.GetColumnHints()) {
-                auto it = memberIndices.find(name);
-                YQL_ENSURE(it != memberIndices.end(), "undetermined column name: " << name);
-                result.ColumnOrder.push_back(it->second);
-            }
-        }
+void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx) {
+    TxHolders.push_back(tx);
+    TxResults.reserve(TxResults.size() + tx->GetTxResultsMeta().size());
+    for (const auto& txResult : tx->GetTxResultsMeta()) {
+        TxResults.emplace_back(txResult.IsStream, txResult.MkqlItemType, &txResult.ColumnOrder);
     }
 }
 

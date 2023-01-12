@@ -438,8 +438,8 @@ private:
             BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
-        ResponseEv->InitTxResult(*tx.Body);
-        BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, 0);
+        ResponseEv->InitTxResult(tx.Body);
+        BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, 0);
 
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Scan, AppData()->EnableKqpSpilling, validateIssue)) {
@@ -734,7 +734,7 @@ public:
             }
 
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
-                &ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), SelfId());
+                ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), SelfId());
         } else {
             YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
 

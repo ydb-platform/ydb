@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/kqp/common/kqp_prepared_query.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -53,10 +54,19 @@ using TTxResultVector = std::vector<
 >;
 
 struct TKqpExecuterTxResult {
-    NKikimr::NMiniKQL::TType* MkqlItemType;
-    TVector<ui32> ColumnOrder;
-    NKikimr::NMiniKQL::TUnboxedValueVector Rows;
     bool IsStream = true;
+    NKikimr::NMiniKQL::TType* MkqlItemType;
+    const TVector<ui32>* ColumnOrder = nullptr;
+    NKikimr::NMiniKQL::TUnboxedValueVector Rows;
+
+    explicit TKqpExecuterTxResult(
+        bool isStream,
+        NKikimr::NMiniKQL::TType* mkqlItemType,
+        const TVector<ui32>* сolumnOrder = nullptr)
+        : IsStream(isStream)
+        , MkqlItemType(mkqlItemType)
+        , ColumnOrder(сolumnOrder)
+    {}
 
     TTypedUnboxedValue GetUV(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& factory);
@@ -151,6 +161,7 @@ private:
     TParamMap Params;
     TUnboxedParamsMap UnboxedData;
     TVector<TVector<TKqpExecuterTxResult>> TxResults;
+    TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
 
 public:
@@ -173,6 +184,7 @@ public:
 
     bool MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding);
     void AddTxResults(TVector<NKikimr::NKqp::TKqpExecuterTxResult>&& results);
+    void AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders);
 
     bool HasResult(ui32 txIndex, ui32 resultIndex) {
         if (txIndex >= TxResults.size())

@@ -68,11 +68,11 @@ struct TKqpTxLocks {
 };
 
 struct TDeferredEffect {
-    std::shared_ptr<const NKqpProto::TKqpPhyTx> PhysicalTx;
+    TKqpPhyTxHolder::TConstPtr PhysicalTx;
     TQueryData::TPtr Params;
 
-    explicit TDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx)
-        : PhysicalTx(std::move(physicalTx)) {}
+    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx)
+        : PhysicalTx(physicalTx) {}
 };
 
 
@@ -98,9 +98,9 @@ public:
 
 private:
     [[nodiscard]]
-    bool Add(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TQueryData::TPtr params) {
-        DeferredEffects.emplace_back(std::move(physicalTx));
-        DeferredEffects.back().Params = std::move(params);
+    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
+        DeferredEffects.emplace_back(physicalTx);
+        DeferredEffects.back().Params = params;
         return true;
     }
 
@@ -135,8 +135,8 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> physicalTx, TQueryData::TPtr params) {
-        return DeferredEffects.Add(std::move(physicalTx), std::move(params));
+    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
+        return DeferredEffects.Add(physicalTx, params);
     }
 
     bool TxHasEffects() const {

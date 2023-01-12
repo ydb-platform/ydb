@@ -526,6 +526,7 @@ private:
             for(auto& tx : txResults) {
                 result.Results.emplace_back(std::move(tx.GetMkql()));
             }
+            Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
             Parameters->AddTxResults(std::move(txResults));
         }
         Promise.SetValue(std::move(result));

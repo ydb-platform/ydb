@@ -45,12 +45,12 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
         ExportTypeToProto(
             MkqlItemType,
             *mkqlResult->MutableType()->MutableList()->MutableItem(),
-            &ColumnOrder);
+            ColumnOrder);
 
         for(auto& row: Rows) {
             ExportValueToProto(
                 MkqlItemType, row, *mkqlResult->MutableValue()->AddList(),
-                &ColumnOrder);
+                ColumnOrder);
         }
 
     } else {
@@ -166,6 +166,10 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(ui32 txIndex, ui32 resultIn
 
 void TQueryData::AddTxResults(TVector<TKqpExecuterTxResult>&& results) {
     TxResults.emplace_back(std::move(results));
+}
+
+void TQueryData::AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders) {
+    TxHolders.emplace_back(std::move(holders));
 }
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {

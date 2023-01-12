@@ -8,6 +8,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/core/kqp/topics/kqp_topics.h>
+#include <ydb/core/kqp/common/kqp_prepared_query.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -57,12 +58,12 @@ void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConf
 class IKqpGateway : public NYql::IKikimrGateway {
 public:
     struct TPhysicalTxData : private TMoveOnly {
-        std::shared_ptr<const NKqpProto::TKqpPhyTx> Body;
+        TKqpPhyTxHolder::TConstPtr Body;
         NKikimr::NKqp::TQueryData::TPtr Params;
 
-        TPhysicalTxData(std::shared_ptr<const NKqpProto::TKqpPhyTx> body, TQueryData::TPtr params)
-            : Body(std::move(body))
-            , Params(std::move(params)) {}
+        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params)
+            : Body(body)
+            , Params(params) {}
     };
 
     struct TKqpSnapshot {

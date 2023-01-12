@@ -85,12 +85,18 @@ private:
     YDB_READONLY_FLAG(Success, false);
     YDB_ACCESSOR_DEF(TString, ErrorMessage);
 public:
-    TObjectOperatorResult(const bool success)
+    explicit TObjectOperatorResult(const bool success)
         : SuccessFlag(success) {
 
     }
 
     TObjectOperatorResult(const TString& errorMessage)
+        : SuccessFlag(false)
+        , ErrorMessage(errorMessage) {
+
+    }
+
+    TObjectOperatorResult(const char* errorMessage)
         : SuccessFlag(false)
         , ErrorMessage(errorMessage) {
 

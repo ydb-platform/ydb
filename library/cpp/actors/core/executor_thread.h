@@ -2,17 +2,18 @@
 
 #include "defs.h"
 #include "event.h"
-#include "actor.h"
-#include "actorsystem.h"
 #include "callstack.h"
 #include "probes.h"
 #include "worker_context.h"
+#include "log_settings.h"
 
 #include <library/cpp/actors/util/datetime.h>
 
 #include <util/system/thread.h>
 
 namespace NActors {
+    class IActor;
+    class TActorSystem;
 
     class TExecutorThread: public ISimpleThread {
     public:
@@ -39,9 +40,13 @@ namespace NActors {
             : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
+        virtual ~TExecutorThread();
+
+        template <ESendingType SendingType = ESendingType::Common>
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
-                               const TActorId& parentId = TActorId());
-        TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId = TActorId());
+                               TActorId parentId = TActorId());
+        template <ESendingType SendingType = ESendingType::Common>
+        TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId = TActorId());
         void UnregisterActor(TMailboxHeader* mailbox, TActorId actorId);
         void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
@@ -50,34 +55,10 @@ namespace NActors {
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
-#ifdef USE_ACTOR_CALLSTACK
-#define TRY_TRACE_CALLSTACK(ev) \
-    do { \
-        (ev)->Callstack = TCallstack::GetTlsCallstack(); \
-        (ev)->Callstack.Trace(); \
-    } while (false) \
-// TRY_TRACE_CALLSTACK
-#else
-#define TRY_TRACE_CALLSTACK(...)
-#endif
+        template <ESendingType SendingType = ESendingType::Common>
+        bool Send(TAutoPtr<IEventHandle> ev);
 
-        bool Send(TAutoPtr<IEventHandle> ev) {
-            TRY_TRACE_CALLSTACK(ev);
-            Ctx.IncrementSentEvents();
-            return ActorSystem->Send(ev);
-        }
-
-        bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) {
-            TRY_TRACE_CALLSTACK(ev);
-            Ctx.IncrementSentEvents();
-            return ActorSystem->SendWithContinuousExecution(ev);
-        }
-
-#undef TRY_TRACE_CALLSTACK
-
-        void GetCurrentStats(TExecutorThreadStats& statsCopy) const {
-            Ctx.GetCurrentStats(statsCopy);
-        }
+        void GetCurrentStats(TExecutorThreadStats& statsCopy) const;
 
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const { return Ctx.WorkerId; }

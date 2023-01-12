@@ -1,5 +1,6 @@
 #include "mailbox.h"
 #include "actorsystem.h"
+#include "actor.h"
 
 #include <library/cpp/actors/util/datetime.h>
 
@@ -162,7 +163,8 @@ namespace NActors {
         return nullptr;
     }
 
-    bool TMailboxTable::SendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool) {
+    template <TMailboxTable::TEPScheduleActivationFunction EPSpecificScheduleActivation>
+    bool TMailboxTable::GenericSendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool) {
         const TActorId& recipient = ev->GetRecipientRewrite();
         const ui32 hint = recipient.Hint();
 
@@ -184,7 +186,7 @@ namespace NActors {
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                        executorPool->ScheduleActivation(hint);
+                        (executorPool->*EPSpecificScheduleActivation)(hint);
                     }
                 }
                     return true;
@@ -208,7 +210,7 @@ namespace NActors {
                     mailbox->QueueWriter.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                        executorPool->ScheduleActivation(hint);
+                        (executorPool->*EPSpecificScheduleActivation)(hint);
                     }
                 }
                     return true;
@@ -220,7 +222,7 @@ namespace NActors {
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                        executorPool->ScheduleActivation(hint);
+                        (executorPool->*EPSpecificScheduleActivation)(hint);
                     }
                 }
                     return true;
@@ -235,7 +237,7 @@ namespace NActors {
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                        executorPool->ScheduleActivation(hint);
+                        (executorPool->*EPSpecificScheduleActivation)(hint);
                     }
                 }
                     return true;
@@ -250,7 +252,7 @@ namespace NActors {
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
-                        executorPool->ScheduleActivation(hint);
+                        (executorPool->*EPSpecificScheduleActivation)(hint);
                     }
                 }
                     return true;
@@ -315,6 +317,12 @@ namespace NActors {
                 Y_FAIL("Unknown mailbox type");
         }
     }
+
+
+    template
+    bool TMailboxTable::GenericSendTo<&IExecutorPool::ScheduleActivation>(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool);
+    template
+    bool TMailboxTable::GenericSendTo<&IExecutorPool::SpecificScheduleActivation>(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool);
 
     void TMailboxTable::ReclaimMailbox(TMailboxType::EType type, ui32 hint, ui64 revolvingCounter) {
         if (hint != 0) {
@@ -547,5 +555,13 @@ namespace NActors {
         AtomicAdd(AllocatedMailboxCount, index - 1);
 
         return ret;
+    }
+
+    bool TMailboxTable::SendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool) {
+        return GenericSendTo<&IExecutorPool::ScheduleActivation>(ev, executorPool);
+    }
+
+    bool TMailboxTable::SpecificSendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool) {
+        return GenericSendTo<&IExecutorPool::SpecificScheduleActivation>(ev, executorPool);
     }
 }

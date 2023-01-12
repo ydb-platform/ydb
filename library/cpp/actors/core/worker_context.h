@@ -2,12 +2,14 @@
 
 #include "defs.h"
 
-#include "actorsystem.h"
+//#include "actorsystem.h"
 #include "event.h"
+#include "executor_pool.h"
 #include "lease.h"
 #include "mailbox.h"
 #include "mon_stats.h"
 
+#include <library/cpp/actors/util/cpumask.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/intrinsics.h>
 #include <library/cpp/actors/util/thread.h>

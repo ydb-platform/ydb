@@ -1,5 +1,6 @@
 #include "actor.h"
 #include "actor_virtual.h"
+#include "actorsystem.h"
 #include "executor_thread.h"
 #include <library/cpp/actors/util/datetime.h>
 
@@ -7,50 +8,12 @@ namespace NActors {
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
     Y_POD_THREAD(TActivationContext*) TlsActivationContext(nullptr);
 
-    bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
-        return Send(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
-    }
-
-    bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const {
-        return ExecutorThread.Send(ev);
-    }
-
-    bool TActorContext::SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
-        return SendWithContinuousExecution(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
-    }
-
-    bool TActorContext::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const {
-        if (TlsThreadContext) {
-            return ExecutorThread.SendWithContinuousExecution(ev);
-        } else {
-            return Send(ev);
-        }
-    }
-
-    void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
-        // fallback to legacy method, do not use it anymore
-        if (auto eh = AfterRegister(SelfId(), owner))
-            sys->SendWithContinuousExecution(eh);
-    }
-
     void IActor::Describe(IOutputStream &out) const noexcept {
         SelfActorId.Out(out);
     }
 
     bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
         return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
-    }
-
-    bool IActor::SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
-        return SelfActorId.SendWithContinuousExecution(recipient, ev, flags, cookie, std::move(traceId));
-    }
-
-    bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
-        return TlsActivationContext->ExecutorThread.Send(ev);
-    }
-
-    bool TActivationContext::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) {
-        return TlsActivationContext->ExecutorThread.SendWithContinuousExecution(ev);
     }
 
     void TActivationContext::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
@@ -63,14 +26,6 @@ namespace NActors {
 
     void TActivationContext::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
         TlsActivationContext->ExecutorThread.Schedule(delta, ev, cookie);
-    }
-
-    bool TActorIdentity::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
-        return TActivationContext::Send(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
-    }
-
-    bool TActorIdentity::SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
-        return TActivationContext::SendWithContinuousExecution(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
     void TActorIdentity::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
@@ -99,10 +54,6 @@ namespace NActors {
         return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId.Hint(), SelfActorId);
     }
 
-    TActorId TActivationContext::Register(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId) {
-        return TlsActivationContext->ExecutorThread.RegisterActor(actor, mailboxType, poolId, parentId);
-    }
-
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
         return TlsActivationContext->ExecutorThread.ActorSystem->InterconnectProxy(destinationNodeId);
     }
@@ -117,10 +68,6 @@ namespace NActors {
 
     double TActivationContext::GetCurrentEventTicksAsSeconds() {
         return NHPTimer::GetSeconds(GetCurrentEventTicks());
-    }
-
-    TActorId TActorContext::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const {
-        return ExecutorThread.RegisterActor(actor, mailboxType, poolId, SelfID);
     }
 
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
@@ -203,4 +150,14 @@ namespace NActors {
         ev->GetBase()->Execute(actor, std::move(ev));
     }
 
+    void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
+        // fallback to legacy method, do not use it anymore
+        if (auto eh = AfterRegister(SelfId(), owner)) {
+            if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
+                sys->Send(eh);
+            } else {
+                sys->Send<ESendingType::SoftContinuousExecution>(eh);
+            }
+        }
+    }
 }

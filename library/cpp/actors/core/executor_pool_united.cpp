@@ -1,5 +1,7 @@
 #include "executor_pool_united.h"
+#include "executor_pool_united_workers.h"
 
+#include "actor.h"
 #include "balancer.h"
 #include "cpu_state.h"
 #include "executor_thread.h"
@@ -869,8 +871,9 @@ namespace NActors {
         void Schedule(TMonotonic, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
         void Schedule(TDuration, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
         bool Send(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
-        bool SendWithContinuousExecution(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
+        bool SpecificSend(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
         void ScheduleActivation(ui32) override { Y_FAIL(); }
+        void SpecificScheduleActivation(ui32) override { Y_FAIL(); }
         void ScheduleActivationEx(ui32, ui64) override { Y_FAIL(); }
         TActorId Register(IActor*, TMailboxType::EType, ui64, const TActorId&) override { Y_FAIL(); }
         TActorId Register(IActor*, TMailboxHeader*, ui32, const TActorId&) override { Y_FAIL(); }
@@ -1411,6 +1414,10 @@ namespace NActors {
 
     inline void TUnitedExecutorPool::ScheduleActivation(ui32 activation) {
         TUnitedExecutorPool::ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
+    }
+
+    inline void TUnitedExecutorPool::SpecificScheduleActivation(ui32 activation) {
+        TUnitedExecutorPool::ScheduleActivation(activation);
     }
 
     inline void TUnitedExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) {

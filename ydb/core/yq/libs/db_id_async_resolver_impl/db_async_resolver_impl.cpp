@@ -1,5 +1,7 @@
 #include "db_async_resolver_impl.h"
 
+#include <library/cpp/actors/core/actorsystem.h>
+
 namespace NYq {
 using namespace NThreading;
 

@@ -5,6 +5,7 @@
 #include <ydb/core/protos/services.pb.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/actors/core/actor.h>
 
 namespace NYql {
 namespace NDq {

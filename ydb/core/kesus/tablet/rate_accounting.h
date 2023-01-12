@@ -4,6 +4,7 @@
 #include <ydb/core/util/time_series_vec.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/noncopyable.h>

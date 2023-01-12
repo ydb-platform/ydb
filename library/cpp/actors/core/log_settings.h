@@ -1,6 +1,5 @@
 #pragma once
 
-#include "actor.h"
 #include "log_iface.h"
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>

@@ -115,13 +115,10 @@ namespace NActors {
         return false;
     }
 
-    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
-        return this->GenericSend< &IExecutorPool::Send>(ev);
-    }
-
-    bool TActorSystem::SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const {
-        return this->GenericSend<&IExecutorPool::SendWithContinuousExecution>(ev);
-    }
+    template
+    bool TActorSystem::GenericSend<&IExecutorPool::Send>(TAutoPtr<IEventHandle> ev) const;
+    template
+    bool TActorSystem::GenericSend<&IExecutorPool::SpecificSend>(TAutoPtr<IEventHandle> ev) const;
 
     bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie) const {
         return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags, cookie));
@@ -145,13 +142,6 @@ namespace NActors {
 
         TTicketLock::TGuard guard(&ScheduleLock);
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
-    }
-
-    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool, ui64 revolvingCounter,
-                                    const TActorId& parentId) {
-        Y_VERIFY(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
-                 (ui32)executorPool, (ui32)ExecutorPoolCount);
-        return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
     }
 
     NThreading::TFuture<THolder<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType,

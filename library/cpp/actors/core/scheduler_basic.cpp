@@ -1,5 +1,6 @@
 #include "scheduler_basic.h"
 #include "scheduler_queue.h"
+#include "actor.h"
 
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/thread.h>

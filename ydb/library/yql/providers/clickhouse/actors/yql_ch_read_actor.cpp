@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/clickhouse/proto/range.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
+#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>

@@ -1,4 +1,5 @@
 #include "executor_pool_basic.h"
+#include "actor.h"
 #include "probes.h"
 #include "mailbox.h"
 #include <library/cpp/actors/util/affinity.h>

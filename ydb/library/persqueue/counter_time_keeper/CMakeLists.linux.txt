@@ -12,6 +12,7 @@ target_link_libraries(library-persqueue-counter_time_keeper PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-lwtrace-protos
   cpp-actors-protos
   ydb-core-protos
 )

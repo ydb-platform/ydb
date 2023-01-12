@@ -1,6 +1,6 @@
 #pragma once
 
-#include "actorsystem.h"
+#include "executor_pool.h"
 #include "executor_thread.h"
 #include "scheduler_queue.h"
 #include <library/cpp/actors/util/affinity.h>
@@ -8,6 +8,8 @@
 #include <library/cpp/actors/util/threadparkpad.h>
 
 namespace NActors {
+    class TActorSystem;
+
     class TExecutorPoolBaseMailboxed: public IExecutorPool {
     protected:
         TActorSystem* ActorSystem;
@@ -25,7 +27,7 @@ namespace NActors {
         void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) override;
         TMailboxHeader *ResolveMailbox(ui32 hint) override;
         bool Send(TAutoPtr<IEventHandle>& ev) override;
-        bool SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) override;
+        bool SpecificSend(TAutoPtr<IEventHandle>& ev) override;
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) override;
         bool Cleanup() override;
@@ -43,6 +45,7 @@ namespace NActors {
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, ui32 maxActivityType);
         ~TExecutorPoolBase();
         void ScheduleActivation(ui32 activation) override;
+        void SpecificScheduleActivation(ui32 activation) override;
         TAffinity* Affinity() const override;
         ui32 GetThreads() const override;
     };

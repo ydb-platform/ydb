@@ -1,12 +1,13 @@
 #pragma once
 
-#include "actorsystem.h"
 #include "harmonizer.h"
-#include "executor_pool_basic.h"
-#include "executor_pool_io.h"
-#include "executor_pool_united.h"
+#include "executor_pool.h"
+#include "executor_pool_united_workers.h"
+#include "balancer.h"
 
 namespace NActors {
+    struct TActorSystemSetup;
+
     class TCpuManager : public TNonCopyable {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
@@ -14,23 +15,9 @@ namespace NActors {
         THolder<IBalancer> Balancer;
         THolder<IHarmonizer> Harmonizer;
         TCpuManagerConfig Config;
+
     public:
-        explicit TCpuManager(THolder<TActorSystemSetup>& setup)
-            : ExecutorPoolCount(setup->GetExecutorsCount())
-            , Balancer(setup->Balancer)
-            , Config(setup->CpuManager)
-        {
-            if (setup->Executors) { // Explicit mode w/o united pools
-                Executors.Reset(setup->Executors.Release());
-                for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
-                    IExecutorPool* pool = Executors[excIdx].Get();
-                    Y_VERIFY(dynamic_cast<TUnitedExecutorPool*>(pool) == nullptr,
-                        "united executor pool is prohibited in explicit mode of NActors::TCpuManager");
-                }
-            } else {
-                Setup();
-            }
-        }
+        explicit TCpuManager(THolder<TActorSystemSetup>& setup);
 
         void Setup();
         void PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem);

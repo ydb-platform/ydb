@@ -1,5 +1,6 @@
 #include "dnsresolver.h"
 
+#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/threading/queue/mpsc_htswap.h>
 #include <util/network/pair.h>

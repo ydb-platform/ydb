@@ -1,5 +1,7 @@
 #pragma once
 
+#include "scheduler_cookie.h"
+
 #include <library/cpp/actors/util/queue_chunk.h>
 
 namespace NActors {

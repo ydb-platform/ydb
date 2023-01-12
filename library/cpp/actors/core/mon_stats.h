@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "actor.h"
+//#include "actor.h"
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <util/system/hp_timer.h>
 

@@ -2,13 +2,15 @@
 
 #include "defs.h"
 
-#include "actor.h"
 #include "balancer.h"
 #include "config.h"
 #include "event.h"
+#include "executor_pool.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "mon_stats.h"
+#include "cpu_manager.h"
+#include "executor_thread.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/actors/util/ticket_lock.h>
@@ -18,9 +20,9 @@
 #include <util/system/mutex.h>
 
 namespace NActors {
+    class IActor;
     class TActorSystem;
     class TCpuManager;
-    class IExecutorPool;
     struct TWorkerContext;
 
     inline TActorId MakeInterconnectProxyId(ui32 destNodeId) {
@@ -44,138 +46,6 @@ namespace NActors {
         class TReader;
         struct TQueueType;
     }
-
-    class IExecutorPool : TNonCopyable {
-    public:
-        const ui32 PoolId;
-
-        TAtomic ActorRegistrations;
-        TAtomic DestroyedActors;
-
-        IExecutorPool(ui32 poolId)
-            : PoolId(poolId)
-            , ActorRegistrations(0)
-            , DestroyedActors(0)
-        {
-        }
-
-        virtual ~IExecutorPool() {
-        }
-
-        // for workers
-        virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
-        virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
-        virtual TMailboxHeader *ResolveMailbox(ui32 hint) = 0;
-
-        /**
-         * Schedule one-shot event that will be send at given time point in the future.
-         *
-         * @param deadline   the wallclock time point in future when event must be send
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
-         * @param workerId   index of thread which will perform event dispatching
-         */
-        virtual void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
-
-        /**
-         * Schedule one-shot event that will be send at given time point in the future.
-         *
-         * @param deadline   the monotonic time point in future when event must be send
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
-         * @param workerId   index of thread which will perform event dispatching
-         */
-        virtual void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
-
-        /**
-         * Schedule one-shot event that will be send after given delay.
-         *
-         * @param delta      the time from now to delay event sending
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
-         * @param workerId   index of thread which will perform event dispatching
-         */
-        virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
-
-        // for actorsystem
-        virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
-        virtual bool SendWithContinuousExecution(TAutoPtr<IEventHandle>& ev) = 0;
-        virtual void ScheduleActivation(ui32 activation) = 0;
-        virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0;
-        virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0;
-        virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0;
-
-        // lifecycle stuff
-        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
-        virtual void Start() = 0;
-        virtual void PrepareStop() = 0;
-        virtual void Shutdown() = 0;
-        virtual bool Cleanup() = 0;
-
-        virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-            // TODO: make pure virtual and override everywhere
-            Y_UNUSED(poolStats);
-            Y_UNUSED(statsCopy);
-        }
-
-        virtual TString GetName() const {
-            return TString();
-        }
-
-        virtual ui32 GetThreads() const {
-            return 1;
-        }
-
-        virtual i16 GetPriority() const {
-            return 0;
-        }
-
-        // generic
-        virtual TAffinity* Affinity() const = 0;
-
-        virtual void SetRealTimeMode() const {}
-
-        virtual ui32 GetThreadCount() const {
-            return 1;
-        };
-
-        virtual void SetThreadCount(ui32 threads) {
-            Y_UNUSED(threads);
-        }
-
-        virtual i16 GetBlockingThreadCount() const {
-            return 0;
-        }
-
-        virtual i16 GetDefaultThreadCount() const {
-            return 1;
-        }
-
-        virtual i16 GetMinThreadCount() const {
-            return 1;
-        }
-
-        virtual i16 GetMaxThreadCount() const {
-            return 1;
-
-        }
-
-        virtual bool IsThreadBeingStopped(i16 threadIdx) const {
-            Y_UNUSED(threadIdx);
-            return false;
-        }
-
-        virtual double GetThreadConsumedUs(i16 threadIdx) {
-            Y_UNUSED(threadIdx);
-            return 0.0;
-        }
-
-        virtual double GetThreadBookedUs(i16 threadIdx) {
-            Y_UNUSED(threadIdx);
-            return 0.0;
-        }
-
-    };
 
     // could be proxy to in-pool schedulers (for NUMA-aware executors)
     class ISchedulerThread : TNonCopyable {
@@ -302,6 +172,7 @@ namespace NActors {
         void Stop();
         void Cleanup();
 
+        template <ESendingType SendingType = ESendingType::Common>
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,
                           ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
 
@@ -312,8 +183,9 @@ namespace NActors {
         bool GenericSend(TAutoPtr<IEventHandle> ev) const;
 
     public:
+        template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev) const;
-        bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
+
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
         /**

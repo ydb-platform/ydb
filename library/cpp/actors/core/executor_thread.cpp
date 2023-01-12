@@ -1,5 +1,6 @@
 #include "executor_thread.h"
 #include "actorsystem.h"
+#include "actor.h"
 #include "callstack.h"
 #include "mailbox.h"
 #include "event.h"
@@ -51,16 +52,9 @@ namespace NActors {
             &Ctx.WorkerStats);
     }
 
-    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId, const TActorId& parentId) {
-        if (poolId == Max<ui32>())
-            return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId ? parentId : CurrentRecipient);
-        else
-            return ActorSystem->Register(actor, mailboxType, poolId, ++RevolvingWriteCounter, parentId ? parentId : CurrentRecipient);
-    }
 
-    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) {
-        return Ctx.Executor->Register(actor, mailbox, hint, parentId ? parentId : CurrentRecipient);
-    }
+    TExecutorThread::~TExecutorThread()
+    { }
 
     void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
         Y_VERIFY_DEBUG(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
@@ -573,4 +567,9 @@ namespace NActors {
             }
         }
     }
+
+    void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) const {
+        Ctx.GetCurrentStats(statsCopy);
+    }
+
 }

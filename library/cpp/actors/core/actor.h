@@ -1,6 +1,8 @@
 #pragma once
 
+#include "actorsystem.h"
 #include "event.h"
+#include "executor_thread.h"
 #include "monotonic.h"
 
 #include <library/cpp/actors/util/local_process_key.h>
@@ -25,12 +27,15 @@ namespace NActors {
     struct TThreadContext {
         IExecutorPool *Pool = nullptr;
         ui32 WaitedActivation = 0;
-        bool IsSendingWithContinuousExecution = false; // set the value to true to work in any sendings
+        ESendingType SendingType = ESendingType::Common;
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext;
 
     struct TActorContext;
+    struct TActivationContext;
+
+    extern Y_POD_THREAD(TActivationContext*) TlsActivationContext;
 
     struct TActivationContext {
     public:
@@ -47,8 +52,11 @@ namespace NActors {
         }
 
     public:
+        template <ESendingType SendingType = ESendingType::Common>
         static bool Send(TAutoPtr<IEventHandle> ev);
-        static bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev);
+
+        template <ESendingType SendingType = ESendingType::Common>
+        static bool Send(std::unique_ptr<IEventHandle> &&ev);
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -58,6 +66,9 @@ namespace NActors {
          * @param cookie     cookie that will be piggybacked with event
          */
         static void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
+        static void Schedule(TInstant deadline, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) {
+            return Schedule(deadline, TAutoPtr<IEventHandle>(ev.release()), cookie);
+        }
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -67,6 +78,9 @@ namespace NActors {
          * @param cookie     cookie that will be piggybacked with event
          */
         static void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
+        static void Schedule(TMonotonic deadline, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) {
+            return Schedule(deadline, TAutoPtr<IEventHandle>(ev.release()), cookie);
+        }
 
         /**
          * Schedule one-shot event that will be send after given delay.
@@ -76,12 +90,16 @@ namespace NActors {
          * @param cookie     cookie that will be piggybacked with event
          */
         static void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
+        static void Schedule(TDuration delta, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) {
+            return Schedule(delta, TAutoPtr<IEventHandle>(ev.release()), cookie);
+        }
 
         static TInstant Now();
         static TMonotonic Monotonic();
         NLog::TSettings* LoggerSettings() const;
 
         // register new actor in ActorSystem on new fresh mailbox.
+        template <ESendingType SendingType = ESendingType::Common>
         static TActorId Register(IActor* actor, TActorId parentId = TActorId(), TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>());
 
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
@@ -110,15 +128,21 @@ namespace NActors {
         {
         }
 
+        template <ESendingType SendingType = ESendingType::Common>
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        template <ESendingType SendingType = ESendingType::Common>
         bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
-            return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
+            return Send<SendingType>(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
+        template <ESendingType SendingType = ESendingType::Common>
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return Send<SendingType>(recipient, ev.release(), flags, cookie, std::move(traceId));
+        }
+        template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev) const;
-        bool SendWithContinuousExecution(TAutoPtr<IEventHandle> ev) const;
-        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
-        bool SendWithContinuousExecution(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
-            return SendWithContinuousExecution(recipient, ev.Release(), flags, cookie, std::move(traceId));
+        template <ESendingType SendingType = ESendingType::Common>
+        bool Send(std::unique_ptr<IEventHandle> &&ev) const {
+            Send<SendingType>(TAutoPtr<IEventHandle>(ev.release()));
         }
 
         TInstant Now() const;
@@ -156,6 +180,7 @@ namespace NActors {
         }
 
         // register new actor in ActorSystem on new fresh mailbox.
+        template <ESendingType SendingType = ESendingType::Common>
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const;
 
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
@@ -168,8 +193,6 @@ namespace NActors {
         std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
     };
 
-    extern Y_POD_THREAD(TActivationContext*) TlsActivationContext;
-
     struct TActorIdentity: public TActorId {
         explicit TActorIdentity(TActorId actorId)
             : TActorId(actorId)
@@ -180,8 +203,8 @@ namespace NActors {
             *this = TActorIdentity(actorId);
         }
 
+        template <ESendingType SendingType = ESendingType::Common>
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
-        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
@@ -193,7 +216,6 @@ namespace NActors {
     public:
         virtual void Describe(IOutputStream&) const noexcept = 0;
         virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
-        virtual bool SendWithContinuousExecution(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -465,8 +487,11 @@ namespace NActors {
     protected:
         void Describe(IOutputStream&) const noexcept override;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
+        }
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return Send(recipient, ev.release(), flags, cookie, std::move(traceId));
         }
 
         template <class TEvent, class ... TEventArgs>
@@ -474,14 +499,15 @@ namespace NActors {
             return Send(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
         }
 
-        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
-        bool SendWithContinuousExecution(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
-            return SendWithContinuousExecution(recipient, ev.Release(), flags, cookie, std::move(traceId));
+        template <ESendingType SendingType>
+        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        template <ESendingType SendingType>
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
-
-        template <class TEvent, class ... TEventArgs>
-        bool SendWithContinuousExecution(TActorId recipient, TEventArgs&& ... args) const {
-            return SendWithContinuousExecution(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
+        template <ESendingType SendingType>
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+            return Send(recipient, ev.release(), flags, cookie, std::move(traceId));
         }
 
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
@@ -689,6 +715,128 @@ namespace NActors {
             return true;
         }
     };
+
+
+    template <ESendingType SendingType>
+    bool TExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
+#ifdef USE_ACTOR_CALLSTACK
+        do {
+            (ev)->Callstack = TCallstack::GetTlsCallstack();
+            (ev)->Callstack.Trace();
+        } while (false)
+#endif
+        Ctx.IncrementSentEvents();
+        return ActorSystem->Send<SendingType>(ev);
+    }
+
+    template <ESendingType SendingType>
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+            TActorId parentId)
+    {
+        if (!parentId) {
+            parentId = CurrentRecipient;
+        }
+        if (poolId == Max<ui32>()) {
+            if constexpr (SendingType == ESendingType::Common) {
+                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+            } else if (!TlsThreadContext) {
+                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+            } else {
+                ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+                TActorId id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                TlsThreadContext->SendingType = previousType;
+                return id;
+            }
+        } else {
+            return ActorSystem->Register<SendingType>(actor, mailboxType, poolId, ++RevolvingWriteCounter, parentId);
+        }
+    }
+
+    template <ESendingType SendingType>
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId) {
+        if (!parentId) {
+            parentId = CurrentRecipient;
+        }
+        if constexpr (SendingType == ESendingType::Common) {
+            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
+        } else if (!TlsActivationContext) {
+            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
+        } else {
+            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            TActorId id = Ctx.Executor->Register(actor, mailbox, hint, parentId);
+            TlsThreadContext->SendingType = previousType;
+            return id;
+        }
+    }
+
+
+    template <ESendingType SendingType>
+    bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
+        return TlsActivationContext->ExecutorThread.Send<SendingType>(ev);
+    }
+
+    template <ESendingType SendingType>
+    bool TActivationContext::Send(std::unique_ptr<IEventHandle> &&ev) {
+        return TlsActivationContext->ExecutorThread.Send<SendingType>(ev.release());
+    }
+
+    template <ESendingType SendingType>
+    bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return Send<SendingType>(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
+    }
+
+    template <ESendingType SendingType>
+    bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const {
+        return ExecutorThread.Send<SendingType>(ev);
+    }
+
+    template <ESendingType SendingType>
+    TActorId TActivationContext::Register(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId) {
+        return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, parentId);
+    }
+
+    template <ESendingType SendingType>
+    TActorId TActorContext::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const {
+        return ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfID);
+    }
+
+    template <ESendingType SendingType>
+    bool TActorIdentity::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return TActivationContext::Send<SendingType>(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
+    }
+
+
+    template <ESendingType SendingType>
+    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+                        ui64 revolvingCounter, const TActorId& parentId) {
+        Y_VERIFY(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
+                (ui32)executorPool, (ui32)ExecutorPoolCount);
+        if constexpr (SendingType == ESendingType::Common) {
+            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        } else if (!TlsThreadContext) {
+            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        } else {
+            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            TActorId id = CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+            TlsThreadContext->SendingType = previousType;
+            return id;
+        }
+    }
+
+    template <ESendingType SendingType>
+    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
+        if constexpr (SendingType == ESendingType::Common) {
+            return this->GenericSend< &IExecutorPool::Send>(ev);
+        } else if (!TlsThreadContext) {
+            return this->GenericSend< &IExecutorPool::Send>(ev);
+        } else {
+            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+            TlsThreadContext->SendingType = previousType;
+            return isSent;
+        }
+    }
+
 }
 
 template <>

@@ -1,8 +1,29 @@
 #include "cpu_manager.h"
 #include "probes.h"
 
+#include "executor_pool_basic.h"
+#include "executor_pool_io.h"
+#include "executor_pool_united.h"
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
+
+    TCpuManager::TCpuManager(THolder<TActorSystemSetup>& setup)
+        : ExecutorPoolCount(setup->GetExecutorsCount())
+        , Balancer(setup->Balancer)
+        , Config(setup->CpuManager)
+    {
+        if (setup->Executors) { // Explicit mode w/o united pools
+            Executors.Reset(setup->Executors.Release());
+            for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
+                IExecutorPool* pool = Executors[excIdx].Get();
+                Y_VERIFY(dynamic_cast<TUnitedExecutorPool*>(pool) == nullptr,
+                    "united executor pool is prohibited in explicit mode of NActors::TCpuManager");
+            }
+        } else {
+            Setup();
+        }
+    }
 
     void TCpuManager::Setup() {
         TAffinity available;

@@ -61,6 +61,11 @@ namespace NActors {
         return Sprintf("<%" PRIu64 ":%" PRIu64 ">", scopeId.first, scopeId.second);
     }
 
+    enum class ESendingType {
+        Common,
+        SoftContinuousExecution,
+    };
+
 }
 
 template<>

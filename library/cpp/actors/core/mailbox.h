@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "event.h"
-#include "actor.h"
+#include "executor_pool.h"
 #include "mailbox_queue_simple.h"
 #include "mailbox_queue_revolving.h"
 #include <library/cpp/actors/util/unordered_cache.h>
@@ -322,7 +322,15 @@ namespace NActors {
             return RelaxedLoad(&AllocatedMailboxCount);
         }
 
+    private:
+        typedef void (IExecutorPool::*TEPScheduleActivationFunction)(ui32 activation);
+
+        template <TEPScheduleActivationFunction EPSpecificScheduleActivation>
+        bool GenericSendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool);
+
+    public:
         bool SendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool);
+        bool SpecificSendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool);
 
         struct TSimpleMailbox: public TMailboxHeader {
             // 4 bytes - state

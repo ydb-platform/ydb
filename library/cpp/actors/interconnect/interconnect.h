@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <util/generic/map.h>
 #include <util/network/address.h>
@@ -136,8 +137,8 @@ namespace NActors {
     /**
      * Name service which can be paired with external discovery service.
      * Copies information from setup on the start (table may be empty).
-     * Handles TEvNodesInfo to change list of known nodes. 
-     * 
+     * Handles TEvNodesInfo to change list of known nodes.
+     *
      * If PendingPeriod is not zero, wait for unknown nodeId
      */
 
@@ -168,7 +169,7 @@ namespace NActors {
 
     /**
      * Creates an actor that resolves host/port and replies with either:
-     * 
+     *
      * - TEvAddressInfo on success
      * - TEvResolveError on errors
      */

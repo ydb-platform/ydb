@@ -80,10 +80,17 @@ void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathI
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
-void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
+void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId) {
     Y_VERIFY(!ss->LockedPaths.contains(pathId));
 
-    LockedPaths.emplace(pathId, lockTxId);
+    LockedPaths.emplace(pathId, InvalidTxId); // will be removed on UnDo()
+}
+
+void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
+    Y_VERIFY(ss->LockedPaths.contains(pathId));
+    Y_VERIFY(ss->LockedPaths.at(pathId) == lockTxId);
+
+    LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -136,8 +143,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     }
 
     while (LockedPaths) {
-        const auto& [id, _] = LockedPaths.top();
-        ss->LockedPaths.erase(id);
+        const auto& [id, lockTxId] = LockedPaths.top();
+        if (lockTxId != InvalidTxId) {
+            ss->LockedPaths[id] = lockTxId;
+        } else {
+            ss->LockedPaths.erase(id);
+        }
         LockedPaths.pop();
     }
 

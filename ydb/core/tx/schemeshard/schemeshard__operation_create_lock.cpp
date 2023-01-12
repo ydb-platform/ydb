@@ -173,7 +173,7 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, pathId);
-        context.MemChanges.GrabNewLongLock(context.SS, pathId, OperationId.GetTxId());
+        context.MemChanges.GrabNewLongLock(context.SS, pathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(pathId);

@@ -50,6 +50,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistLongLock(db, lockTxId, pId);
     }
 
+    for (const auto& pId : Unlocks) {
+        ss->PersistUnLock(db, pId);
+    }
+
     for (const auto& shardIdx : Shards) {
         const TShardInfo& shardInfo = ss->ShardInfos.at(shardIdx);
         const TPathId& pId = shardInfo.PathId;

@@ -63,7 +63,9 @@ public:
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId);
-    void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
+
+    void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId);
+    void GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
 
     void UnDo(TSchemeShard* ss);
 };

@@ -2,23 +2,74 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <ydb/core/base/subdomain.h>
+#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+
+namespace NKikimr::NSchemeShard {
 
 namespace {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
+class TPropose: public TSubOperationState {
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TDropLock TPropose"
+            << " opId# " << OperationId << " ";
+    }
+
+public:
+    explicit TPropose(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxDropLock);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        const auto step = TStepId(ev->Get()->StepId);
+
+        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+            << ": step# " << step);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+
+        return true;
+    }
+
+private:
+    const TOperationId OperationId;
+
+}; // TPropose
 
 class TDropLock: public TSubOperation {
-    static TTxState::ETxState NextState() {
-        return TTxState::Done;
+    const bool ProposeToCoordinator;
+
+    TTxState::ETxState NextState() const {
+        if (ProposeToCoordinator) {
+            return TTxState::Propose;
+        } else {
+            return TTxState::Done;
+        }
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
+            return NextState();
+        case TTxState::Propose:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -27,7 +78,8 @@ class TDropLock: public TSubOperation {
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
+        case TTxState::Propose:
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -36,27 +88,31 @@ class TDropLock: public TSubOperation {
     }
 
 public:
-    using TSubOperation::TSubOperation;
+    explicit TDropLock(TOperationId id, const TTxTransaction& tx)
+        : TSubOperation(id, tx)
+        , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
+    {
+    }
+
+    explicit TDropLock(TOperationId id, TTxState::ETxState state)
+        : TSubOperation(id, state)
+        , ProposeToCoordinator(AppData()->FeatureFlags.GetEnableChangefeedInitialScan())
+    {
+    }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TTabletId ssId = context.SS->SelfTabletId();
+        const auto& workingDir = Transaction.GetWorkingDir();
+        const auto& op = Transaction.GetLockConfig();
 
-        auto schema = Transaction.GetLockConfig();
+        LOG_N("TDropLock Propose"
+            << ": opId# " << OperationId
+            << ", path# " << workingDir << "/" << op.GetName());
 
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = schema.GetName();
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropLock Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
-
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
-
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        const auto parentPath = TPath::Resolve(workingDir, context.SS);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check();
+            const auto checks = parentPath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -72,9 +128,9 @@ public:
             }
         }
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        const auto dstPath = parentPath.Child(op.GetName());
         {
-            NSchemeShard::TPath::TChecker checks = dstPath.Check();
+            const auto checks = dstPath.Check();
             checks
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -93,25 +149,21 @@ public:
         }
 
         const auto& lockguard = Transaction.GetLockGuard();
-        auto lockOwner = TTxId(lockguard.GetOwnerTxId());
+        const auto lockOwner = TTxId(lockguard.GetOwnerTxId());
         if (!lockguard.HasOwnerTxId() || !lockOwner) {
-            TString explain = TStringBuilder()
-                << "lock owner tx id unset"
-                << " path: " << dstPath.PathString();
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, explain);
+            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, TStringBuilder() << "path checks failed"
+                << ", lock owner tx id not set"
+                << ", path: " << dstPath.PathString());
             return result;
         }
 
-        TPathElement::TPtr pathEl = dstPath.Base();
-        TPathId pathId = pathEl->PathId;
+        const auto pathId = dstPath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
         if (!dstPath.LockedBy()) {
-            TString explain = TStringBuilder()
-                << "dst path fail checks"
+            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already unlocked"
-                << ", path: " << dstPath.PathString();
-            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, explain);
+                << ", path: " << dstPath.PathString());
             return result;
         }
 
@@ -121,28 +173,34 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, pathId);
+        context.MemChanges.GrabLongLock(context.SS, pathId, lockOwner);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
-        pathEl->LastTxId = OperationId.GetTxId();
-        pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
+        context.DbChanges.PersistPath(pathId);
+        context.DbChanges.PersistUnLock(pathId);
+        context.DbChanges.PersistTxState(OperationId);
 
+        Y_VERIFY(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropLock, pathId);
-        txState.State = TTxState::Done;
-        context.SS->PersistTxState(db, OperationId);
+        txState.State = ProposeToCoordinator ? TTxState::Propose : TTxState::Done;
 
-        if (pathEl->IsTable()) {
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
-            for (auto splitTx: table->GetSplitOpsInFlight()) {
-                context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
-            }
+        dstPath.Base()->LastTxId = OperationId.GetTxId();
+        dstPath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
+
+        if (dstPath.Base()->IsTable()) {
+            auto table = context.SS->Tables.at(pathId);
             Y_VERIFY_DEBUG(table->GetSplitOpsInFlight().size() == 0);
+
+            for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
+                context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
+            }
         }
 
         auto lockedBy = context.SS->LockedPaths[pathId];
         Y_VERIFY(lockedBy == lockOwner);
         context.SS->LockedPaths.erase(pathId);
-
-        context.SS->PersistUnLock(db, pathId);
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
 
         context.OnComplete.ActivateTx(OperationId);
@@ -151,24 +209,21 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropLock");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TDropLock AbortPropose"
+            << ": opId# " << OperationId);
+        context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Add(1);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropLock AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
-
+        LOG_N("TDropLock AbortUnsafe"
+            << ": opId# " << OperationId
+            << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };
 
-}
-
-namespace NKikimr::NSchemeShard {
+} // anonymous namespace
 
 ISubOperationBase::TPtr DropLock(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropLock>(id, tx);

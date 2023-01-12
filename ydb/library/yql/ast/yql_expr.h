@@ -236,31 +236,6 @@ public:
         return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null || kind == ETypeAnnotationKind::Pg;
     }
 
-    bool CanBeEmpty() const {
-        switch (Kind) {
-            case ETypeAnnotationKind::Pg:
-            case ETypeAnnotationKind::Optional:
-            case ETypeAnnotationKind::List:
-            case ETypeAnnotationKind::Dict:
-                return true;
-            default:
-                break;
-        }
-        return false;
-    }
-
-    bool IsNullOrEmpty() const {
-        switch (Kind) {
-            case ETypeAnnotationKind::Null:
-            case ETypeAnnotationKind::EmptyList:
-            case ETypeAnnotationKind::EmptyDict:
-                return true;
-            default:
-                break;
-        }
-        return false;
-    }
-
     bool IsBlockOrScalar() const {
         auto kind = GetKind();
         return kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::Scalar;

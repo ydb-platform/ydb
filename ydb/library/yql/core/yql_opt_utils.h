@@ -83,7 +83,6 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
 template <bool Bool>
 TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
-TExprNode::TPtr MakeEmptyContainer(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 
 constexpr std::initializer_list<std::string_view> SkippableCallables = {"Unordered", "AssumeSorted", "AssumeUnique", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce"};
 

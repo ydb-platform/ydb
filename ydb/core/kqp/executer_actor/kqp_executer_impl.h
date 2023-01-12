@@ -181,7 +181,8 @@ protected:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
-        LOG_D("Got execution state from compute actor: " << computeActor
+        LOG_D("ActorState: " << CurrentStateFuncName()
+            << ", got execution state from compute actor: " << computeActor
             << ", task: " << taskId
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
@@ -1015,6 +1016,17 @@ protected:
     }
 
 protected:
+    virtual TString CurrentStateFuncName() const {
+        const auto& func = this->CurrentStateFunc();
+        if (func == &TKqpExecuterBase::ZombieState) {
+            return "ZombieState";
+        } else if (func == &TKqpExecuterBase::ReadyState) {
+            return "ReadyState";
+        } else {
+            return "unknown state";
+        }
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
         sb << "[KqpExecuter], type: " << (ExecType == EExecType::Data ? "Data" : "Scan")

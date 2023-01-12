@@ -155,13 +155,15 @@ public:
         for (const auto& x : ShardStates) {
             if (x.second.State != TShardState::EState::Finished) {
                 notFinished++;
-                LOG_D("Datashard " << x.first << " not finished yet: " << ToString(x.second.State));
+                LOG_D("ActorState: " << CurrentStateFuncName()
+                    << ", datashard " << x.first << " not finished yet: " << ToString(x.second.State));
             }
         }
         for (const auto& x : TopicTabletStates) {
             if (x.second.State != TShardState::EState::Finished) {
                 ++notFinished;
-                LOG_D("TopicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
+                LOG_D("ActorState: " << CurrentStateFuncName()
+                    << ", topicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
             }
         }
         if (notFinished == 0 && TBase::CheckExecutionComplete()) {
@@ -169,7 +171,8 @@ public:
         }
 
         if (IsDebugLogEnabled()) {
-            auto sb = TStringBuilder() << "Waiting for " << PendingComputeActors.size() << " compute actor(s) and "
+            auto sb = TStringBuilder() << "ActorState: " << CurrentStateFuncName()
+                << ", waiting for " << PendingComputeActors.size() << " compute actor(s) and "
                 << notFinished << " datashard(s): ";
             for (const auto& shardId : PendingComputeActors) {
                 sb << "CA " << shardId.first << ", ";
@@ -270,6 +273,21 @@ public:
     }
 
 private:
+    TString CurrentStateFuncName() const override {
+        const auto& func = CurrentStateFunc();
+        if (func == &TThis::PrepareState) {
+            return "PrepareState";
+        } else if (func == &TThis::ExecuteState) {
+            return "ExecuteState";
+        } else if (func == &TThis::WaitSnapshotState) {
+            return "WaitSnapshotState";
+        } else if (func == &TThis::WaitResolveState) {
+            return "WaitResolveState";
+        } else {
+            return TBase::CurrentStateFuncName();
+        }
+    }
+
     STATEFN(PrepareState) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -459,8 +477,13 @@ private:
     void CancelProposal(ui64 exceptShardId) {
         for (auto& [shardId, state] : ShardStates) {
             if (shardId != exceptShardId &&
-                (state.State == TShardState::EState::Preparing || state.State == TShardState::EState::Prepared))
+                (state.State == TShardState::EState::Preparing
+                 || state.State == TShardState::EState::Prepared
+                 || (state.State == TShardState::EState::Executing && ImmediateTx)))
             {
+                ui64 id = shardId;
+                LOG_D("Send CancelTransactionProposal to shard: " << id);
+
                 state.State = TShardState::EState::Finished;
 
                 YQL_ENSURE(!state.DatashardState->Follower);
@@ -746,7 +769,7 @@ private:
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandleComputeStats);
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
-                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 hFunc(TEvents::TEvWakeup, HandleTimeout);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -784,6 +807,13 @@ private:
                 return;
             }
         }
+    }
+
+    void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        if (ImmediateTx) {
+            CancelProposal(0);
+        }
+        TBase::HandleAbortExecution(ev);
     }
 
     void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -1216,7 +1246,8 @@ private:
 
         for (auto& shardTask : shardTasks) {
             auto& task = TasksGraph.GetTask(shardTask.second);
-            LOG_D("Stage " << stageInfo.Id << " create datashard task: " << shardTask.second
+            LOG_D("ActorState: " << CurrentStateFuncName()
+                << ", stage: " << stageInfo.Id << " create datashard task: " << shardTask.second
                 << ", shard: " << shardTask.first
                 << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
         }
@@ -1318,7 +1349,8 @@ private:
         auto locksCount = dataTransaction.GetKqpTransaction().GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
 
-        LOG_D("Executing KQP transaction on shard: " << shardId
+        LOG_D("State: " << CurrentStateFuncName()
+            << ", Executing KQP transaction on shard: " << shardId
             << ", tasks: [" << JoinStrings(shardState.TaskIds.begin(), shardState.TaskIds.end(), ",") << "]"
             << ", lockTxId: " << lockTxId
             << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString());
@@ -1765,14 +1797,16 @@ private:
         ExecuteTasks();
 
         if (ImmediateTx) {
-            LOG_T("Immediate tx, become ExecuteState");
+            LOG_D("ActorState: " << CurrentStateFuncName()
+                << ", immediate tx, become ExecuteState");
             Become(&TKqpDataExecuter::ExecuteState);
             if (ExecuterStateSpan) {
                 ExecuterStateSpan.End();
                 ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
             }
         } else {
-            LOG_T("Not immediate tx, become PrepareState");
+            LOG_D("ActorState: " << CurrentStateFuncName()
+                << ", not immediate tx, become PrepareState");
             Become(&TKqpDataExecuter::PrepareState);
             if (ExecuterStateSpan) {
                 ExecuterStateSpan.End();

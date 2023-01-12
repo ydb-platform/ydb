@@ -21,7 +21,6 @@ static void CheckStatusAfterTimeout(TSession& session, const TString& query, con
     const TInstant start = TInstant::Now();
     while (true) {
         auto result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        Cerr << "STATUS: " << result.GetStatus() << " " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
         if (result.GetStatus() == EStatus::SUCCESS) {
             break;
@@ -300,8 +299,14 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, true, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(QueryClientTimeout) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(QueryClientTimeout, WithMvcc) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetEnableKqpImmediateEffects(WithMvcc);
+
+        TKikimrRunner kikimr(serverSettings);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -313,7 +318,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 2);
 
         auto result = session.ExecuteDataQuery(
             query,

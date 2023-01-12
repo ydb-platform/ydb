@@ -13,32 +13,22 @@ target_include_directories(restricted-boost-spirit INTERFACE
 )
 target_link_libraries(restricted-boost-spirit INTERFACE
   contrib-libs-cxxsupp
-  yutil
-  restricted-boost-algorithm
   restricted-boost-array
   restricted-boost-assert
-  restricted-boost-concept_check
   restricted-boost-config
   restricted-boost-core
   restricted-boost-endian
-  restricted-boost-filesystem
-  restricted-boost-foreach
   restricted-boost-function
   restricted-boost-function_types
   restricted-boost-fusion
   restricted-boost-integer
   restricted-boost-io
-  restricted-boost-iostreams
   restricted-boost-iterator
-  restricted-boost-lexical_cast
-  restricted-boost-locale
-  restricted-boost-math
   restricted-boost-move
   restricted-boost-mpl
   restricted-boost-optional
   restricted-boost-phoenix
   restricted-boost-pool
-  restricted-boost-predef
   restricted-boost-preprocessor
   restricted-boost-proto
   restricted-boost-range
@@ -47,7 +37,6 @@ target_link_libraries(restricted-boost-spirit INTERFACE
   restricted-boost-static_assert
   restricted-boost-thread
   restricted-boost-throw_exception
-  restricted-boost-tti
   restricted-boost-type_traits
   restricted-boost-typeof
   restricted-boost-unordered

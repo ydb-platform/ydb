@@ -4685,8 +4685,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
                    << " for unknown txId " <<  txId
                    << " message# " << ev->Get()->Record.DebugString());
 
-        THolder<TEvDataShard::TEvSchemaChangedResult> event =
-            THolder(new TEvDataShard::TEvSchemaChangedResult(ui64(txId)));
+        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(ui64(txId));
         ctx.Send(ackTo, event.Release());
         return;
     }
@@ -4698,8 +4697,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
                    << " for unknown part in txId: " <<  txId
                    << " message# " << ev->Get()->Record.DebugString());
 
-        THolder<TEvDataShard::TEvSchemaChangedResult> event =
-            THolder(new TEvDataShard::TEvSchemaChangedResult(ui64(txId)));
+        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(ui64(txId));
         ctx.Send(ackTo, event.Release());
         return;
     }
@@ -4779,9 +4777,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, 
     if (IsReadOnlyMode) {
         ui64 txId = ev->Get()->Record.GetTxId();
         ui64 selfId = TabletID();
-        THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> result =
-                THolder(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                    NKikimrScheme::StatusReadOnly, txId, selfId, "Schema is in ReadOnly mode"));
+        auto result = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusReadOnly, txId, selfId, "Schema is in ReadOnly mode");
 
         ctx.Send(ev->Sender, result.Release());
 

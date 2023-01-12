@@ -283,8 +283,7 @@ void NTableState::AckAllSchemaChanges(const TOperationId &operationId, TTxState 
                         << ", datashard: " << tabletId
                         << ", at schemeshard: " << ssId);
 
-        THolder<TEvDataShard::TEvSchemaChangedResult> event =
-                THolder(new TEvDataShard::TEvSchemaChangedResult());
+        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(operationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event), ui64(shardIdx.GetLocalId()));

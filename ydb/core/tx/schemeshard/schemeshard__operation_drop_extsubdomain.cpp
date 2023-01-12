@@ -258,13 +258,13 @@ class TDropExtSubdomain: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::DeleteExternalShards:
-            return THolder(new TDeleteExternalShards(OperationId));
+            return MakeHolder<TDeleteExternalShards>(OperationId);
         case TTxState::DeletePrivateShards:
-            return THolder(new TDeletePrivateShards(OperationId));
+            return MakeHolder<TDeletePrivateShards>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

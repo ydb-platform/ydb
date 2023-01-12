@@ -58,13 +58,13 @@ class TCreateSubDomain: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new NSubDomainState::TConfigureParts(OperationId));
+            return MakeHolder<NSubDomainState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new NSubDomainState::TPropose(OperationId));
+            return MakeHolder<NSubDomainState::TPropose>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

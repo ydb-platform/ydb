@@ -338,9 +338,7 @@ public:
                             << ", opId: " << OperationId
                             << ", at schemeshard: " << context.SS->TabletID());
 
-            THolder<TEvCancel> event =
-                THolder(new TEvCancel(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId));
-
+            auto event = MakeHolder<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 
@@ -490,17 +488,17 @@ class TBackupRestoreOperationBase: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new TConfigurePart<TKind>(TxType, OperationId));
+            return MakeHolder<TConfigurePart<TKind>>(TxType, OperationId);
         case TTxState::Propose:
-            return THolder(new TPropose<TKind>(TxType, OperationId));
+            return MakeHolder<TPropose<TKind>>(TxType, OperationId);
         case TTxState::ProposedWaitParts:
-            return THolder(new TProposedWaitParts<TKind>(TxType, OperationId));
+            return MakeHolder<TProposedWaitParts<TKind>>(TxType, OperationId);
         case TTxState::Aborting:
-            return THolder(new TAborting<TKind, TEvCancel>(TxType, OperationId));
+            return MakeHolder<TAborting<TKind, TEvCancel>>(TxType, OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

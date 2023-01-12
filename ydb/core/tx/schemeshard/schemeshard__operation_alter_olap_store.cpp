@@ -557,13 +557,13 @@ class TAlterOlapStore: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureParts(OperationId));
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return THolder(new TProposedWaitParts(OperationId));
+            return MakeHolder<TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

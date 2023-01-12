@@ -262,13 +262,13 @@ class TDropTableIndex: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId, AfterPropose));
+            return MakeHolder<TPropose>(OperationId, AfterPropose);
         case TTxState::WaitShadowPathPublication:
-            return THolder(new TWaitRenamedPathPublication(OperationId));
+            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
-            return THolder(new TDeletePathBarrier(OperationId));
+            return MakeHolder<TDeletePathBarrier>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

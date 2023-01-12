@@ -138,9 +138,9 @@ class TDropSolomon: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedDeleteParts:
-            return THolder(new TDeleteParts(OperationId));
+            return MakeHolder<TDeleteParts>(OperationId);
         default:
             return nullptr;
         }

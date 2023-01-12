@@ -142,13 +142,13 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            THolder<TEvDataShard::TEvProposeTransaction> event =
-                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
-                                                        context.SS->TabletID(),
-                                                        context.Ctx.SelfID,
-                                                        ui64(OperationId.GetTxId()),
-                                                        txBody,
-                                                        context.SS->SelectProcessingParams(txState->TargetPathId)));
+            auto event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+                NKikimrTxDataShard::TX_KIND_SCHEME,
+                context.SS->TabletID(),
+                context.Ctx.SelfID,
+                ui64(OperationId.GetTxId()),
+                txBody,
+                context.SS->SelectProcessingParams(txState->TargetPathId));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }

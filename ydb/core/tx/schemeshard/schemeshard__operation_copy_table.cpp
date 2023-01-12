@@ -101,14 +101,14 @@ public:
             TString txBody;
             Y_PROTOBUF_SUPPRESS_NODISCARD newShardTx.SerializeToString(&txBody);
 
-            THolder<TEvDataShard::TEvProposeTransaction> dstEvent =
-                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
-                                                    context.SS->TabletID(),
-                                                    subDomainPathId,
-                                                    context.Ctx.SelfID,
-                                                    ui64(OperationId.GetTxId()),
-                                                    txBody,
-                                                    context.SS->SelectProcessingParams(txState->TargetPathId)));
+            auto dstEvent = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+                NKikimrTxDataShard::TX_KIND_SCHEME,
+                context.SS->TabletID(),
+                subDomainPathId,
+                context.Ctx.SelfID,
+                ui64(OperationId.GetTxId()),
+                txBody,
+                context.SS->SelectProcessingParams(txState->TargetPathId));
             context.OnComplete.BindMsgToPipe(OperationId, dstDatashardId, dstShardIdx, dstEvent.Release());
 
             // Send "SendParts" transaction to source datashard
@@ -121,13 +121,13 @@ public:
             oldShardTx.SetReadOnly(true);
             txBody.clear();
             Y_PROTOBUF_SUPPRESS_NODISCARD oldShardTx.SerializeToString(&txBody);
-            THolder<TEvDataShard::TEvProposeTransaction> srcEvent =
-                THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
-                                                    context.SS->TabletID(),
-                                                    context.Ctx.SelfID,
-                                                    ui64(OperationId.GetTxId()),
-                                                    txBody,
-                                                    context.SS->SelectProcessingParams(txState->TargetPathId)));
+            auto srcEvent = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+                NKikimrTxDataShard::TX_KIND_SCHEME,
+                context.SS->TabletID(),
+                context.Ctx.SelfID,
+                ui64(OperationId.GetTxId()),
+                txBody,
+                context.SS->SelectProcessingParams(txState->TargetPathId));
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
         }
 
@@ -266,15 +266,15 @@ class TCopyTable: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureParts(OperationId));
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return THolder(new NTableState::TProposedWaitParts(OperationId));
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

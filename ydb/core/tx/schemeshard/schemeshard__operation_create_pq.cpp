@@ -243,13 +243,13 @@ class TCreatePQ: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new NPQState::TConfigureParts(OperationId));
+            return MakeHolder<NPQState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new NPQState::TPropose(OperationId));
+            return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

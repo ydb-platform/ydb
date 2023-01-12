@@ -34,13 +34,13 @@ class TAlterBlockStoreVolume: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new NBSVState::TConfigureParts(OperationId));
+            return MakeHolder<NBSVState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new NBSVState::TPropose(OperationId));
+            return MakeHolder<NBSVState::TPropose>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

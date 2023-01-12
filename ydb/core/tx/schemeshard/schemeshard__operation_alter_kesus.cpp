@@ -229,9 +229,9 @@ class TAlterKesus: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureParts(OperationId));
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         default:
             return nullptr;
         }

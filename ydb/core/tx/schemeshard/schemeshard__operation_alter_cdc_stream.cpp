@@ -88,9 +88,9 @@ class TAlterCdcStream: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -259,13 +259,13 @@ class TAlterCdcStreamAtTable: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return THolder(new TConfigurePartsAtTable(OperationId));
+            return MakeHolder<TConfigurePartsAtTable>(OperationId);
         case TTxState::Propose:
-            return THolder(new NCdcStreamState::TProposeAtTable(OperationId));
+            return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
         case TTxState::ProposedWaitParts:
-            return THolder(new NTableState::TProposedWaitParts(OperationId));
+            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return THolder(new TDone(OperationId));
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

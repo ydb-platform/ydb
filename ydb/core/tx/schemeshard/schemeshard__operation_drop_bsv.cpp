@@ -159,9 +159,9 @@ class TDropBlockStoreVolume: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::DeleteParts:
-            return THolder(new TDeleteParts(OperationId));
+            return MakeHolder<TDeleteParts>(OperationId);
         case TTxState::Propose:
-            return THolder(new TPropose(OperationId));
+            return MakeHolder<TPropose>(OperationId);
         default:
             return nullptr;
         }

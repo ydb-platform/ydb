@@ -1081,23 +1081,23 @@ class TUpgradeSubDomain: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
-            return THolder(new TWait(OperationId));
+            return MakeHolder<TWait>(OperationId);
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new TConfigure(OperationId));
+            return MakeHolder<TConfigure>(OperationId);
         case TTxState::PublishTenantReadOnly:
-            return THolder(new TPublishTenantReadOnly(OperationId));
+            return MakeHolder<TPublishTenantReadOnly>(OperationId);
         case TTxState::PublishGlobal:
-            return THolder(new TPublishGlobal(OperationId, UpgradeSubDomainDecision));
+            return MakeHolder<TPublishGlobal>(OperationId, UpgradeSubDomainDecision);
         case TTxState::RewriteOwners:
-            return THolder(new TRewriteOwner(OperationId));
+            return MakeHolder<TRewriteOwner>(OperationId);
         case TTxState::PublishTenant:
-            return THolder(new TPublishTenant(OperationId));
+            return MakeHolder<TPublishTenant>(OperationId);
         case TTxState::DoneMigrateTree:
-            return THolder(new TDoneMigrateTree(OperationId));
+            return MakeHolder<TDoneMigrateTree>(OperationId);
         case TTxState::DeleteTenantSS:
-            return THolder(new TDeleteTenantSS(OperationId));
+            return MakeHolder<TDeleteTenantSS>(OperationId);
         default:
             return nullptr;
         }
@@ -1347,7 +1347,7 @@ class TUpgradeSubDomainDecision: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Done:
-            return THolder(new TDecisionDone(OperationId));
+            return MakeHolder<TDecisionDone>(OperationId);
         default:
             return nullptr;
         }

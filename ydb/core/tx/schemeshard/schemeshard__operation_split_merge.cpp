@@ -148,11 +148,12 @@ public:
             splitDescForShard.AddDestinationRanges()->CopyFrom(rangeDescr);
 
             Y_VERIFY(txState->SplitDescription);
-            THolder<TEvDataShard::TEvInitSplitMergeDestination> event =
-                THolder(new TEvDataShard::TEvInitSplitMergeDestination(ui64(OperationId.GetTxId()), context.SS->TabletID(),
-                                                                   subDomainPathId,
-                                                                   splitDescForShard,
-                                                                   context.SS->SelectProcessingParams(txState->TargetPathId)));
+            auto event = MakeHolder<TEvDataShard::TEvInitSplitMergeDestination>(
+                ui64(OperationId.GetTxId()),
+                context.SS->TabletID(),
+                subDomainPathId,
+                splitDescForShard,
+                context.SS->SelectProcessingParams(txState->TargetPathId));
 
             // Add a new-style CreateTable with correct per-shard settings
             // WARNING: legacy datashard will ignore this and use the schema
@@ -344,8 +345,7 @@ public:
                         << " splitOpId# " << OperationId
                         << " at tablet " << context.SS->TabletID());
 
-            THolder<TEvDataShard::TEvSplit> event =
-                THolder(new TEvDataShard::TEvSplit(ui64(OperationId.GetTxId())));
+            auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
             Y_VERIFY(txState->SplitDescription);
             event->Record.MutableSplitDescription()->CopyFrom(*txState->SplitDescription);
@@ -503,13 +503,13 @@ class TSplitMerge: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::CreateParts:
-            return THolder(new TCreateParts(OperationId));
+            return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return THolder(new TConfigureDestination(OperationId));
+            return MakeHolder<TConfigureDestination>(OperationId);
         case TTxState::TransferData:
-            return THolder(new TTransferData(OperationId));
+            return MakeHolder<TTransferData>(OperationId);
         case TTxState::NotifyPartitioningChanged:
-            return THolder(new TNotifySrc(OperationId));
+            return MakeHolder<TNotifySrc>(OperationId);
         default:
             return nullptr;
         }

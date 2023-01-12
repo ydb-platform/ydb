@@ -1010,12 +1010,12 @@ NUdf::TCastResultOptions CastResult(const TTupleExprType* source, const TTupleEx
     for (size_t i = 0U; i < std::max(sItems.size(), tItems.size()); ++i) {
         if (i >= sItems.size()) {
             if constexpr (AllOrAnyElements) {
-                if (!(tItems[i]->IsNullOrEmpty() || tItems[i]->IsCanBeEmpty()))
+                if (!(tItems[i]->IsNullOrEmpty() || tItems[i]->CanBeEmpty()))
                     return Strong ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::MayFail;
             }
         } else if (i >= tItems.size()) {
             if (!sItems[i]->IsNullOrEmpty()) {
-                if (sItems[i]->IsCanBeEmpty()) {
+                if (sItems[i]->CanBeEmpty()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
                     if constexpr (Strong && AllOrAnyElements) {
@@ -1046,12 +1046,12 @@ NUdf::TCastResultOptions CastResult(const TStructExprType* source, const TStruct
     for (const auto& field : fields) {
         if (!field.second.front()) {
             if constexpr (AllOrAnyMembers) {
-                if (!(field.second.back()->IsNullOrEmpty() || field.second.back()->IsCanBeEmpty()))
+                if (!(field.second.back()->IsNullOrEmpty() || field.second.back()->CanBeEmpty()))
                     return  Strong ? NUdf::ECastOptions::Impossible : NUdf::ECastOptions::MayFail;
             }
         } else if (!field.second.back()) {
             if (!field.second.front()->IsNullOrEmpty()) {
-                if (field.second.front()->IsCanBeEmpty()) {
+                if (field.second.front()->CanBeEmpty()) {
                     result |= Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
                 } else {
                     if constexpr (Strong && AllOrAnyMembers) {
@@ -1505,7 +1505,7 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
             default: break;
         }
     } else if (source->IsNullOrEmpty()) {
-        if (target->IsNullOrEmpty() || target->IsCanBeEmpty())
+        if (target->IsNullOrEmpty() || target->CanBeEmpty())
             return NUdf::ECastOptions::Complete;
         else if constexpr (Strong)
             return NUdf::ECastOptions::Impossible;
@@ -1515,9 +1515,9 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
         if (source->IsNullOrEmpty())
             return NUdf::ECastOptions::Complete;
         else if constexpr (Strong)
-            return source->IsCanBeEmpty() ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::Impossible;
+            return source->CanBeEmpty() ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::Impossible;
         else
-            return source->IsCanBeEmpty() ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::AnywayLoseData;
+            return source->CanBeEmpty() ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::AnywayLoseData;
     } else if (tKind == ETypeAnnotationKind::Optional) {
         return ReduceCastResult<Strong>(CastResult<Strong>(source, target->Cast<TOptionalExprType>()->GetItemType()));
     } else if (sKind == ETypeAnnotationKind::Optional) {

@@ -236,7 +236,7 @@ public:
         return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null || kind == ETypeAnnotationKind::Pg;
     }
 
-    bool IsCanBeEmpty() const {
+    bool CanBeEmpty() const {
         switch (Kind) {
             case ETypeAnnotationKind::Pg:
             case ETypeAnnotationKind::Optional:
@@ -259,11 +259,6 @@ public:
                 break;
         }
         return false;
-    }
-
-    bool IsContainer() const {
-        auto kind = GetKind();
-        return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null || kind == ETypeAnnotationKind::Pg;
     }
 
     bool IsBlockOrScalar() const {

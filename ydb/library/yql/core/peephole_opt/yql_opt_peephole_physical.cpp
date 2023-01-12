@@ -1275,7 +1275,7 @@ TExprNode::TPtr ExpandCastOverOptionalTuple(const TExprNode::TPtr& input, TExprC
         TExprNode::TListType items;
         items.reserve(sourceItems.size() - targetItems.size());
         for (auto i = targetItems.size(); i < sourceItems.size(); ++i) {
-            if (sourceItems[i]->IsCanBeEmpty()) {
+            if (sourceItems[i]->CanBeEmpty()) {
                 items.emplace_back(ctx.Builder(input->Pos())
                     .Callable(sourceItems[i]->GetKind() == ETypeAnnotationKind::Optional ? "Exists" : "HasItems")
                         .Callable(0, "Nth")
@@ -1386,7 +1386,7 @@ TExprNode::TPtr ExpandCastOverOptionalStruct(const TExprNode::TPtr& input, TExpr
         TExprNode::TListType items;
         items.reserve(sourceNames.size());
         for (const auto& skipped : sourceNames) {
-            if (skipped.second->IsCanBeEmpty()) {
+            if (skipped.second->CanBeEmpty()) {
                 items.emplace_back(ctx.Builder(input->Pos())
                     .Callable(skipped.second->GetKind() == ETypeAnnotationKind::Optional ? "Exists" : "HasItems")
                         .Callable(0, "Member")
@@ -1562,7 +1562,7 @@ TExprNode::TPtr ExpandCast(const TExprNode::TPtr& input, TExprContext& ctx) {
                     case ETypeAnnotationKind::Variant:  return ExpandCastOverOptionalVariant<Strong>(input, ctx);
                     default: break;
                 }
-            } else if (targetItemType->IsNullOrEmpty() && source->IsCanBeEmpty()) {
+            } else if (targetItemType->IsNullOrEmpty() && source->CanBeEmpty()) {
                 YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " to " << *targetItemType << " as check exists.";
                 return ctx.Builder(input->Pos())
                     .Callable("If")
@@ -1603,7 +1603,7 @@ TExprNode::TPtr ExpandCast(const TExprNode::TPtr& input, TExprContext& ctx) {
                 .Seal().Build();
         }
     } else if (source->IsNullOrEmpty()) {
-        if (target->IsNullOrEmpty() || target->IsCanBeEmpty()) {
+        if (target->IsNullOrEmpty() || target->CanBeEmpty()) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as empty container.";
             return MakeEmptyContainer(input->Head().Pos(), *target, ctx);
         }

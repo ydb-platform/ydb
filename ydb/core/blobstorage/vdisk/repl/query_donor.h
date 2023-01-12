@@ -82,7 +82,7 @@ namespace NKikimr {
                 const ui64 index = item.GetCookie();
                 Y_VERIFY_DEBUG(UnresolvedItems[index]);
 
-                if (item.GetStatus() == NKikimrProto::OK || item.GetStatus() == NKikimrProto::ERROR) {
+                if (item.GetStatus() == NKikimrProto::OK /* || item.GetStatus() == NKikimrProto::ERROR */) {
                     auto *res = result.MutableResult(index);
 
                     std::optional<ui64> cookie = res->HasCookie() ? std::make_optional(res->GetCookie()) : std::nullopt;

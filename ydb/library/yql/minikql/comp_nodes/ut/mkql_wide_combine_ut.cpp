@@ -922,13 +922,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 8 / very long value 7 / very long value 6");
+        UNBOXED_VALUE_STR_EQUAL(item, "key one");
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item, "very long value 2 / key two");
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item, "very long key one");
         UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "key one");
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 8 / very long value 7 / very long value 6");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

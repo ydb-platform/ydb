@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/datetime/base.h>
 
@@ -25,6 +26,24 @@ TShardIterator(const TString& streamName, const TString& streamArn,
                 ui32 shardId, ui64 readTimestamp, ui64 sequenceNumber,
                 NKikimrPQ::TYdsShardIterator::ETopicKind kind = NKikimrPQ::TYdsShardIterator::KIND_COMMON)
     : Expired{false}, Valid{true} {
+    using TPartitionOffset =
+            std::invoke_result_t<decltype(&NKikimrClient::TCmdReadResult_TResult::GetOffset),
+                                 NKikimrClient::TCmdReadResult_TResult>;
+    using TYdsSeqNo =
+            std::invoke_result_t<decltype(&NKikimrPQ::TYdsShardIterator::GetSequenceNumber),
+                                 NKikimrPQ::TYdsShardIterator>;
+    static_assert(std::is_same<TPartitionOffset, TYdsSeqNo>::value,
+                  "Types of partition message offset and yds record sequence number should match");
+
+    using TCreationTimestamp =
+            std::invoke_result_t<decltype(&NKikimrClient::TCmdReadResult_TResult::GetCreateTimestampMS),
+                                 NKikimrClient::TCmdReadResult_TResult>;
+    using TYdsTimestamp =
+            std::invoke_result_t<decltype(&NKikimrPQ::TYdsShardIterator::GetReadTimestampMs),
+                                 NKikimrPQ::TYdsShardIterator>;
+    static_assert(std::is_same<TCreationTimestamp, TYdsTimestamp>::value,
+                  "Types of partition message creation timestamp and yds record timestamp should match");
+
     Proto.SetStreamName(streamName);
     Proto.SetStreamArn(streamArn);
     Proto.SetShardId(shardId);

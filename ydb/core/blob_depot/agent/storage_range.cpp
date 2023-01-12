@@ -17,16 +17,6 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                if (Request.Decommission) {
-                    Y_VERIFY(Agent.ProxyId);
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "forwarding TEvRange", (VirtualGroupId, Agent.VirtualGroupId),
-                        (TabletId, Agent.TabletId), (Msg, Request), (ProxyId, Agent.ProxyId));
-                    const bool sent = TActivationContext::Send(Event->Forward(Agent.ProxyId));
-                    Y_VERIFY(sent);
-                    delete this;
-                    return;
-                }
-
                 BDEV_QUERY(BDEV21, "TEvRange_new", (U.TabletId, Request.TabletId), (U.From, Request.From), (U.To, Request.To),
                     (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IndexOnly, Request.IsIndexOnly));
 

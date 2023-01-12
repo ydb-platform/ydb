@@ -22,15 +22,6 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                if (Request.Decommission) {
-                    // just forward this message to underlying proxy
-                    Y_VERIFY(Agent.ProxyId);
-                    const bool sent = TActivationContext::Send(Event->Forward(Agent.ProxyId));
-                    Y_VERIFY(sent);
-                    delete this;
-                    return;
-                }
-
                 if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Request.QuerySize; ++i) {
                         const auto& q = Request.Queries[i];

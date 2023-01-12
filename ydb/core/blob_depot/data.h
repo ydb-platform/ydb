@@ -357,7 +357,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvResolve::TPtr Ev; // original resolve request
             ui32 NumRangesInFlight;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs = {};
-            TIntervalMap<TLogoBlobID> Errors = {};
+            std::vector<std::tuple<TLogoBlobID, TLogoBlobID>> Errors = {};
         };
         ui64 LastRangeId = 0;
         THashMap<ui64, TResolveDecommitContext> ResolveDecommitContexts;
@@ -389,8 +389,8 @@ namespace NKikimr::NBlobDepot {
         TData(TBlobDepot *self);
         ~TData();
 
-        template<typename TCallback>
-        bool ScanRange(const TKey *begin, const TKey *end, TScanFlags flags, TCallback&& callback) {
+        template<typename TCallback, typename T>
+        bool ScanRange(const T& begin, const T& end, TScanFlags flags, TCallback&& callback) {
             auto beginIt = !begin ? Data.begin()
                 : flags & EScanFlags::INCLUDE_BEGIN ? Data.lower_bound(*begin)
                 : Data.upper_bound(*begin);

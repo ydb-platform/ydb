@@ -261,7 +261,14 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        Self->Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
+        if (ev->Get()->Status == NKikimrProto::OK) {
+            Self->Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
+        } else {
+            STLOG(PRI_INFO, BLOB_DEPOT, BDT75, "TEvAssimilate failed", (Id, Self->GetLogId()),
+                (Status, ev->Get()->Status), (ErrorReason, ev->Get()->ErrorReason));
+
+            Action();
+        }
     }
 
     void TAssimilator::ScanDataForCopying() {
@@ -296,8 +303,9 @@ namespace NKikimr::NBlobDepot {
         };
 
         // FIXME: reentrable as it shares mailbox with the BlobDepot tablet itself
-        TData::TKey lastScannedKey = LastScannedKey ? TData::TKey(*LastScannedKey) : TData::TKey();
-        const bool finished = Self->Data->ScanRange(LastScannedKey ? &lastScannedKey : nullptr, nullptr, {}, callback);
+        const bool finished = Self->Data->ScanRange(
+            LastScannedKey ? std::make_optional<TData::TKey>(*LastScannedKey) : std::nullopt,
+            std::optional<TData::TKey>(), {}, callback);
 
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT56, "ScanDataForCopying done", (Id, Self->GetLogId()),
             (LastScannedKey, LastScannedKey), (ScanQ.size, scanQ.size()), (EntriesToProcess, EntriesToProcess),

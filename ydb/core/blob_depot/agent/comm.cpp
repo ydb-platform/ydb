@@ -141,6 +141,8 @@ namespace NKikimr::NBlobDepot {
             kind.IdAllocInFlight = false;
         }
 
+        ClearPendingEventQueue("BlobDepot tablet disconnected");
+
         IsConnected = false;
     }
 

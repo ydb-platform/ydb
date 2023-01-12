@@ -184,6 +184,7 @@ namespace NKikimr::NBsController {
     private:
         class TTxUpdateGroup : public TTransactionBase<TBlobStorageController> {
             TVirtualGroupSetupMachine *Machine;
+            std::optional<TConfigState> State;
 
         public:
             TTxUpdateGroup(TVirtualGroupSetupMachine *machine)
@@ -209,6 +210,21 @@ namespace NKikimr::NBsController {
                 if (group->SeenOperational) {
                     row.Update<T::SeenOperational>(true);
                 }
+                if (group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING &&
+                        group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
+                    State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                    TGroupInfo *group = State->Groups.FindForUpdate(Machine->GroupId);
+                    Y_VERIFY(group);
+                    group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
+                    group->ContentChanged = true;
+                    TString error;
+                    if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update",
+                            (VirtualGroupId, Machine->GroupId), (Error, error));
+                        State->Rollback();
+                        State.reset();
+                    }
+                }
                 return true;
             }
 
@@ -216,6 +232,9 @@ namespace NKikimr::NBsController {
                 TGroupInfo *group = GetGroup(false);
                 Y_VERIFY(group->VirtualGroupSetupMachineId == Machine->SelfId());
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, Machine->SelfId(), {}, nullptr, 0));
+                if (State) {
+                    State->ApplyConfigUpdates();
+                }
             }
 
         private:
@@ -224,40 +243,6 @@ namespace NKikimr::NBsController {
                 Y_VERIFY(group->CommitInProgress != commitInProgress);
                 group->CommitInProgress = commitInProgress;
                 return group;
-            }
-        };
-
-        class TTxCommitDecommit : public TTransactionBase<TBlobStorageController> {
-            TVirtualGroupSetupMachine *Machine;
-            std::optional<TConfigState> State;
-
-        public:
-            TTxCommitDecommit(TVirtualGroupSetupMachine *machine)
-                : TTransactionBase(machine->Self)
-                , Machine(machine)
-            {}
-
-            bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
-                State->CheckConsistency();
-                TGroupInfo *group = State->Groups.FindForUpdate(Machine->GroupId);
-                if (group && group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
-                    group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
-                    group->ContentChanged = true;
-                }
-                State->CheckConsistency();
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
-                    State->Rollback();
-                    State.reset();
-                }
-                return true;
-            }
-
-            void Complete(const TActorContext&) override {
-                if (State) {
-                    State->ApplyConfigUpdates();
-                }
             }
         };
 
@@ -436,11 +421,6 @@ namespace NKikimr::NBsController {
             group->BlobDepotId = BlobDepotTabletId;
             group->NeedAlter = false; // race-check
             Self->Execute(new TTxUpdateGroup(this));
-
-            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
-                Self->Execute(new TTxCommitDecommit(this));
-            }
-
             NTabletPipe::CloseAndForgetClient(SelfId(), BlobDepotPipeId);
         }
 

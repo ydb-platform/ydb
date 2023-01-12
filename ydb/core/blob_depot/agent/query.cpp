@@ -13,26 +13,50 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandleStorageProxy(TAutoPtr<IEventHandle> ev) {
+        bool doForward = false;
+
+        switch (ev->GetTypeRewrite()) {
+            case TEvBlobStorage::EvGet:
+                doForward = ev->Get<TEvBlobStorage::TEvGet>()->Decommission;
+                break;
+
+            case TEvBlobStorage::EvRange:
+                doForward = ev->Get<TEvBlobStorage::TEvRange>()->Decommission;
+                break;
+        }
+
+        if (doForward) {
+            TActivationContext::Send(ev->Forward(ProxyId));
+            return;
+        }
+
         std::unique_ptr<IEventHandle> p(ev.Release());
 
-        if (!IsConnected || !PendingEventQ.empty()) {
-            size_t size = Max<size_t>();
+        size_t size = 0;
+
+        if (!IsConnected) { // check for queue overflow
             switch (p->GetTypeRewrite()) {
 #define XX(TYPE) case TEvBlobStorage::TYPE: size = p->Get<TEvBlobStorage::T##TYPE>()->CalculateSize(); break;
                 ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
             }
-            Y_VERIFY(size != Max<size_t>());
 
             if (size + PendingEventBytes > MaxPendingEventBytes) {
                 CreateQuery<0>(std::move(p))->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
-            } else {
-                PendingEventBytes += size;
-                PendingEventQ.push_back(TPendingEvent{std::move(p), size, TMonotonic::Now() + EventExpirationTime});
+                return;
             }
+        }
+
+        if (!IsConnected || !PendingEventQ.empty()) {
+            PendingEventBytes += size;
+            PendingEventQ.push_back(TPendingEvent{std::move(p), size, TMonotonic::Now() + EventExpirationTime});
         } else {
             ProcessStorageEvent(std::move(p));
         }
+    }
+
+    void TBlobDepotAgent::HandleAssimilate(TAutoPtr<IEventHandle> ev) {
+        TActivationContext::Send(ev->Forward(ProxyId));
     }
 
     void TBlobDepotAgent::HandlePendingEvent() {
@@ -42,12 +66,27 @@ namespace NKikimr::NBlobDepot {
             Y_VERIFY(PendingEventBytes >= item.Size);
             PendingEventBytes -= item.Size;
             PendingEventQ.pop_front();
-            Y_VERIFY(!PendingEventQ.empty() || !PendingEventBytes);
-
-            if (TDuration::Seconds(timer.Passed()) >= TDuration::MicroSeconds(100)) {
-                TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
+            if (!PendingEventQ.empty() && TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
+                if (!ProcessPendingEventInFlight) {
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessPendingEvent, 0, SelfId(), {}, nullptr, 0));
+                    ProcessPendingEventInFlight = true;
+                }
                 break;
             }
+        }
+    }
+
+    void TBlobDepotAgent::HandleProcessPendingEvent() {
+        Y_VERIFY(ProcessPendingEventInFlight);
+        ProcessPendingEventInFlight = false;
+        HandlePendingEvent();
+    }
+
+    void TBlobDepotAgent::ClearPendingEventQueue(const TString& reason) {
+        for (auto& item : std::exchange(PendingEventQ, {})) {
+            Y_VERIFY(PendingEventBytes >= item.Size);
+            PendingEventBytes -= item.Size;
+            CreateQuery<0>(std::move(item.Event))->EndWithError(NKikimrProto::ERROR, reason);
         }
     }
 
@@ -63,13 +102,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandlePendingEventQueueWatchdog() {
-        const TMonotonic now = TActivationContext::Monotonic();
-        std::deque<TPendingEvent>::iterator it;
-        for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
-            CreateQuery<0>(std::move(it->Event))->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
-            PendingEventBytes -= it->Size;
+        if (!IsConnected) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            std::deque<TPendingEvent>::iterator it;
+            for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
+                CreateQuery<0>(std::move(it->Event))->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
+                PendingEventBytes -= it->Size;
+            }
+            PendingEventQ.erase(PendingEventQ.begin(), it);
         }
-        PendingEventQ.erase(PendingEventQ.begin(), it);
 
         TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvPendingEventQueueWatchdog, 0,
             SelfId(), {}, nullptr, 0));

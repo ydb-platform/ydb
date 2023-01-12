@@ -35,5 +35,4 @@ target_sources(core-blob_depot-agent PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_collect_garbage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_status.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_patch.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_assimilate.cpp
 )

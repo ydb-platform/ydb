@@ -7,13 +7,6 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
-    namespace {
-        TLogoBlobID BlobIdUpperBound(TLogoBlobID id) {
-            return TLogoBlobID(id.TabletID(), id.Generation(), id.Step(), id.Channel(), TLogoBlobID::MaxBlobSize,
-                id.Cookie(), TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
-        }
-    }
-
     TData::TResolveResultAccumulator::TResolveResultAccumulator(TEventHandle<TEvBlobDepot::TEvResolve>& ev)
         : Sender(ev.Sender)
         , Recipient(ev.Recipient)
@@ -91,7 +84,7 @@ namespace NKikimr::NBlobDepot {
     class TData::TTxResolve : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         std::unique_ptr<TEvBlobDepot::TEvResolve::THandle> Request;
         std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
-        TIntervalMap<TLogoBlobID> Errors;
+        std::vector<std::tuple<TLogoBlobID, TLogoBlobID>> Errors;
 
         bool KeysLoaded = false;
         int ItemIndex = 0;
@@ -108,7 +101,7 @@ namespace NKikimr::NBlobDepot {
 
         TTxResolve(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr request,
                 std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob>&& decommitBlobs = {},
-                TIntervalMap<TLogoBlobID>&& errors = {})
+                std::vector<std::tuple<TLogoBlobID, TLogoBlobID>>&& errors = {})
             : TTransactionBase(self)
             , Request(request.Release())
             , DecommitBlobs(std::move(decommitBlobs))
@@ -179,7 +172,10 @@ namespace NKikimr::NBlobDepot {
 
             for (ui32 numItemsRemain = 10'000; !DecommitBlobs.empty(); DecommitBlobs.pop_front()) {
                 if (numItemsRemain) {
-                    numItemsRemain -= Self->Data->AddDataOnDecommit(DecommitBlobs.front(), txc, this);
+                    const auto& blob = DecommitBlobs.front();
+                    if (Self->Data->LastAssimilatedBlobId < blob.Id) {
+                        numItemsRemain -= Self->Data->AddDataOnDecommit(DecommitBlobs.front(), txc, this);
+                    }
                 } else {
                     SuccessorTx = true;
                     return true;
@@ -202,7 +198,7 @@ namespace NKikimr::NBlobDepot {
                     IssueResponseItem(cookie, key, value);
                     return --maxKeys != 0;
                 };
-                Self->Data->ScanRange(begin ? &begin.value() : nullptr, end ? &end.value() : nullptr, flags, callback);
+                Self->Data->ScanRange(begin, end, flags, callback);
             }
 
             return true;
@@ -227,6 +223,10 @@ namespace NKikimr::NBlobDepot {
         bool LoadKeys(TTransactionContext& txc, bool& progress) {
             NIceDb::TNiceDb db(txc.DB);
 
+            if (Self->Data->Loaded) {
+                return true;
+            }
+
             const auto& record = Request->Get()->Record;
             const auto& items = record.GetItems();
             for (; ItemIndex < items.size(); ++ItemIndex, LastScannedKey.reset(), NumKeysRead = 0) {
@@ -250,8 +250,8 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                if (Self->Data->Loaded || (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey)) {
-                    continue;
+                if (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey) {
+                    continue; // key is already loaded
                 }
 
                 if (Self->Data->LastLoadedKey && begin <= Self->Data->LastLoadedKey && !(flags & EScanFlags::REVERSE)) {
@@ -262,17 +262,13 @@ namespace NKikimr::NBlobDepot {
                         LastScannedKey = key;
                         return ++NumKeysRead != maxKeys;
                     };
-                    Self->Data->ScanRange(begin ? &begin.value() : nullptr, &Self->Data->LastLoadedKey.value(),
-                        flags | EScanFlags::INCLUDE_END, callback);
+                    if (!Self->Data->ScanRange(begin, Self->Data->LastLoadedKey, flags | EScanFlags::INCLUDE_END, callback)) {
+                        continue; // we have read all the keys required (MaxKeys limit hit)
+                    }
 
                     // adjust range beginning
                     begin = Self->Data->LastLoadedKey;
                     flags &= ~EScanFlags::INCLUDE_BEGIN;
-
-                    // check if we have read all the keys requested
-                    if (maxKeys && NumKeysRead == maxKeys) {
-                        continue;
-                    }
                 }
 
                 auto processRange = [&](auto table) {
@@ -373,9 +369,14 @@ namespace NKikimr::NBlobDepot {
 
             bool foundError = false;
 
-            if (Errors) {
+            if (!Errors.empty()) {
                 const TLogoBlobID id = key.GetBlobId();
-                foundError = TIntervalSet<TLogoBlobID>(id, BlobIdUpperBound(id)).IsSubsetOf(Errors);
+                for (const auto& [from, to] : Errors) {
+                    if (from <= id && id <= to) {
+                        foundError = true;
+                        break;
+                    }
+                }
             }
 
             if (foundError) {
@@ -484,10 +485,12 @@ namespace NKikimr::NBlobDepot {
 
             if (msg.Status == NKikimrProto::OK) {
                 for (const auto& response : msg.Responses) {
-                    context.DecommitBlobs.push_back({response.Id, response.Keep, response.DoNotKeep});
+                    if (LastAssimilatedBlobId < response.Id) {
+                        context.DecommitBlobs.push_back({response.Id, response.Keep, response.DoNotKeep});
+                    }
                 }
             } else {
-                context.Errors.Add(msg.From, BlobIdUpperBound(msg.To));
+                context.Errors.emplace_back(msg.From, msg.To);
             }
 
             if (!--context.NumRangesInFlight) {

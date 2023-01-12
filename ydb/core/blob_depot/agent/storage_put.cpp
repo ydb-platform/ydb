@@ -54,9 +54,7 @@ namespace NKikimr::NBlobDepot {
                     const auto *blkp = i ? &Request.ExtraBlockChecks[i - 1] : nullptr;
                     const ui64 tabletId = blkp ? blkp->first : Request.Id.TabletID();
                     const ui32 generation = blkp ? blkp->second : Request.Id.Generation();
-                    const auto status = Request.Decommission
-                        ? NKikimrProto::OK // suppress blocks check when copying blob from decommitted group
-                        : Agent.BlocksManager.CheckBlockForTablet(tabletId, generation, this, nullptr);
+                    const auto status = Agent.BlocksManager.CheckBlockForTablet(tabletId, generation, this, nullptr);
                     if (status == NKikimrProto::OK) {
                         continue;
                     } else if (status != NKikimrProto::UNKNOWN) {
@@ -123,9 +121,7 @@ namespace NKikimr::NBlobDepot {
                     locator->SetGroupId(groupId);
                     auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic);
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
-                    if (!Request.Decommission) { // do not check original blob against blocks when writing decommission copy
-                        ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
-                    }
+                    ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
                     BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));
                     Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
                     ++PutsInFlight;

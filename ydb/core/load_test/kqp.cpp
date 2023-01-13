@@ -337,6 +337,10 @@ public:
     }
 
     void HandleWakeup(const TActorContext& ctx) {
+        if (ResultsReceived) {
+            // if death process is started, then brake wakeup circuit
+            return;
+        }
         size_t targetSessions;
         if (IncreaseSessions) {
             targetSessions = 1 + NumOfSessions * (TInstant::Now() - Start).Seconds() / DurationSeconds;
@@ -458,7 +462,7 @@ private:
 
         Total->Add(response->Data);
         ++ResultsReceived;
-        if (ResultsReceived == NumOfSessions) {
+        if (ResultsReceived == Workers.size()) {
             StartDeathProcess(ctx);
         }
     }

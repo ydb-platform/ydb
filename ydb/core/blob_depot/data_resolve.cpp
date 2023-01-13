@@ -343,7 +343,7 @@ namespace NKikimr::NBlobDepot {
                 item.SetCookie(*cookie);
             }
             item.SetKey(key.MakeBinaryKey());
-            if (value.ValueChain.empty() && Self->Config.GetIsDecommittingGroup()) {
+            if (value.GoingToAssimilate && Self->Config.GetIsDecommittingGroup()) {
                 Y_VERIFY(!value.UncertainWrite);
                 auto *out = item.AddValueChain();
                 out->SetGroupId(Self->Config.GetVirtualGroupId());
@@ -448,7 +448,7 @@ namespace NKikimr::NBlobDepot {
                     }
                     if (minId == maxId) {
                         const auto it = Data.find(TKey(minId));
-                        if (it != Data.end() && !it->second.ValueChain.empty()) {
+                        if (it != Data.end() && !it->second.GoingToAssimilate) {
                             continue; // fast path for extreme queries
                         }
                     }

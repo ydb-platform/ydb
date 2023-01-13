@@ -90,6 +90,7 @@ namespace NKikimr::NBlobDepot {
             std::vector<TLogoBlobID> deleteQ;
             const bool uncertainWriteBefore = value.UncertainWrite;
             const bool wasUncertain = value.IsWrittenUncertainly();
+            const bool wasGoingToAssimilate = value.GoingToAssimilate;
 
             if (!inserted) {
                 EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
@@ -162,6 +163,9 @@ namespace NKikimr::NBlobDepot {
                     Data.erase(it);
                     row.Delete();
                     ValidateRecords();
+                    if (wasGoingToAssimilate) {
+                        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] -= key.GetBlobId().BlobSize();
+                    }
                     return true;
 
                 case EUpdateOutcome::CHANGE:
@@ -175,6 +179,10 @@ namespace NKikimr::NBlobDepot {
                     }
                     if (wasUncertain && !value.IsWrittenUncertainly()) {
                         UncertaintyResolver->MakeKeyCertain(key);
+                    }
+                    if (wasGoingToAssimilate != value.GoingToAssimilate) {
+                        const i64 sign = value.GoingToAssimilate - wasGoingToAssimilate;
+                        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] += key.GetBlobId().BlobSize() * sign;
                     }
                     ValidateRecords();
                     return true;
@@ -206,6 +214,9 @@ namespace NKikimr::NBlobDepot {
                 auto *chain = value.ValueChain.Add();
                 auto *locator = chain->MutableLocator();
                 locator->CopyFrom(item.GetBlobLocator());
+
+                // clear assimilation flag -- we have blob overwritten with fresh copy (of the same data)
+                value.GoingToAssimilate = false;
             }
 
             return EUpdateOutcome::CHANGE;
@@ -216,17 +227,17 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId));
         Y_VERIFY(Loaded || IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool inserted) {
-            if (!value.ValueChain.empty()) {
-                return EUpdateOutcome::NO_CHANGE;
-            } else {
+            if (inserted || value.GoingToAssimilate) {
                 auto *chain = value.ValueChain.Add();
                 auto *locator = chain->MutableLocator();
                 locator->SetGroupId(Self->Info()->GroupFor(blobSeqId.Channel, blobSeqId.Generation));
                 blobSeqId.ToProto(locator->MutableBlobSeqId());
                 locator->SetTotalDataLen(key.GetBlobId().BlobSize());
                 locator->SetFooterLen(0);
+                value.GoingToAssimilate = false;
                 return inserted ? EUpdateOutcome::DROP : EUpdateOutcome::CHANGE;
             }
+            return EUpdateOutcome::NO_CHANGE;
         });
     }
 
@@ -333,6 +344,9 @@ namespace NKikimr::NBlobDepot {
                 AddFirstMentionedBlob(id);
             }
         });
+        if (it->second.GoingToAssimilate) {
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] += it->first.GetBlobId().BlobSize();
+        }
 
         ValidateRecords();
     }
@@ -350,6 +364,11 @@ namespace NKikimr::NBlobDepot {
                 change = true;
             } else if (blob.Keep && value.KeepState < EKeepState::Keep) {
                 value.KeepState = EKeepState::Keep;
+                change = true;
+            }
+
+            if (value.ValueChain.empty() && !value.GoingToAssimilate) {
+                value.GoingToAssimilate = true;
                 change = true;
             }
 

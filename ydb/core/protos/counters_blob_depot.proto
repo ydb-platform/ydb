@@ -8,12 +8,15 @@ enum ESimpleCounters {
     COUNTER_TOTAL_STORED_DATA_SIZE = 0 [(NKikimr.CounterOpts) = {Name: "TotalStoredDataSize"}];
     COUNTER_TOTAL_STORED_TRASH_SIZE = 1 [(NKikimr.CounterOpts) = {Name: "TotalStoredTrashSize"}];
     COUNTER_IN_FLIGHT_TRASH_SIZE = 2 [(NKikimr.CounterOpts) = {Name: "InFlightTrashSize"}];
+    COUNTER_BYTES_TO_DECOMMIT = 3 [(NKikimr.CounterOpts) = {Name: "BytesToDecommit"}];
 }
 
 enum ECumulativeCounters {
     COUNTER_PUTS_INCOMING = 0 [(NKikimr.CounterOpts) = {Name: "Puts/Incoming"}];
     COUNTER_PUTS_OK = 1 [(NKikimr.CounterOpts) = {Name: "Puts/Ok"}];
     COUNTER_PUTS_ERROR = 2 [(NKikimr.CounterOpts) = {Name: "Puts/Error"}];
+    COUNTER_DECOMMIT_GET_BYTES = 3 [(NKikimr.CounterOpts) = {Name: "Decommit/GetBytes"}];
+    COUNTER_DECOMMIT_PUT_OK_BYTES = 4 [(NKikimr.CounterOpts) = {Name: "Decommit/PutOkBytes"}];
 }
 
 enum EPercentileCounters {

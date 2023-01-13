@@ -223,6 +223,7 @@ namespace NKikimr::NBlobDepot {
             TValueChain ValueChain;
             EKeepState KeepState = EKeepState::Default;
             bool Public = false;
+            bool GoingToAssimilate = false;
             bool UncertainWrite = false;
 
             TValue() = default;
@@ -237,6 +238,7 @@ namespace NKikimr::NBlobDepot {
                 , ValueChain(std::move(*proto.MutableValueChain()))
                 , KeepState(proto.GetKeepState())
                 , Public(proto.GetPublic())
+                , GoingToAssimilate(proto.GetGoingToAssimilate())
                 , UncertainWrite(uncertainWrite)
             {}
 
@@ -273,6 +275,9 @@ namespace NKikimr::NBlobDepot {
                 if (Public != proto->GetPublic()) {
                     proto->SetPublic(Public);
                 }
+                if (GoingToAssimilate != proto->GetGoingToAssimilate()) {
+                    proto->SetGoingToAssimilate(GoingToAssimilate);
+                }
             }
 
             static bool Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item);
@@ -298,6 +303,7 @@ namespace NKikimr::NBlobDepot {
                     << " ValueChain# " << FormatList(ValueChain)
                     << " KeepState# " << EKeepState_Name(KeepState)
                     << " Public# " << (Public ? "true" : "false")
+                    << " GoingToAssimilate# " << (GoingToAssimilate ? "true" : "false")
                     << " UncertainWrite# " << (UncertainWrite ? "true" : "false")
                     << "}";
             }

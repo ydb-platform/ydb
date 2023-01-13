@@ -178,6 +178,8 @@ namespace NKikimr::NBlobDepot {
                     Agent.HandleGetResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
+                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "TTabletDisconnected", (VirtualGroupId, Agent.VirtualGroupId),
+                            (QueryId, GetQueryId()), (QueryIdx, resolveContext->QueryIdx));
                         Response->Responses[resolveContext->QueryIdx].Status = NKikimrProto::ERROR;
                         --AnswersRemain;
                         CheckAndFinish();

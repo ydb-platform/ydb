@@ -6969,7 +6969,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureMaxArgsCount(*input, 7, ctx.Expr)) {
+        if (!EnsureMaxArgsCount(*input, 8, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7052,7 +7052,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             fileAlias = input->Child(6)->Content();
         }
 
-        if (input->ChildrenSize() != 7) {
+        // (7) settings
+        if (input->ChildrenSize() > 7) {
+            if (!EnsureTuple(*input->Child(7), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            for (const auto& child : input->Child(7)->Children()) {
+                if (!EnsureTupleMinSize(*child, 1, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (!EnsureAtom(child->Head(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto settingName = child->Head().Content();
+                if (settingName == "strict") {
+                    if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                } else if (settingName == "blocks") {
+                    if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                } else {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Head().Pos()), TStringBuilder() << "Unknown setting: " << settingName));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        if (input->ChildrenSize() != 8) {
             YQL_PROFILE_SCOPE(DEBUG, "ResolveUdfs");
             auto& cacheItem = ctx.Types.UdfTypeCache[std::make_tuple(TString(name), TString(typeConfig), userType)];
             auto& cachedFuncType = std::get<0>(cacheItem);
@@ -7137,6 +7168,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Add(4, callableTypeNode)
                     .Add(5, runConfigTypeNode)
                     .Atom(6, fileAlias)
+                    .List(7)
+                    .Seal()
                 .Seal()
                 .Build();
 
@@ -7752,7 +7785,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
         }
-
+        
         TExprNode::TPtr runConfig;
         if (input->ChildrenSize() > 4) {
             runConfig = input->Child(4);

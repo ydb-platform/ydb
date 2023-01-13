@@ -2189,7 +2189,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("Udf", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        YQL_ENSURE(node.ChildrenSize() == 7);
+        YQL_ENSURE(node.ChildrenSize() == 8);
         std::string_view function = node.Head().Content();
         const auto runConfig = MkqlBuildExpr(*node.Child(1), ctx);
         const auto userType = BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn(), ctx.ProgramBuilder, true);

@@ -1385,6 +1385,25 @@ namespace {
             return false;
         }
 
+        bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override {
+            auto getDataProvider = [&]() {
+                auto provider = Config->Types.DataSourceMap.FindPtr(node.Child(5)->Content());
+                Y_ENSURE(provider, "DataSource doesn't exist: " << node.Child(5)->Content());
+                return *provider;
+            };
+
+            if (TResTransientBase::Match(&node)) {
+                return getDataProvider()->ValidateExecution(TResTransientBase(&node).Data().Ref(), ctx);
+            }
+            if (TResIf::Match(&node)) {
+                return getDataProvider()->ValidateExecution(TResIf(&node).Condition().Ref(), ctx);
+            }
+            if (TResFor::Match(&node)) {
+                return getDataProvider()->ValidateExecution(TResFor(&node).Items().Ref(), ctx);
+            }
+            return true;
+        }
+
         IGraphTransformer& GetCallableExecutionTransformer() override {
             if (!CallableExecutionTransformer) {
                 CallableExecutionTransformer = new TResultCallableExecutionTransformer(Config);

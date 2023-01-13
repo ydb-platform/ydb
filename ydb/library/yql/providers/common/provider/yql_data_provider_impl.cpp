@@ -244,6 +244,12 @@ bool TDataProviderBase::CanExecute(const TExprNode& node) {
     return false;
 }
 
+bool TDataProviderBase::ValidateExecution(const TExprNode& node, TExprContext& ctx) {
+    Y_UNUSED(node);
+    Y_UNUSED(ctx);
+    return true;
+}
+
 void TDataProviderBase::GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) {
     TPlanFormatterBase::GetDependencies(node, children, false);
 }

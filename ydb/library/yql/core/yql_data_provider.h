@@ -150,6 +150,7 @@ public:
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;
+    virtual bool ValidateExecution(const TExprNode& node, TExprContext& ctx) = 0;
     virtual void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) = 0;
     virtual IGraphTransformer& GetCallableExecutionTransformer() = 0;
 

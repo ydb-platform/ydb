@@ -762,6 +762,10 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
         return TStatus::Error;
     }
 
+    if (!dataProvider->ValidateExecution(*node, ctx)) {
+        return TStatus::Error;
+    }
+
     TExprNode::TListType childrenToCheck;
     dataProvider->GetRequiredChildren(*node, childrenToCheck);
     IGraphTransformer::TStatus combinedStatus = IGraphTransformer::TStatus::Ok;

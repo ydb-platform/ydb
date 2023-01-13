@@ -72,6 +72,7 @@ public:
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override;
     bool CanExecute(const TExprNode& node) override;
+    bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override;
     void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) override;
     IGraphTransformer& GetCallableExecutionTransformer() override;
     IGraphTransformer& GetFinalizingTransformer() override;

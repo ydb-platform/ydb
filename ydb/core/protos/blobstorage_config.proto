@@ -256,6 +256,9 @@ message TProposeStoragePools {
 message TQueryBaseConfig {
 }
 
+message TReadSettings {
+}
+
 message TPDiskId {
     uint32 NodeId = 1;
     uint32 PDiskId = 2;
@@ -453,6 +456,8 @@ message TUpdateSettings {
     repeated uint32 MaxScrubbedDisksAtOnce = 8;
     repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
     repeated bool EnableGroupLayoutSanitizer = 10;
+    // TODO
+    // repeated TSerialManagementStage.E SerialManagementStage = 11;
 }
 
 message TBoxStoragePoolId {
@@ -516,10 +521,11 @@ message TConfigRequest {
             TAllocateVirtualGroup AllocateVirtualGroup = 39;
             TDecommitGroups DecommitGroups = 40;
             TWipeVDisk WipeVDisk = 41;
+            TSanitizeGroup SanitizeGroup = 42;
+            TReadSettings ReadSettings = 43;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
-            TSanitizeGroup SanitizeGroup = 42;
         }
     }
 
@@ -711,6 +717,7 @@ message TConfigResponse {
         repeated TWipeVDisk WipeVDisk = 17;
         TDeclareIntent Intent = 15;
         bool Already = 16;
+        TUpdateSettings Settings = 18;
     }
 
     repeated TStatus Status = 1;

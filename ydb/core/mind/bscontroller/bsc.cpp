@@ -356,6 +356,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadBox:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadStoragePool:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadDriveStatus:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadSettings:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kQueryBaseConfig:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadIntent:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:

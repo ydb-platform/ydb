@@ -431,6 +431,23 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadSettings& /*cmd*/, TStatus& status) {
+        auto settings = status.MutableSettings();
+
+        settings->AddDefaultMaxSlots(Self.DefaultMaxSlots);
+        settings->AddEnableSelfHeal(Self.SelfHealEnable);
+        settings->AddEnableDonorMode(Self.DonorMode);
+        settings->AddScrubPeriodicitySeconds(Self.ScrubPeriodicity.Seconds());
+        settings->AddPDiskSpaceMarginPromille(Self.PDiskSpaceMarginPromille);
+        settings->AddGroupReserveMin(Self.GroupReserveMin);
+        settings->AddGroupReservePartPPM(Self.GroupReservePart);
+        settings->AddMaxScrubbedDisksAtOnce(Self.MaxScrubbedDisksAtOnce);
+        settings->AddPDiskSpaceColorBorder(Self.PDiskSpaceColorBorder);
+        settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizer);
+        // TODO:
+        // settings->AddSerialManagementStage(Self.SerialManagementStage);
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& /*cmd*/, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
         PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {

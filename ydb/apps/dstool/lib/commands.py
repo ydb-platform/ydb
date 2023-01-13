@@ -24,6 +24,7 @@ import ydb.apps.dstool.lib.dstool_cmd_node_list as node_list
 
 import ydb.apps.dstool.lib.dstool_cmd_cluster_balance as cluster_balance
 import ydb.apps.dstool.lib.dstool_cmd_cluster_list as cluster_list
+import ydb.apps.dstool.lib.dstool_cmd_cluster_get as cluster_get
 import ydb.apps.dstool.lib.dstool_cmd_cluster_set as cluster_set
 import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_run as cluster_workload_run
 
@@ -33,7 +34,7 @@ import ydb.apps.dstool.lib.common as common
 MODULE_PREFIX = 'ydb.apps.dstool.lib.dstool_cmd_'
 
 modules = [
-    cluster_balance, cluster_set, cluster_list, cluster_workload_run,
+    cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
     pool_list,
@@ -49,7 +50,7 @@ default_structure = [
     ('pool', ['list']),
     ('box', ['list']),
     ('node', ['list']),
-    ('cluster', ['balance', 'set', ('workload', ['run']), 'list']),
+    ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
 ]
 
 

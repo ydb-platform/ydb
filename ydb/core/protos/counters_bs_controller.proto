@@ -73,6 +73,8 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_REASSIGN_GROUP_DISK_USEC = 37 [(CounterOpts) = {Name: "ReassignGroupDisk"}];
 
     COUNTER_DISK_SCRUB_QUANTUM_FINISHED = 38 [(CounterOpts) = {Name: "QuantumFinished"}];
+
+    COUNTER_CONFIGCMD_READ_SETTINGS_USEC = 39 [(CounterOpts) = {Name: "ReadSettings"}];
 }
 
 enum EPercentileCounters {

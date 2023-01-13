@@ -79,23 +79,24 @@ struct TKqpSessionInfo {
     TActorId WorkerId;
     TString Database;
     TKqpDbCountersPtr DbCounters;
-    TInstant LastRequestAt;
-    TInstant CreatedAt;
     TInstant ShutdownStartedAt;
     std::vector<i32> ReadyPos;
+    NActors::TMonotonic IdleTimeout;
+    // position in the idle list.
+    std::list<TKqpSessionInfo*>::iterator IdlePos;
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos)
+        const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
+        NActors::TMonotonic idleTimeout, std::list<TKqpSessionInfo*>::iterator idlePos)
         : SessionId(sessionId)
         , WorkerId(workerId)
         , Database(database)
         , DbCounters(dbCounters)
         , ShutdownStartedAt()
         , ReadyPos(std::move(pos))
+        , IdleTimeout(idleTimeout)
+        , IdlePos(idlePos)
     {
-        auto now = TAppData::TimeProvider->Now();
-        LastRequestAt = now;
-        CreatedAt = now;
     }
 };
 
@@ -137,6 +138,7 @@ class TLocalSessionsRegistry {
     THashMap<TString, ui32> SessionsCountPerDatabase;
     std::vector<std::vector<TString>> ReadySessions;
     TIntrusivePtr<IRandomProvider> RandomProvider;
+    std::list<TKqpSessionInfo*> IdleSessions;
 
 public:
     TLocalSessionsRegistry(TIntrusivePtr<IRandomProvider> randomProvider)
@@ -145,7 +147,8 @@ public:
     {}
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing)
+        const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing,
+        TDuration idleDuration)
     {
         std::vector<i32> pos(2, -1);
         pos[0] = ReadySessions[0].size();
@@ -157,10 +160,12 @@ public:
         }
 
         auto result = LocalSessions.emplace(sessionId,
-            TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos)));
+            TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
+                NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end()));
         SessionsCountPerDatabase[database]++;
         Y_VERIFY(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
+        StartIdleCheck(&(result.first->second), idleDuration);
         return &result.first->second;
     }
 
@@ -174,6 +179,49 @@ public:
         ptr->ShutdownStartedAt = TAppData::TimeProvider->Now();
         RemoveSessionFromLists(ptr);
         return ptr;
+    }
+
+    bool IsSessionIdle(const TKqpSessionInfo* sessionInfo) const {
+        return sessionInfo->IdlePos != IdleSessions.end();
+    }
+
+    const TKqpSessionInfo* GetIdleSession(const NActors::TMonotonic& now) {
+        if (IdleSessions.empty()) {
+            return nullptr;
+        }
+
+        const TKqpSessionInfo* candidate = (*IdleSessions.begin());
+        if (candidate->IdleTimeout > now) {
+            return nullptr;
+        }
+
+        StopIdleCheck(candidate);
+        return candidate;
+    }
+
+    void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {
+        if (!sessionInfo)
+            return;
+
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+
+        info->IdleTimeout = NActors::TActivationContext::Monotonic() + idleDuration;
+        if (info->IdlePos != IdleSessions.end()) {
+            IdleSessions.erase(info->IdlePos);
+        }
+
+        info->IdlePos = IdleSessions.insert(IdleSessions.end(), info);
+    }
+
+    void StopIdleCheck(const TKqpSessionInfo* sessionInfo) {
+        if (!sessionInfo)
+            return;
+
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+        if (info->IdlePos != IdleSessions.end()) {
+            IdleSessions.erase(info->IdlePos);
+            info->IdlePos = IdleSessions.end();
+        }
     }
 
     TKqpSessionInfo* PickSessionToShutdown(bool force, ui32 minReasonableToKick) {
@@ -209,6 +257,7 @@ public:
                 }
             }
 
+            StopIdleCheck(&(it->second));
             RemoveSessionFromLists(&(it->second));
             ShutdownInFlightSessions.erase(sessionId);
             TargetIdIndex.erase(it->second.WorkerId);

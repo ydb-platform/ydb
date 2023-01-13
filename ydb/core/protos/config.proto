@@ -1213,6 +1213,7 @@ message TTableServiceConfig {
 
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
     optional bool EnableKqpDataQuerySourceRead = 27 [default = false];
+    optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
 };
 
 // Config describes immediate controls and allows

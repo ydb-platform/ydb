@@ -852,18 +852,6 @@ private:
         }
     }
 
-    bool ReplyPingStatus(const TActorId& sender, ui64 proxyRequestId, bool ready, const TActorContext& ctx) {
-        auto ev = MakeHolder<TEvKqp::TEvPingSessionResponse>();
-        auto& record = ev->Record;
-        record.SetStatus(Ydb::StatusIds::SUCCESS);
-        record.MutableResponse()->SetSessionStatus(ready
-            ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
-            : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY);
-
-        AddTrailingInfo(record);
-        return ctx.Send(sender, ev.Release(), 0, proxyRequestId);
-    }
-
     bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId,
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message, const TActorContext& ctx)
     {

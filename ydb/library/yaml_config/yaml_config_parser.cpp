@@ -801,18 +801,18 @@ namespace NKikimr::NYaml {
 
         NKikimrBlobStorage::TConfigRequest result;
 
+        const auto itemConfigGeneration = json.Has("storage_config_generation") ?
+            GetUnsignedIntegerSafe(json, "storage_config_generation") : 0;
+
         for(auto hostConfig: json["host_configs"].GetArraySafe()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
             NProtobufJson::MergeJson2Proto(hostConfig, *hostConfigProto, GetJsonToProtoConfig());
+            hostConfigProto->SetItemConfigGeneration(itemConfigGeneration);
         }
 
         auto *defineBox = result.AddCommand()->MutableDefineBox();
         defineBox->SetBoxId(1);
-        if (json.Has("storage_config_generation")) {
-            defineBox->SetItemConfigGeneration(GetUnsignedIntegerSafe(json, "storage_config_generation"));
-        } else {
-            defineBox->SetItemConfigGeneration(0);
-        }
+        defineBox->SetItemConfigGeneration(itemConfigGeneration);
 
         for(auto jsonHost: json["hosts"].GetArraySafe()) {
             auto* host = defineBox->AddHost();

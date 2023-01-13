@@ -12,7 +12,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor
     sb << "DECLARE $lastPingNewValue AS Uint32;" << Endl;
     sb << "UPDATE `" + ExecutorController->GetTableName() + "`" << Endl;
     sb << "SET lastPing = $lastPingNewValue" << Endl;
-    sb << "WHERE id IN ($taskIds)" << Endl;
+    sb << "WHERE id IN $taskIds" << Endl;
     request.mutable_query()->set_yql_text(sb);
 
     {
@@ -22,10 +22,9 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor
     }
 
     auto& idStrings = (*request.mutable_parameters())["$taskIds"];
-    idStrings.mutable_type()->mutable_list_type();
+    idStrings.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
     for (auto&& i : TaskIds) {
-        auto* idString = idStrings.mutable_value()->add_items();
-        idString->set_bytes_value(i);
+        idStrings.mutable_value()->add_items()->set_bytes_value(i);
     }
 
     request.set_session_id(sessionId);

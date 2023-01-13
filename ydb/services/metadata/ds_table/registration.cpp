@@ -61,28 +61,33 @@ void TRegistrationData::InitializationFinished(const TString& initId) {
     auto it = InRegistration.find(initId);
     Y_VERIFY(it != InRegistration.end());
 
+    if (initId == NInitializer::TDBInitialization::GetTypeId()) {
+        Y_VERIFY(Stage == EStage::WaitInitializerInfo);
+        Stage = EStage::Active;
+    }
+
     Registered.emplace(initId, it->second);
     InRegistration.erase(it);
     EventsWaiting->Initialized(initId);
+
+    if (initId == NInitializer::TDBInitialization::GetTypeId()) {
+        EventsWaiting->TryResendOne();
+    }
+
 }
 
 void TRegistrationData::SetInitializationSnapshot(NFetcher::ISnapshot::TPtr s) {
+    const bool notInitializedBefore = !InitializationSnapshot;
     InitializationSnapshot = dynamic_pointer_cast<NInitializer::TSnapshot>(s);
     Y_VERIFY(InitializationSnapshot);
-    if (Stage == EStage::WaitInitializerInfo) {
-        Stage = EStage::Active;
+    if (notInitializedBefore) {
         EventsWaiting->TryResendOne();
-    } else if (Stage == EStage::Active) {
-
-    } else if (Stage == EStage::Created) {
-        Y_VERIFY(false, "incorrect stage for method usage");
     }
 }
 
 void TRegistrationData::StartInitialization() {
     Y_VERIFY(Stage == EStage::Created);
     Stage = EStage::WaitInitializerInfo;
-    EventsWaiting->GetOwnerId().Send(EventsWaiting->GetOwnerId(), new TEvSubscribeExternal(InitializationFetcher));
 }
 
 TRegistrationData::TRegistrationData() {

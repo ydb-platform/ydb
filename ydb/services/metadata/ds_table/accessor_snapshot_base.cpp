@@ -43,7 +43,61 @@ void TDSAccessorBase::Handle(TEvEnrichSnapshotProblem::TPtr& ev) {
     OnSnapshotEnrichingError(ev->Get()->GetErrorText());
 }
 
+void TDSAccessorBase::Handle(TEvRecheckExistence::TPtr& ev) {
+    Register(new TTableExistsActor(InternalController, ev->Get()->GetPath(), TDuration::Seconds(5)));
+}
+
+void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev) {
+    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot detect path existence: " << ev->Get()->GetPath() << "/" << ev->Get()->GetErrorMessage();
+    Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
+}
+
+void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& ev) {
+    auto it = ExistenceChecks.find(ev->Get()->GetTablePath());
+    Y_VERIFY(it != ExistenceChecks.end());
+    if (ev->Get()->IsTableExists()) {
+        it->second = 1;
+    } else {
+        it->second = -1;
+    }
+    bool hasNonExist = false;
+    for (auto&& i : ExistenceChecks) {
+        if (i.second == 0) {
+            return;
+        }
+        if (i.second == -1) {
+            hasNonExist = true;
+            continue;
+        }
+    }
+    if (hasNonExist) {
+        OnNewEnrichedSnapshot(SnapshotConstructor->CreateEmpty(RequestedActuality));
+    } else {
+        StartSnapshotsFetchingImpl();
+    }
+}
+
 void TDSAccessorBase::StartSnapshotsFetching() {
+    RequestedActuality = TInstant::Now();
+    auto& managers = SnapshotConstructor->GetManagers();
+    Y_VERIFY(managers.size());
+    bool hasExistsCheckers = false;
+    for (auto&& i : managers) {
+        auto it = ExistenceChecks.find(i->GetStorageTablePath());
+        if (it == ExistenceChecks.end() || it->second == -1) {
+            Register(new TTableExistsActor(InternalController, i->GetStorageTablePath(), TDuration::Seconds(5)));
+            hasExistsCheckers = true;
+            ExistenceChecks[i->GetStorageTablePath()] = 0;
+        } else if (it->second == 0) {
+            hasExistsCheckers = true;
+        }
+    }
+    if (!hasExistsCheckers) {
+        StartSnapshotsFetchingImpl();
+    }
+}
+
+void TDSAccessorBase::StartSnapshotsFetchingImpl() {
     TStringBuilder sb;
     RequestedActuality = TInstant::Now();
     auto& managers = SnapshotConstructor->GetManagers();

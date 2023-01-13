@@ -2,13 +2,13 @@
 
 #include "accessor_subscribe.h"
 #include "behaviour_registrator_actor.h"
-#include "initializer_actor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/metadata/initializer/behaviour.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -19,15 +19,15 @@ IActor* CreateService(const TConfig& config) {
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
     TBehavioursId id(managers);
     if (RegistrationData->GetInitializationSnapshot()) {
-        const bool isInitialization = (managers.size() == 1) && managers.front()->GetTypeId() == NInitializer::TDBInitialization::GetTypeId();
+        auto bInitializer = NInitializer::TDBObjectBehaviour::GetInstance();
         switch (RegistrationData->GetStage()) {
             case TRegistrationData::EStage::Created:
                 RegistrationData->StartInitialization();
+                Y_VERIFY(RegistrationData->InRegistration.emplace(bInitializer->GetTypeId(), bInitializer).second);
+                RegisterWithSameMailbox(new TBehaviourRegistrator(bInitializer, RegistrationData, Config.GetRequestConfig()));
                 break;
             case TRegistrationData::EStage::WaitInitializerInfo:
-                if (!isInitialization) {
-                    break;
-                }
+                break;
             case TRegistrationData::EStage::Active:
                 for (auto&& b : managers) {
                     Y_VERIFY(!RegistrationData->Registered.contains(b->GetTypeId()));
@@ -97,7 +97,7 @@ void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     RegistrationData->EventsWaiting = std::make_shared<TEventsCollector>(SelfId());
     ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service started" << Endl;
     Become(&TService::StateMain);
-    RegisterWithSameMailbox(new TInitializerSnapshotReader(RegistrationData, Config.GetRequestConfig()));
+    Send(SelfId(), new TEvSubscribeExternal(RegistrationData->GetInitializationFetcher()));
 }
 
 

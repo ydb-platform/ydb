@@ -1,4 +1,5 @@
 #pragma once
+#include "table_exists.h"
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/initializer/accessor_init.h>
@@ -6,6 +7,17 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
+
+class TEvRecheckExistence: public NActors::TEventLocal<TEvRecheckExistence, EEvents::EvRecheckExistence> {
+private:
+    YDB_READONLY_DEF(TString, Path);
+public:
+    TEvRecheckExistence(const TString& path)
+        : Path(path)
+    {
+
+    }
+};
 
 class TEvRefresh: public NActors::TEventLocal<TEvRefresh, EEvents::EvRefresh> {
 public:
@@ -42,12 +54,15 @@ public:
     }
 };
 
-class TRefreshInternalController: public NFetcher::ISnapshotAcceptorController, public NRequest::IQueryOutput {
+class TRefreshInternalController: public NFetcher::ISnapshotAcceptorController,
+    public NRequest::IQueryOutput,
+    public TTableExistsActor::TEvController {
 private:
     const TActorIdentity ActorId;
 public:
     TRefreshInternalController(const TActorIdentity& actorId)
-        : ActorId(actorId) {
+        : TTableExistsActor::TEvController(actorId)
+        , ActorId(actorId) {
 
     }
 
@@ -69,6 +84,8 @@ private:
     using TBase = NActors::TActorBootstrapped<TDSAccessorBase>;
     YDB_READONLY(TInstant, RequestedActuality, TInstant::Zero());
     const NRequest::TConfig Config;
+    std::map<TString, i32> ExistenceChecks;
+    void StartSnapshotsFetchingImpl();
 protected:
     std::shared_ptr<TRefreshInternalController> InternalController;
     NFetcher::ISnapshotsFetcher::TPtr SnapshotConstructor;
@@ -82,9 +99,12 @@ protected:
     virtual void OnSnapshotEnrichingError(const TString& errorMessage);
     void StartSnapshotsFetching();
 
+    void Handle(TEvRecheckExistence::TPtr& ev);
     void Handle(TEvEnrichSnapshotResult::TPtr& ev);
     void Handle(TEvEnrichSnapshotProblem::TPtr& ev);
     void Handle(TEvYQLResponse::TPtr& ev);
+    void Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev);
+    void Handle(TTableExistsActor::TEvController::TEvResult::TPtr& ev);
 public:
     void Bootstrap();
 
@@ -93,6 +113,10 @@ public:
             hFunc(TEvYQLResponse, Handle);
             hFunc(TEvEnrichSnapshotResult, Handle);
             hFunc(TEvEnrichSnapshotProblem, Handle);
+            hFunc(TTableExistsActor::TEvController::TEvError, Handle);
+            hFunc(TTableExistsActor::TEvController::TEvResult, Handle);
+            hFunc(TEvRecheckExistence, Handle);
+            
             default:
                 break;
         }

@@ -79,6 +79,10 @@ protected:
 public:
     using TPtr = std::shared_ptr<ISnapshotsFetcher>;
 
+    ISnapshot::TPtr CreateEmpty(const TInstant actuality) const {
+        return CreateSnapshot(actuality);
+    }
+
     TString GetComponentId() const;
     ISnapshot::TPtr ParseSnapshot(const Ydb::Table::ExecuteQueryResult& rawData, const TInstant actuality) const;
 

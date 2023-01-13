@@ -34,7 +34,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TFetchTasksActor
     sb << "AND enabled = true" << Endl;
     sb << "AND lastPing > $lastPingCriticalBorder" << Endl;
     if (CurrentTaskIds.size()) {
-        sb << " AND id NOT IN ($taskIds)" << Endl;
+        sb << " AND id NOT IN $taskIds" << Endl;
         auto& idStrings = (*request.mutable_parameters())["$taskIds"];
         idStrings.mutable_type()->mutable_list_type();
         for (auto&& i : CurrentTaskIds) {

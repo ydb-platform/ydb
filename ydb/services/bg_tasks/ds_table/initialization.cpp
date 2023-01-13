@@ -62,6 +62,7 @@ void TBGTasksInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput::
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
         result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
+        result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tableName, "acl"));
     }
     controller->OnPreparationFinished(result);
 }

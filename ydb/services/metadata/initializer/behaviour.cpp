@@ -29,4 +29,9 @@ std::shared_ptr<NKikimr::NMetadata::NModifications::IOperationsManager> TDBObjec
     return result;
 }
 
+std::shared_ptr<NKikimr::NMetadata::NInitializer::TDBObjectBehaviour> TDBObjectBehaviour::GetInstance() {
+    static std::shared_ptr<TDBObjectBehaviour> result = std::make_shared<TDBObjectBehaviour>();
+    return result;
+}
+
 }

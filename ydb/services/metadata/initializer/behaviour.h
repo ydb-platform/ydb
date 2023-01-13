@@ -17,7 +17,9 @@ protected:
         return "";
     }
 
+public:
     virtual TString GetTypeId() const override;
+    static std::shared_ptr<TDBObjectBehaviour> GetInstance();
 };
 
 }

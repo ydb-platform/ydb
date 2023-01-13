@@ -42,7 +42,7 @@ private:
                 needManagers.emplace_back(i);
             }
         }
-        if (needManagers.empty()) {
+        if (needManagers.empty() || (needManagers.size() == 1 && needManagers[0]->GetTypeId() == NInitializer::TDBInitialization::GetTypeId())) {
             auto it = Accessors.find(fetcher->GetComponentId());
             if (it == Accessors.end()) {
                 THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, fetcher);

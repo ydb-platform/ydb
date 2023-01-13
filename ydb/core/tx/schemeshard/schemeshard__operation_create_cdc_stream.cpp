@@ -302,7 +302,7 @@ public:
 
 }; // TConfigurePartsAtTable
 
-class TProposeAtTableWithSnapshot: public NCdcStreamState::TProposeAtTable {
+class TProposeAtTableWithInitialScan: public NCdcStreamState::TProposeAtTable {
 public:
     using NCdcStreamState::TProposeAtTable::TProposeAtTable;
 
@@ -318,7 +318,7 @@ public:
         return true;
     }
 
-}; // TProposeAtTableWithSnapshot
+}; // TProposeAtTableWithInitialScan
 
 class TNewCdcStreamAtTable: public TSubOperation {
     static TTxState::ETxState NextState() {
@@ -346,7 +346,7 @@ class TNewCdcStreamAtTable: public TSubOperation {
             return MakeHolder<TConfigurePartsAtTable>(OperationId);
         case TTxState::Propose:
             if (InitialScan) {
-                return MakeHolder<TProposeAtTableWithSnapshot>(OperationId);
+                return MakeHolder<TProposeAtTableWithInitialScan>(OperationId);
             } else {
                 return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
             }
@@ -444,6 +444,8 @@ public:
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(tablePath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
         if (InitialScan) {
@@ -461,7 +463,7 @@ public:
         Y_VERIFY(!table->AlterData);
 
         const auto txType = InitialScan
-            ? TTxState::TxCreateCdcStreamAtTableWithSnapshot
+            ? TTxState::TxCreateCdcStreamAtTableWithInitialScan
             : TTxState::TxCreateCdcStreamAtTable;
 
         Y_VERIFY(!context.SS->FindTx(OperationId));

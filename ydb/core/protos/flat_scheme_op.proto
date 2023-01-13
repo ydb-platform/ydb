@@ -736,8 +736,13 @@ message TAlterCdcStream {
     message TDisable {
     }
 
+    message TGetReady {
+        optional uint64 LockTxId = 1;
+    }
+
     oneof Action {
         TDisable Disable = 3;
+        TGetReady GetReady = 4;
     }
 }
 

@@ -129,13 +129,13 @@ void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& stre
     SetSchema(schema);
 }
 
-void TUserTable::DisableCdcStream(const TPathId& streamPathId) {
+void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::EState state) {
     auto it = CdcStreams.find(streamPathId);
     if (it == CdcStreams.end()) {
         return;
     }
 
-    it->second.State = TCdcStream::EState::ECdcStreamStateDisabled;
+    it->second.State = state;
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -145,7 +145,7 @@ void TUserTable::DisableCdcStream(const TPathId& streamPathId) {
             continue;
         }
 
-        it->SetState(TCdcStream::EState::ECdcStreamStateDisabled);
+        it->SetState(state);
         SetSchema(schema);
 
         return;

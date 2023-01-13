@@ -169,9 +169,9 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxUpdateMainTableOnIndexMove = 137 [(CounterOpts) = {Name: "InFlightOps/UpdateMainTableOnIndexMove"}];
 
     COUNTER_IN_FLIGHT_OPS_TxAllocatePQ   = 138            [(CounterOpts) = {Name: "InFlightOps/AllocatePQ"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTableWithSnapshot = 139 [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTableWithSnapshot"}];
-
-    COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomainCreateHive = 140  [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomainCreateHive"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTableWithInitialScan = 139 [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTableWithInitialScan"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomainCreateHive = 140 [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomainCreateHive"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterCdcStreamAtTableDropSnapshot = 141 [(CounterOpts) = {Name: "InFlightOps/AlterCdcStreamAtTableDropSnapshot"}];
 }
 
 enum ECumulativeCounters {
@@ -274,10 +274,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxUpdateMainTableOnIndexMove = 82 [(CounterOpts) = {Name: "FinishedOps/UpdateMainTableOnIndexMove"}];
 
     COUNTER_FINISHED_OPS_TxAllocatePQ   = 83              [(CounterOpts) = {Name: "FinishedOps/AllocatePQ"}];
-    COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTableWithSnapshot = 84 [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTableWithSnapshot"}];
-
-    COUNTER_FINISHED_OPS_TxAlterExtSubDomainCreateHive = 85   [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomainCreateHive"}];
-
+    COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTableWithInitialScan = 84 [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTableWithInitialScan"}];
+    COUNTER_FINISHED_OPS_TxAlterExtSubDomainCreateHive = 85 [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomainCreateHive"}];
+    COUNTER_FINISHED_OPS_TxAlterCdcStreamAtTableDropSnapshot = 86 [(CounterOpts) = {Name: "FinishedOps/AlterCdcStreamAtTableDropSnapshot"}];
 }
 
 enum EPercentileCounters {

@@ -135,8 +135,15 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotUnderDeleting()
-                .NotUnderOperation()
                 .IsCommonSensePath();
+
+            if (checks) {
+                if (dstPath.IsUnderOperation()) { // may be part of a consistent operation
+                    checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                } else {
+                    checks.NotUnderOperation();
+                }
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

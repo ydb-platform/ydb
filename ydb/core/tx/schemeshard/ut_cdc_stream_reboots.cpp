@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         CreateStream({}, true);
     }
 
-    Y_UNIT_TEST(AlterStream) {
+    Y_UNIT_TEST(DisableStream) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -112,6 +112,65 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
                 NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
                 NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
+            });
+        });
+    }
+
+    Y_UNIT_TEST(GetReadyStream) {
+        TTestWithReboots t;
+        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                      State: ECdcStreamStateScan
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::PathExist,
+                    NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+                    NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                    NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateScan),
+                });
+            }
+
+            const auto lockTxId = t.TxId;
+            auto request = AlterCdcStreamRequest(++t.TxId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamName: "Stream"
+                GetReady {
+                  LockTxId: %lu
+                }
+            )", lockTxId));
+            request->Record.MutableTransaction(0)->MutableLockGuard()->SetOwnerTxId(lockTxId);
+
+            t.TestEnv->ReliablePropose(runtime, request, {
+                NKikimrScheme::StatusAccepted,
+                NKikimrScheme::StatusMultipleModifications,
+            });
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                NLs::PathExist,
+                NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+                NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             });
         });
     }

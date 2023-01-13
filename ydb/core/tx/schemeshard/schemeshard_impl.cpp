@@ -1400,8 +1400,9 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterColumnTable:
     case TTxState::TxAlterCdcStream:
     case TTxState::TxAlterCdcStreamAtTable:
+    case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
     case TTxState::TxCreateCdcStreamAtTable:
-    case TTxState::TxCreateCdcStreamAtTableWithSnapshot:
+    case TTxState::TxCreateCdcStreamAtTableWithInitialScan:
     case TTxState::TxDropCdcStreamAtTable:
     case TTxState::TxAlterSequence:
     case TTxState::TxAlterReplication:
@@ -2079,13 +2080,11 @@ void TSchemeShard::PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapsho
 }
 
 void TSchemeShard::PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId) {
-    db.Table<Schema::SnapshotSteps>().Key(snapshotId).Update(
-        NIceDb::TUpdate<Schema::SnapshotSteps::StepId>(stepId));
+    db.Table<Schema::SnapshotSteps>().Key(snapshotId).Update(NIceDb::TUpdate<Schema::SnapshotSteps::StepId>(stepId));
 }
 
 void TSchemeShard::PersistDropSnapshot(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId) {
     db.Table<Schema::SnapshotTables>().Key(snapshotId, tableId.OwnerId, tableId.LocalPathId).Delete();
-
     db.Table<Schema::SnapshotSteps>().Key(snapshotId).Delete();
 }
 

@@ -402,10 +402,16 @@ message TCreateCdcStreamNotice {
     optional string SnapshotName = 4;
 }
 
+message TSnapshot {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+}
+
 message TAlterCdcStreamNotice {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
     optional NKikimrSchemeOp.TCdcStreamDescription StreamDescription = 3;
+    optional TSnapshot DropSnapshot = 4;
 }
 
 message TDropCdcStreamNotice {

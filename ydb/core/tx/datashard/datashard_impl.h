@@ -1598,10 +1598,10 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
-    TUserTable::TPtr AlterTableDisableCdcStream(
+    TUserTable::TPtr AlterTableSwitchCdcStreamState(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
-        const TPathId& streamPathId);
+        const TPathId& streamPathId, NKikimrSchemeOp::ECdcStreamState state);
 
     TUserTable::TPtr AlterTableDropCdcStream(
         const TActorContext& ctx, TTransactionContext& txc,

@@ -411,7 +411,7 @@ struct TUserTable : public TThrRefBase {
     bool HasAsyncIndexes() const;
 
     void AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
-    void DisableCdcStream(const TPathId& streamPathId);
+    void SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::EState state);
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
     bool NeedSchemaSnapshots() const;

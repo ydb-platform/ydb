@@ -1048,8 +1048,9 @@ class TConfigurePartsAtTable: public TSubOperationState {
     static bool IsExpectedTxType(TTxState::ETxType txType) {
         switch (txType) {
         case TTxState::TxCreateCdcStreamAtTable:
-        case TTxState::TxCreateCdcStreamAtTableWithSnapshot:
+        case TTxState::TxCreateCdcStreamAtTableWithInitialScan:
         case TTxState::TxAlterCdcStreamAtTable:
+        case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
         case TTxState::TxDropCdcStreamAtTable:
             return true;
         default:
@@ -1126,8 +1127,9 @@ class TProposeAtTable: public TSubOperationState {
     static bool IsExpectedTxType(TTxState::ETxType txType) {
         switch (txType) {
         case TTxState::TxCreateCdcStreamAtTable:
-        case TTxState::TxCreateCdcStreamAtTableWithSnapshot:
+        case TTxState::TxCreateCdcStreamAtTableWithInitialScan:
         case TTxState::TxAlterCdcStreamAtTable:
+        case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
         case TTxState::TxDropCdcStreamAtTable:
             return true;
         default:

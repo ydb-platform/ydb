@@ -29,19 +29,39 @@ public:
 
         const auto& params = schemeTx.GetAlterCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
+        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+        const auto state = streamDesc.GetState();
 
         const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
-
-        Y_VERIFY_S(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled, "Unexpected alter cdc stream"
-            << ": desc# " << streamDesc.ShortDebugString());
-
         const auto version = params.GetTableSchemaVersion();
         Y_VERIFY(version);
 
-        auto tableInfo = DataShard.AlterTableDisableCdcStream(ctx, txc, pathId, version, streamPathId);
+        TUserTable::TPtr tableInfo;
+        switch (state) {
+        case NKikimrSchemeOp::ECdcStreamStateDisabled:
+        case NKikimrSchemeOp::ECdcStreamStateReady:
+            tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
+            if (state == NKikimrSchemeOp::ECdcStreamStateReady) {
+                if (params.HasDropSnapshot()) {
+                    const auto& snapshot = params.GetDropSnapshot();
+                    Y_VERIFY(snapshot.GetStep() != 0);
+
+                    const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, snapshot.GetStep(), snapshot.GetTxId());
+                    DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+                } else {
+                    Y_VERIFY_DEBUG(false, "Absent snapshot");
+                }
+            }
+            break;
+
+        default:
+            Y_FAIL_S("Unexpected alter cdc stream"
+                << ": params# " << params.ShortDebugString());
+        }
+
+        Y_VERIFY(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
 
         if (tableInfo->NeedSchemaSnapshots()) {

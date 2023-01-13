@@ -1255,13 +1255,13 @@ TUserTable::TPtr TDataShard::AlterTableAddCdcStream(
     return tableInfo;
 }
 
-TUserTable::TPtr TDataShard::AlterTableDisableCdcStream(
+TUserTable::TPtr TDataShard::AlterTableSwitchCdcStreamState(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,
-    const TPathId& streamPathId)
+    const TPathId& streamPathId, NKikimrSchemeOp::ECdcStreamState state)
 {
     auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
-    tableInfo->DisableCdcStream(streamPathId);
+    tableInfo->SwitchCdcStreamState(streamPathId, state);
 
     NIceDb::TNiceDb db(txc.DB);
     PersistUserTable(db, pathId.LocalPathId, *tableInfo);

@@ -351,9 +351,11 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
-    } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTableWithSnapshot) {
+    } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxAlterCdcStreamAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxAlterCdcStreamAtTableDropSnapshot) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;

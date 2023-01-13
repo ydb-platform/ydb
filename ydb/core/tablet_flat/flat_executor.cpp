@@ -1515,7 +1515,7 @@ bool TExecutor::CanExecuteTransaction() const {
     return Stats->IsActive && (Stats->IsFollower || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
-void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
+void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
     Y_VERIFY(ActivationQueue, "attempt to execute transaction before activation");
 
     TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
@@ -1560,7 +1560,7 @@ void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
         return;
     }
 
-    if (ActiveTransaction || ActivateTransactionWaiting) {
+    if (ActiveTransaction || ActivateTransactionWaiting || !allowImmediate) {
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
@@ -1569,6 +1569,14 @@ void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
     }
 
     ExecuteTransaction(seat, ctx);
+}
+
+void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
+    DoExecute(self, true, ctx);
+}
+
+void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
+    DoExecute(self, false, ctx);
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {

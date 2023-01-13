@@ -109,6 +109,15 @@ struct TEvTxProcessing {
         TEvReadSet()
         {}
 
+        TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer)
+        {
+            Record.SetStep(step);
+            Record.SetTxId(orderId);
+            Record.SetTabletSource(tabletSource);
+            Record.SetTabletDest(tabletDest);
+            Record.SetTabletProducer(tabletProducer);
+        }
+
         TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer, const TString &readSet, ui64 seqno = 0)
         {
             Record.SetStep(step);

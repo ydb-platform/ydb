@@ -61,12 +61,18 @@ public:
     void ResendAll(const TActorContext& ctx);
     void Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx);
 
-    bool Empty() const { return CurrentReadSets.empty(); }
+    bool Empty() const { return CurrentReadSets.empty() && Expectations.empty(); }
     bool HasAcks() const { return ! ReadSetAcks.empty(); }
     bool Has(const TReadSetKey& rsKey) const { return CurrentReadSetInfos.contains(rsKey); }
 
     ui64 CountReadSets() const { return CurrentReadSets.size(); }
     ui64 CountAcks() const { return ReadSetAcks.size(); }
+
+    bool AddExpectation(ui64 target, ui64 step, ui64 txId);
+    bool RemoveExpectation(ui64 target, ui64 txId);
+    bool HasExpectations(ui64 target);
+    void ResendExpectations(ui64 target, const TActorContext& ctx);
+    THashMap<ui64, ui64> RemoveExpectations(ui64 target);
 
 private:
     void UpdateMonCounter() const;
@@ -77,6 +83,8 @@ private:
     THashMap<TReadSetKey, ui64> CurrentReadSetInfos;  // Info -> SeqNo
     THashSet<ui64> AckedSeqno;
     TVector<TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks;
+    // Target -> TxId -> Step
+    THashMap<ui64, THashMap<ui64, ui64>> Expectations;
 };
 
 }}

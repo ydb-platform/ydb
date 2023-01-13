@@ -694,4 +694,20 @@ private:
     const bool PrevValue;
 };
 
+template<class TCondition>
+void WaitFor(TTestActorRuntime& runtime, TCondition&& condition, const TString& description = "condition", size_t maxAttempts = 1) {
+    for (size_t attempt = 0; attempt < maxAttempts; ++attempt) {
+        if (condition()) {
+            return;
+        }
+        Cerr << "... waiting for " << description << Endl;
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return condition();
+        };
+        runtime.DispatchEvents(options);
+    }
+    UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+}
+
 }

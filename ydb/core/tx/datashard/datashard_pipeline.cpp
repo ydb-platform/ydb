@@ -638,7 +638,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
                    "Unexpected readset in state %" PRIu32 " for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    Self->State, step, txId, Self->TabletID());
         if (ack) {
-            DelayedAcks[TStepOrder(step, txId)] = std::move(ack);
+            DelayedAcks[TStepOrder(step, txId)].push_back(std::move(ack));
         }
         return false;
     }
@@ -934,7 +934,9 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
                    "Will send outdated delayed readset ack for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    pr.first.Step, pr.first.TxId, Self->TabletID());
 
-        op->AddDelayedAck(std::move(pr.second));
+        for (auto& ack : pr.second) {
+            op->AddDelayedAck(std::move(ack));
+        }
         DelayedAcks.erase(DelayedAcks.begin());
     }
 

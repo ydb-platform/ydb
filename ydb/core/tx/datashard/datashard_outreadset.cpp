@@ -179,4 +179,47 @@ bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const
     return true;
 }
 
+bool TOutReadSets::AddExpectation(ui64 target, ui64 step, ui64 txId) {
+    auto res = Expectations[target].emplace(txId, step);
+    return res.second;
+}
+
+bool TOutReadSets::RemoveExpectation(ui64 target, ui64 txId) {
+    auto it = Expectations.find(target);
+    if (it != Expectations.end()) {
+        auto itTxId = it->second.find(txId);
+        if (itTxId != it->second.end()) {
+            it->second.erase(itTxId);
+            if (it->second.empty()) {
+                Expectations.erase(it);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TOutReadSets::HasExpectations(ui64 target) {
+    return Expectations.contains(target);
+}
+
+void TOutReadSets::ResendExpectations(ui64 target, const TActorContext& ctx) {
+    auto it = Expectations.find(target);
+    if (it != Expectations.end()) {
+        for (const auto& pr : it->second) {
+            Self->SendReadSetExpectation(ctx, pr.second, pr.first, Self->TabletID(), target);
+        }
+    }
+}
+
+THashMap<ui64, ui64> TOutReadSets::RemoveExpectations(ui64 target) {
+    THashMap<ui64, ui64> result;
+    auto it = Expectations.find(target);
+    if (it != Expectations.end()) {
+        result = std::move(it->second);
+        Expectations.erase(it);
+    }
+    return result;
+}
+
 }}

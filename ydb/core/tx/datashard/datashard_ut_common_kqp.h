@@ -128,6 +128,14 @@ namespace NKqpHelpers {
         return JoinSeq(", ", result.result_sets(0).rows());
     }
 
+    inline TString FormatResult(const Ydb::Table::ExecuteDataQueryResponse& response) {
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.operation().status();
+        }
+        Ydb::Table::ExecuteQueryResult result;
+        response.operation().result().UnpackTo(&result);
+        return FormatResult(result);
+    }
 
     inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
         TString sessionId = CreateSessionRPC(runtime, database);

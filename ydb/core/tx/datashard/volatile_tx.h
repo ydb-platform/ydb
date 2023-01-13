@@ -121,7 +121,7 @@ namespace NKikimr::NDataShard {
 
         void Clear();
         bool Load(NIceDb::TNiceDb& db);
-        void Start();
+        void Start(const TActorContext& ctx);
 
         TVolatileTxInfo* FindByTxId(ui64 txId) const;
         TVolatileTxInfo* FindByCommitTxId(ui64 txId) const;
@@ -136,8 +136,14 @@ namespace NKikimr::NDataShard {
         bool AttachVolatileTxCallback(
             ui64 txId, IVolatileTxCallback::TPtr callback);
 
+        void AbortWaitingTransaction(TVolatileTxInfo* info);
+
         void ProcessReadSet(
             const TEvTxProcessing::TEvReadSet& rs,
+            TTransactionContext& txc);
+
+        void ProcessReadSetMissing(
+            ui64 source, ui64 txId,
             TTransactionContext& txc);
 
         TTxMapAccess GetTxMap() const {

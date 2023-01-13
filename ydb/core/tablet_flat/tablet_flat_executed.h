@@ -25,6 +25,7 @@ protected:
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
+    void EnqueueExecute(TAutoPtr<ITransaction> transaction);
 
     const NTable::TScheme& Scheme() const noexcept;
 

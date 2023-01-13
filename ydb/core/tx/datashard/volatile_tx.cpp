@@ -158,13 +158,18 @@ namespace NKikimr::NDataShard {
         return true;
     }
 
-    void TVolatileTxManager::Start() {
+    void TVolatileTxManager::Start(const TActorContext& ctx) {
         for (auto& pr : VolatileTxs) {
             if (!pr.second->Dependencies.empty()) {
                 continue;
             }
             switch (pr.second->State) {
                 case EVolatileTxState::Waiting:
+                    for (ui64 target : pr.second->Participants) {
+                        if (Self->AddExpectation(target, pr.second->Version.Step, pr.second->TxId)) {
+                            Self->SendReadSetExpectation(ctx, pr.second->Version.Step, pr.second->TxId, Self->TabletID(), target);
+                        }
+                    }
                     break;
                 case EVolatileTxState::Committed:
                     PendingCommits.push_back(pr.first);
@@ -422,6 +427,7 @@ namespace NKikimr::NDataShard {
 
         for (ui64 shardId : info->Participants) {
             db.Table<Schema::TxVolatileParticipants>().Key(info->TxId, shardId).Delete();
+            Self->RemoveExpectation(shardId, info->TxId);
         }
         db.Table<Schema::TxVolatileDetails>().Key(info->TxId).Delete();
     }
@@ -470,6 +476,29 @@ namespace NKikimr::NDataShard {
         return true;
     }
 
+    void TVolatileTxManager::AbortWaitingTransaction(TVolatileTxInfo* info) {
+        Y_VERIFY(info && info->State == EVolatileTxState::Waiting);
+
+        ui64 txId = info->TxId;
+
+        // Move tx to aborted, but don't persist yet, we need a separate transaction for that
+        info->State = EVolatileTxState::Aborted;
+
+        // We don't need aborted transactions in tx map
+        RemoveFromTxMap(info);
+
+        // Aborted transactions don't have dependencies
+        for (ui64 dependencyTxId : info->Dependencies) {
+            auto* dependency = FindByTxId(dependencyTxId);
+            Y_VERIFY(dependency);
+            dependency->Dependents.erase(txId);
+        }
+        info->Dependencies.clear();
+
+        // We will unblock operations when we persist the abort
+        AddPendingAbort(txId);
+    }
+
     void TVolatileTxManager::ProcessReadSet(
             const TEvTxProcessing::TEvReadSet& rs,
             TTransactionContext& txc)
@@ -503,6 +532,8 @@ namespace NKikimr::NDataShard {
 
         bool committed = [&]() {
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
+                Y_VERIFY(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
+                    "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in ProcessReadSet");
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Processed readset without data from " << srcTabletId << " to " << dstTabletId
                     << " at tablet " << Self->TabletID());
@@ -520,26 +551,19 @@ namespace NKikimr::NDataShard {
                 return false;
             }
 
+            if (record.GetStep() != info->Version.Step) {
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Processed readset from " << srcTabletId << " to " << dstTabletId
+                    << " with step " << record.GetStep() << " expecting " << info->Version.Step
+                    << ", treating like abort due to divergence at tablet " << Self->TabletID());
+                return false;
+            }
+
             return true;
         }();
 
         if (!committed) {
-            // Move tx to aborted, but don't persist yet, we need a separate transaction for that
-            info->State = EVolatileTxState::Aborted;
-
-            // We don't need aborted transactions in tx map
-            RemoveFromTxMap(info);
-
-            // Aborted transactions don't have dependencies
-            for (ui64 dependencyTxId : info->Dependencies) {
-                auto* dependency = FindByTxId(dependencyTxId);
-                Y_VERIFY(dependency);
-                dependency->Dependents.erase(txId);
-            }
-            info->Dependencies.clear();
-
-            // We will unblock operations when we persist the abort
-            AddPendingAbort(txId);
+            AbortWaitingTransaction(info);
             return;
         }
 
@@ -623,7 +647,7 @@ namespace NKikimr::NDataShard {
     void TVolatileTxManager::RunPendingAbortTx() {
         if (!PendingAbortTxScheduled && !PendingAborts.empty()) {
             PendingAbortTxScheduled = true;
-            Self->Execute(new TDataShard::TTxVolatileTxAbort(Self));
+            Self->EnqueueExecute(new TDataShard::TTxVolatileTxAbort(Self));
         }
     }
 

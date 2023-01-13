@@ -1206,6 +1206,7 @@ class TDataShard
 
     void RestartPipeRS(ui64 tabletId, const TActorContext& ctx);
     void AckRSToDeletedTablet(ui64 tabletId, const TActorContext& ctx);
+    void AbortExpectationsFromDeletedTablet(ui64 tabletId, THashMap<ui64, ui64>&& expectations);
 
     void DefaultSignalTabletActive(const TActorContext &ctx) override {
         // This overriden in order to pospone SignalTabletActive until TxInit completes
@@ -1255,7 +1256,14 @@ public:
                                    const TActorContext& ctx);
     THolder<TEvTxProcessing::TEvReadSet> PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target,
                                                         const TString& body, ui64 seqno);
+    THolder<TEvTxProcessing::TEvReadSet> PrepareReadSetExpectation(ui64 step, ui64 txId, ui64 source, ui64 target);
+    void SendReadSet(const TActorContext& ctx, THolder<TEvTxProcessing::TEvReadSet>&& rs);
     void SendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
+    bool AddExpectation(ui64 target, ui64 step, ui64 txId);
+    bool RemoveExpectation(ui64 target, ui64 txId);
+    void SendReadSetExpectation(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target);
+    void SendReadSetNoData(const TActorContext& ctx, const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target);
+    bool ProcessReadSetExpectation(TEvTxProcessing::TEvReadSet::TPtr& ev);
     void SendReadSets(const TActorContext& ctx,
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);

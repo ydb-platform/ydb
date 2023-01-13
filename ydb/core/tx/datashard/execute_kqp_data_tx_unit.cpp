@@ -294,8 +294,16 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 txc);
         }
 
-        if (op->HasVolatilePrepareFlag() && !op->OutReadSets().empty()) {
-            DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+        if (op->HasVolatilePrepareFlag()) {
+            // Notify other shards about our expectations as soon as possible, even before we commit
+            for (ui64 target : op->AwaitingDecisions()) {
+                if (DataShard.AddExpectation(target, op->GetStep(), op->GetTxId())) {
+                    DataShard.SendReadSetExpectation(ctx, op->GetStep(), op->GetTxId(), DataShard.TabletID(), target);
+                }
+            }
+            if (!op->OutReadSets().empty()) {
+                DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+            }
         }
 
         // Note: may erase persistent locks, must be after we persist volatile tx

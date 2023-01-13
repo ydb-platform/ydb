@@ -298,7 +298,7 @@ public:
     }
 
     ui64 GetDataTxCacheSize() const { return DataTxCache.size(); }
-    const TMap<TStepOrder, THolder<IEventHandle>> &GetDelayedAcks() const
+    const TMap<TStepOrder, TStackVec<THolder<IEventHandle>, 1>> &GetDelayedAcks() const
     {
         return DelayedAcks;
     }
@@ -453,7 +453,7 @@ private:
     TSortedOps::iterator ActivePlannedOpsLogicallyCompleteEnd;
     TSortedOps::iterator ActivePlannedOpsLogicallyIncompleteEnd;
     THashMap<ui64, TValidatedDataTx::TPtr> DataTxCache;
-    TMap<TStepOrder, THolder<IEventHandle>> DelayedAcks;
+    TMap<TStepOrder, TStackVec<THolder<IEventHandle>, 1>> DelayedAcks;
     TStepOrder LastPlannedTx;
     TStepOrder LastCompleteTx;
     TStepOrder UtmostCompleteTx;

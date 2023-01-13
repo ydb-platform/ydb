@@ -445,11 +445,13 @@ struct TOutputOpData {
     using TDelayedAcks = TVector<THolder<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
     using TChangeRecord = NMiniKQL::IChangeCollector::TChange;
+    using TExpectedReadSets = TMap<std::pair<ui64, ui64>, TStackVec<TActorId, 1>>;
 
     TResultPtr Result;
     // ACKs to send on successful operation completion.
     TDelayedAcks DelayedAcks;
     TOutReadSets OutReadSets;
+    TExpectedReadSets ExpectedReadSets;
     TVector<THolder<TEvTxProcessing::TEvReadSet>> PreparedOutReadSets;
     // Access log of checked locks
     TLocksCache LocksAccessLog;
@@ -598,6 +600,7 @@ public:
     ////////////////////////////////////////
     //            OUTPUT DATA             //
     ////////////////////////////////////////
+    bool HasOutputData() { return bool(OutputData); }
     TOutputOpData::TResultPtr &Result() { return OutputDataRef().Result; }
 
     TOutputOpData::TDelayedAcks &DelayedAcks() { return OutputDataRef().DelayedAcks; }
@@ -607,6 +610,7 @@ public:
     }
 
     TOutputOpData::TOutReadSets &OutReadSets() { return OutputDataRef().OutReadSets; }
+    TOutputOpData::TExpectedReadSets &ExpectedReadSets() { return OutputDataRef().ExpectedReadSets; }
     TVector<THolder<TEvTxProcessing::TEvReadSet>> &PreparedOutReadSets()
     {
         return OutputDataRef().PreparedOutReadSets;
@@ -798,7 +802,6 @@ protected:
             OutputData = MakeHolder<TOutputOpData>();
         return *OutputData;
     }
-    void ClearOutputData() { OutputData = nullptr; }
 
     TInputOpData &InputDataRef()
     {

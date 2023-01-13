@@ -819,6 +819,9 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             }
 
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
+                Y_VERIFY(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
+                    "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in delayed readsets");
+
                 // No readset data: participant aborted the transaction
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed readset without data from"
                     << srcTabletId << " to " << dstTabletId << " will abort txId# " << tx->GetTxId());

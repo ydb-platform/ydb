@@ -121,10 +121,12 @@ public:
 private:
     TEvTxProcessing::TEvReadSet::TPtr Ev;
     THolder<IEventHandle> Ack;
+    THolder<IEventHandle> NoDataReply;
     TMonotonic AckTs;
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx);
     THolder<IEventHandle> MakeAck(const TActorContext &ctx);
+    THolder<IEventHandle> MakeNoDataReply(const TActorContext &ctx);
 };
 
 class TDataShard::TTxProgressResendRS : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

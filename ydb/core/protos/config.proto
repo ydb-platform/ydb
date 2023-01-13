@@ -593,7 +593,7 @@ message TMetadataProviderConfig {
 }
 
 message TBackgroundTasksConfig {
-    optional bool Enabled = 1 [default = false];
+    optional bool Enabled = 1 [default = true];
     optional TInternalRequestConfig RequestConfig = 2;
     optional uint32 PullPeriodSeconds = 3 [default = 10];
     optional uint32 PingPeriodSeconds = 4 [default = 2];

@@ -14,7 +14,7 @@ private:
     YDB_READONLY(TDuration, PingCheckPeriod, TDuration::Seconds(20));
     YDB_READONLY(ui32, MaxInFlight, 1);
     YDB_READONLY(TString, InternalTablePath, ".bg_tasks/tasks");
-    YDB_READONLY_FLAG(Enabled, false);
+    YDB_READONLY_FLAG(Enabled, true);
 public:
     bool DeserializeFromProto(const NKikimrConfig::TBackgroundTasksConfig& config);
     TString GetTablePath() const;

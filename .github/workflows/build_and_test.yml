@@ -29,5 +29,6 @@ jobs:
       run: |
         rm -rf /mnt/d/tmp/*
         cd ../build/ydb
-        TMPDIR=/mnt/d/tmp ctest -j28 --timeout 1200 --force-new-ctest-process
+        # Our test util provides output with coloring, so remove it using sed before sending to grep
+        TMPDIR=/mnt/d/tmp ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E "(Test\s*#|\[FAIL\])"
       

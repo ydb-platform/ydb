@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             VerifySSL: false
             Endpoint: "storage.cloud-preprod.yandex.net"
             Bucket: "tiering-test-01"
-            AccessKey: "USId:root@builtin:secretAccessKey"
+            AccessKey: "SId:secretAccessKey"
             SecretKey: "USId:root@builtin:secretSecretKey"
             ProxyHost: "localhost"
             ProxyPort: 8080
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Endpoint: "fake"
             Bucket: "fake"
             AccessKey: "USId:root@builtin:secretAccessKey"
-            SecretKey: "USId:root@builtin:secretSecretKey"
+            SecretKey: "SId:secretSecretKey"
         }
     )";
     const TString TierEndpoint = "fake";

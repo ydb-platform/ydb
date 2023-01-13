@@ -6,7 +6,7 @@ namespace NKikimr::NColumnShard::NTiers {
 
 NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFromSettings(
     const NYql::TObjectSettingsImpl& settings,
-    const NMetadata::NModifications::IOperationsManager::TModificationContext& /*context*/) const
+    const NMetadata::NModifications::IOperationsManager::TModificationContext& context) const
 {
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Bytes(settings.GetObjectId()));
@@ -17,7 +17,21 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
             if (!::google::protobuf::TextFormat::ParseFromString(it->second, &proto)) {
                 return "incorrect proto format";
             } else {
-                result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Bytes(it->second));
+                TString defaultUserId;
+                if (context.GetUserToken()) {
+                    defaultUserId = context.GetUserToken()->GetUserSID();
+                }
+                auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetAccessKey(), defaultUserId);
+                if (!accessKey) {
+                    return "AccessKey is incorrect";
+                }
+                *proto.MutableObjectStorage()->MutableAccessKey() = accessKey->SerializeToString();
+                auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetSecretKey(), defaultUserId);
+                if (!secretKey) {
+                    return "SecretKey is incorrect";
+                }
+                *proto.MutableObjectStorage()->MutableSecretKey() = secretKey->SerializeToString();
+                result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Bytes(proto.DebugString()));
             }
         }
     }

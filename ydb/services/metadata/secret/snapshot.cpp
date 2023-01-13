@@ -23,11 +23,14 @@ TString TSnapshot::DoSerializeToString() const {
 }
 
 bool TSnapshot::PatchString(TString& stringForPath) const {
-    TSecretId sId;
-    if (!sId.DeserializeFromString(stringForPath)) {
+    std::optional<TSecretIdOrValue> sId = TSecretIdOrValue::DeserializeFromString(stringForPath);
+    if (!sId) {
         return false;
     }
-    auto it = Secrets.find(sId);
+    if (sId->GetValue()) {
+        return true;
+    }
+    auto it = Secrets.find(*sId->GetSecretId());
     if (it == Secrets.end()) {
         return false;
     }
@@ -39,10 +42,15 @@ bool TSnapshot::CheckSecretAccess(const TString& secretableString, const std::op
     if (!userToken) {
         return true;
     }
-    TSecretId sId;
-    if (!sId.DeserializeFromString(secretableString)) {
+    std::optional<TSecretIdOrValue> sIdOrValue = TSecretIdOrValue::DeserializeFromString(secretableString);
+    if (!sIdOrValue) {
+        return false;
+    } else if (sIdOrValue->GetValue()) {
         return true;
+    } else if (!sIdOrValue->GetSecretId()) {
+        return false;
     }
+    const auto sId = *sIdOrValue->GetSecretId();
     auto it = Secrets.find(sId);
     if (it == Secrets.end()) {
         return false;

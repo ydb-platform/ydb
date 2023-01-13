@@ -16,18 +16,94 @@ public:
     TSecretId() = default;
     TSecretId(const TString& ownerUserId, const TString& secretId)
         : OwnerUserId(ownerUserId)
-        , SecretId(secretId)
-    {
+        , SecretId(secretId) {
     }
 
-    bool DeserializeFromString(const TString& info);
+    TSecretId(const TStringBuf ownerUserId, const TStringBuf secretId)
+        : OwnerUserId(ownerUserId)
+        , SecretId(secretId) {
+    }
+
     TString SerializeToString() const;
+
+    template <class TProto>
+    TString BuildSecretAccessString(const TProto& proto, const TString& defaultOwnerId) {
+        if (proto.HasValue()) {
+            return proto.GetValue();
+        } else {
+            return TStringBuilder() << "USId:" << (proto.GetSecretOwnerId() ? proto.GetSecretOwnerId() : defaultOwnerId) << ":" << SecretId;
+        }
+    }
 
     bool operator<(const TSecretId& item) const {
         return std::tie(OwnerUserId, SecretId) < std::tie(item.OwnerUserId, item.SecretId);
     }
     bool operator==(const TSecretId& item) const {
         return std::tie(OwnerUserId, SecretId) == std::tie(item.OwnerUserId, item.SecretId);
+    }
+};
+
+class TSecretIdOrValue {
+private:
+    YDB_READONLY_DEF(std::optional<TSecretId>, SecretId);
+    YDB_READONLY_DEF(std::optional<TString>, Value);
+    TSecretIdOrValue() = default;
+
+    bool DeserializeFromStringImpl(const TString& info, const TString& defaultUserId) {
+        static const TString prefixWithUser = "USId:";
+        static const TString prefixNoUser = "SId:";
+        if (info.StartsWith(prefixWithUser)) {
+            TStringBuf sb(info.data(), info.size());
+            sb.Skip(prefixWithUser.size());
+            TStringBuf uId;
+            TStringBuf sId;
+            if (!sb.TrySplit(':', uId, sId)) {
+                return false;
+            }
+            if (!uId || !sId) {
+                return false;
+            }
+            SecretId = TSecretId(uId, sId);
+        } else if (info.StartsWith(prefixNoUser)) {
+            TStringBuf sb(info.data(), info.size());
+            sb.Skip(prefixNoUser.size());
+            SecretId = TSecretId(defaultUserId, TString(sb));
+            if (!sb || !defaultUserId) {
+                return false;
+            }
+        } else {
+            Value = info;
+        }
+        return true;
+    }
+public:
+    TSecretIdOrValue(const TSecretId& id)
+        : SecretId(id) {
+
+    }
+
+    TSecretIdOrValue(const TString& value)
+        : Value(value) {
+
+    }
+
+    static std::optional<TSecretIdOrValue> DeserializeFromString(const TString& info, const TString& defaultOwnerId = Default<TString>()) {
+        TSecretIdOrValue result;
+        if (!result.DeserializeFromStringImpl(info, defaultOwnerId)) {
+            return {};
+        } else {
+            return result;
+        }
+    }
+
+    TString SerializeToString() const {
+        if (SecretId) {
+            return SecretId->SerializeToString();
+        } else if (Value) {
+            return *Value;
+        }
+        Y_VERIFY(false);
+        return "";
     }
 };
 

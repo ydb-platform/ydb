@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto db = kikimr.GetQueryClient();
 
         auto result = db.ExecuteQuery(R"(
-            SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

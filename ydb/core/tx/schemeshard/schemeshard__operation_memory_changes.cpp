@@ -1,40 +1,38 @@
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/tx_processing.h>
-
 namespace NKikimr::NSchemeShard {
 
-void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& op) {
-    Y_VERIFY(!ss->TxInFlight.contains(op));
+template <typename I, typename C, typename H>
+static void GrabNew(const I& id, const C& cont, H& holder) {
+    Y_VERIFY(!cont.contains(id));
+    holder.emplace(id, nullptr);
+}
 
-    TxStates.emplace(op, nullptr);
+template <typename T, typename I, typename C, typename H>
+static void Grab(const I& id, const C& cont, H& holder) {
+    Y_VERIFY(cont.contains(id));
+    holder.emplace(id, new T(*cont.at(id)));
+}
+
+void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) {
+    GrabNew(opId, ss->TxInFlight, TxStates);
 }
 
 void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->PathsById.contains(pathId));
-
-    Paths.emplace(pathId, nullptr);
+    GrabNew(pathId, ss->PathsById, Paths);
 }
 
 void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->PathsById.contains(pathId));
-
-    TPathElement::TPtr copy = new TPathElement(*ss->PathsById.at(pathId));
-    Paths.emplace(pathId, copy);
+    Grab<TPathElement>(pathId, ss->PathsById, Paths);
 }
 
 void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->Tables.contains(pathId));
-
-    Tables.emplace(pathId, nullptr);
+    GrabNew(pathId, ss->Tables, Tables);
 }
 
 void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->Tables.contains(pathId));
-
-    TTableInfo::TPtr copy = new TTableInfo(*ss->Tables.at(pathId));
-    Tables.emplace(pathId, copy);
+    Grab<TTableInfo>(pathId, ss->Tables, Tables);
 }
 
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
@@ -49,47 +47,38 @@ void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
 }
 
 void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->SubDomains.contains(pathId));
-
-    TSubDomainInfo::TPtr copy = new TSubDomainInfo(*ss->SubDomains.at(pathId));
-    SubDomains.emplace(pathId, copy);
+    Grab<TSubDomainInfo>(pathId, ss->SubDomains, SubDomains);
 }
 
 void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->Indexes.contains(pathId));
-
-    Indexes.emplace(pathId, nullptr);
+    GrabNew(pathId, ss->Indexes, Indexes);
 }
 
 void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(ss->Indexes.contains(pathId));
-
-    TTableIndexInfo::TPtr copy = new TTableIndexInfo(*ss->Indexes.at(pathId));
-    Indexes.emplace(pathId, copy);
+    Grab<TTableIndexInfo>(pathId, ss->Indexes, Indexes);
 }
 
 void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->CdcStreams.contains(pathId));
+    GrabNew(pathId, ss->CdcStreams, CdcStreams);
+}
 
-    CdcStreams.emplace(pathId, nullptr);
+void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TCdcStreamInfo>(pathId, ss->CdcStreams, CdcStreams);
 }
 
 void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
     Y_VERIFY(!ss->TablesWithSnapshots.contains(pathId));
-
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
 void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId) {
     Y_VERIFY(!ss->LockedPaths.contains(pathId));
-
     LockedPaths.emplace(pathId, InvalidTxId); // will be removed on UnDo()
 }
 
 void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
     Y_VERIFY(ss->LockedPaths.contains(pathId));
     Y_VERIFY(ss->LockedPaths.at(pathId) == lockTxId);
-
     LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
 }
 

@@ -88,8 +88,10 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
 
         void SpecialSend(TAutoPtr<IEventHandle> ev, const TActorContext &ctx) {
-            if (SendingType == ESendingType::SoftContinuousExecution) {
-                ctx.Send<ESendingType::SoftContinuousExecution>(ev);
+            if (SendingType == ESendingType::Lazy) {
+                ctx.Send<ESendingType::Lazy>(ev);
+            } else if (SendingType == ESendingType::Tail) {
+                ctx.Send<ESendingType::Tail>(ev);
             } else {
                 ctx.Send(ev);
             }
@@ -333,9 +335,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " " << mType << Endl;
             stats = CountStats([mType] {
-                return BenchSendReceive(true, mType, EPoolType::Basic, ESendingType::SoftContinuousExecution);
+                return BenchSendReceive(true, mType, EPoolType::Basic, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " " << mType << " ContinuousExecution" << Endl;
+            Cerr << stats.ToString() << " " << mType << " Lazy" << Endl;
+            stats = CountStats([mType] {
+                return BenchSendReceive(true, mType, EPoolType::Basic, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
         }
     }
 
@@ -346,9 +352,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " " << mType << Endl;
             stats = CountStats([mType] {
-                return BenchSendReceive(true, mType, EPoolType::United, ESendingType::SoftContinuousExecution);
+                return BenchSendReceive(true, mType, EPoolType::United, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " " << mType << " ContinuousExecution" << Endl;
+            Cerr << stats.ToString() << " " << mType << " Lazy" << Endl;
+            stats = CountStats([mType] {
+                return BenchSendReceive(true, mType, EPoolType::United, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
         }
     }
 
@@ -359,9 +369,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " " << mType << Endl;
             stats = CountStats([mType] {
-                return BenchSendReceive(false, mType, EPoolType::Basic, ESendingType::SoftContinuousExecution);
+                return BenchSendReceive(false, mType, EPoolType::Basic, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " " << mType << " ContinuousExecution" << Endl;
+            Cerr << stats.ToString() << " " << mType << " Lazy" << Endl;
+            stats = CountStats([mType] {
+                return BenchSendReceive(false, mType, EPoolType::Basic, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
         }
     }
 
@@ -372,9 +386,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " " << mType << Endl;
             stats = CountStats([mType] {
-                return BenchSendReceive(false, mType, EPoolType::United, ESendingType::SoftContinuousExecution);
+                return BenchSendReceive(false, mType, EPoolType::United, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " " << mType << " ContinuousExecution" << Endl;
+            Cerr << stats.ToString() << " " << mType << " Lazy" << Endl;
+            stats = CountStats([mType] {
+                return BenchSendReceive(false, mType, EPoolType::United, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
         }
     }
 
@@ -384,9 +402,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         });
         Cerr << stats.ToString() << Endl;
         stats = CountStats([=] {
-            return BenchSendActivateReceive(poolsCount, threads, allocation, poolType, ESendingType::SoftContinuousExecution);
+            return BenchSendActivateReceive(poolsCount, threads, allocation, poolType, ESendingType::Lazy);
         });
-        Cerr << stats.ToString() << " ContinuousExecution" << Endl;
+        Cerr << stats.ToString() << " Lazy" << Endl;
+        stats = CountStats([=] {
+            return BenchSendActivateReceive(poolsCount, threads, allocation, poolType, ESendingType::Tail);
+        });
+        Cerr << stats.ToString() << " Tail" << Endl;
     }
 
     Y_UNIT_TEST(SendActivateReceive1Pool1ThreadAlloc) {
@@ -444,9 +466,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " actorPairs: " << actorPairs << Endl;
             stats = CountStats([threads, actorPairs, poolType] {
-                return BenchContentedThreads(threads, actorPairs, poolType, ESendingType::SoftContinuousExecution);
+                return BenchContentedThreads(threads, actorPairs, poolType, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " actorPairs: " << actorPairs << " ContinuousExecution"<< Endl;
+            Cerr << stats.ToString() << " actorPairs: " << actorPairs << " Lazy"<< Endl;
+            stats = CountStats([threads, actorPairs, poolType] {
+                return BenchContentedThreads(threads, actorPairs, poolType, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " actorPairs: " << actorPairs << " Tail"<< Endl;
         }
     }
 
@@ -475,9 +501,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " neighbourActors: " << neighbour << Endl;
             stats = CountStats([neighbour] {
-                return BenchSendActivateReceiveWithMailboxNeighbours(neighbour, EPoolType::Basic, ESendingType::SoftContinuousExecution);
+                return BenchSendActivateReceiveWithMailboxNeighbours(neighbour, EPoolType::Basic, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " ContinuousExecution" << Endl;
+            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Lazy" << Endl;
+            stats = CountStats([neighbour] {
+                return BenchSendActivateReceiveWithMailboxNeighbours(neighbour, EPoolType::Basic, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Tail" << Endl;
         }
     }
 
@@ -489,9 +519,13 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " neighbourActors: " << neighbour << Endl;
             stats = CountStats([neighbour] {
-                return BenchSendActivateReceiveWithMailboxNeighbours(neighbour, EPoolType::United, ESendingType::SoftContinuousExecution);
+                return BenchSendActivateReceiveWithMailboxNeighbours(neighbour, EPoolType::United, ESendingType::Lazy);
             });
-            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " ContinuousExecution" << Endl;
+            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Lazy" << Endl;
+            stats = CountStats([neighbour] {
+                return BenchSendActivateReceiveWithMailboxNeighbours(neighbour, EPoolType::United, ESendingType::Tail);
+            });
+            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Tail" << Endl;
         }
     }
 }

@@ -92,6 +92,7 @@ namespace NActors {
         ui64 PoolActorRegistrations = 0;
         ui64 PoolDestroyedActors = 0;
         ui64 PoolAllocatedMailboxes = 0;
+        ui64 MailboxPushedOutByTailSending = 0;
         ui64 MailboxPushedOutBySoftPreemption = 0;
         ui64 MailboxPushedOutByTime = 0;
         ui64 MailboxPushedOutByEventCount = 0;
@@ -126,6 +127,7 @@ namespace NActors {
             ElapsedTicks += RelaxedLoad(&other.ElapsedTicks);
             ParkedTicks += RelaxedLoad(&other.ParkedTicks);
             BlockedTicks += RelaxedLoad(&other.BlockedTicks);
+            MailboxPushedOutByTailSending += RelaxedLoad(&other.MailboxPushedOutByTailSending);
             MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
             MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);
             MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount);

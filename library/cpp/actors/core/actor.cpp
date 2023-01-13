@@ -156,7 +156,7 @@ namespace NActors {
             if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
                 sys->Send(eh);
             } else {
-                sys->Send<ESendingType::SoftContinuousExecution>(eh);
+                sys->SpecificSend(eh);
             }
         }
     }

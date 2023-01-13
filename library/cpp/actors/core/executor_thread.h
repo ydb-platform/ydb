@@ -66,8 +66,8 @@ namespace NActors {
     private:
         void* ThreadProc();
 
-        template <typename TMailbox>
-        void Execute(TMailbox* mailbox, ui32 hint);
+        template <typename TMailbox, bool IsTailExecution = false>
+        bool Execute(TMailbox* mailbox, ui32 hint);
 
     public:
         TActorSystem* const ActorSystem;

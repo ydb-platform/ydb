@@ -67,17 +67,21 @@ namespace NActors {
         return MailboxTable->SpecificSendTo(ev, this);
     }
 
-    Y_FORCE_INLINE bool IsSendingWithContinuousExecution(IExecutorPool *self) {
-        return TlsThreadContext && TlsThreadContext->Pool == self && TlsThreadContext->SendingType != ESendingType::Common;
-    }
-
     void TExecutorPoolBase::ScheduleActivation(ui32 activation) {
         ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
     }
 
+    Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
+        if (TlsThreadContext->Pool != self || TlsThreadContext->CapturedType == ESendingType::Tail) {
+            return false;
+        }
+        return TlsThreadContext->SendingType != ESendingType::Common;
+    }
+
     void TExecutorPoolBase::SpecificScheduleActivation(ui32 activation) {
-        if (IsSendingWithContinuousExecution(this)) {
-            std::swap(TlsThreadContext->WaitedActivation, activation);
+        if (IsAllowedToCapture(this)) {
+            std::swap(TlsThreadContext->CapturedActivation, activation);
+            TlsThreadContext->CapturedType = TlsThreadContext->SendingType;
         }
         if (activation) {
             ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));

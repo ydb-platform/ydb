@@ -26,7 +26,8 @@ namespace NActors {
 
     struct TThreadContext {
         IExecutorPool *Pool = nullptr;
-        ui32 WaitedActivation = 0;
+        ui32 CapturedActivation = 0;
+        ESendingType CapturedType = ESendingType::Lazy;
         ESendingType SendingType = ESendingType::Common;
     };
 
@@ -517,6 +518,9 @@ namespace NActors {
         // register new actor in ActorSystem on new fresh mailbox.
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept final;
 
+        template <ESendingType SendingType>
+        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept;
+
         // Register new actor in ActorSystem on same _mailbox_ as current actor.
         // There is one thread per mailbox to execute actor, which mean
         // no _cpu core scalability_ for such actors.
@@ -805,6 +809,16 @@ namespace NActors {
         return TActivationContext::Send<SendingType>(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
+    template <ESendingType SendingType>
+    bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+        return SelfActorId.Send<SendingType>(recipient, ev, flags, cookie, std::move(traceId));
+    }
+
+    template <ESendingType SendingType>
+    TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
+        return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfActorId);
+    }
+
 
     template <ESendingType SendingType>
     TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
@@ -827,13 +841,8 @@ namespace NActors {
     bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
         if constexpr (SendingType == ESendingType::Common) {
             return this->GenericSend< &IExecutorPool::Send>(ev);
-        } else if (!TlsThreadContext) {
-            return this->GenericSend< &IExecutorPool::Send>(ev);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
-            TlsThreadContext->SendingType = previousType;
-            return isSent;
+            return this->SpecificSend(ev, SendingType);
         }
     }
 

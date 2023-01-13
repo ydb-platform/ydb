@@ -186,6 +186,9 @@ namespace NActors {
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev) const;
 
+        bool SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const;
+        bool SpecificSend(TAutoPtr<IEventHandle> ev) const;
+
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
         /**

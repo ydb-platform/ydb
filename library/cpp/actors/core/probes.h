@@ -23,6 +23,9 @@
     PROBE(SlowRegisterAdd, GROUPS("ActorLibSlow"),                                                                                    \
           TYPES(ui32, double),                                                                                                        \
           NAMES("poolId", "registerAddMs"))                                                                                           \
+    PROBE(MailboxPushedOutByTailSending, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                       \
+          TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
+          NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
     PROBE(MailboxPushedOutBySoftPreemption, GROUPS("ActorLibMailbox", "ActorLibMailboxPushedOut"),                                    \
           TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
           NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \

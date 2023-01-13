@@ -124,6 +124,21 @@ namespace NActors {
         return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags, cookie));
     }
 
+    bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev) const {
+        return this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+    }
+
+    bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const {
+        if (!TlsThreadContext) {
+            return this->GenericSend<&IExecutorPool::Send>(ev);
+        } else {
+            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, sendingType);
+            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+            TlsThreadContext->SendingType = previousType;
+            return isSent;
+        }
+    }
+
     void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
         Schedule(deadline - Timestamp(), ev, cookie);
     }

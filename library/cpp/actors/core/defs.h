@@ -63,7 +63,8 @@ namespace NActors {
 
     enum class ESendingType {
         Common,
-        SoftContinuousExecution,
+        Lazy,
+        Tail,
     };
 
 }

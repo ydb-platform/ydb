@@ -169,7 +169,7 @@ public:
             return false;
         }
 
-        if (auto type = GetItemType(*node.GetTypeAnn()); !type || type->GetKind() != ETypeAnnotationKind::Struct) {
+        if (auto type = GetSeqItemType(node.GetTypeAnn()); !type || type->GetKind() != ETypeAnnotationKind::Struct) {
             return false;
         }
 

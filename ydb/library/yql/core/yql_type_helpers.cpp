@@ -5,26 +5,10 @@
 
 namespace NYql {
 
-const TTypeAnnotationNode* GetItemType(const TTypeAnnotationNode& type) {
-    switch (type.GetKind()) {
-    case ETypeAnnotationKind::List:
-        return type.Cast<TListExprType>()->GetItemType();
-    case ETypeAnnotationKind::Optional:
-        return type.Cast<TOptionalExprType>()->GetItemType();
-    case ETypeAnnotationKind::Stream:
-        return type.Cast<TStreamExprType>()->GetItemType();
-    case ETypeAnnotationKind::Flow:
-        return type.Cast<TFlowExprType>()->GetItemType();
-    default:
-        break;
-    }
-    return nullptr;
-}
-
 TSet<TStringBuf> GetColumnsOfStructOrSequenceOfStruct(const TTypeAnnotationNode& type) {
     const TTypeAnnotationNode* itemType = nullptr;
     if (type.GetKind() != ETypeAnnotationKind::Struct) {
-        itemType = GetItemType(type);
+        itemType = GetSeqItemType(&type);
         YQL_ENSURE(itemType);
     } else {
         itemType = &type;
@@ -44,7 +28,7 @@ bool SilentGetSequenceItemType(TPosition pos, const TTypeAnnotationNode& inputTy
                                const TTypeAnnotationNode*& result, TIssue& error)
 {
     result = nullptr;
-    const TTypeAnnotationNode* itemType = GetItemType(inputType);
+    const auto itemType = GetSeqItemType(&inputType);
     if (!itemType) {
         error = TIssue(pos, TStringBuilder() << "Expected list, stream, flow or optional, but got: " << inputType);
         return false;

@@ -628,7 +628,7 @@ TExprNode::TPtr ExpandRemoveMembers(const TExprNode::TPtr& node, TExprContext& c
 TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
 
-    const TTypeAnnotationNode* targetItemType = GetItemType(*node->GetTypeAnn());
+    const TTypeAnnotationNode* targetItemType = GetSeqItemType(node->GetTypeAnn());
     bool isSequence = true;
     if (!targetItemType) {
         targetItemType = node->GetTypeAnn();

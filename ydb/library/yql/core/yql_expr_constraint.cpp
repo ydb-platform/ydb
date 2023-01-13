@@ -568,7 +568,7 @@ private:
     }
 
     TStatus ExtractMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const auto outItemType = GetItemType(*input->GetTypeAnn())->Cast<TStructExprType>();
+        const auto outItemType = GetSeqItemType(*input->GetTypeAnn()).Cast<TStructExprType>();
         if (const auto passthrough = input->Head().GetConstraint<TPassthroughConstraintNode>()) {
             TPassthroughConstraintNode::TMapType filteredMapping;
             for (const auto& part: passthrough->GetColumnMapping()) {
@@ -607,7 +607,7 @@ private:
     }
 
     TStatus RemovePrefixMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const TTypeAnnotationNode* outItemType = GetItemType(*input->GetTypeAnn());
+        const TTypeAnnotationNode* outItemType = GetSeqItemType(input->GetTypeAnn());
         if (!outItemType) {
             outItemType = input->GetTypeAnn();
         }
@@ -729,7 +729,7 @@ private:
 
     static TConstraintNode::TListType GetConstraintsForInputArgument(const TExprNode& node, std::unordered_set<const TPassthroughConstraintNode*>& explicitPasstrought, TExprContext& ctx) {
         TConstraintNode::TListType constraints;
-        if (const auto inItemType = GetItemType(*node.Head().GetTypeAnn())) {
+        if (const auto inItemType = GetSeqItemType(node.Head().GetTypeAnn())) {
             if (inItemType->GetKind() == ETypeAnnotationKind::Variant) {
                 if (inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
                     const auto tupleType = inItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
@@ -799,7 +799,7 @@ private:
 
     template <bool UseSorted, bool Flat, bool WideInput = false, bool WideOutput = false>
     TStatus MapWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const auto inItemType = GetItemType(*input->Head().GetTypeAnn());
+        const auto inItemType = GetSeqItemType(input->Head().GetTypeAnn());
         TSmallVec<TConstraintNode::TListType> argConstraints(input->Tail().Head().ChildrenSize());
         std::unordered_set<const TPassthroughConstraintNode*> explicitPasstrought;
         if constexpr (WideInput) {
@@ -1019,10 +1019,11 @@ private:
             }
             if (UseSorted && !hasOutSorted && !lambdaPassthrough) {
                 if (const auto sorted = input->Head().GetConstraint<TSortedConstraintNode>()) {
-                    const auto outItemType = GetItemType(*input->GetTypeAnn());
-                    if (outItemType && outItemType->GetKind() == ETypeAnnotationKind::Struct) {
-                        if (const auto outSorted = TSortedConstraintNode::FilterByType(sorted, outItemType->Cast<TStructExprType>(), ctx)) {
-                            input->AddConstraint(outSorted);
+                    if (const auto outItemType = GetSeqItemType(input->GetTypeAnn())) {
+                        if (outItemType->GetKind() == ETypeAnnotationKind::Struct) {
+                            if (const auto outSorted = TSortedConstraintNode::FilterByType(sorted, outItemType->Cast<TStructExprType>(), ctx)) {
+                                input->AddConstraint(outSorted);
+                            }
                         }
                     }
                 }
@@ -1621,7 +1622,7 @@ private:
         }
 
         auto outType = input->GetTypeAnn();
-        if (auto t = GetItemType(*outType)) {
+        if (auto t = GetSeqItemType(outType)) {
             outType = t;
         }
         if (outType->GetKind() == ETypeAnnotationKind::Variant && outType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
@@ -1817,7 +1818,7 @@ private:
     }
 
     TStatus MuxWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        const TTypeAnnotationNode* listItemType = GetItemType(*input->GetTypeAnn());
+        const auto listItemType = GetSeqItemType(input->GetTypeAnn());
         if (!listItemType) {
             return TStatus::Ok;
         }
@@ -2222,7 +2223,7 @@ private:
             }
         }
 
-        const bool multiInput = ETypeAnnotationKind::Variant == GetItemType(*input->Head().GetTypeAnn())->GetKind();
+        const bool multiInput = ETypeAnnotationKind::Variant == GetSeqItemType(*input->Head().GetTypeAnn()).GetKind();
         const auto lambdaVarIndex = handlerLambda->GetConstraint<TVarIndexConstraintNode>();
         const auto multi = input->Head().GetConstraint<TMultiConstraintNode>();
         const auto lambdaMulti = handlerLambda->GetConstraint<TMultiConstraintNode>();
@@ -2462,7 +2463,7 @@ private:
 
     static std::vector<std::string_view> GetAllItemTypeFields(const TTypeAnnotationNode& type, TExprContext& ctx) {
         std::vector<std::string_view> fields;
-        if (const auto itemType = GetItemType(type)) {
+        if (const auto itemType = GetSeqItemType(&type)) {
             switch (itemType->GetKind()) {
                 case ETypeAnnotationKind::Struct:
                     if (const auto structType = itemType->Cast<TStructExprType>()) {
@@ -2496,7 +2497,7 @@ private:
     }
 
     static const TStructExprType* GetNonEmptyStructItemType(const TTypeAnnotationNode& type) {
-        const TTypeAnnotationNode* itemType = GetItemType(type);
+        const auto itemType = GetSeqItemType(&type);
         if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
             return nullptr;
         }

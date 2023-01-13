@@ -4857,7 +4857,7 @@ static void PrintTypeDiff(TStringBuilder& res, size_t level, const TIndentPrinte
         case ETypeAnnotationKind::Flow:
             res << left.GetKind() << '<';
             indent(res, level + 1);
-            PrintTypeDiff(res, level + 1, indent, *GetItemType(left), *GetItemType(right));
+            PrintTypeDiff(res, level + 1, indent, GetSeqItemType(left), GetSeqItemType(right));
             indent(res, level);
             res << '>';
             break;

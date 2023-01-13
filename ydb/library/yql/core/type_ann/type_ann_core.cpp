@@ -1783,7 +1783,7 @@ namespace NTypeAnnImpl {
 
         const TTypeAnnotationNode* resultType = nullptr;
         bool isSequence = true;
-        const TTypeAnnotationNode* itemType = GetItemType(*firstChildType);
+        const TTypeAnnotationNode* itemType = GetSeqItemType(firstChildType);
         if (!itemType) {
             itemType = firstChildType;
             isSequence = false;
@@ -1871,7 +1871,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* itemType = GetItemType(*firstChildType);
+        const TTypeAnnotationNode* itemType = GetSeqItemType(firstChildType);
         if (!itemType) {
             itemType = firstChildType;
         }

@@ -94,7 +94,7 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
     // dq splits this type of lambda output into separate stage outputs
     // thus it's impossible to maintain 'node' typing (muxing them ain't an option,
     // cause the only purpose of this optimizer is to push original Mux to the stage)
-    if (const auto listItemType = GetItemType(*node.Ref().GetTypeAnn());
+    if (const auto listItemType = GetSeqItemType(node.Ref().GetTypeAnn());
         !listItemType || listItemType->GetKind() == ETypeAnnotationKind::Variant) {
         return node;
     }
@@ -752,7 +752,7 @@ TExprBase DqBuildLMapOverMuxStageStub(TExprBase node, TExprContext& ctx, NYql::I
         return node;
     }
     auto mux = maybeMux.Cast();
-    const TTypeAnnotationNode* listItemType = GetItemType(*node.Ref().GetTypeAnn());
+    const TTypeAnnotationNode* listItemType = GetSeqItemType(node.Ref().GetTypeAnn());
     if (!listItemType) {
         return node;
     }

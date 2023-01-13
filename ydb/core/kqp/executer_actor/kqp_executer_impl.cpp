@@ -25,8 +25,8 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
 
 void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, const NYql::NDqProto::TData& rows) {
     YQL_ENSURE(idx < TxResults.size());
-    ResultRowsCount += rows.GetRaw().size();
-    ResultRowsBytes += rows.GetRows();
+    ResultRowsCount += rows.GetRows();
+    ResultRowsBytes += rows.GetRaw().size();
     auto guard = AllocState->TypeEnv.BindAllocator();
     auto& result = TxResults[idx];
     if (rows.GetRows() || !result.IsStream) {

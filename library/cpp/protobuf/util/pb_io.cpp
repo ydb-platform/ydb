@@ -3,6 +3,7 @@
 #include <library/cpp/binsaver/bin_saver.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <google/protobuf/io/tokenizer.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/messagext.h>
 #include <google/protobuf/text_format.h>
@@ -79,7 +80,43 @@ namespace NProtoBuf {
     bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
         return MergePartialFromString(m, serializedProtoMessage) && m.IsInitialized();
     }
-}
+}  // end of namespace NProtoBuf
+
+
+namespace {
+    class TErrorCollector: public NProtoBuf::io::ErrorCollector {
+    public:
+        TErrorCollector(const NProtoBuf::Message& m, IOutputStream* errorOut, IOutputStream* warningOut)
+          : TypeName_(m.GetTypeName())
+        {
+            ErrorOut_ = errorOut ? errorOut : &Cerr;
+            WarningOut_ = warningOut ? warningOut : &Cerr;
+        }
+        void AddError(int line, int column, const TProtoStringType& message) override {
+            PrintErrorMessage(ErrorOut_, "Error", line, column, message);
+        }
+        void AddWarning(int line, int column, const TProtoStringType& message) override {
+            PrintErrorMessage(WarningOut_, "Warning", line, column, message);
+        }
+
+    private:
+        void PrintErrorMessage(IOutputStream* out, TStringBuf errorLevel, int line, int column, const TProtoStringType& message) {
+            (*out) << errorLevel << " parsing text-format ";
+            if (line >= 0) {
+                (*out) << TypeName_ << ": " << (line + 1) << ":" << (column + 1) << ": " << message;
+            } else {
+                (*out) << TypeName_ << ": " << message;
+            }
+            out->Flush();
+        }
+
+    private:
+        const TProtoStringType TypeName_;
+        IOutputStream* ErrorOut_;
+        IOutputStream* WarningOut_;
+    };
+}  // end of anonymous namespace
+
 
 int operator&(NProtoBuf::Message& m, IBinSaver& f) {
     TStringStream ss;
@@ -138,30 +175,46 @@ static void ConfigureParser(const EParseFromTextFormatOptions options,
 }
 
 void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options) {
+                         const EParseFromTextFormatOptions options, IOutputStream* warningStream) {
     NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in);
     NProtoBuf::TextFormat::Parser p;
     ConfigureParser(options, p);
 
+    bool writeErrorToException = options & EParseFromTextFormatOption::WriteErrorMessageToException;
+    TStringStream errorLog;
+    THolder<TErrorCollector> errorCollector;
+
+    if (writeErrorToException) {
+        errorCollector = MakeHolder<TErrorCollector>(m, &errorLog, warningStream);
+        p.RecordErrorsTo(errorCollector.Get());
+    } else if (warningStream) {
+        errorCollector = MakeHolder<TErrorCollector>(m, &Cerr, warningStream);
+        p.RecordErrorsTo(errorCollector.Get());
+    }
+
     if (!p.Parse(&adaptor, &m)) {
         // remove everything that may have been read
         m.Clear();
-        ythrow yexception() << "ParseFromTextFormat failed on Parse for " << m.GetTypeName();
+        if (Y_UNLIKELY(writeErrorToException)) {
+            ythrow yexception() << errorLog.Str();
+        } else {
+            ythrow yexception() << "ParseFromTextFormat failed on Parse for " << m.GetTypeName();
+        }
     }
 }
 
 void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options) {
+                         const EParseFromTextFormatOptions options, IOutputStream* warningStream) {
     /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds
     * a buffer on top of it. */
     TUnbufferedFileInput stream(fileName);
-    ParseFromTextFormat(stream, m, options);
+    ParseFromTextFormat(stream, m, options, warningStream);
 }
 
 bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options) {
+                            const EParseFromTextFormatOptions options, IOutputStream* warningStream) {
     try {
-        ParseFromTextFormat(fileName, m, options);
+        ParseFromTextFormat(fileName, m, options, warningStream);
     } catch (std::exception&) {
         return false;
     }
@@ -170,9 +223,9 @@ bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
 }
 
 bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options) {
+                            const EParseFromTextFormatOptions options, IOutputStream* warningStream) {
     try {
-        ParseFromTextFormat(in, m, options);
+        ParseFromTextFormat(in, m, options, warningStream);
     } catch (std::exception&) {
         return false;
     }

@@ -58,44 +58,46 @@ void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream&
 
 enum class EParseFromTextFormatOption : ui64 {
     // Unknown fields will be ignored by the parser
-    AllowUnknownField = 1
+    AllowUnknownField = 1,
+    // Error message will be writen to exception message instead of cerr
+    WriteErrorMessageToException = 2
 };
 
 Y_DECLARE_FLAGS(EParseFromTextFormatOptions, EParseFromTextFormatOption);
 
 // Parse a text-format protocol message from the given file into message object.
 void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options = {});
+                         const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
 // NOTE: will read `in` till the end.
 void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                         const EParseFromTextFormatOptions options = {});
+                         const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
 
 /* @return              `true` if parsing was successfull and `false` otherwise.
  *
  * @see `ParseFromTextFormat`
  */
 bool TryParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options = {});
+                            const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
 // NOTE: will read `in` till the end.
 bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
-                            const EParseFromTextFormatOptions options = {});
+                            const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
 
 // @see `ParseFromTextFormat`
 template <typename T>
 static T ParseFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}) {
+                             const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
     T message;
-    ParseFromTextFormat(fileName, message, options);
+    ParseFromTextFormat(fileName, message, options, warningStream);
     return message;
 }
 
 // @see `ParseFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T ParseFromTextFormat(IInputStream& in,
-                             const EParseFromTextFormatOptions options = {}) {
+static T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
+                             IOutputStream* warningStream = nullptr) {
     T message;
-    ParseFromTextFormat(in, message, options);
+    ParseFromTextFormat(in, message, options, warningStream);
     return message;
 }
 

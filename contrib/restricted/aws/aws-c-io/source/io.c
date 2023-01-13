@@ -287,6 +287,19 @@ static struct aws_error_info s_errors[] = {
         "Default TLS trust store not found on this system."
         " Trusted CA certificates must be installed,"
         " or \"override default trust store\" must be used while creating the TLS context."),
+
+    AWS_DEFINE_ERROR_INFO_IO(
+        AWS_IO_STREAM_SEEK_FAILED,
+        "Stream failed to seek from the underlying I/O source."),
+    AWS_DEFINE_ERROR_INFO_IO(
+        AWS_IO_STREAM_GET_LENGTH_FAILED,
+        "Stream failed to get length from the underlying I/O source."),
+    AWS_DEFINE_ERROR_INFO_IO(
+        AWS_IO_STREAM_SEEK_UNSUPPORTED,
+        "Seek is not supported in the underlying I/O source."),
+    AWS_DEFINE_ERROR_INFO_IO(
+        AWS_IO_STREAM_GET_LENGTH_UNSUPPORTED,
+        "Get length is not supported in the underlying I/O source."),
 };
 /* clang-format on */
 

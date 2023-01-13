@@ -622,6 +622,13 @@ AWS_IO_API int aws_tls_ctx_options_set_alpn_list(struct aws_tls_ctx_options *opt
 AWS_IO_API void aws_tls_ctx_options_set_verify_peer(struct aws_tls_ctx_options *options, bool verify_peer);
 
 /**
+ * Sets preferred TLS Cipher List
+ */
+AWS_IO_API void aws_tls_ctx_options_set_tls_cipher_preference(
+    struct aws_tls_ctx_options *options,
+    enum aws_tls_cipher_pref cipher_pref);
+
+/**
  * Sets the minimum TLS version to allow.
  */
 AWS_IO_API void aws_tls_ctx_options_set_minimum_tls_version(

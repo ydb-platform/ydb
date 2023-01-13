@@ -1348,7 +1348,7 @@ struct aws_socket *aws_server_bootstrap_new_socket_listener(
         AWS_LS_IO_CHANNEL_BOOTSTRAP,
         "id=%p: attempting to initialize a new "
         "server socket listener for %s:%d",
-        (void *)server_connection_args->bootstrap,
+        (void *)bootstrap_options->bootstrap,
         bootstrap_options->host_name,
         (int)bootstrap_options->port);
 

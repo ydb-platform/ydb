@@ -41,7 +41,7 @@ static int s_unsubscribe_from_io_events(struct aws_event_loop *event_loop, struc
 static void s_free_io_event_resources(void *user_data);
 static bool s_is_event_thread(struct aws_event_loop *event_loop);
 
-static void s_event_thread_main(void *user_data);
+static void aws_event_loop_thread(void *user_data);
 
 int aws_open_nonblocking_posix_pipe(int pipe_fds[2]);
 
@@ -368,7 +368,7 @@ static int s_run(struct aws_event_loop *event_loop) {
 
     aws_thread_increment_unjoined_count();
     int err =
-        aws_thread_launch(&impl->thread_created_on, s_event_thread_main, (void *)event_loop, &impl->thread_options);
+        aws_thread_launch(&impl->thread_created_on, aws_event_loop_thread, (void *)event_loop, &impl->thread_options);
 
     if (err) {
         aws_thread_decrement_unjoined_count();
@@ -521,8 +521,6 @@ static void s_subscribe_task(struct aws_task *task, void *user_data, enum aws_ta
     if (status == AWS_TASK_STATUS_CANCELED) {
         return;
     }
-    AWS_LOGF_TRACE(
-        AWS_LS_IO_EVENT_LOOP, "id=%p: subscribing to events on fd %d", (void *)event_loop, handle_data->owner->data.fd);
 
     /* If handle was unsubscribed before this task could execute, nothing to do */
     if (handle_data->state == HANDLE_STATE_UNSUBSCRIBED) {
@@ -530,6 +528,8 @@ static void s_subscribe_task(struct aws_task *task, void *user_data, enum aws_ta
     }
 
     AWS_ASSERT(handle_data->state == HANDLE_STATE_SUBSCRIBING);
+    AWS_LOGF_TRACE(
+        AWS_LS_IO_EVENT_LOOP, "id=%p: subscribing to events on fd %d", (void *)event_loop, handle_data->owner->data.fd);
 
     /* In order to monitor both reads and writes, kqueue requires you to add two separate kevents.
      * If we're adding two separate kevents, but one of those fails, we need to remove the other kevent.
@@ -808,7 +808,20 @@ static int s_aws_event_flags_from_kevent(struct kevent *kevent) {
     return event_flags;
 }
 
-static void s_event_thread_main(void *user_data) {
+/**
+ * This just calls kevent()
+ *
+ * We broke this out into its own function so that the stacktrace clearly shows
+ * what this thread is doing. We've had a lot of cases where users think this
+ * thread is deadlocked because it's stuck here. We want it to be clear
+ * that it's doing nothing on purpose. It's waiting for events to happen...
+ */
+AWS_NO_INLINE
+static int aws_event_loop_listen_for_io_events(int kq_fd, struct kevent kevents[MAX_EVENTS], struct timespec *timeout) {
+    return kevent(kq_fd, NULL /*changelist*/, 0 /*nchanges*/, kevents /*eventlist*/, MAX_EVENTS /*nevents*/, timeout);
+}
+
+static void aws_event_loop_thread(void *user_data) {
     struct aws_event_loop *event_loop = user_data;
     AWS_LOGF_INFO(AWS_LS_IO_EVENT_LOOP, "id=%p: main loop started", (void *)event_loop);
     struct kqueue_loop *impl = event_loop->impl_data;
@@ -851,8 +864,7 @@ static void s_event_thread_main(void *user_data) {
             (unsigned long long)timeout.tv_nsec);
 
         /* Process kqueue events */
-        int num_kevents = kevent(
-            impl->kq_fd, NULL /*changelist*/, 0 /*nchanges*/, kevents /*eventlist*/, MAX_EVENTS /*nevents*/, &timeout);
+        int num_kevents = aws_event_loop_listen_for_io_events(impl->kq_fd, kevents, &timeout);
 
         aws_event_loop_register_tick_start(event_loop);
         AWS_LOGF_TRACE(

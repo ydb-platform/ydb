@@ -69,7 +69,7 @@ int aws_host_resolver_resolve_host(
     struct aws_host_resolver *resolver,
     const struct aws_string *host_name,
     aws_on_host_resolved_result_fn *res,
-    struct aws_host_resolution_config *config,
+    const struct aws_host_resolution_config *config,
     void *user_data) {
     AWS_ASSERT(resolver->vtable && resolver->vtable->resolve_host);
     return resolver->vtable->resolve_host(resolver, host_name, res, config, user_data);
@@ -961,7 +961,7 @@ static bool s_is_host_entry_pinned_by_listener(struct aws_linked_list *listener_
     return false;
 }
 
-static void resolver_thread_fn(void *arg) {
+static void aws_host_resolver_thread(void *arg) {
     struct host_entry *host_entry = arg;
 
     size_t unsolicited_resolve_max = host_entry->resolution_config.max_ttl;
@@ -1252,7 +1252,7 @@ static inline int create_and_init_host_entry(
     struct aws_host_resolver *resolver,
     const struct aws_string *host_name,
     aws_on_host_resolved_result_fn *res,
-    struct aws_host_resolution_config *config,
+    const struct aws_host_resolution_config *config,
     uint64_t timestamp,
     void *user_data) {
     struct host_entry *new_host_entry = aws_mem_calloc(resolver->allocator, 1, sizeof(struct host_entry));
@@ -1359,8 +1359,9 @@ static inline int create_and_init_host_entry(
 
     struct aws_thread_options thread_options = *aws_default_thread_options();
     thread_options.join_strategy = AWS_TJS_MANAGED;
+    thread_options.name = aws_byte_cursor_from_c_str("AwsHostResolver"); /* 15 characters is max for Linux */
 
-    aws_thread_launch(&new_host_entry->resolver_thread, resolver_thread_fn, new_host_entry, &thread_options);
+    aws_thread_launch(&new_host_entry->resolver_thread, aws_host_resolver_thread, new_host_entry, &thread_options);
     ++default_host_resolver->pending_host_entry_shutdown_completion_callbacks;
 
     return AWS_OP_SUCCESS;
@@ -1380,7 +1381,7 @@ static int default_resolve_host(
     struct aws_host_resolver *resolver,
     const struct aws_string *host_name,
     aws_on_host_resolved_result_fn *res,
-    struct aws_host_resolution_config *config,
+    const struct aws_host_resolution_config *config,
     void *user_data) {
     int result = AWS_OP_SUCCESS;
 
@@ -1553,7 +1554,7 @@ static void s_aws_host_resolver_destroy(struct aws_host_resolver *resolver) {
 
 struct aws_host_resolver *aws_host_resolver_new_default(
     struct aws_allocator *allocator,
-    struct aws_host_resolver_default_options *options) {
+    const struct aws_host_resolver_default_options *options) {
     AWS_FATAL_ASSERT(options != NULL);
 
     /* NOTE: we don't use el_group yet, but we will in the future. Also, we

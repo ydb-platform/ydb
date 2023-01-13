@@ -65,10 +65,9 @@ static void s_aws_event_loop_group_shutdown_async(struct aws_event_loop_group *e
 
     aws_thread_init(&cleanup_thread, el_group->allocator);
 
-    struct aws_thread_options thread_options;
-    AWS_ZERO_STRUCT(thread_options);
-    thread_options.cpu_id = -1;
+    struct aws_thread_options thread_options = *aws_default_thread_options();
     thread_options.join_strategy = AWS_TJS_MANAGED;
+    thread_options.name = aws_byte_cursor_from_c_str("EvntLoopCleanup"); /* 15 characters is max for Linux */
 
     aws_thread_launch(&cleanup_thread, s_event_loop_destroy_async_thread_fn, el_group, &thread_options);
 }
@@ -124,12 +123,20 @@ static struct aws_event_loop_group *s_event_loop_group_new(
 
             struct aws_event_loop_options options = {
                 .clock = clock,
+                .thread_options = &thread_options,
             };
 
             if (pin_threads) {
                 thread_options.cpu_id = usable_cpus[i].cpu_id;
-                options.thread_options = &thread_options;
             }
+
+            /* Thread name should be <= 15 characters */
+            char thread_name[32] = {0};
+            int thread_name_len = snprintf(thread_name, sizeof(thread_name), "AwsEventLoop %d", (int)i + 1);
+            if (thread_name_len > AWS_THREAD_NAME_RECOMMENDED_STRLEN) {
+                snprintf(thread_name, sizeof(thread_name), "AwsEventLoop");
+            }
+            thread_options.name = aws_byte_cursor_from_c_str(thread_name);
 
             struct aws_event_loop *loop = new_loop_fn(alloc, &options, new_loop_user_data);
 

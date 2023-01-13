@@ -80,7 +80,7 @@ struct aws_channel {
     size_t window_update_batch_emit_threshold;
     struct aws_channel_task window_update_task;
     bool read_back_pressure_enabled;
-    bool window_update_in_progress;
+    bool window_update_scheduled;
 };
 
 struct channel_setup_args {
@@ -833,6 +833,8 @@ static void s_window_update_task(struct aws_channel_task *channel_task, void *ar
     (void)channel_task;
     struct aws_channel *channel = arg;
 
+    channel->window_update_scheduled = false;
+
     if (status == AWS_TASK_STATUS_RUN_READY && channel->channel_state < AWS_CHANNEL_SHUTTING_DOWN) {
         /* get the right-most slot to start the updates. */
         struct aws_channel_slot *slot = channel->first;
@@ -852,7 +854,6 @@ static void s_window_update_task(struct aws_channel_task *channel_task, void *ar
                         "channel %p: channel update task failed with status %d",
                         (void *)slot->channel,
                         aws_last_error());
-                    slot->channel->window_update_in_progress = false;
                     aws_channel_shutdown(channel, aws_last_error());
                     return;
                 }
@@ -860,7 +861,6 @@ static void s_window_update_task(struct aws_channel_task *channel_task, void *ar
             slot = slot->adj_left;
         }
     }
-    channel->window_update_in_progress = false;
 }
 
 int aws_channel_slot_increment_read_window(struct aws_channel_slot *slot, size_t window) {
@@ -869,9 +869,9 @@ int aws_channel_slot_increment_read_window(struct aws_channel_slot *slot, size_t
         slot->current_window_update_batch_size =
             aws_add_size_saturating(slot->current_window_update_batch_size, window);
 
-        if (!slot->channel->window_update_in_progress &&
+        if (!slot->channel->window_update_scheduled &&
             slot->window_size <= slot->channel->window_update_batch_emit_threshold) {
-            slot->channel->window_update_in_progress = true;
+            slot->channel->window_update_scheduled = true;
             aws_channel_task_init(
                 &slot->channel->window_update_task, s_window_update_task, slot->channel, "window update task");
             aws_channel_schedule_task_now(slot->channel, &slot->channel->window_update_task);

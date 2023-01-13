@@ -872,6 +872,13 @@ public:
                     YQL_ENSURE(false, "Can't reset TTL settings");
                 }
             }
+            if (const auto& tiering = Params.TableSettings.Tiering) {
+                if (tiering.IsSet()) {
+                    settings = L(settings, Q(Y(Q("setTiering"), tiering.GetValueSet())));
+                } else {
+                    YQL_ENSURE(false, "Can't reset TIERING");
+                }
+            }
             if (Params.TableSettings.StoreType) {
                 const auto& ref = Params.TableSettings.StoreType.GetRef();
                 settings = L(settings, Q(Y(Q("storeType"), BuildQuotedAtom(ref.Pos, ref.Name))));
@@ -1049,6 +1056,13 @@ public:
                     settings = L(settings, Q(Y(Q("resetTtlSettings"), Q(Y()))));
                 }
             }
+            if (const auto& tiering = Params.TableSettings.Tiering) {
+                if (tiering.IsSet()) {
+                    settings = L(settings, Q(Y(Q("setTiering"), tiering.GetValueSet())));
+                } else {
+                    settings = L(settings, Q(Y(Q("resetTiering"), Q(Y()))));
+                }
+            }
             actions = L(actions, Q(Y(Q("setTableSettings"), Q(settings))));
         }
 
@@ -1148,7 +1162,7 @@ public:
         auto opts = Y();
 
         opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
-        
+
         if (TableType == ETableType::TableStore) {
             opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
         }

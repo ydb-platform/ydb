@@ -1559,7 +1559,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (TypeOf '((String '\"2022-01-01\"))) (TypeOf (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float)))) '\"\" (Void))";
         UNIT_ASSERT(programm.find(expected) != TString::npos);
     }
-    
+
     Y_UNIT_TEST(UdfSyntaxSugarFullTest) {
         auto req = "SELECT Udf(DateTime::FromString, String, Tuple<Int32, Float>, 'foo' as TypeConfig, Void() As RunConfig)('2022-01-01');";
         auto res = SqlToYql(req);
@@ -1672,6 +1672,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TieringParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+                WITH ( TIERING = 'my_tiering' );)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiering"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("my_tiering"));
             }
         };
 
@@ -1869,6 +1890,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column)").IsOk());
     }
 
+    Y_UNIT_TEST(AlterTableSetTieringIsCorrect) {
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TIERING = 'my_tiering')").IsOk());
+    }
+
     Y_UNIT_TEST(AlterTableAddChangefeedIsCorrect) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'json')").IsOk());
     }
@@ -2004,7 +2029,7 @@ Y_UNIT_TEST_SUITE(ExternalFunction) {
     }
 }
 
-Y_UNIT_TEST_SUITE(SqlToYQLErrors) {    
+Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
         auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
         auto res = SqlToYql(req);

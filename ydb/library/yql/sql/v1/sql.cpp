@@ -2334,6 +2334,17 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         } else {
             settings.TtlSettings.Reset();
         }
+    } else if (to_lower(id.Name) == "tiering") {
+        if (!reset) {
+            TNodePtr tieringNode;
+            if (!StoreString(*value, tieringNode, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            settings.Tiering.Set(tieringNode);
+        } else {
+            settings.Tiering.Reset();
+        }
     } else if (to_lower(id.Name) == "store") {
         if (reset) {
             Ctx.Error() << to_upper(id.Name) << " reset is not supported";

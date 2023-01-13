@@ -750,7 +750,7 @@ namespace NSQLTranslationV1 {
         const bool Ordered;
     };
 
-    
+
     class TUdfNode: public INode {
     public:
         TUdfNode(TPosition pos, const TVector<TNodePtr>& args);
@@ -1129,13 +1129,14 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> KeyBloomFilter;
         TNodePtr ReadReplicasSettings;
         NYql::TResetableSetting<TTtlSettings, void> TtlSettings;
+        NYql::TResetableSetting<TNodePtr, void> Tiering;
         TMaybe<TIdentifier> StoreType;
         TNodePtr PartitionByHashFunction;
 
         bool IsSet() const {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
-                || ReadReplicasSettings || TtlSettings || StoreType || PartitionByHashFunction;
+                || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction;
         }
     };
 

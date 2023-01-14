@@ -315,7 +315,7 @@ private:
         for (ui32 i = 0, outIndex = 0; i < Width_; ++i) {
             bool isScalar = Types_[i]->GetShape() == TBlockType::EShape::Scalar;
             if (i != BitmapIndex_ && output[outIndex]) {
-                *output[outIndex] = isScalar ? s.InputValues_[i] : s.Builders_[i]->Build(ctx, s.Finish_);
+                *output[outIndex] = isScalar ? s.InputValues_[i] : ctx.HolderFactory.CreateArrowBlock(s.Builders_[i]->Build(s.Finish_));
             }
             if (i != BitmapIndex_) {
                 outIndex++;

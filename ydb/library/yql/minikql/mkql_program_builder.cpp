@@ -5312,6 +5312,23 @@ TRuntimeNode TProgramBuilder::PgInternal0(TType* returnType) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
+    const auto conditionType = AS_TYPE(TBlockType, condition.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDataType, conditionType->GetItemType())->GetSchemeType() == NUdf::TDataType<bool>::Id,
+                "Expected bool as first argument");
+
+    const auto thenType = AS_TYPE(TBlockType, thenBranch.GetStaticType());
+    const auto elseType = AS_TYPE(TBlockType, elseBranch.GetStaticType());
+    MKQL_ENSURE(thenType->GetItemType()->IsSameType(*elseType->GetItemType()), "Different return types in branches.");
+
+    auto returnType = NewBlockType(thenType->GetItemType(), GetResultShape({conditionType, thenType, elseType}));
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(condition);
+    callableBuilder.Add(thenBranch);
+    callableBuilder.Add(elseBranch);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args) {
     for (const auto& arg : args) {
         MKQL_ENSURE(arg.GetStaticType()->IsBlock(), "Expected Block type");

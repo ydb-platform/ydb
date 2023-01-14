@@ -17,29 +17,6 @@ namespace NMiniKQL {
 
 namespace {
 
-bool AlwaysUseChunks(const TType* type) {
-    if (type->IsOptional()) {
-        return AlwaysUseChunks(AS_TYPE(TOptionalType, type)->GetItemType());
-    }
-
-    if (type->IsTuple()) {
-        auto tupleType = AS_TYPE(TTupleType, type);
-        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            if (AlwaysUseChunks(tupleType->GetElementType(i))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    if (type->IsData()) {
-        auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
-        return (GetDataTypeInfo(slot).Features & NYql::NUdf::EDataTypeFeatures::StringType) != 0u;
-    }
-
-    MKQL_ENSURE(false, "Unsupported type");
-}
-
 std::shared_ptr<arrow::DataType> GetArrowType(TType* type) {
     std::shared_ptr<arrow::DataType> result;
     Y_VERIFY(ConvertArrowType(type, result));
@@ -101,21 +78,14 @@ public:
         CurrLen += popCount;
     }
 
-    NUdf::TUnboxedValuePod Build(TComputationContext& ctx, bool finish) final {
+    arrow::Datum Build(bool finish) final {
         auto tree = BuildTree(finish);
-        arrow::ArrayVector chunks;
+        TVector<std::shared_ptr<arrow::ArrayData>> chunks;
         while (size_t size = CalcSliceSize(*tree)) {
-            std::shared_ptr<arrow::ArrayData> data = Slice(*tree, size);
-            chunks.push_back(arrow::Datum(data).make_array());
+            chunks.push_back(Slice(*tree, size));
         }
 
-        Y_VERIFY(!chunks.empty());
-
-        if (chunks.size() > 1 || AlwaysUseChunks(Type)) {
-            auto chunked = ARROW_RESULT(arrow::ChunkedArray::Make(std::move(chunks), GetArrowType(Type)));
-            return ctx.HolderFactory.CreateArrowBlock(std::move(chunked));
-        }
-        return ctx.HolderFactory.CreateArrowBlock(chunks.front());
+        return MakeArray(chunks);
     }
 
     TBlockArrayTree::Ptr BuildTree(bool finish) {

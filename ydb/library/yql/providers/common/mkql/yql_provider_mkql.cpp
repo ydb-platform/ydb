@@ -552,7 +552,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"ListFromRange", &TProgramBuilder::ListFromRange},
 
-        {"PreserveStream", &TProgramBuilder::PreserveStream}
+        {"PreserveStream", &TProgramBuilder::PreserveStream},
+
+        {"BlockIf", &TProgramBuilder::BlockIf},
     });
 
     AddSimpleCallables({

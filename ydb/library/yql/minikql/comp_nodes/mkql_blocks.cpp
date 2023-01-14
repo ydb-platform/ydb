@@ -43,7 +43,7 @@ public:
             builder->Add(result);
         }
 
-        return builder->Build(ctx, true);
+        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
     }
 
 private:
@@ -98,7 +98,7 @@ public:
 
         for (size_t i = 0; i < Width_; ++i) {
             if (auto* out = output[i]; out != nullptr) {
-                *out = s.Builders_[i]->Build(ctx, s.IsFinished_);
+                *out = ctx.HolderFactory.CreateArrowBlock(s.Builders_[i]->Build(s.IsFinished_));
             }
         }
 

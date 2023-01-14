@@ -189,6 +189,49 @@ IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto pred = input->Child(0);
+    auto thenNode  = input->Child(1);
+    auto elseNode = input->Child(2);
+
+    if (!EnsureBlockOrScalarType(*pred, ctx.Expr) ||
+        !EnsureBlockOrScalarType(*thenNode, ctx.Expr) ||
+        !EnsureBlockOrScalarType(*elseNode, ctx.Expr))
+    {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool predIsScalar;
+    const TTypeAnnotationNode* predItemType = GetBlockItemType(*pred->GetTypeAnn(), predIsScalar);
+    if (!EnsureSpecificDataType(pred->Pos(), *predItemType, NUdf::EDataSlot::Bool, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool thenIsScalar;
+    const TTypeAnnotationNode* thenItemType = GetBlockItemType(*thenNode->GetTypeAnn(), thenIsScalar);
+
+    bool elseIsScalar;
+    const TTypeAnnotationNode* elseItemType = GetBlockItemType(*elseNode->GetTypeAnn(), elseIsScalar);
+
+    if (!IsSameAnnotation(*thenItemType, *elseItemType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
+            "Mismatch item types: then branch is " << *thenItemType << ", else branch is " << *elseItemType));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (predIsScalar && thenIsScalar && elseIsScalar) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(thenItemType));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(thenItemType));
+    }
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 2U, ctx.Expr)) {

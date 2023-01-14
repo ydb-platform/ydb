@@ -31,7 +31,7 @@ public:
     virtual void Add(NUdf::TUnboxedValuePod value) = 0;
     virtual void Add(TBlockItem value) = 0;
     virtual void AddMany(const arrow::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) = 0;
-    virtual NUdf::TUnboxedValuePod Build(TComputationContext& ctx, bool finish) = 0;
+    virtual arrow::Datum Build(bool finish) = 0;
 };
 
 std::unique_ptr<IBlockBuilder> MakeBlockBuilder(TType* type, arrow::MemoryPool& pool, size_t maxBlockLength);

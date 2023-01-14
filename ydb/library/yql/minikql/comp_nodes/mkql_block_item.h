@@ -36,6 +36,19 @@ public:
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present);
     }
 
+    inline TBlockItem(ui64 low, ui64 high) {
+        Raw.Halfs[0] = low;
+        Raw.Halfs[1] = high;
+    }
+
+    inline ui64 Low() const {
+        return Raw.Halfs[0];
+    }
+
+    inline ui64 High() const {
+        return Raw.Halfs[1];
+    }
+
     template <typename T, typename = std::enable_if_t<NYql::NUdf::TPrimitiveDataType<T>::Result>>
     inline T As() const;
 

@@ -1,5 +1,9 @@
 #include "arrow_util.h"
 #include "mkql_bit_utils.h"
+
+#include <arrow/array/array_base.h>
+#include <arrow/chunked_array.h>
+
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 
 #include <util/system/yassert.h>
@@ -65,6 +69,32 @@ std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len,
     auto bitmap = AllocateBitmapWithReserve(len, pool);
     CompressSparseBitmap(bitmap->mutable_data(), srcSparse, len);
     return bitmap;
+}
+
+void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func) {
+    MKQL_ENSURE(datum.is_arraylike(), "Expected array");
+    if (datum.is_array()) {
+        func(datum.array());
+    } else {
+        for (auto& chunk : datum.chunks()) {
+            func(chunk->data());
+        }
+    }
+}
+
+arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks) {
+    MKQL_ENSURE(!chunks.empty(), "Expected non empty chunks");
+    arrow::ArrayVector resultChunks;
+    for (auto& chunk : chunks) {
+        resultChunks.push_back(arrow::Datum(chunk).make_array());
+    }
+
+    if (resultChunks.size() > 1) {
+        auto type = resultChunks.front()->type();
+        auto chunked = ARROW_RESULT(arrow::ChunkedArray::Make(std::move(resultChunks), type));
+        return arrow::Datum(chunked);
+    }
+    return arrow::Datum(resultChunks.front());
 }
 
 }

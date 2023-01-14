@@ -6,8 +6,60 @@
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 
 #include <arrow/array.h>
+#include <arrow/scalar.h>
+#include <arrow/datum.h>
+#include <arrow/compute/kernel.h>
 
 namespace NKikimr::NMiniKQL {
+
+arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool);
+
+arrow::ValueDescr ToValueDescr(TType* type);
+
+std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
+arrow::compute::OutputType ConvertToOutputType(TType* output);
+
+class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
+public:
+    TBlockFuncNode(TComputationMutables& mutables, TVector<IComputationNode*>&& argsNodes,
+        const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
+        std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
+        const arrow::compute::FunctionOptions* functionOptions = nullptr);
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const;
+private:
+    struct TState : public TComputationValue<TState> {
+        using TComputationValue::TComputationValue;
+
+        TState(TMemoryUsageInfo* memInfo, const arrow::compute::FunctionOptions* options,
+               const arrow::compute::ScalarKernel& kernel, const std::vector<arrow::ValueDescr>& argsValuesDescr,
+               TComputationContext& ctx)
+               : TComputationValue(memInfo)
+               , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
+               , KernelContext(&ExecContext)
+        {
+            if (kernel.init) {
+                State = ARROW_RESULT(kernel.init(&KernelContext, { &kernel, argsValuesDescr, options }));
+                KernelContext.SetState(State.get());
+            }
+        }
+
+        arrow::compute::ExecContext ExecContext;
+        arrow::compute::KernelContext KernelContext;
+        std::unique_ptr<arrow::compute::KernelState> State;
+    };
+
+    void RegisterDependencies() const final;
+    TState& GetState(TComputationContext& ctx) const;
+private:
+    const ui32 StateIndex;
+    const TVector<IComputationNode*> ArgsNodes;
+    const std::vector<arrow::ValueDescr> ArgsValuesDescr;
+    const arrow::compute::ScalarKernel& Kernel;
+    const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder;
+    const arrow::compute::FunctionOptions* const Options;
+    const bool ScalarOutput;
+};
 
 template <typename TDerived>
 class TStatefulWideFlowBlockComputationNode: public TWideFlowBaseComputationNode<TDerived>

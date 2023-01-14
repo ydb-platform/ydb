@@ -272,19 +272,23 @@ private:
         {
             size_t maxBlockItemSize = 0;
             for (ui32 i = 0, outIndex = 0; i < width; ++i) {
-                ValuePointers_[i] = &InputValues_[i];
                 if (i != bitmapIndex) {
-                    if (types[i]->GetShape() != TBlockType::EShape::Scalar && output != nullptr) {
+                    if (types[i]->GetShape() != TBlockType::EShape::Scalar && output[outIndex] != nullptr) {
                         HaveBlocks_ = true;
                         maxBlockItemSize = std::max(maxBlockItemSize, CalcMaxBlockItemSize(types[i]->GetItemType()));
                     }
+                    if (output[outIndex] != nullptr) {
+                        ValuePointers_[i] = &InputValues_[i];
+                    }
                     outIndex++;
+                } else {
+                    ValuePointers_[i] = &InputValues_[i];
                 }
             }
             const size_t maxBlockLen = CalcBlockLen(maxBlockItemSize);
             for (ui32 i = 0, outIndex = 0; i < width; ++i) {
                 if (i != bitmapIndex) {
-                    if (types[i]->GetShape() != TBlockType::EShape::Scalar && output != nullptr) {
+                    if (types[i]->GetShape() != TBlockType::EShape::Scalar && output[outIndex] != nullptr) {
                         Builders_[i] = MakeBlockBuilder(types[i]->GetItemType(), pool, maxBlockLen);
                     }
                     outIndex++;
@@ -313,11 +317,11 @@ private:
     void FlushBuffers(TState& s, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         Y_VERIFY(s.OutputPos_ > 0);
         for (ui32 i = 0, outIndex = 0; i < Width_; ++i) {
-            bool isScalar = Types_[i]->GetShape() == TBlockType::EShape::Scalar;
-            if (i != BitmapIndex_ && output[outIndex]) {
-                *output[outIndex] = isScalar ? s.InputValues_[i] : ctx.HolderFactory.CreateArrowBlock(s.Builders_[i]->Build(s.Finish_));
-            }
             if (i != BitmapIndex_) {
+                NUdf::TUnboxedValue result = s.Builders_[i] ? ctx.HolderFactory.CreateArrowBlock(s.Builders_[i]->Build(s.Finish_)) : s.InputValues_[i];
+                if (output[outIndex]) {
+                    *output[outIndex] = result;
+                }
                 outIndex++;
             }
         }

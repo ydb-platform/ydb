@@ -346,6 +346,12 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.MutableTTLSettings()->MutableDisabled();
     }
 
+    if (proto.has_set_tiering()) {
+        tableDesc.MutableTTLSettings()->SetUseTiering(proto.set_tiering());
+    } else if (proto.has_drop_tiering()) {
+        tableDesc.MutableTTLSettings()->SetUseTiering("");
+    }
+
     if (!changed && !hadPartitionConfig) {
         tableDesc.ClearPartitionConfig();
     }

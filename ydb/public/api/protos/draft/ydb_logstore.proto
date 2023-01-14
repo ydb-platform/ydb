@@ -195,6 +195,7 @@ message AlterLogTableRequest {
         google.protobuf.Empty drop_ttl_settings = 3;
         Ydb.Table.TtlSettings set_ttl_settings = 4;
         TieringSettings set_tiering_settings = 5;
+        google.protobuf.Empty drop_tiering_settings = 6;
     }
 }
 

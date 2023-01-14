@@ -487,6 +487,8 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
+    // Tiering name for table
+    string tiering = 18;
 }
 
 message CreateTableResponse {
@@ -561,6 +563,11 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
+    // Setup or remove tiering
+    oneof tiering_action {
+        string set_tiering = 22;
+        google.protobuf.Empty drop_tiering = 23;
+    }
 }
 
 message AlterTableResponse {

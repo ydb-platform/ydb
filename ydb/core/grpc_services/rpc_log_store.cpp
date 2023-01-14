@@ -623,6 +623,12 @@ private:
             alter->MutableAlterTtlSettings()->MutableDisabled();
         }
 
+        if (req->has_set_tiering_settings()) {
+            alter->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering_settings().tiering_id());
+        } else if (req->has_drop_tiering_settings()) {
+            alter->MutableAlterTtlSettings()->SetUseTiering("");
+        }
+
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 };

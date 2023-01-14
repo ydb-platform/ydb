@@ -2424,6 +2424,16 @@ private:
             }
         }
 
+        if (const auto& tiering = metadata->TableSettings.Tiering) {
+            if (tiering.IsSet()) {
+                proto.set_tiering(tiering.GetValueSet());
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Can't reset TIERING";
+                return false;
+            }
+        }
+
         return true;
     }
 

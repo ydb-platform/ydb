@@ -36,125 +36,126 @@ public:
         , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
-        ResolveTables();
-        Become(&TKqpTableResolver::ResolveTablesState);
-    }
-
-private:
-    STATEFN(ResolveTablesState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveTables);
-            hFunc(TEvents::TEvPoison, HandleResolveTables);
-            default:
-                UnexpectedEvent("ResolveTablesState", ev->GetTypeRewrite());
-        }
-    }
-
-    void HandleResolveTables(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        auto timer = std::make_unique<NCpuTime::TCpuTimer>(CpuTime);
-
-        const auto& entries = ev->Get()->Request->ResultSet;
-        LOG_D("Resolved tables: " << entries.size());
-        YQL_ENSURE(entries.size() == TableKeys.Size());
-
-        for (auto& entry : entries) {
-            switch (entry.Status) {
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                    break;
-
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                    ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
-                            << "Table scheme error `" << JoinPath(entry.Path) << "`: " << entry.Status << '.'));
-                    return;
-
-                default:
-                    ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
-                            << "Failed to resolve table `" << JoinPath(entry.Path) << "`: " << entry.Status << '.'));
-                    return;
-
-            }
-
-            auto* table = TableKeys.FindTablePtr(entry.TableId);
-            if (!table) {
-                timer.reset();
-                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
-                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
-                        << "Unresolved table `" << JoinPath(entry.Path) << "` with tableId: " << entry.TableId << "."));
-                return;
-            }
-
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-                YQL_ENSURE(entry.ColumnTableInfo || entry.OlapStoreInfo);
-                // NOTE: entry.SysViewInfo might not be empty for OLAP stats virtual tables
-                table->TableKind = ETableKind::Olap;
-            } else if (entry.TableId.IsSystemView()) {
-                table->TableKind = ETableKind::SysView;
-            } else {
-                table->TableKind = ETableKind::Datashard;
-            }
-
-            // TODO: Resolve columns by id
-            TMap<TStringBuf, ui32> columnsMap;
-            for (auto& [columnId, column] : entry.Columns) {
-                auto ret = columnsMap.emplace(column.Name, columnId);
-                YQL_ENSURE(ret.second, "" << column.Name);
-
-                if (column.KeyOrder >= 0) {
-                    table->Columns.emplace(column.Name, TKqpTableKeys::TColumn());
-
-                    if (table->KeyColumns.size() <= (ui32) column.KeyOrder) {
-                        table->KeyColumns.resize(column.KeyOrder + 1);
-                        table->KeyColumnTypes.resize(column.KeyOrder + 1);
-                    }
-                    table->KeyColumns[column.KeyOrder] = column.Name;
-                    table->KeyColumnTypes[column.KeyOrder] = column.PType;
-                }
-            }
-
-            for (auto& keyColumn : table->KeyColumns) {
-                YQL_ENSURE(!keyColumn.empty());
-            }
-
-            auto& sysColumns = GetSystemColumns();
-            for (auto& [columnName, columnKey] : table->Columns) {
-                if (auto* systemColumn = sysColumns.FindPtr(columnName)) {
-                    columnKey.Id = systemColumn->ColumnId;
-                    columnKey.Type = NScheme::TTypeInfo(systemColumn->TypeId);
-                    continue;
-                }
-
-                auto* columnId = columnsMap.FindPtr(columnName);
-                if (!columnId) {
-                    timer.reset();
-                    ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
-                            << "Unknown column `" << columnName << "` at table `" << JoinPath(entry.Path) << "`."));
-                    return;
-                }
-
-                auto* column = entry.Columns.FindPtr(*columnId);
-                YQL_ENSURE(column);
-
-                columnKey.Id = column->Id;
-                columnKey.Type = column->PType;
-            }
-        }
+        FillTables();
 
         ResolveKeys();
-        timer.reset();
-
         Become(&TKqpTableResolver::ResolveKeysState);
     }
 
-    void HandleResolveTables(TEvents::TEvPoison::TPtr&) {
-        PassAway();
+private:
+    static void FillColumn(const NKqpProto::TKqpPhyColumn& phyColumn, TKqpTableKeys::TTable& table) {
+        if (table.Columns.FindPtr(phyColumn.GetId().GetName())) {
+            return;
+        }
+
+        TKqpTableKeys::TColumn column;
+        column.Id = phyColumn.GetId().GetId();
+
+        if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
+            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
+        } else {
+            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
+                NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
+        }
+
+        table.Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
     }
 
-private:
+    void FillTable(const NKqpProto::TKqpPhyTable& phyTable) {
+        auto tableId = MakeTableId(phyTable.GetId());
+
+        auto table = TableKeys.FindTablePtr(tableId);
+        if (!table) {
+            table = &TableKeys.GetOrAddTable(tableId, phyTable.GetId().GetPath());
+
+            switch (phyTable.GetKind()) {
+                case NKqpProto::TABLE_KIND_DS:
+                    table->TableKind = ETableKind::Datashard;
+                    break;
+                case NKqpProto::TABLE_KIND_OLAP:
+                    table->TableKind = ETableKind::Olap;
+                    break;
+                case NKqpProto::TABLE_KIND_SYS_VIEW:
+                    table->TableKind = ETableKind::SysView;
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
+            }
+
+            for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
+                FillColumn(phyColumn, *table);
+            }
+
+            YQL_ENSURE(table->KeyColumns.empty());
+            table->KeyColumns.reserve(phyTable.KeyColumnsSize());
+            YQL_ENSURE(table->KeyColumnTypes.empty());
+            table->KeyColumnTypes.reserve(phyTable.KeyColumnsSize());
+            for (const auto& keyColumnId : phyTable.GetKeyColumns()) {
+                const auto& column = table->Columns.FindPtr(keyColumnId.GetName());
+                YQL_ENSURE(column);
+
+                table->KeyColumns.push_back(keyColumnId.GetName());
+                table->KeyColumnTypes.push_back(column->Type);
+            }
+        } else {
+            for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
+                FillColumn(phyColumn, *table);
+            }
+        }
+    }
+
+    void FillTables() {
+        auto addColumn = [](TKqpTableKeys::TTable& table, const TString& columnName) mutable {
+            auto& sysColumns = GetSystemColumns();
+            if (table.Columns.FindPtr(columnName)) {
+                return;
+            }
+
+            auto* systemColumn = sysColumns.FindPtr(columnName);
+            YQL_ENSURE(systemColumn, "Unknown table column"
+                << ", table: " << table.Path
+                << ", column: " << columnName);
+
+            TKqpTableKeys::TColumn column;
+            column.Id = systemColumn->ColumnId;
+            column.Type = NScheme::TTypeInfo(systemColumn->TypeId);
+            table.Columns.emplace(columnName, std::move(column));
+        };
+
+        for (auto& tx : Transactions) {
+            for (const auto& phyTable : tx.Body->GetTables()) {
+                FillTable(phyTable);
+            }
+
+            for (auto& stage : tx.Body->GetStages()) {
+                for (auto& op : stage.GetTableOps()) {
+                    auto& table = TableKeys.GetTable(MakeTableId(op.GetTable()));
+                    for (auto& column : op.GetColumns()) {
+                        addColumn(table, column.GetName());
+                    }
+                }
+
+                for (auto& source : stage.GetSources()) {
+                    if (source.HasReadRangesSource()) {
+                        auto& table = TableKeys.GetTable(MakeTableId(source.GetReadRangesSource().GetTable()));
+                        for (auto& column : source.GetReadRangesSource().GetColumns()) {
+                            addColumn(table, column.GetName());
+                        }
+                    }
+                }
+
+                for (const auto& input : stage.GetInputs()) {
+                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                        auto& table = TableKeys.GetTable(MakeTableId(input.GetStreamLookup().GetTable()));
+                        for (auto& column : input.GetStreamLookup().GetColumns()) {
+                            addColumn(table, column);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     STATEFN(ResolveKeysState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolveKeys);
@@ -227,56 +228,6 @@ private:
     }
 
 private:
-    // TODO: Get rid of ResolveTables & TableKeys, get table information from phy tx proto.
-    void ResolveTables() {
-        for (auto& tx : Transactions) {
-            for (auto& stage : tx.Body->GetStages()) {
-                for (auto& op : stage.GetTableOps()) {
-                    auto& table = TableKeys.GetOrAddTable(MakeTableId(op.GetTable()), op.GetTable().GetPath());
-                    for (auto& column : op.GetColumns()) {
-                        table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
-                    }
-                }
-
-                for (auto& source : stage.GetSources()) {
-                    if (source.HasReadRangesSource()) {
-                        auto& table = TableKeys.GetOrAddTable(
-                            MakeTableId(source.GetReadRangesSource().GetTable()),
-                            source.GetReadRangesSource().GetTable().GetPath());
-                        for (auto& column : source.GetReadRangesSource().GetColumns()) {
-                            table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
-                        }
-                    }
-                }
-
-                for (const auto& input : stage.GetInputs()) {
-                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-                        const auto& streamLookup = input.GetStreamLookup();
-                        auto& table = TableKeys.GetOrAddTable(MakeTableId(streamLookup.GetTable()), streamLookup.GetTable().GetPath());
-                        for (auto& column : input.GetStreamLookup().GetColumns()) {
-                            table.Columns.emplace(column, TKqpTableKeys::TColumn());
-                        }
-                    }
-                }
-            }
-        }
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->ResultSet.reserve(TableKeys.Size());
-        for (auto& [tableId, table] : TableKeys.Get()) {
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-            entry.TableId = tableId;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-            entry.ShowPrivatePath = true;
-
-            request->ResultSet.emplace_back(std::move(entry));
-        }
-
-        auto ev = MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.Release());
-        Send(MakeSchemeCacheID(), ev.Release());
-    }
-
     void ResolveKeys() {
         FillKqpTasksGraphStages(TasksGraph, Transactions);
 

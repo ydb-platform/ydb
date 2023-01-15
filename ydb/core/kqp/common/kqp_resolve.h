@@ -42,6 +42,18 @@ public:
         return TablesById.FindPtr(id);
     }
 
+    TTable& GetTable(const TTableId& id) {
+        auto table = TablesById.FindPtr(id);
+        MKQL_ENSURE_S(table);
+        return *table;
+    }
+
+    const TTable& GetTable(const TTableId& id) const {
+        auto table = TablesById.FindPtr(id);
+        MKQL_ENSURE_S(table);
+        return *table;
+    }
+
     TTable& GetOrAddTable(const TTableId& id, const TStringBuf path) {
         auto& table = TablesById[id];
 
@@ -52,12 +64,6 @@ public:
         }
 
         return table;
-    }
-
-    const TTable& GetTable(const TTableId& id) const {
-        auto table = TablesById.FindPtr(id);
-        MKQL_ENSURE_S(table);
-        return *table;
     }
 
     size_t Size() const {
@@ -133,7 +139,7 @@ void SortPartitions(TList& partitions, const TVector<NScheme::TTypeInfo>& keyCol
 }
 
 TTableId MakeTableId(const NYql::NNodes::TKqpTable& node);
-TTableId MakeTableId(const NKqpProto::TKqpPhyTable& table);
+TTableId MakeTableId(const NKqpProto::TKqpPhyTableId& table);
 
 } // namespace NKqp
 } // namespace NKikimr

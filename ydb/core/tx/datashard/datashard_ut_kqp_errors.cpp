@@ -81,16 +81,12 @@ Y_UNIT_TEST_SUITE(KqpErrors) {
 
 Y_UNIT_TEST(ResolveTableError) {
     TLocalFixture fixture;
-    int skip = 1; // compile
     auto mitm = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
-            if (skip-- == 0) {
-                // fail on execution phase (kqp_table_resolver.cpp)
-                auto event = ev.Get()->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
-                event->Request->ErrorCount = 1;
-                auto& entries = event->Request->ResultSet;
-                entries[0].Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
-            }
+            auto event = ev.Get()->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+            event->Request->ErrorCount = 1;
+            auto& entries = event->Request->ResultSet;
+            entries[0].Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
     };

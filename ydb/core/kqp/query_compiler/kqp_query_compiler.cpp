@@ -75,7 +75,7 @@ NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::st
     return bindingType;
 }
 
-void FillTable(const TKqpTable& table, NKqpProto::TKqpPhyTable& tableProto) {
+void FillTableId(const TKqpTable& table, NKqpProto::TKqpPhyTableId& tableProto) {
     auto pathId = TKikimrPathId::Parse(table.PathId());
 
     tableProto.SetPath(TString(table.Path()));
@@ -83,6 +83,77 @@ void FillTable(const TKqpTable& table, NKqpProto::TKqpPhyTable& tableProto) {
     tableProto.SetTableId(pathId.TableId());
     tableProto.SetSysView(TString(table.SysView()));
     tableProto.SetVersion(FromString<ui64>(table.Version()));
+}
+
+void FillTableId(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTableId& tableProto) {
+    tableProto.SetPath(tableMeta.Name);
+    tableProto.SetOwnerId(tableMeta.PathId.OwnerId());
+    tableProto.SetTableId(tableMeta.PathId.TableId());
+    tableProto.SetSysView(tableMeta.SysView);
+    tableProto.SetVersion(tableMeta.SchemaVersion);
+}
+
+NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
+    switch (kind) {
+        case EKikimrTableKind::Datashard:
+            return NKqpProto::TABLE_KIND_DS;
+        case EKikimrTableKind::Olap:
+            return NKqpProto::TABLE_KIND_OLAP;
+        case EKikimrTableKind::SysView:
+            return NKqpProto::TABLE_KIND_SYS_VIEW;
+        default:
+            return NKqpProto::TABLE_KIND_UNSPECIFIED;
+    }
+}
+
+void FillTablesMap(const TKqpTable& table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+    tablesMap.emplace(table.Path().Value(), THashSet<TStringBuf>{});
+}
+
+void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
+    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+{
+    FillTablesMap(table, tablesMap);
+
+    for (const auto& column : columns) {
+        tablesMap[table.Path()].emplace(column);
+    }
+}
+
+void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& columns,
+    NKqpProto::TKqpPhyTable& tableProto)
+{
+    FillTableId(tableMeta, *tableProto.MutableId());
+    tableProto.SetKind(GetPhyTableKind(tableMeta.Kind));
+
+    for (const auto& keyColumnName : tableMeta.KeyColumnNames) {
+        auto keyColumn = tableMeta.Columns.FindPtr(keyColumnName);
+        YQL_ENSURE(keyColumn);
+
+        auto& phyKeyColumn = *tableProto.MutableKeyColumns()->Add();
+        phyKeyColumn.SetId(keyColumn->Id);
+        phyKeyColumn.SetName(keyColumn->Name);
+
+        columns.emplace(keyColumnName);
+    }
+
+    auto& phyColumns = *tableProto.MutableColumns();
+    for (const auto& columnName : columns) {
+        auto column = tableMeta.Columns.FindPtr(columnName);
+        if (!column) {
+            YQL_ENSURE(GetSystemColumns().find(columnName) != GetSystemColumns().end());
+            continue;
+        }
+
+        auto& phyColumn = phyColumns[column->Id];
+        phyColumn.MutableId()->SetId(column->Id);
+        phyColumn.MutableId()->SetName(column->Name);
+        phyColumn.SetTypeId(column->TypeInfo.GetTypeId());
+
+        if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+            phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetTypeDesc()));
+        }
+    }
 }
 
 template <typename TProto>
@@ -461,7 +532,7 @@ private:
     }
 
     void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
-        const TMap<ui64, ui32>& stagesMap)
+        const TMap<ui64, ui32>& stagesMap, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
     {
         stageProto.SetIsEffectsStage(NOpt::IsKqpEffectsStage(stage));
 
@@ -470,14 +541,14 @@ private:
 
             if (input.Maybe<TDqSource>()) {
                 auto* protoSource = stageProto.AddSources();
-                FillSource(input.Cast<TDqSource>(), protoSource, true);
+                FillSource(input.Cast<TDqSource>(), protoSource, true, tablesMap);
                 protoSource->SetInputIndex(inputIndex);
             } else {
                 YQL_ENSURE(input.Maybe<TDqConnection>());
                 auto connection = input.Cast<TDqConnection>();
 
                 auto& protoInput = *stageProto.AddInputs();
-                FillConnection(connection, stagesMap, protoInput, ctx);
+                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap);
                 protoInput.SetInputIndex(inputIndex);
             }
         }
@@ -493,7 +564,8 @@ private:
                 YQL_ENSURE(tableMeta);
 
                 auto& tableOp = *stageProto.AddTableOps();
-                FillTable(readTable.Table(), *tableOp.MutableTable());
+                FillTablesMap(readTable.Table(), readTable.Columns(), tablesMap);
+                FillTableId(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
                 FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
             } else if (auto maybeLookupTable = node.Maybe<TKqpLookupTable>()) {
@@ -502,7 +574,8 @@ private:
                 YQL_ENSURE(tableMeta);
 
                 auto& tableOp = *stageProto.AddTableOps();
-                FillTable(lookupTable.Table(), *tableOp.MutableTable());
+                FillTablesMap(lookupTable.Table(), lookupTable.Columns(), tablesMap);
+                FillTableId(lookupTable.Table(), *tableOp.MutableTable());
                 FillColumns(lookupTable.Columns(), *tableMeta, tableOp, true);
                 FillLookup(lookupTable, *tableOp.MutableLookup());
             } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
@@ -514,7 +587,8 @@ private:
                 auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
 
                 auto& tableOp = *stageProto.AddTableOps();
-                FillTable(upsertRows.Table(), *tableOp.MutableTable());
+                FillTablesMap(upsertRows.Table(), upsertRows.Columns(), tablesMap);
+                FillTableId(upsertRows.Table(), *tableOp.MutableTable());
                 FillColumns(upsertRows.Columns(), *tableMeta, tableOp, false);
                 FillEffectRows(upsertRows, *tableOp.MutableUpsertRows(), settings.Inplace);
             } else if (auto maybeDeleteRows = node.Maybe<TKqpDeleteRows>()) {
@@ -525,7 +599,8 @@ private:
                 YQL_ENSURE(stageProto.GetIsEffectsStage());
 
                 auto& tableOp = *stageProto.AddTableOps();
-                FillTable(deleteRows.Table(), *tableOp.MutableTable());
+                FillTablesMap(deleteRows.Table(), tablesMap);
+                FillTableId(deleteRows.Table(), *tableOp.MutableTable());
                 FillEffectRows(deleteRows, *tableOp.MutableDeleteRows(), false);
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
@@ -533,7 +608,8 @@ private:
                 YQL_ENSURE(tableMeta);
 
                 auto& tableOp = *stageProto.AddTableOps();
-                FillTable(readTableRanges.Table(), *tableOp.MutableTable());
+                FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
+                FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
@@ -542,7 +618,8 @@ private:
                 YQL_ENSURE(tableMeta);
 
                 auto& tableOp = *stageProto.AddTableOps();
-                FillTable(readTableRanges.Table(), *tableOp.MutableTable());
+                FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
+                FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
@@ -608,9 +685,11 @@ private:
         bool hasEffectStage = false;
 
         TMap<ui64, ui32> stagesMap;
+        THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
+
         for (const auto& stage : tx.Stages()) {
             auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap);
+            CompileStage(stage, *protoStage, ctx, stagesMap, tablesMap);
             hasEffectStage |= protoStage->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
@@ -652,7 +731,7 @@ private:
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx);
+            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap);
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -691,12 +770,22 @@ private:
                 }
             }
         }
+
+        for (auto& [tablePath, tableColumns] : tablesMap) {
+            auto tableMeta = TablesData->ExistingTable(Cluster, tablePath).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillTable(*tableMeta, std::move(tableColumns), *txProto.AddTables());
+        }
     }
 
-    void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns) {
+    void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    {
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>()) {
             NKqpProto::TKqpReadRangesSource& readProto = *protoSource->MutableReadRangesSource();
-            FillTable(settings.Table().Cast(), *readProto.MutableTable());
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+            FillTableId(settings.Table().Cast(), *readProto.MutableTable());
 
             auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
             YQL_ENSURE(tableMeta);
@@ -744,7 +833,8 @@ private:
     }
 
     void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx)
+        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
     {
         auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
         YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
@@ -815,7 +905,8 @@ private:
             auto tableMeta = TablesData->ExistingTable(Cluster, streamLookup.Table().Path()).Metadata;
             YQL_ENSURE(tableMeta);
 
-            FillTable(streamLookup.Table(), *streamLookupProto.MutableTable());
+            FillTablesMap(streamLookup.Table(), streamLookup.Columns(), tablesMap);
+            FillTableId(streamLookup.Table(), *streamLookupProto.MutableTable());
 
             const auto lookupKeysType = streamLookup.LookupKeysType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             YQL_ENSURE(lookupKeysType, "Empty stream lookup keys type");

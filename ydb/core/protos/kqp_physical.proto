@@ -47,17 +47,37 @@ message TKqpPhyResultBinding {
     }
 }
 
-message TKqpPhyColumn {
+message TKqpPhyColumnId {
     uint32 Id = 1;
     string Name = 2;
 }
 
-message TKqpPhyTable {
+message TKqpPhyColumn {
+    TKqpPhyColumnId Id = 1;
+    uint32 TypeId = 2;
+    string PgTypeName = 3;
+}
+
+enum EKqpPhyTableKind {
+    TABLE_KIND_UNSPECIFIED = 0;
+    TABLE_KIND_DS = 1;
+    TABLE_KIND_OLAP = 2;
+    TABLE_KIND_SYS_VIEW = 3;
+}
+
+message TKqpPhyTableId {
     string Path = 1;
     uint64 OwnerId = 2;
     uint64 TableId = 3;
     string SysView = 4;
     uint64 Version = 5;
+}
+
+message TKqpPhyTable {
+    TKqpPhyTableId Id = 1;
+    EKqpPhyTableKind Kind = 2;
+    map<uint32, TKqpPhyColumn> Columns = 3;
+    repeated TKqpPhyColumnId KeyColumns = 4;
 }
 
 message TKqpPhyParamValue {
@@ -165,8 +185,8 @@ message TKqpPhyOpReadRanges {
 }
 
 message TKqpPhyTableOperation {
-    TKqpPhyTable Table = 1;
-    repeated TKqpPhyColumn Columns = 2;
+    TKqpPhyTableId Table = 1;
+    repeated TKqpPhyColumnId Columns = 2;
 
     oneof Type {
         TKqpPhyOpReadRange ReadRange = 3;
@@ -213,7 +233,7 @@ message TKqpPhyCnMerge {
 }
 
 message TKqpPhyCnStreamLookup {
-    TKqpPhyTable Table = 1;
+    TKqpPhyTableId Table = 1;
     repeated string KeyColumns = 2;
     repeated string Columns = 3;
     bytes LookupKeysType = 4;
@@ -240,8 +260,8 @@ message TKqpPhyConnection {
 }
 
 message TKqpReadRangesSource {
-    TKqpPhyTable Table = 1;
-    repeated TKqpPhyColumn Columns = 2;
+    TKqpPhyTableId Table = 1;
+    repeated TKqpPhyColumnId Columns = 2;
     TKqpPhyValue ItemsLimit = 3;
     bool Reverse = 4;
     bool Sorted = 5;
@@ -296,6 +316,7 @@ message TKqpPhyTx {
     repeated TKqpPhyParamBinding ParamBindings = 4;
     string Plan = 5;
     bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set
+    repeated TKqpPhyTable Tables = 7;
 }
 
 message TKqpTableInfo {

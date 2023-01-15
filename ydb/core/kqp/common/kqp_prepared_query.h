@@ -78,6 +78,10 @@ public:
         return Proto->GetParamBindings();
     }
 
+    const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& GetTables() const {
+        return Proto->GetTables();
+    }
+
     TProtoStringType DebugString() const {
         return Proto->ShortDebugString();
     }

@@ -38,7 +38,7 @@ TTableId MakeTableId(const TKqpTable& node) {
     return tableId;
 }
 
-TTableId MakeTableId(const NKqpProto::TKqpPhyTable& table) {
+TTableId MakeTableId(const NKqpProto::TKqpPhyTableId& table) {
     TTableId tableId;
     tableId.PathId = TPathId(table.GetOwnerId(), table.GetTableId());
     tableId.SysViewInfo = table.GetSysView();

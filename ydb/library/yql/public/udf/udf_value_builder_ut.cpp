@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TUdfValueBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(19, GetMethodIndex(&IValueBuilder::Run));
         UNIT_ASSERT_VALUES_EQUAL(20, GetMethodIndex(&IValueBuilder::ExportArrowBlock));
         UNIT_ASSERT_VALUES_EQUAL(21, GetMethodIndex(&IValueBuilder::ImportArrowBlock));
-        UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::Unused3));
+        UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::GetArrowBlockChunks));
         UNIT_ASSERT_VALUES_EQUAL(23, GetMethodIndex(&IValueBuilder::GetPgBuilder));
         UNIT_ASSERT_VALUES_EQUAL(24, GetMethodIndex(&IValueBuilder::NewArray64));
     }

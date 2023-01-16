@@ -200,11 +200,15 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IValueBuilder5: public IValueBuilder4 {
 public:
+    // exports one Array or Scalar to out. should be called for each chunk of ChunkedArray
     // returns array with one element for scalars
-    virtual void ExportArrowBlock(TUnboxedValuePod value, bool& isScalar, ArrowArray* out) const = 0;
+    virtual void ExportArrowBlock(TUnboxedValuePod value, ui32 chunk, ArrowArray* out) const = 0;
+    // imports all chunks. returns Scalar, ChunkedArray if chunkCount > 1, otherwise Array
+    // arrays should be a pointer to array of chunkCount structs
     // the ArrowArray struct has its contents moved to a private object held alive by the result.
-    virtual TUnboxedValue ImportArrowBlock(ArrowArray* array, const IArrowType& type, bool isScalar) const = 0;
-    virtual void Unused3() const = 0;
+    virtual TUnboxedValue ImportArrowBlock(ArrowArray* arrays, ui32 chunkCount, bool isScalar, const IArrowType& type) const = 0;
+    // always returns 1 for Scalar and Array, >= 1 for ChunkedArray
+    virtual ui32 GetArrowBlockChunks(TUnboxedValuePod value, bool& isScalar, ui64& length) const = 0;
 };
 #endif
 

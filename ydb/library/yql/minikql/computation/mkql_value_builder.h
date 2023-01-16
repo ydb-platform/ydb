@@ -57,9 +57,9 @@ public:
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef &value) const final;
     const NUdf::TSourcePosition* CalleePosition() const final;
     NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const final;
-    void ExportArrowBlock(NUdf::TUnboxedValuePod value, bool& isScalar, ArrowArray* out) const final;
-    NUdf::TUnboxedValue ImportArrowBlock(ArrowArray* array, const NUdf::IArrowType& type, bool isScalar) const final;
-    void Unused3() const final;
+    void ExportArrowBlock(NUdf::TUnboxedValuePod value, ui32 chunk, ArrowArray* out) const final;
+    NUdf::TUnboxedValue ImportArrowBlock(ArrowArray* arrays, ui32 chunkCount, bool isScalar, const NUdf::IArrowType& type) const final;
+    ui32 GetArrowBlockChunks(NUdf::TUnboxedValuePod value, bool& isScalar, ui64& length) const final;
     bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const final;
     bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const final;
 

@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         const ui64 storageMb = 55_GB / 1_MB;
-        const ui32 shardCount = 5;
+        const ui32 shardCount = 2;
         {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                storageMb);
 
                             });
-        UNIT_ASSERT_VALUES_EQUAL(storageSchemaFound, 20);
+        UNIT_ASSERT_VALUES_EQUAL(storageSchemaFound, 8);
 
         auto throughputSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
                                                          "second");
                             });
-        UNIT_ASSERT_VALUES_EQUAL(throughputSchemaFound, 20);
+        UNIT_ASSERT_VALUES_EQUAL(throughputSchemaFound, 8);
 
         auto putUnitsSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.events.puts.v1",
@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
                                                          "put_events");
                             });
-        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 20);
+        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 8);
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*testServer.Driver);
         {

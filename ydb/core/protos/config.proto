@@ -1593,6 +1593,9 @@ message TCompactionConfig {
 
         // Compact even if shard has single part and empty memtable
         optional bool CompactSinglePartedShards = 10 [default = false];
+
+        // Do not wakeup earlier, than this interval
+        optional uint64 MinWakeupIntervalMs = 11 [default = 10];
     }
 
     message TBorrowedCompactionConfig {
@@ -1601,6 +1604,9 @@ message TCompactionConfig {
 
         // After this interval we will try to restart
         optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        // Do not wakeup earlier, than this interval
+        optional uint64 MinWakeupIntervalMs = 4 [default = 10];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;

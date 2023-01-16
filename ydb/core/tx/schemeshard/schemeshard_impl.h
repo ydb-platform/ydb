@@ -82,7 +82,8 @@ private:
         TShardCompactionInfo,
         TCompactionQueueImpl,
         TEvPrivate::EvRunBackgroundCompaction,
-        NKikimrServices::FLAT_TX_SCHEMESHARD>;
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_COMPACTION>;
 
     class TCompactionStarter : public TCompactionQueue::IStarter {
     public:
@@ -106,7 +107,8 @@ private:
         TShardIdx,
         TFifoQueue<TShardIdx>,
         TEvPrivate::EvRunBorrowedCompaction,
-        NKikimrServices::FLAT_TX_SCHEMESHARD>;
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::SCHEMESHARD_BORROWED_COMPACTION>;
 
     class TBorrowedCompactionStarter : public TBorrowedCompactionQueue::IStarter {
     public:

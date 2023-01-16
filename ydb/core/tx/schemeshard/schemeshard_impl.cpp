@@ -6369,6 +6369,7 @@ void TSchemeShard::ConfigureBackgroundCompactionQueue(
 
     compactionConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
     compactionConfig.WakeupInterval = TDuration::Seconds(config.GetWakeupIntervalSeconds());
+    compactionConfig.MinWakeupInterval = TDuration::MilliSeconds(config.GetMinWakeupIntervalMs());
     compactionConfig.InflightLimit = config.GetInflightLimit();
     compactionConfig.RoundInterval = TDuration::Seconds(config.GetRoundSeconds());
     compactionConfig.MaxRate = config.GetMaxRate();
@@ -6403,6 +6404,7 @@ void TSchemeShard::ConfigureBorrowedCompactionQueue(
 
     compactionConfig.IsCircular = false;
     compactionConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
+    compactionConfig.MinWakeupInterval = TDuration::MilliSeconds(config.GetMinWakeupIntervalMs());
     compactionConfig.InflightLimit = config.GetInflightLimit();
     compactionConfig.MaxRate = config.GetMaxRate();
 

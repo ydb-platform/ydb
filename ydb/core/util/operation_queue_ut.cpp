@@ -955,6 +955,46 @@ Y_UNIT_TEST_SUITE(TCircularOperationQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.back(), goldWakeup);
     }
 
+    Y_UNIT_TEST(CheckWakeupWhenRPSExhausted2) {
+        // regression case for the following case:
+        // 1. Enqueue operation 1.
+        // 2. Done operation 1.
+        // 3. Enqueue 2 and 3 - they should not add extra wakeups
+
+        TQueue::TConfig config;
+        config.IsCircular = true;
+        config.InflightLimit = 1;
+        config.MaxRate = 0.5;
+        config.Timeout = Timeout;
+        TOperationStarter starter;
+
+        TQueue queue(config, starter, starter);
+        queue.Start();
+
+        queue.Enqueue(1);
+        queue.Enqueue(2);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 1UL); // only timeout for 1
+
+        queue.OnDone(1);
+
+        // 2 is running now because token bucket allows
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 1UL); // only first timeout
+
+        queue.Enqueue(3);
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 1UL); // only first timeout
+
+        queue.OnDone(2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL); // blocked by RPS
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 2UL); // start new one, when RPS allows
+
+        queue.Enqueue(4);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL); // no change
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 2UL); // no change
+    }
+
     Y_UNIT_TEST(CheckStartAfterStop) {
         TQueue::TConfig config;
         config.IsCircular = true;

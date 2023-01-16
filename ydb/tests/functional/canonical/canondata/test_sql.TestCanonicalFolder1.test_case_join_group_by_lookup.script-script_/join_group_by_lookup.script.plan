@@ -214,12 +214,7 @@
                                                         "PlanNodeType": "Connection"
                                                     }
                                                 ],
-                                                "Operators": [
-                                                    {
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "Node Type": "Aggregate"
+                                                "Node Type": "Stage"
                                             }
                                         ],
                                         "Node Type": "UnionAll",

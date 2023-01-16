@@ -516,7 +516,7 @@ private:
 protected:
     using TThis = TDerived;
 
-    TIntrusivePtr<TBlobStorageGroupInfo> Info;
+    const TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TIntrusivePtr<TGroupQueues> GroupQueues;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TIntrusivePtr<TStoragePoolCounters> PoolCounters;

@@ -314,7 +314,7 @@ public:
 
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        const ui32 orderNumber = Info->GetOrderNumber(vdiskId);
+        const ui32 orderNumber = Info->GetTopology().GetOrderNumber(vdiskId);
         Y_VERIFY(orderNumber < PerVDiskInfo.size());
 
         if (record.GetStatus() == NKikimrProto::OK) {

@@ -166,6 +166,8 @@ namespace NKikimr::NBlobDepot {
             bool progress = false;
             if (!KeysLoaded && !LoadKeys(txc, progress)) {
                 return progress;
+            } else if (SuccessorTx) {
+                return true;
             } else {
                 KeysLoaded = true;
             }

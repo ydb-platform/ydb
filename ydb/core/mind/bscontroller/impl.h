@@ -508,7 +508,6 @@ public:
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
-        bool CommitInProgress = false;
 
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
@@ -1646,6 +1645,7 @@ private:
     void RenderFooter(IOutputStream& out);
     void RenderMonPage(IOutputStream& out);
     void RenderInternalTables(IOutputStream& out, const TString& table);
+    void RenderVirtualGroups(IOutputStream& out);
     void RenderGroupDetail(IOutputStream &out, TGroupId groupId);
     void RenderGroupsInStoragePool(IOutputStream &out, const TBoxStoragePoolId& id);
     void RenderVSlotTable(IOutputStream& out, std::function<void()> callback);

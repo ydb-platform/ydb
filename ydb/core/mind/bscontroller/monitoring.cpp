@@ -909,6 +909,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         } else if (page == "InternalTables") {
             const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
             RenderInternalTables(str, table);
+        } else if (page == "VirtualGroups") {
+            RenderVirtualGroups(str);
         } else if (page == "StopGivingGroups") {
             StopGivingGroups = true;
             str << "OK";
@@ -960,6 +962,7 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
+    out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
     HTML(out) {

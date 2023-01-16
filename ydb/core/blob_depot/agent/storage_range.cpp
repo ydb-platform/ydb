@@ -49,12 +49,13 @@ namespace NKikimr::NBlobDepot {
                 ++ResolvesInFlight;
             }
 
-            void IssueResolve(TLogoBlobID id) {
+            void IssueResolve(ui64 tag) {
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
-                item->SetExactKey(id.AsBinaryString());
+                item->SetExactKey(Reads[tag].AsBinaryString());
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
+                item->SetCookie(tag);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
                 ++ResolvesInFlight;
@@ -79,14 +80,29 @@ namespace NKikimr::NBlobDepot {
                     return EndWithError(msg.GetStatus(), msg.GetErrorReason());
                 }
 
+#ifndef NDEBUG
+                THashSet<TLogoBlobID> ids;
+#endif
+
                 for (const auto& key : msg.GetResolvedKeys()) {
                     const TString& blobId = key.GetKey();
                     auto id = TLogoBlobID::FromBinary(blobId);
+
+#ifndef NDEBUG
+                    const bool inserted = ids.insert(id).second;
+                    Y_VERIFY(inserted);
+#endif
 
                     if (key.HasErrorReason()) {
                         return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << id
                             << ": " << key.GetErrorReason());
                     } else if (!Request.IsIndexOnly) {
+                        const ui64 tag = key.HasCookie() ? key.GetCookie() : Reads.size();
+                        if (tag == Reads.size()) {
+                            Reads.push_back(id);
+                        } else {
+                            Y_VERIFY(Reads[tag] == id);
+                        }
                         TReadArg arg{
                             key.GetValueChain(),
                             NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -94,17 +110,14 @@ namespace NKikimr::NBlobDepot {
                             this,
                             0,
                             0,
-                            Reads.size(),
+                            tag,
                             {}};
-                        Reads.push_back(id);
                         ++ReadsInFlight;
                         TString error;
                         if (!Agent.IssueRead(arg, error)) {
                             return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                 << error);
                         }
-                    } else if (Request.MustRestoreFirst) {
-                        Y_FAIL("not implemented yet");
                     } else {
                         FoundBlobs.try_emplace(id);
                     }
@@ -128,7 +141,7 @@ namespace NKikimr::NBlobDepot {
                     }
 
                     case NKikimrProto::NODATA:
-                        IssueResolve(Reads[tag]);
+                        IssueResolve(tag);
                         break;
 
                     default:

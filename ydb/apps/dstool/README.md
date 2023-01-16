@@ -1,4 +1,19 @@
-# How to run ydb-dstool
+# How to run ydb-dstool from package
+
+## Install ydb-dstool package
+
+```bash
+user@host:~$ pip install ydb-dstool
+```
+
+## Set up environment and run
+
+```bash
+user@host:~$ export PATH=${PATH}:${HOME}/.local/bin
+user@host:~$ ydb-dstool -e ydb.endpoint cluster list
+```
+
+# How to run ydb-dstool from source
 
 ## Clone ydb
 
@@ -17,7 +32,6 @@ Have a look at https://grpc.io/docs/languages/python/quickstart.
 ```bash
 user@host:~$ cd ~/github/ydb
 user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ chmod +x ydb/apps/dstool/compile_protos.py
 user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
 ```
 
@@ -25,10 +39,11 @@ user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_roo
 
 ```bash
 user@host:~$ cd ~/github/ydb
-user@host:~/github/ydb$ export PATH=$PATH:${ydb_root}/ydb/apps/dstool
-user@host:~/github/ydb$ export PYTHONPATH=$PYTHONPATH:${ydb_root}
-user@host:~/github/ydb$ chmod +x ./ydb/apps/dstool/ydb-dstool.py
-user@host:~/github/ydb$ ydb-dstool.py -e ydb.endpoint cluster list
+user@host:~/github/ydb$ ydb_root=$(pwd)
+user@host:~/github/ydb$ export PATH=${PATH}:${ydb_root}/ydb/apps/dstool
+user@host:~/github/ydb$ export PYTHONPATH=${PYTHONPATH}:${ydb_root}
+user@host:~/github/ydb$ alias ydb-dstool=ydb-dstool.py
+user@host:~/github/ydb$ ydb-dstool -e ydb.endpoint cluster list
 ```
 
 # How to do things with ydb-dstool
@@ -38,19 +53,19 @@ user@host:~/github/ydb$ ydb-dstool.py -e ydb.endpoint cluster list
 In order to list all available commands along with their descriptions in a nicely printed tree run
 
 ```bash
-user@host:~$ ydb-dstool.py --help
+user@host:~$ ydb-dstool --help
 ```
 
 ### Get help for a particular subset of commands or a command
 
 ```bash
-user@host:~$ ydb-dstool.py pdisk --help
+user@host:~$ ydb-dstool pdisk --help
 ```
 
 The above command prints help for the ```pdisk``` commands.
 
 ```bash
-user@host:~$ ydb-dstool.py pdisk list --help
+user@host:~$ ydb-dstool pdisk list --help
 ```
 
 The above command prints help for the ```pdisk list``` command.
@@ -60,7 +75,7 @@ The above command prints help for the ```pdisk list``` command.
 To make operation of a command verbose add ```--verbose``` to global options:
 
 ```bash
-user@host:~$ ydb-dstool.py --verbose -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
+user@host:~$ ydb-dstool --verbose -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
 ### Don't show non-vital messages
@@ -68,7 +83,7 @@ user@host:~$ ydb-dstool.py --verbose -e ydbd.endpoint vdisk evict --vdisk-ids ${
 To dismiss non-vital messages of a command add ```--quiet``` to global options:
 
 ```bash
-user@host:~$ ydb-dstool.py --quiet -e ydbd.endpoint pool balance
+user@host:~$ ydb-dstool --quiet -e ydbd.endpoint pool balance
 ```
 
 ### Run command without side effects
@@ -76,23 +91,23 @@ user@host:~$ ydb-dstool.py --quiet -e ydbd.endpoint pool balance
 To run command without side effect add ```--dry-run``` to global options:
 
 ```bash
-user@host:~$ ydb-dstool.py --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
+user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
 ### Handle errors
 
-By convention ```user@host:~$ ydb-dstool.py``` returns 0 on success, and non-zero on failure. You can check exit status
+By convention ```user@host:~$ ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status
 as follows:
 
 ```bash
-~$ user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
+~$ user@host:~$ ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ~$ if [ $? -eq 0 ]; then echo "success"; else echo "failure"; fi
 ```
 
-```user@host:~$ ydb-dstool.py``` outputs errors to ```stderr``` so to redirect errors to ```errors.txt``` one could run:
+```user@host:~$ ydb-dstool``` outputs errors to ```stderr``` so to redirect errors to ```errors.txt``` one could run:
 
 ```bash
-~$ user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id} 2> ~/errors.txt
+~$ user@host:~$ ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id} 2> ~/errors.txt
 ```
 
 ### Set endpoint
@@ -101,7 +116,7 @@ as follows:
 ```[PROTOCOL://]HOST[:PORT]```. To set endpoint use ```--endpoint``` global option:
 
 ```bash
-user@host:~$ ydb-dstool.py --endpoint https://ydbd.endpoint:8765 pdisk list
+user@host:~$ ydb-dstool --endpoint https://ydbd.endpoint:8765 pdisk list
 ```
 
 The endpoint's protocol from the above command is ```https```, host is ```ydbd.endpoint```, port is ```8765```.
@@ -113,7 +128,7 @@ There is support for authentication with access token. When authentication is re
 token with ```--token-file``` global option:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint --token-file ~/access_token
+user@host:~$ ydb-dstool -e ydbd.endpoint --token-file ~/access_token
 ```
 
 The above command reads ```~/access_token``` and uses it's contents as an access token for authentication.
@@ -131,7 +146,7 @@ are available:
 To set output format to ```tsv``` add ```--format tsv``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --format tsv
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --format tsv
 ```
 
 ### Exclude header from the output
@@ -139,7 +154,7 @@ user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --format tsv
 To exclude header with the column names from the output add ```--no-header``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --format tsv --no-header
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --format tsv --no-header
 ```
 
 ### Output all available columns
@@ -148,7 +163,7 @@ By default a listing like command outputs only certain columns. The default colu
 To output all available columns add ```--all-columns``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --all-columns
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --all-columns
 ```
 
 ### Output only certain columns
@@ -157,7 +172,7 @@ To output only certain columns add ```--columns``` along with a space separated 
 options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --columns NodeId:PDiskId Path
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --columns NodeId:PDiskId Path
 ```
 
 The above command lists only the ```NodeId:PDiskId```, ```Path``` columns while listing pdisks.
@@ -168,7 +183,7 @@ To sort output by certain columns add ```--sort-by``` along with a space separat
 options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --sort-by FQDN
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --sort-by FQDN
 ```
 
 The above command lists pdisks sorted by the ```FQDN``` column.
@@ -179,7 +194,7 @@ To output sizes in terms of kilobytes, megabytes, etc. and fractions in terms of
 or ```-H``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --show-pdisk-usage -H
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage -H
 ```
 
 ## Do things with pdisks
@@ -187,7 +202,7 @@ user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --show-pdisk-usage -H
 ### List pdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list
 ```
 
 The above command lists all pdisks of a cluster along with their state.
@@ -195,7 +210,7 @@ The above command lists all pdisks of a cluster along with their state.
 ### Show space usage of every pdisk
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk list --show-pdisk-usage --human-readable
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk list --show-pdisk-usage --human-readable
 ```
 
 The above command lists usage of all pdisks of a cluster in a human-readable way.
@@ -203,7 +218,7 @@ The above command lists usage of all pdisks of a cluster in a human-readable way
 ### Prevent new groups from using certain pdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_PENDING --pdisk-ids "[NODE_ID:PDISK_ID]"
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_PENDING --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
 The above command prevents new groups from using pdisk ```"[NODE_ID:PDISK_ID]"```.
@@ -211,7 +226,7 @@ The above command prevents new groups from using pdisk ```"[NODE_ID:PDISK_ID]"``
 ### Move data out from certain pdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[NODE_ID:PDISK_ID]"
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
 The above command initiates a background process that is going to move all of the data from pdisk ```"[NODE_ID:PDISK_ID]"```
@@ -221,7 +236,7 @@ a cluster.
 ### Move data out from broken pdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --status BROKEN --unavail-as-offline --pdisk-ids "[NODE_ID:PDISK_ID]"
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk set --status BROKEN --unavail-as-offline --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
 The above command moves all of the data from pdisk ```"[NODE_ID:PDISK_ID]"``` to some ```DECOMMIT_NONE``` pdisks.
@@ -233,7 +248,7 @@ pdisk ASAP. The ```--unavail-as-offline``` command option treats pdisk unavailab
 Broken pdisks need to be enabled after recovery. The following command
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pdisk set --status ACTIVE --allow-working-disks --pdisk-ids "[NODE_ID:PDISK_ID]"
+user@host:~$ ydb-dstool -e ydbd.endpoint pdisk set --status ACTIVE --allow-working-disks --pdisk-ids "[NODE_ID:PDISK_ID]"
 ```
 
 enables pdisk ```"[NODE_ID:PDISK_ID]"```. The ```--allow-working-disks``` command option allows to set state for working pdisks.
@@ -243,7 +258,7 @@ enables pdisk ```"[NODE_ID:PDISK_ID]"```. The ```--allow-working-disks``` comman
 ### List vdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk list
+user@host:~$ ydb-dstool -e ydbd.endpoint vdisk list
 ```
 
 The above command lists all vdisks of a cluster along with the corresponding pdisks.
@@ -251,7 +266,7 @@ The above command lists all vdisks of a cluster along with the corresponding pdi
 ### Show status of pdisks were vdisks reside
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk list --show-pdisk-status
+user@host:~$ ydb-dstool -e ydbd.endpoint vdisk list --show-pdisk-status
 ```
 
 The above command lists all vdisks of a cluster along with the corresponding pdisks. On top of that, for every
@@ -260,7 +275,7 @@ vdisk it lists the status of the corresponding pdisk where vdisk resides.
 ### Show space usage every vdisk
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk list --show-vdisk-usage --human-readable
+user@host:~$ ydb-dstool -e ydbd.endpoint vdisk list --show-vdisk-usage --human-readable
 ```
 
 The above command lists usage of all vdisks of a cluster in a human-readable way.
@@ -268,7 +283,7 @@ The above command lists usage of all vdisks of a cluster in a human-readable way
 ### Unload certain pdisks by moving some vdisks from them
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk evict --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]"
+user@host:~$ ydb-dstool -e ydbd.endpoint vdisk evict --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]"
 ```
 
 The above command evicts vdisks ```[8200001b:3:0:7:0]```, ```[8200001c:1:0:1:0]``` from their current pdisks to
@@ -278,7 +293,7 @@ are running out of space. This might happen because of usage sckew of certain gr
 ### Wipe certain vdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk wipe --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]" --run
+user@host:~$ ydb-dstool -e ydbd.endpoint vdisk wipe --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]" --run
 ```
 
 The above command wipes out vdisks ```[8200001b:3:0:7:0]```, ```[8200001c:1:0:1:0]```. This command is useful when
@@ -287,7 +302,7 @@ vdisk becomes unhealable.
 ### Remove no longer needed donor vdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint vdisk remove-donor --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]"
+user@host:~$ ydb-dstool -e ydbd.endpoint vdisk remove-donor --vdisk-ids "[8200001b:3:0:7:0] [8200001c:1:0:1:0]"
 ```
 
 The above command removes donor vdisks ```[8200001b:3:0:7:0]```, ```[8200001c:1:0:1:0]```. The provided vdisks
@@ -309,7 +324,7 @@ Group can be thought of as a RAID of vdisks. Any vdisk belongs to a single group
 ### List groups
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group list
+user@host:~$ ydb-dstool -e ydbd.endpoint group list
 ```
 
 The above command lists all groups of a cluster.
@@ -320,7 +335,7 @@ To show aggregated statuses of vdisks within a group (i.e. how many vdisks withi
 add ```--show-vdisk-status``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group list --show-vdisk-status
+user@host:~$ ydb-dstool -e ydbd.endpoint group list --show-vdisk-status
 ```
 
 ### Show space usage of every group
@@ -328,7 +343,7 @@ user@host:~$ ydb-dstool.py -e ydbd.endpoint group list --show-vdisk-status
 To show space usage of groups, add ```--show-vdisk-usage``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group list --show-vdisk-usage -H
+user@host:~$ ydb-dstool -e ydbd.endpoint group list --show-vdisk-usage -H
 ```
 
 The above command lists all groups of a cluster along with their space usage in a human-readable way.
@@ -336,7 +351,7 @@ The above command lists all groups of a cluster along with their space usage in 
 ### Check certain groups for compliance with failure model
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group check --group-ids 2181038097 2181038105 --failure-model
+user@host:~$ ydb-dstool -e ydbd.endpoint group check --group-ids 2181038097 2181038105 --failure-model
 ```
 
 The above command checks groups ```2181038097```, ```2181038105``` for compliance with their failure model.
@@ -344,7 +359,7 @@ The above command checks groups ```2181038097```, ```2181038105``` for complianc
 ### Show space usage of groups by tablets
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group show usage-by-tablets
+user@host:~$ ydb-dstool -e ydbd.endpoint group show usage-by-tablets
 ```
 
 The above command shows which tablets are using which groups and what the space usage is.
@@ -352,7 +367,7 @@ The above command shows which tablets are using which groups and what the space 
 ### Show info about certain blob from a certain group
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group show blob-info --group-id 2181038081 --blob-id "[72075186224037892:1:2:1:8192:410:0]"
+user@host:~$ ydb-dstool -e ydbd.endpoint group show blob-info --group-id 2181038081 --blob-id "[72075186224037892:1:2:1:8192:410:0]"
 ```
 
 The above command shows information about blob ```[72075186224037892:1:2:1:8192:410:0]``` that is stored in
@@ -361,7 +376,7 @@ group ```2181038081```. This command might be useful in certain debug scenarios.
 ### Add new groups to certain pool
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint group add --pool-name /Root:nvme --groups 1
+user@host:~$ ydb-dstool -e ydbd.endpoint group add --pool-name /Root:nvme --groups 1
 ```
 
 The above command adds one group to the pool ```/Root:nvme```
@@ -369,7 +384,7 @@ The above command adds one group to the pool ```/Root:nvme```
 ### Figure out whether certain number of groups can be added
 
 ```bash
-user@host:~$ ydb-dstool.py --dry-run -e ydbd.endpoint group add --pool-name /Root:nvme --groups 10
+user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint group add --pool-name /Root:nvme --groups 10
 ```
 
 The above command adds ten groups to the pool ```/Root:nvme``` without actually adding them. It might be useful
@@ -382,7 +397,7 @@ Pool is a collection of groups.
 ### List pools
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pool list
+user@host:~$ ydb-dstool -e ydbd.endpoint pool list
 ```
 
 The above command lists all pools of a cluster.
@@ -393,7 +408,7 @@ To show aggregated statuses of groups within a pool (i.e. how many groups within
 add ```--show-group-status``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pool list --show-group-status
+user@host:~$ ydb-dstool -e ydbd.endpoint pool list --show-group-status
 ```
 
 ### Show aggregated statuses of vdisks within pool
@@ -402,7 +417,7 @@ To show aggregated statuses of vdisks within a pool (i.e. how many vdisks within
 add ```--show-vdisk-status``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pool list --show-vdisk-status
+user@host:~$ ydb-dstool -e ydbd.endpoint pool list --show-vdisk-status
 ```
 
 ### Show space usage of pools
@@ -410,7 +425,7 @@ user@host:~$ ydb-dstool.py -e ydbd.endpoint pool list --show-vdisk-status
 To show space usage of pools, add ```--show-vdisk-usage``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pool list --show-vdisk-usage -H
+user@host:~$ ydb-dstool -e ydbd.endpoint pool list --show-vdisk-usage -H
 ```
 
 The above command lists all pools of a cluster along with their space usage in a human-readable way.
@@ -418,7 +433,7 @@ The above command lists all pools of a cluster along with their space usage in a
 ### Show estimated space usage of pools
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint pool list --show-vdisk-estimated-usage
+user@host:~$ ydb-dstool -e ydbd.endpoint pool list --show-vdisk-estimated-usage
 ```
 
 The above command shows:
@@ -433,7 +448,7 @@ Box is a collection of pdisks.
 ###  List boxes
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint box list
+user@host:~$ ydb-dstool -e ydbd.endpoint box list
 ```
 
 The above command lists all boxes of a cluster.
@@ -444,7 +459,7 @@ Tow show aggregated statuses of pdisks within a box (i.e. how many pdisks within
 add ```--show-pdisk-status``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint box list --show-pdisk-status
+user@host:~$ ydb-dstool -e ydbd.endpoint box list --show-pdisk-status
 ```
 
 ### Show space usage of boxes
@@ -452,7 +467,7 @@ user@host:~$ ydb-dstool.py -e ydbd.endpoint box list --show-pdisk-status
 To show space usage of boxes, add ```--show-pdisk-usage``` to command options:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint box list --show-pdisk-usage -H
+user@host:~$ ydb-dstool -e ydbd.endpoint box list --show-pdisk-usage -H
 ```
 
 The above command lists all boxes of a cluster along with their space usage in a human-readable way.
@@ -465,7 +480,7 @@ In terms of implementation, a node is a a YDB process running on one of cluster'
 ### List nodes
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint node list
+user@host:~$ ydb-dstool -e ydbd.endpoint node list
 ```
 
 The above command lists all nodes of a cluster.
@@ -475,7 +490,7 @@ The above command lists all nodes of a cluster.
 ### Show how many cluster entities there are
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster list
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster list
 ```
 
 The above command shows how many
@@ -496,7 +511,7 @@ In rare cases some pdisks can become overpopulated (i.e. they host too many vdis
 balancing of vdisks over pdisks. To accomplish this, run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster balance
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster balance
 ```
 
 The above command moves out vdisks from overpopulated pdisks. A single vdisk is moved at a time so that the failure model of
@@ -517,13 +532,13 @@ failed vdisk within a group.
 To enable self-healing on a cluster, run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --enable-self-heal
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --enable-self-heal
 ```
 
 To disable self-healing on a cluster, run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --disable-self-heal
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --disable-self-heal
 ```
 
 ### Enable/Disable donors
@@ -535,13 +550,13 @@ old vdisk could be used as a donor, so that the new vdisk would copy all of the 
 To enable support for donor vdisk mode on a cluster, run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --enable-donor-mode
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --enable-donor-mode
 ```
 
 To disable support for donor vdisk mode on a cluster, run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --disable-donor-mode
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --disable-donor-mode
 ```
 
 ### Adjust scrubbing intervals
@@ -550,19 +565,19 @@ Scrubbing is a background process that checks data integrity and performs data r
 a cluster enter the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --scrub-periodicity disable
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --scrub-periodicity disable
 ```
 
 To set scrubbing interval to two days run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --scrub-periodicity 2d
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --scrub-periodicity 2d
 ```
 
 ### Set maximum number of simultaneously scrubbed pdisks
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster set --max-scrubbed-disks-at-once 2
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster set --max-scrubbed-disks-at-once 2
 ```
 
 The above command sets maximum number of simultaneously scrubbed pdisk to two.
@@ -572,7 +587,7 @@ The above command sets maximum number of simultaneously scrubbed pdisk to two.
 To run workload that allows to stress test failure model of groups, run the following command:
 
 ```bash
-user@host:~$ ydb-dstool.py -e ydbd.endpoint cluster workload run
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster workload run
 ```
 
 The above command performs various

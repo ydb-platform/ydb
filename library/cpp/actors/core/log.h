@@ -381,7 +381,10 @@ namespace NActors {
 }
 
 #define ACTORS_LOG_STREAM(actorCtxOrSystem, mPriority, mComponent) \
-     if (!IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, mPriority, mComponent)); else NActors::TRecordWriter(actorCtxOrSystem, static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent))
+    if (!IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, mPriority, mComponent));\
+        else NActors::TRecordWriter(\
+            actorCtxOrSystem, static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
+            ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
 
 #define ACTORS_LOG_STREAM_TRACE(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component)
 #define ACTORS_LOG_STREAM_DEBUG(actorCtxOrSystem, component) ACTORS_LOG_STREAM(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component)

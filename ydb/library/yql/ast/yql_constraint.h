@@ -86,7 +86,8 @@ public:
         return Name_;
     }
 
-    static bool PathExistsInType(const TPathType& path, const TTypeAnnotationNode& type);
+    static const TTypeAnnotationNode* GetSubTypeByPath(const TPathType& path, const TTypeAnnotationNode& type);
+    static TString PathToString(const TPathType& path);
 protected:
     ui64 Hash_;
     std::string_view Name_;
@@ -205,7 +206,7 @@ private:
 
 class TSortedConstraintNode final: public TConstraintNode {
 public:
-    using TColumnsSet = NSorted::TSimpleSet<std::string_view>;
+    using TColumnsSet = NSorted::TSimpleSet<TPathType>;
     using TContainerType = TSmallVec<std::pair<TColumnsSet, bool>>;
 private:
     friend struct TExprContext;
@@ -235,6 +236,7 @@ public:
     const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
     static const TSortedConstraintNode* FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx);
 
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 protected:
     TContainerType Content_;
 };

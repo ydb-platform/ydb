@@ -1003,53 +1003,6 @@ void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySel
     }
 }
 
-std::vector<std::pair<std::string_view, bool>> ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda) {
-    const auto& keySelectorBody = keySelectorLambda.Tail();
-    const auto& keySelectorArg = keySelectorLambda.Head().Head();
-    std::vector<std::pair<std::string_view, bool>> columns;
-    if (sortDirections.IsCallable("Bool"))
-        columns.emplace_back(std::string_view(), IsTrue(sortDirections.Tail().Content()));
-    else if (sortDirections.IsList())
-        if (const auto size = keySelectorBody.ChildrenSize()) {
-            columns.reserve(size);
-            for (auto i = 0U; i < size; ++i)
-                if (const auto child = sortDirections.Child(i); child->IsCallable("Bool"))
-                    columns.emplace_back(std::string_view(), IsTrue(child->Tail().Content()));
-                else
-                    return {};
-        } else
-            return {};
-    else
-        return  {};
-
-    if (keySelectorBody.IsCallable("Member") && &keySelectorBody.Head() == &keySelectorArg)
-        if (columns.size() == 1U)
-            columns.front().first = keySelectorBody.Tail().Content();
-        else
-            return {};
-    else if (keySelectorBody.IsList())
-        if (const auto size = keySelectorBody.ChildrenSize()) {
-            std::unordered_set<std::string_view> set(size);
-            columns.resize(size, std::make_pair(std::string_view(), columns.back().second));
-            auto it = columns.begin();
-            for (auto i = 0U; i < columns.size(); ++i) {
-                if (const auto child = keySelectorBody.Child(i); child->IsCallable("Member") && &child->Head() == &keySelectorArg) {
-                    if (set.emplace(child->Tail().Content()).second)
-                        it++->first = child->Tail().Content();
-                    else if (columns.cend() != it)
-                        it = columns.erase(it);
-                } else {
-                    columns.resize(i);
-                }
-            }
-        } else
-            return {};
-    else
-        return {};
-
-    return columns;
-}
-
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) {
     const TExprNode* p = &node;
     while (p->IsCallable(skipCallables)) {

@@ -83,7 +83,7 @@ public:
         Functions["Unordered"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Sort"] = &TCallableConstraintTransformer::SortWrap;
-        Functions["AssumeSorted"] = &TCallableConstraintTransformer::AssumeSortedWrap;
+        Functions["AssumeSorted"] = &TCallableConstraintTransformer::SortWrap;
         Functions["AssumeUnique"] = &TCallableConstraintTransformer::AssumeUniqueWrap;
         Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["AssumeAllMembersNullableAtOnce"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
@@ -339,27 +339,14 @@ private:
     }
 
     TStatus SortWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        auto status = UpdateLambdaConstraints(*input->Child(2));
-        if (status != TStatus::Ok) {
+        if (const auto status = UpdateLambdaConstraints(input->Tail()); status != TStatus::Ok) {
             return status;
         }
 
-        if (auto sorted = DeduceSortConstraint(*input->Child(0), *input->Child(1), *input->Child(2), ctx)) {
+        if (const auto sorted = DeduceSortConstraint(*input->Child(1), *input->Child(2), ctx)) {
             input->AddConstraint(sorted);
         }
 
-        return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
-    }
-
-    TStatus AssumeSortedWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        auto status = UpdateLambdaConstraints(*input->Child(2));
-        if (status != TStatus::Ok) {
-            return status;
-        }
-
-        if (auto assumeConstr = DeduceSortConstraint(*input->Child(0), *input->Child(1), *input->Child(2), ctx)) {
-            input->AddConstraint(assumeConstr);
-        }
         return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
@@ -382,13 +369,12 @@ private:
 
     template <bool UseSort>
     TStatus TopWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        auto status = UpdateLambdaConstraints(*input->Child(3));
-        if (status != TStatus::Ok) {
+        if (const auto status = UpdateLambdaConstraints(input->Tail()); status != TStatus::Ok) {
             return status;
         }
 
         if constexpr (UseSort) {
-            if (auto sorted = DeduceSortConstraint(*input->Child(0), *input->Child(2), *input->Child(3), ctx)) {
+            if (const auto sorted = DeduceSortConstraint(*input->Child(2), *input->Child(3), ctx)) {
                 input->AddConstraint(sorted);
             }
         }
@@ -725,6 +711,56 @@ private:
             return GetConstraintFromWideResultLambda<TConstraintType>(lambda, ctx);
         else
             return GetLambdaConstraint<TConstraintType>(lambda, ctx);
+    }
+
+    static std::vector<std::pair<TConstraintNode::TPathType, bool>>
+    ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda) {
+        const auto& keySelectorBody = keySelectorLambda.Tail();
+        const auto& keySelectorArg = keySelectorLambda.Head().Head();
+        std::vector<std::pair<TConstraintNode::TPathType, bool>> columns;
+        if (sortDirections.IsCallable("Bool"))
+            columns.emplace_back(TConstraintNode::TPathType(), IsTrue(sortDirections.Tail().Content()));
+        else if (sortDirections.IsList())
+            if (const auto size = keySelectorBody.ChildrenSize()) {
+                columns.reserve(size);
+                for (auto i = 0U; i < size; ++i)
+                    if (const auto child = sortDirections.Child(i); child->IsCallable("Bool"))
+                        columns.emplace_back(TConstraintNode::TPathType(), IsTrue(child->Tail().Content()));
+                    else
+                        return {};
+            } else
+                return {};
+        else
+            return  {};
+
+        if (&keySelectorBody == &keySelectorArg)
+            columns.resize(1U);
+        else if (keySelectorBody.IsCallable({"Member", "Nth"}) && &keySelectorBody.Head() == &keySelectorArg)
+            if (columns.size() == 1U)
+                columns.front().first.emplace_back(keySelectorBody.Tail().Content());
+            else
+                return {};
+        else if (keySelectorBody.IsList())
+            if (const auto size = keySelectorBody.ChildrenSize()) {
+                std::unordered_set<std::string_view> set(size);
+                columns.resize(size, std::make_pair(TConstraintNode::TPathType(), columns.back().second));
+                auto it = columns.begin();
+                for (auto i = 0U; i < columns.size(); ++i) {
+                    if (const auto child = keySelectorBody.Child(i); child->IsCallable({"Member", "Nth"}) && &child->Head() == &keySelectorArg) {
+                        if (set.emplace(child->Tail().Content()).second)
+                            it++->first.emplace_back(child->Tail().Content());
+                        else if (columns.cend() != it)
+                            it = columns.erase(it);
+                    } else {
+                        columns.resize(i);
+                    }
+                }
+            } else
+                return {};
+        else
+            return {};
+
+        return columns;
     }
 
     static TConstraintNode::TListType GetConstraintsForInputArgument(const TExprNode& node, std::unordered_set<const TPassthroughConstraintNode*>& explicitPasstrought, TExprContext& ctx) {
@@ -1081,30 +1117,43 @@ private:
         if (auto sort = MakeCommonConstraint<TSortedConstraintNode>(input, 0, ctx)) {
             if (Union && input->ChildrenSize() > 1) {
                 // Check and exclude modified keys from final constraint
-                auto resultStruct = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                std::vector<const TStructExprType*> inputStructs;
-                for (auto& child: input->Children()) {
-                    inputStructs.push_back(child->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+                const auto resultItemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                std::vector<const TTypeAnnotationNode*> inputs;
+                for (const auto& child: input->Children()) {
+                    inputs.emplace_back(child->GetTypeAnn()->Cast<TListExprType>()->GetItemType());
                 }
-                auto commonPrefixLength = sort->GetContent().size();
-                for (size_t i = 0; i < commonPrefixLength; ++i) {
-                    auto column = sort->GetContent()[i].first.front();
-                    auto pos = resultStruct->FindItem(column);
-                    YQL_ENSURE(pos, "Missing column " << TString{column}.Quote() << " in result type");
-                    auto resultItemType = resultStruct->GetItems()[*pos];
-                    for (size_t childNdx = 0; childNdx < input->ChildrenSize(); ++childNdx) {
-                        const auto inputStruct = inputStructs[childNdx];
-                        if (auto pos = inputStruct->FindItem(column)) {
-                            if (resultItemType != inputStruct->GetItems()[*pos]) {
-                                commonPrefixLength = i;
-                                break;
+
+                auto content = sort->GetContent();
+                for (auto i = 0U; i < content.size(); ++i) {
+                    for (auto it = content[i].first.cbegin(); content[i].first.cend() != it;) {
+                        const auto resultItemSubType = TConstraintNode::GetSubTypeByPath(*it, *resultItemType);
+                        YQL_ENSURE(resultItemSubType, "Missing " << *it << " in result type");
+                        auto childNdx = 0U;
+                        while (childNdx < input->ChildrenSize()) {
+                            if (const auto inputItemSubType = TConstraintNode::GetSubTypeByPath(*it, *inputs[childNdx])) {
+                                if (IsSameAnnotation(*inputItemSubType, *resultItemSubType)) {
+                                    ++childNdx;
+                                    continue;
+                                }
+                            } else {
+                                YQL_ENSURE(input->Child(childNdx)->GetConstraint<TEmptyConstraintNode>(), "Missing column " << *it << " in non empty input type");
                             }
-                        } else {
-                            YQL_ENSURE(input->Child(childNdx)->GetConstraint<TEmptyConstraintNode>(), "Missing column " << TString{column}.Quote() << " in non empty input type");
+                            break;
                         }
+
+                        if (childNdx < input->ChildrenSize())
+                            ++it;
+                        else
+                            it = content[i].first.erase(it);
+                    }
+
+                    if (content[i].first.empty()) {
+                        content.resize(i);
+                        break;
                     }
                 }
-                sort = sort->CutPrefix(commonPrefixLength, ctx);
+
+                sort = content.empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
             }
             if (sort) {
                 input->AddConstraint(sort);
@@ -2505,15 +2554,13 @@ private:
         return structType->GetSize() ? structType : nullptr;
     }
 
-    static const TSortedConstraintNode* DeduceSortConstraint(const TExprNode& list, const TExprNode& directions, const TExprNode& keyExtractor, TExprContext& ctx) {
-        if (GetSeqItemType(*list.GetTypeAnn()).GetKind() == ETypeAnnotationKind::Struct) {
-            if (const auto& columns = ExtractSimpleSortTraits(directions, keyExtractor); !columns.empty()) {
-                TSortedConstraintNode::TContainerType content(columns.size());
-                std::transform(columns.cbegin(), columns.cend(), content.begin(), [](const std::pair<std::string_view, bool>& item) {
-                   return TSortedConstraintNode::TContainerType::value_type({item.first}, item.second);
-                });
-                return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
-            }
+    static const TSortedConstraintNode* DeduceSortConstraint(const TExprNode& directions, const TExprNode& keyExtractor, TExprContext& ctx) {
+        if (const auto& columns = ExtractSimpleSortTraits(directions, keyExtractor); !columns.empty()) {
+            TSortedConstraintNode::TContainerType content(columns.size());
+            std::transform(columns.cbegin(), columns.cend(), content.begin(), [](const std::pair<TConstraintNode::TPathType, bool>& item) {
+                return std::make_pair(TSortedConstraintNode::TColumnsSet{item.first}, item.second);
+            });
+            return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
         }
         return nullptr;
     }
@@ -2542,11 +2589,13 @@ private:
         TSortedConstraintNode::TContainerType filtered;
         for (auto i = 0U; i < content.size(); ++i) {
             TSortedConstraintNode::TContainerType::value_type nextItem;
-            for (const auto& column : content[i].first) {
-                auto range = reverseMapping.equal_range(column);
-                if (range.first != range.second) {
-                    for (auto it = range.first; it != range.second; ++it) {
-                        nextItem.first.emplace_back(it->second);
+            for (const auto& path : content[i].first) {
+                if (path.size() == 1U) {
+                    auto range = reverseMapping.equal_range(path.front());
+                    if (range.first != range.second) {
+                        for (auto it = range.first; it != range.second; ++it) {
+                            nextItem.first.insert_unique(TConstraintNode::TPathType{it->second});
+                        }
                     }
                 }
             }

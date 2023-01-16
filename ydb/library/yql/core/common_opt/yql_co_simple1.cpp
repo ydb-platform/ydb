@@ -119,10 +119,15 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         size_t index = 0;
                         for (auto c : constent) {
-                            parent.Callable(index++, "Member")
-                                .Arg(0, "item")
-                                .Atom(1, c.first.front())
-                            .Seal();
+                            if (c.first.front().empty())
+                                parent.Arg(index++, "item");
+                            else {
+                                YQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
+                                parent.Callable(index++, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, c.first.front().front())
+                                .Seal();
+                            }
                         }
                         return parent;
                     })
@@ -2726,10 +2731,15 @@ void FixSortness(const TExprNode& origNode, TExprNode::TPtr& node, TExprContext&
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             size_t index = 0;
                             for (auto c : content) {
-                                parent.Callable(index++, "Member")
-                                        .Arg(0, "item")
-                                        .Atom(1, c.first.front())
-                                        .Seal();
+                                if (c.first.empty())
+                                    parent.Arg(0, "item");
+                                else {
+                                    YQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
+                                    parent.Callable(index++, "Member")
+                                            .Arg(0, "item")
+                                            .Atom(1, c.first.front().front())
+                                            .Seal();
+                                }
                             }
                             return parent;
                         })

@@ -29,9 +29,9 @@ void TConstraintNode::Out(IOutputStream& out) const {
     out.Write(Name_);
 }
 
-bool TConstraintNode::PathExistsInType(const TPathType& path, const TTypeAnnotationNode& type) {
+const TTypeAnnotationNode* TConstraintNode::GetSubTypeByPath(const TPathType& path, const TTypeAnnotationNode& type) {
     if (path.empty())
-        return true;
+        return &type;
 
     const auto tail = [](const TPathType& path) {
         auto p(path);
@@ -40,25 +40,25 @@ bool TConstraintNode::PathExistsInType(const TPathType& path, const TTypeAnnotat
     };
     switch (type.GetKind()) {
         case ETypeAnnotationKind::Optional:
-            return PathExistsInType(path, *type.Cast<TOptionalExprType>()->GetItemType());
+            return GetSubTypeByPath(path, *type.Cast<TOptionalExprType>()->GetItemType());
         case ETypeAnnotationKind::Struct:
             if (const auto itemType = type.Cast<TStructExprType>()->FindItemType(path.front()))
-                return PathExistsInType(tail(path), *itemType);
+                return GetSubTypeByPath(tail(path), *itemType);
             break;
         case ETypeAnnotationKind::Tuple:
             if (const auto index = TryFromString<ui64>(TStringBuf(path.front())))
                 if (const auto typleType = type.Cast<TTupleExprType>(); typleType->GetSize() > *index)
-                    return PathExistsInType(tail(path), *typleType->GetItems()[*index]);
+                    return GetSubTypeByPath(tail(path), *typleType->GetItems()[*index]);
             break;
         case ETypeAnnotationKind::Multi:
             if (const auto index = TryFromString<ui64>(TStringBuf(path.front())))
                 if (const auto multiType = type.Cast<TMultiExprType>(); multiType->GetSize() > *index)
-                    return PathExistsInType(tail(path), *multiType->GetItems()[*index]);
+                    return GetSubTypeByPath(tail(path), *multiType->GetItems()[*index]);
             break;
         default:
             break;
     }
-    return false;
+    return nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -209,7 +209,8 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&&
     YQL_ENSURE(!Content_.empty());
     for (const auto& c : Content_) {
         YQL_ENSURE(!c.first.empty());
-        Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
+        for (const auto& path : c.first)
+            Hash_ = std::accumulate(path.cbegin(), path.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
     }
 }
 
@@ -249,13 +250,16 @@ bool TSortedConstraintNode::Includes(const TConstraintNode& node) const {
 void TSortedConstraintNode::Out(IOutputStream& out) const {
     TConstraintNode::Out(out);
     out.Write('(');
-    for (size_t i = 0; i < Content_.size(); ++i) {
-        if (i > 0) {
+    bool first = true;
+    for (const auto& c : Content_) {
+        if (first)
+            first = false;
+        else
             out.Write(';');
-        }
-        out.Write(JoinSeq(',', Content_[i].first));
+
+        out.Write(JoinSeq(',', c.first));
         out.Write('[');
-        out.Write(Content_[i].second ? "asc" : "desc");
+        out.Write(c.second ? "asc" : "desc");
         out.Write(']');
     }
     out.Write(')');
@@ -263,10 +267,10 @@ void TSortedConstraintNode::Out(IOutputStream& out) const {
 
 void TSortedConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     out.OpenArray();
-    for (size_t i = 0; i < Content_.size(); ++i) {
+    for (const auto& c : Content_) {
         out.OpenArray();
-        out.Write(JoinSeq(';', Content_[i].first));
-        out.Write(Content_[i].second);
+        out.Write(JoinSeq(';', c.first));
+        out.Write(c.second);
         out.CloseArray();
     }
     out.CloseArray();
@@ -279,16 +283,15 @@ bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const 
 bool TSortedConstraintNode::IsOrderBy(const TUniqueConstraintNode& unique) const {
     NSorted::TSimpleSet<TColumnsSet> columns;
     for (const auto& key : Content_)
-        if (!key.first.empty())
-            columns.insert_unique(key.first);
+        columns.insert_unique(key.first);
 
     const auto ordered = columns;
     for (const auto& set : unique.GetAllSets()) {
         if (std::all_of(set.cbegin(), set.cend(), [&ordered](const TPathType& path) {
-            return !path.empty() && std::any_of(ordered.cbegin(), ordered.cend(), [&path](const TColumnsSet& s) { return s.contains(path.front()); });
+            return !path.empty() && std::any_of(ordered.cbegin(), ordered.cend(), [&path](const TColumnsSet& s) { return s.contains(path); });
         })) {
             std::for_each(set.cbegin(), set.cend(), [&columns](const TPathType& path) {
-                if (const auto it = std::find_if(columns.cbegin(), columns.cend(), [&path](const TColumnsSet& s) { return s.contains(path.front()); }); columns.cend() != it)
+                if (const auto it = std::find_if(columns.cbegin(), columns.cend(), [&path](const TColumnsSet& s) { return s.contains(path); }); columns.cend() != it)
                     columns.erase(it);
             });
             if (columns.empty())
@@ -372,7 +375,7 @@ const TSortedConstraintNode* TSortedConstraintNode::FilterByType(const TSortedCo
         auto content = sorted->GetContent();
         for (size_t i = 0; i < content.size(); ++i) {
             for (auto it = content[i].first.cbegin(); content[i].first.cend() != it;) {
-                if (outItemType->FindItem(*it))
+                if (GetSubTypeByPath(*it, *outItemType))
                     ++it;
                 else
                     it = content[i].first.erase(it);
@@ -401,6 +404,13 @@ const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLe
     auto content = Content_;
     content.resize(newPrefixLength);
     return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
+}
+
+bool TSortedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    const auto& itemType = GetSeqItemType(type);
+    return std::all_of(Content_.cbegin(), Content_.cend(), [&itemType](const std::pair<TColumnsSet, bool>& pair) {
+        return std::all_of(pair.first.cbegin(), pair.first.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
+    });
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -546,19 +556,11 @@ void TUniqueConstraintNode::Out(IOutputStream& out) const {
         out.Write('(');
         bool first = true;
         for (const auto& path : set) {
-            if (!first) {
+            if (first)
+                first = false;
+            else
                 out.Write(',');
-            }
-            if (!path.empty()) {
-                auto it = path.cbegin();
-                out.Write(*it);
-                while (path.cend() > ++it) {
-                    out.Write('#');
-                    out.Write(*it);
-                }
-            }
-
-            first = false;
+            out << path;
         }
         out.Write(')');
     }
@@ -667,7 +669,7 @@ const TUniqueConstraintNode* TUniqueConstraintNode::RenameFields(TExprContext& c
 bool TUniqueConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
     const auto& itemType = GetSeqItemType(type);
     return std::all_of(Sets_.cbegin(), Sets_.cend(), [&itemType](const TSetType& set) {
-        return std::all_of(set.cbegin(), set.cend(), std::bind(&PathExistsInType, std::placeholders::_1, std::cref(itemType)));
+        return std::all_of(set.cbegin(), set.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
     });
 }
 
@@ -726,32 +728,17 @@ bool TPartOfUniqueConstraintNode::Includes(const TConstraintNode& node) const {
 void TPartOfUniqueConstraintNode::Out(IOutputStream& out) const {
     TConstraintNode::Out(out);
     out.Write('(');
-
     bool first = true;
     for (const auto& part : Mapping_) {
         for (const auto& item : part.second) {
-            if (!first) {
+            if (first)
+                first = false;
+            else
                 out.Write(',');
-            }
-            if (!item.first.empty()) {
-                auto it = item.first.cbegin();
-                out.Write(*it);
-                while (item.first.cend() > ++it) {
-                    out.Write('#');
-                    out.Write(*it);
-                }
-            }
-            out.Write(':');
-            if (!item.second.empty()) {
-                auto it = item.second.cbegin();
-                out.Write(*it);
-                while (item.second.cend() > ++it) {
-                    out.Write('#');
-                    out.Write(*it);
-                }
-            }
 
-            first = false;
+            out << item.first;
+            out.Write(':');
+            out << item.second;
         }
     }
     out.Write(')');
@@ -1594,6 +1581,22 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
 } // namespace NYql
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template<>
+void Out<NYql::TConstraintNode::TPathType>(IOutputStream& out, const NYql::TConstraintNode::TPathType& path) {
+    if (path.empty())
+        out.Write('/');
+    else {
+        bool first = true;
+        for (const auto& c : path) {
+            if (first)
+                first = false;
+            else
+                out.Write('/');
+            out.Write(c);
+        }
+    }
+}
 
 template<>
 void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& c) {

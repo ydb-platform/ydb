@@ -2608,7 +2608,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 std::vector<TRuntimeNode> keys;
                 keys.reserve(content.size());
                 for (const auto& c : content) {
-                    keys.push_back(ctx.ProgramBuilder.Member(item, c.first.front()));
+                    if (c.first.front().empty())
+                         keys.push_back(item);
+                    else {
+                        MKQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
+                        keys.push_back(ctx.ProgramBuilder.Member(item, c.first.front().front()));
+                    }
                 }
                 return ctx.ProgramBuilder.NewTuple(keys);
             };

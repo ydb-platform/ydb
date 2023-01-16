@@ -4387,6 +4387,7 @@ using TDedupRealMap = std::map<ui32, ui32>;
 TDedupRealMap DedupAggregationKeysFromState(const TExprNode& extract, const TExprNode& init, const TExprNode& update) {
     YQL_ENSURE(init.ChildrenSize() == update.ChildrenSize(), "Must be same size.");
     const ui32 keyWidth = extract.ChildrenSize() - 1;
+    const ui32 itemsWidth = extract.Head().ChildrenSize();
 
     TNodeMap<ui32> map;
     map.reserve(keyWidth);
@@ -4405,7 +4406,8 @@ TDedupRealMap DedupAggregationKeysFromState(const TExprNode& extract, const TExp
             if (!CompareExprTreeParts(*extract.Child(extractIdx), *init.Child(initIdx), map)) {
                 continue;
             }
-            if (update.Head().Child(initIdx + keyWidth) != update.Child(initIdx)) {
+            if (update.Head().Child(initIdx - 1 + keyWidth) != update.Child(initIdx) &&
+                update.Child(initIdx) != update.Head().Child(initIdx + keyWidth + itemsWidth - 1)) {
                 continue;
             }
             dedups.emplace(initIdx + keyWidth - 1, extractIdx - 1);

@@ -17,6 +17,8 @@
 
 {% include [x](_includes/basic/random.md) %}
 
+{% include [x](_includes/basic/udf.md) %}
+
 {% include [x](_includes/basic/current_utc.md) %}
 
 {% include [x](_includes/basic/current_tz.md) %}

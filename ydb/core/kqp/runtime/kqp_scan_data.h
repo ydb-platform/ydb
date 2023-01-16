@@ -27,6 +27,29 @@ struct TBytesStatistics {
     ui64 AllocatedBytes = 0;
     ui64 DataBytes = 0;
 
+    TBytesStatistics() = default;
+    TBytesStatistics(const ui64 allocated, const ui64 data)
+        : AllocatedBytes(allocated)
+        , DataBytes(data)
+    {
+
+    }
+
+    TBytesStatistics operator+(const TBytesStatistics& item) const {
+        return TBytesStatistics(AllocatedBytes + item.AllocatedBytes, DataBytes + item.DataBytes);
+    }
+
+    void operator+=(const TBytesStatistics& item) {
+        AllocatedBytes += item.AllocatedBytes;
+        DataBytes += item.DataBytes;
+    }
+
+    template <class T>
+    TBytesStatistics operator*(const T kff) const {
+        static_assert(std::is_arithmetic<T>());
+        return TBytesStatistics(AllocatedBytes * kff, DataBytes * kff);
+    }
+
     void AddStatistics(const TBytesStatistics& other) {
         AllocatedBytes += other.AllocatedBytes;
         DataBytes += other.DataBytes;
@@ -34,7 +57,7 @@ struct TBytesStatistics {
 
 };
 
-TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, NScheme::TTypeInfo type);
+TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NScheme::TTypeInfo& type);
 TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
     const arrow::RecordBatch& batch, i64 columnIndex, NScheme::TTypeInfo columnType);
 TBytesStatistics WriteColumnValuesFromArrow(NUdf::TUnboxedValue* editAccessors,
@@ -146,17 +169,27 @@ public:
         private:
             const ui32 CellsCountForRow;
             const ui32 ColumnsCount;
+            const ui32 RowsCount;
             TUnboxedValueVector Cells;
             ui64 CurrentRow = 0;
+            const ui64 AllocatedBytes;
         public:
             TMaybe<ui64> ShardId;
 
-            explicit RowBatch(const ui32 columnsCount, TUnboxedValueVector&& cells, TMaybe<ui64> shardId)
+            explicit RowBatch(const ui32 columnsCount, const ui32 rowsCount, TUnboxedValueVector&& cells, TMaybe<ui64> shardId, const ui64 allocatedBytes)
                 : CellsCountForRow(columnsCount ? columnsCount : 1)
                 , ColumnsCount(columnsCount)
+                , RowsCount(rowsCount)
                 , Cells(std::move(cells))
+                , AllocatedBytes(allocatedBytes)
                 , ShardId(shardId)
             {
+                Y_VERIFY(AllocatedBytes);
+                Y_VERIFY(RowsCount);
+            }
+
+            double BytesForRecordEstimation() {
+                return 1.0 * AllocatedBytes / RowsCount;
             }
 
             const NUdf::TUnboxedValue* GetCurrentData() const {
@@ -174,7 +207,7 @@ public:
         TSmallVec<TColumn> SystemColumns;
         TSmallVec<TColumn> ResultColumns;
         TQueue<RowBatch> RowBatches;
-        ui64 StoredBytes = 0;
+        double StoredBytes = 0;
         bool Finished = false;
     };
 

@@ -119,6 +119,7 @@ struct TTxState {
         item(TxCreateCdcStreamAtTableWithInitialScan, 73) \
         item(TxAlterExtSubDomainCreateHive, 74) \
         item(TxAlterCdcStreamAtTableDropSnapshot, 75) \
+        item(TxDropCdcStreamAtTableDropSnapshot, 76) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -351,6 +352,7 @@ struct TTxState {
         case TxDropTableIndexAtMainTable:
         case TxDropCdcStream:
         case TxDropCdcStreamAtTable:
+        case TxDropCdcStreamAtTableDropSnapshot:
         case TxDropSequence:
         case TxDropReplication:
         case TxDropBlobDepot:
@@ -441,6 +443,7 @@ struct TTxState {
         case TxFinalizeBuildIndex:
         case TxDropTableIndexAtMainTable: // just increments schemaversion at main table
         case TxDropCdcStreamAtTable:
+        case TxDropCdcStreamAtTableDropSnapshot:
         case TxUpdateMainTableOnIndexMove:
             return false;
         case TxAlterPQGroup:
@@ -530,6 +533,7 @@ struct TTxState {
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
         case TxDropCdcStreamAtTable:
+        case TxDropCdcStreamAtTableDropSnapshot:
         case TxUpdateMainTableOnIndexMove:
             return false;
         case TxAlterPQGroup:

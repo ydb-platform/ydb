@@ -172,6 +172,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTableWithInitialScan = 139 [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTableWithInitialScan"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterExtSubDomainCreateHive = 140 [(CounterOpts) = {Name: "InFlightOps/AlterExtSubDomainCreateHive"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterCdcStreamAtTableDropSnapshot = 141 [(CounterOpts) = {Name: "InFlightOps/AlterCdcStreamAtTableDropSnapshot"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropCdcStreamAtTableDropSnapshot = 142 [(CounterOpts) = {Name: "InFlightOps/DropCdcStreamAtTableDropSnapshot"}];
 }
 
 enum ECumulativeCounters {
@@ -277,6 +278,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTableWithInitialScan = 84 [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTableWithInitialScan"}];
     COUNTER_FINISHED_OPS_TxAlterExtSubDomainCreateHive = 85 [(CounterOpts) = {Name: "FinishedOps/AlterExtSubDomainCreateHive"}];
     COUNTER_FINISHED_OPS_TxAlterCdcStreamAtTableDropSnapshot = 86 [(CounterOpts) = {Name: "FinishedOps/AlterCdcStreamAtTableDropSnapshot"}];
+    COUNTER_FINISHED_OPS_TxDropCdcStreamAtTableDropSnapshot = 87 [(CounterOpts) = {Name: "FinishedOps/DropCdcStreamAtTableDropSnapshot"}];
 }
 
 enum EPercentileCounters {

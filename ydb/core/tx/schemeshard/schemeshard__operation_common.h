@@ -1052,6 +1052,7 @@ class TConfigurePartsAtTable: public TSubOperationState {
         case TTxState::TxAlterCdcStreamAtTable:
         case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
         case TTxState::TxDropCdcStreamAtTable:
+        case TTxState::TxDropCdcStreamAtTableDropSnapshot:
             return true;
         default:
             return false;
@@ -1131,6 +1132,7 @@ class TProposeAtTable: public TSubOperationState {
         case TTxState::TxAlterCdcStreamAtTable:
         case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
         case TTxState::TxDropCdcStreamAtTable:
+        case TTxState::TxDropCdcStreamAtTableDropSnapshot:
             return true;
         default:
             return false;
@@ -1206,6 +1208,40 @@ protected:
     const TOperationId OperationId;
 
 }; // TProposeAtTable
+
+class TProposeAtTableDropSnapshot: public TProposeAtTable {
+public:
+    using TProposeAtTable::TProposeAtTable;
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        TProposeAtTable::HandleReply(ev, context);
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        const auto& pathId = txState->TargetPathId;
+
+        Y_VERIFY(context.SS->TablesWithSnapshots.contains(pathId));
+        const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+
+        auto it = context.SS->SnapshotTables.find(snapshotTxId);
+        if (it != context.SS->SnapshotTables.end()) {
+            it->second.erase(pathId);
+            if (it->second.empty()) {
+                context.SS->SnapshotTables.erase(it);
+            }
+        }
+
+        context.SS->SnapshotsStepIds.erase(snapshotTxId);
+        context.SS->TablesWithSnapshots.erase(pathId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);
+
+        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+        return true;
+    }
+
+}; // TProposeAtTableDropSnapshot
 
 } // NCdcStreamState
 

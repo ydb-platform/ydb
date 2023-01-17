@@ -969,7 +969,9 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
     case TTxState::ETxType::TxDropCdcStream:
         return CreateDropCdcStreamImpl(NextPartId(), txState);
     case TTxState::ETxType::TxDropCdcStreamAtTable:
-        return CreateDropCdcStreamAtTable(NextPartId(), txState);
+        return CreateDropCdcStreamAtTable(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropCdcStreamAtTableDropSnapshot:
+        return CreateDropCdcStreamAtTable(NextPartId(), txState, true);
 
     // Sequences
     case TTxState::ETxType::TxCreateSequence:

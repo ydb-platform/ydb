@@ -278,40 +278,6 @@ public:
 
 }; // TConfigurePartsAtTableDropSnapshot
 
-class TProposeAtTableDropSnapshot: public NCdcStreamState::TProposeAtTable {
-public:
-    using NCdcStreamState::TProposeAtTable::TProposeAtTable;
-
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-        NCdcStreamState::TProposeAtTable::HandleReply(ev, context);
-
-        const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        const auto& pathId = txState->TargetPathId;
-
-        Y_VERIFY(context.SS->TablesWithSnapshots.contains(pathId));
-        const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
-
-        auto it = context.SS->SnapshotTables.find(snapshotTxId);
-        if (it != context.SS->SnapshotTables.end()) {
-            it->second.erase(pathId);
-            if (it->second.empty()) {
-                context.SS->SnapshotTables.erase(it);
-            }
-        }
-
-        context.SS->SnapshotsStepIds.erase(snapshotTxId);
-        context.SS->TablesWithSnapshots.erase(pathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);
-
-        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
-        return true;
-    }
-
-}; // TProposeAtTableDropSnapshot
-
 class TAlterCdcStreamAtTable: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::ConfigureParts;
@@ -344,7 +310,7 @@ class TAlterCdcStreamAtTable: public TSubOperation {
             }
         case TTxState::Propose:
             if (DropSnapshot) {
-                return MakeHolder<TProposeAtTableDropSnapshot>(OperationId);
+                return MakeHolder<NCdcStreamState::TProposeAtTableDropSnapshot>(OperationId);
             } else {
                 return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
             }

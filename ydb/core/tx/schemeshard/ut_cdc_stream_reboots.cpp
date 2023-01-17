@@ -175,8 +175,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(DropStream) {
+    void DropStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing()) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -188,14 +190,23 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                NKikimrSchemeOp::TCdcStreamDescription streamDesc;
+                streamDesc.SetName("Stream");
+                streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly);
+                streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+                if (state) {
+                    streamDesc.SetState(*state);
+                }
+
+                TString strDesc;
+                const bool ok = google::protobuf::TextFormat::PrintToString(streamDesc, &strDesc);
+                UNIT_ASSERT_C(ok, "protobuf serialization failed");
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
                     TableName: "Table"
-                    StreamDescription {
-                      Name: "Stream"
-                      Mode: ECdcStreamModeKeysOnly
-                      Format: ECdcStreamFormatProto
-                    }
-                )");
+                    StreamDescription { %s }
+                )", strDesc.c_str()));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -207,6 +218,18 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
         });
+    }
+
+    Y_UNIT_TEST(DropStream) {
+        DropStream();
+    }
+
+    Y_UNIT_TEST(DropStreamExplicitReady) {
+        DropStream(NKikimrSchemeOp::ECdcStreamStateReady);
+    }
+
+    Y_UNIT_TEST(DropStreamCreatedWithInitialScan) {
+        DropStream(NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
     Y_UNIT_TEST(CreateDropRecreate) {

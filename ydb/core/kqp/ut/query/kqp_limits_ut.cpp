@@ -393,7 +393,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(ComputeNodeMemoryLimit) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000);
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(100'000'000);
 
@@ -450,6 +450,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        auto prepareSettings =
+            TPrepareDataQuerySettings()
+                .OperationTimeout(TDuration::Seconds(20));
         auto prepareResult = session.PrepareDataQuery(Q_(R"(
             SELECT ToDict(
                 ListMap(
@@ -457,7 +460,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                     ($x) -> { RETURN AsTuple($x, $x + 1); }
                 )
             );
-        )")).GetValueSync();
+        )"), prepareSettings).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
         auto dataQuery = prepareResult.GetQuery();
 

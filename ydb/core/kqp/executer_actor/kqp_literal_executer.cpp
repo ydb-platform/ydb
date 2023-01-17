@@ -134,11 +134,12 @@ public:
         auto& alloc = Request.TxAlloc->Alloc;
         auto rmConfig = GetKqpResourceManager()->GetConfig();
         ui64 mkqlInitialLimit = std::min(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
+        ui64 mkqlMaxLimit = std::max(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
         alloc.SetLimit(mkqlInitialLimit);
 
         // TODO: KIKIMR-15350
-        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMemoryLimit](ui64 currentLimit, ui64 required) {
-            if (required < mkqlMemoryLimit) {
+        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
+            if (required < mkqlMaxLimit) {
                 LOG_D("Increase memory limit from " << currentLimit << " to " << required);
                 alloc.SetLimit(required);
             }

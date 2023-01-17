@@ -192,6 +192,9 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
                 udf.NormalizedUserType = ConvertMiniKQLType(udf.Pos, const_cast<TType*>(funcInfo.UserType), ctx);
                 YQL_ENSURE(udf.NormalizedUserType);
             }
+
+            udf.SupportsBlocks = funcInfo.SupportsBlocks;
+            udf.IsStrict = funcInfo.IsStrict;
         } catch (const std::exception& e) {
             ctx.AddError(TIssue(udf.Pos, TStringBuilder()
                 << "Internal error was found when udf metadata is loading for function: " << udf.Name

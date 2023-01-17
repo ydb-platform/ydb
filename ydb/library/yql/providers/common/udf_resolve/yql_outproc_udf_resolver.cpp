@@ -364,6 +364,8 @@ private:
                         continue;
                     }
                 }
+                udf->SupportsBlocks = udfRes.GetSupportsBlocks();
+                udf->IsStrict = udfRes.GetIsStrict();
             }
         }
 

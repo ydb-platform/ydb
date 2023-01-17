@@ -7089,6 +7089,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto& cachedFuncType = std::get<0>(cacheItem);
             auto& cachedRunConfigType = std::get<1>(cacheItem);
             auto& cachedNormalizedUserType = std::get<2>(cacheItem);
+            auto& cachedSupportsBlocks = std::get<3>(cacheItem);
+            auto& cachedIsStrict = std::get<4>(cacheItem);
             if (!cachedFuncType) {
                 IUdfResolver::TFunction description;
                 description.Pos = ctx.Expr.GetPosition(input->Pos());
@@ -7133,6 +7135,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 cachedFuncType = description.CallableType;
                 cachedRunConfigType = description.RunConfigType ? description.RunConfigType : ctx.Expr.MakeType<TVoidExprType>();
                 cachedNormalizedUserType = description.UserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
+                cachedSupportsBlocks = description.SupportsBlocks;
+                cachedIsStrict = description.IsStrict;
             }
 
             TStringBuf typeConfig = "";
@@ -7169,6 +7173,22 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Add(5, runConfigTypeNode)
                     .Atom(6, fileAlias)
                     .List(7)
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 settingIndex = 0;
+                            if (cachedSupportsBlocks) {
+                                parent.List(settingIndex++)
+                                    .Atom(0, "blocks")
+                                    .Seal();
+                            }
+
+                            if (cachedIsStrict) {
+                                parent.List(settingIndex++)
+                                    .Atom(0, "strict")
+                                    .Seal();
+                            }
+
+                            return parent;
+                        })
                     .Seal()
                 .Seal()
                 .Build();

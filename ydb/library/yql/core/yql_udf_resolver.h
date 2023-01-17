@@ -45,6 +45,8 @@ public:
         const TTypeAnnotationNode* NormalizedUserType = nullptr;
         const TTypeAnnotationNode* RunConfigType = nullptr;
         const TTypeAnnotationNode* CallableType = nullptr;
+        bool SupportsBlocks = false;
+        bool IsStrict = false;
     };
 
     struct TImport {

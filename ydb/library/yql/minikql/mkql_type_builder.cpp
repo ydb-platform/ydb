@@ -1480,11 +1480,8 @@ NUdf::TType* TFunctionTypeInfoBuilder::EmptyDict() const {
     return Env_.GetTypeOfEmptyDict();
 }
 
-NUdf::IFunctionTypeInfoBuilder9& TFunctionTypeInfoBuilder::BlockImplementationImpl(
-        NUdf::TUniquePtr<NUdf::IBoxedValue> impl)
+void TFunctionTypeInfoBuilder::Unused1()
 {
-    BlockImplementation_ = std::move(impl);
-    return *this;
 }
 
 NUdf::ISetTypeBuilder::TPtr TFunctionTypeInfoBuilder::Set() const {
@@ -1507,10 +1504,18 @@ NUdf::IBlockTypeBuilder::TPtr TFunctionTypeInfoBuilder::Block(bool isScalar) con
     return new TBlockTypeBuilder(*this, isScalar);
 }
 
-void TFunctionTypeInfoBuilder::Unused1() {
+void TFunctionTypeInfoBuilder::Unused2() {
 }
 
-void TFunctionTypeInfoBuilder::Unused2() {
+void TFunctionTypeInfoBuilder::Unused3() {
+}
+
+void TFunctionTypeInfoBuilder::SupportsBlocks() {
+    SupportsBlocks_ = true;
+}
+
+void TFunctionTypeInfoBuilder::IsStrict() {
+    IsStrict_ = true;
 }
 
 bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
@@ -1635,7 +1640,8 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     funcInfo->ModuleIR = std::move(ModuleIR_);
     funcInfo->ModuleIRUniqID = std::move(ModuleIRUniqID_);
     funcInfo->IRFunctionName = std::move(IRFunctionName_);
-    funcInfo->BlockImplementation = std::move(BlockImplementation_);
+    funcInfo->SupportsBlocks = SupportsBlocks_;
+    funcInfo->IsStrict = IsStrict_;
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const

@@ -2089,7 +2089,21 @@ namespace Tests {
 
     bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, const NKikimrClient::TResponse& expectedResponse) {
         NKikimrClient::TResponse response;
-        FlatQueryRaw(query, opts, response);
+        if (expectedResponse.HasStatus() && expectedResponse.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
+            // Client is expecting OK, retry REJECTED replies during restarts and splits
+            for (int i = 0; i < 5; ++i) {
+                if (i != 0) {
+                    response.Clear();
+                    Cerr << "Retrying rejected query..." << Endl;
+                }
+                FlatQueryRaw(query, opts, response);
+                if (response.GetStatus() != NMsgBusProxy::MSTATUS_REJECTED) {
+                    break;
+                }
+            }
+        } else {
+            FlatQueryRaw(query, opts, response);
+        }
 
         if (!response.GetDataShardErrors().empty()) {
             Cerr << "DataShardErrors:" << Endl << response.GetDataShardErrors() << Endl;
@@ -2347,7 +2361,7 @@ namespace Tests {
 
         TVector<ui32> followerNodes;
         for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) {
-            if (tablet.GetTabletID() == tabletId && tablet.HasFollowerID()) {
+            if (tablet.GetTabletID() == tabletId && tablet.HasFollowerID() && tablet.GetNodeID() != 0) {
                 followerNodes.push_back(NodeIdToIndex(runtime, tablet.GetNodeID()));
             }
         }

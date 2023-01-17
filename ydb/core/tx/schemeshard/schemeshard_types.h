@@ -7,13 +7,12 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <util/generic/fwd.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 struct TSchemeLimits {
     // path
     ui64 MaxDepth = 32;
-    ui64 MaxPaths = 200*1000;
+    ui64 MaxPaths = 10*1000;
     ui64 MaxChildrenInDir = 100*1000;
     ui64 MaxAclBytesSize = 10 << 10;
     ui64 MaxPathElementLength = 255;
@@ -27,7 +26,7 @@ struct TSchemeLimits {
     ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
     ui64 MaxShardsInPath = 35*1000; // In each path in database
-    ui64 MaxConsistentCopyTargets = 1000;
+    ui64 MaxConsistentCopyTargets = 10*1000; // by default same as MaxPaths
 
     // pq group
     ui64 MaxPQPartitions = 1000000;
@@ -39,7 +38,6 @@ struct TSchemeLimits {
 };
 
 using ETabletType = TTabletTypes;
-
 
 struct TGlobalTimestamp {
     TStepId Step = InvalidStepId;
@@ -78,12 +76,10 @@ struct TGlobalTimestamp {
     }
 };
 
-
 enum class ETableColumnDefaultKind : ui32 {
     None = 0,
     FromSequence = 1,
 };
-
 
 enum class EAttachChildResult : ui32 {
     Undefined = 0,
@@ -106,5 +102,4 @@ enum class EAttachChildResult : ui32 {
     RejectAsNewerUnCreated
 };
 
-}
 }

@@ -8,7 +8,7 @@ CDC is represented as a data schema object: a changefeed that can be added to a 
 
 ## Reading data from a topic {#read}
 
-You can read data using an [SDK](../reference/ydb-sdk) or the [{{ ydb-short-name }} CLI](../reference/ydb-cli). As with any other data schema object, you can access a changefeed using its path that has the following format:
+You can read data using an [SDK](../reference/ydb-sdk/) or the [{{ ydb-short-name }} CLI](../reference/ydb-cli/). As with any other data schema object, you can access a changefeed using its path that has the following format:
 
 ```txt
 path/to/table/changefeed_name

@@ -16,7 +16,7 @@ To use [{{ k8s }}](https://kubernetes.io/) to create a cluster [{{ ydb-short-nam
 
 1. Install the {{ k8s }} CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl).
 
-1. [Define]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials){% endif %} the kubectl configuration.
+1. [Define]{% if lang == "en" %}(https://cloud.yandex.com/en-ru/docs/managed-kubernetes/operations/connect/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/managed-kubernetes/operations/connect/){% endif %} the kubectl configuration.
 
 1. Install the {{ k8s }} [Helm 3](https://helm.sh/docs/intro/install/) package manager.
 

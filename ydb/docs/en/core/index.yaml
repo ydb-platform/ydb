@@ -1,7 +1,7 @@
 title: YDB
 description:
   - >-
-    <i>YDB</i> is a fault-tolerant distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference">YQL</a>).
+    <i>YDB</i> is a fault-tolerant distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference/">YQL</a>).
 nav:
   title: YDB
 meta:

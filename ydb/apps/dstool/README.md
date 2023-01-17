@@ -15,19 +15,19 @@ user@host:~$ ydb-dstool -e ydb.endpoint cluster list
 
 # How to run ydb-dstool from source
 
-## Clone ydb
+## Clone ydb repository
 
 ```bash
 user@host:~$ mkdir github
 user@host:~$ cd github
-user@host:~$ git clone https://github.com/ydb-platform/ydb.git
+user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
 ```
 
-## Install python grpc_tools
+## Install grpc_tools python package
 
-Have a look at https://grpc.io/docs/languages/python/quickstart.
+Follow the steps described at https://grpc.io/docs/languages/python/quickstart.
 
-## Compile proto files
+## Compile proto files for python
 
 ```bash
 user@host:~$ cd ~/github/ydb

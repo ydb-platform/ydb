@@ -4395,23 +4395,21 @@ TDedupRealMap DedupAggregationKeysFromState(const TExprNode& extract, const TExp
     {
         ui32 i = 0U;
         extract.Head().ForEachChild([&](const TExprNode& arg) { map.emplace(&arg, i++); });
-        for (; i < init.Head().ChildrenSize(); ++i) {
+        for (i = keyWidth; i < init.Head().ChildrenSize(); ++i) {
             map.emplace(init.Head().Child(i), i - keyWidth);
         }
     }
 
     TDedupRealMap dedups;
-    for (ui32 initIdx = 1; initIdx < init.ChildrenSize(); ++initIdx) {
-        for (ui32 extractIdx = 1; extractIdx < extract.ChildrenSize(); ++extractIdx) {
-            if (!CompareExprTreeParts(*extract.Child(extractIdx), *init.Child(initIdx), map)) {
+    for (ui32 stateIdx = 0; stateIdx + 1 < init.ChildrenSize(); ++stateIdx) {
+        for (ui32 keyIdx = 0; keyIdx + 1 < extract.ChildrenSize(); ++keyIdx) {
+            if (!CompareExprTreeParts(*extract.Child(keyIdx + 1), *init.Child(stateIdx + 1), map)) {
                 continue;
             }
-            if (update.Head().Child(initIdx - 1 + keyWidth) != update.Child(initIdx) &&
-                update.Child(initIdx) != update.Head().Child(initIdx + keyWidth + itemsWidth - 1)) {
-                continue;
+            if (update.Head().Child(keyWidth + itemsWidth + stateIdx) == update.Child(stateIdx + 1)) {
+                dedups.emplace(stateIdx, keyIdx);
+                break;
             }
-            dedups.emplace(initIdx + keyWidth - 1, extractIdx - 1);
-            break;
         }
     }
     return dedups;
@@ -4605,28 +4603,29 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
-    if (const auto dedups = DedupAggregationKeysFromState(*node->Child(2), *node->Child(3), *node->Child(4)); !dedups.empty()) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Dedup keys from state " << node->Content() << ' ' << dedups.size() << " states.";
+    if (const auto stateToKeyIdxs = DedupAggregationKeysFromState(*node->Child(2), *node->Child(3), *node->Child(4)); !stateToKeyIdxs.empty()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Dedup keys from state " << node->Content() << ' ' << stateToKeyIdxs.size() << " states.";
 
         auto children = node->ChildrenList();
-        const auto keysAndStateSize = children[5]->Head().ChildrenSize();
         const auto itemsWidth = children[2]->Head().ChildrenSize();
-
-        std::vector<ui32> map(itemsWidth + keysAndStateSize);
-        std::iota(map.begin(), map.end(), 0U);
-        std::for_each(dedups.cbegin(), dedups.cend(), [&](const std::pair<ui32, ui32>& it) { map[it.first] = it.second; });
-
-        const auto buildRemappedLambda = [&](TExprNode& lambda, const ui32 shift) {
+        const auto keyWidth = children[2]->ChildrenSize() - 1;
+        const auto statesWidth = children[3]->ChildrenSize() - 1;
+        const auto buildRemappedLambda = [&](TExprNode& lambda, const ui32 statesShift, const ui32 keysShift) {
             return ctx.Builder(lambda.Pos())
                 .Lambda()
                 .Params("out", lambda.Head().ChildrenSize())
                     .Apply(lambda)
                         .Do([&](TExprNodeReplaceBuilder& inner) -> TExprNodeReplaceBuilder& {
-                            for (ui32 j = 0U; j < lambda.Head().ChildrenSize(); ++j) {
-                                if (j > shift) {
-                                    inner.With(j, "out", shift + map[j - shift]);
-                                } else {
+                            for (ui32 j = 0; j < lambda.Head().ChildrenSize(); ++j) {
+                                if (j < statesShift || j >= statesShift + statesWidth) {
                                     inner.With(j, "out", j);
+                                } else {
+                                    auto it = stateToKeyIdxs.find(j - statesShift);
+                                    if (it == stateToKeyIdxs.end()) {
+                                        inner.With(j, "out", j);
+                                    } else {
+                                        inner.With(j, "out", keysShift + it->second);
+                                    }
                                 }
                             }
                             return inner;
@@ -4634,10 +4633,14 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
                     .Seal()
                 .Seal().Build();
         };
+        children[4] = buildRemappedLambda(*children[4], keyWidth + itemsWidth, 0);
+        children[5] = buildRemappedLambda(*children[5], keyWidth, 0);
 
-        children[3] = buildRemappedLambda(*children[3], itemsWidth);
-        children[4] = buildRemappedLambda(*children[4], itemsWidth);
-        children[5] = buildRemappedLambda(*children[5], 0);
+        auto body = GetLambdaBody(*children[3]);
+        for (auto&& i : stateToKeyIdxs) {
+            body[i.first] = children[3]->Head().Child(i.second);
+        }
+        children[3] = ctx.DeepCopyLambda(*children[3], std::move(body));
 
         return ctx.ChangeChildren(*node, std::move(children));
     }

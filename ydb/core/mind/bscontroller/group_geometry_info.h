@@ -85,12 +85,16 @@ namespace NKikimr::NBsController {
                 TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
             TString error;
             auto misplacedVDisks = mapper.FindMisplacedVDisks(group);
-            for (const bool requireOperational : {true, false}) {
-                for (const auto& replacedDisk : misplacedVDisks.Disks) {
-                    TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
-                    if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace, 
-                            requireOperational, error)) {
-                        return {replacedDisk, pdiskId};
+            if (misplacedVDisks.Disks.size() == 0) {
+                error = TStringBuilder() << "cannot find misplaced disks, fail level: " << (ui32)misplacedVDisks.FailLevel;
+            } else {
+                for (const bool requireOperational : {true, false}) {
+                    for (const auto& replacedDisk : misplacedVDisks.Disks) {
+                        TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
+                        if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace, 
+                                requireOperational, error)) {
+                            return {replacedDisk, pdiskId};
+                        }
                     }
                 }
             }

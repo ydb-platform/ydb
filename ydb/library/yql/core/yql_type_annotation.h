@@ -168,6 +168,14 @@ enum class EHiddenMode {
     Auto /* "auto" */
 };
 
+struct TUdfCachedInfo {
+    const TTypeAnnotationNode* FunctionType = nullptr;
+    const TTypeAnnotationNode* RunConfigType = nullptr;
+    const TTypeAnnotationNode* NormalizedUserType = nullptr;
+    bool SupportsBlocks = false;
+    bool IsStrict = false;
+};
+
 struct TTypeAnnotationContext: public TThrRefBase {
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -206,9 +214,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 EvaluateOrderByColumnLimit = 100;
     bool PullUpFlatMapOverJoin = true;
     bool DeprecatedSQL = false;
-    THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>,
-        std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*, bool, bool>>
-        UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type, blocks, strict)
+    THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
     bool ForceDq = false;

@@ -7085,13 +7085,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (input->ChildrenSize() != 8) {
             YQL_PROFILE_SCOPE(DEBUG, "ResolveUdfs");
-            auto& cacheItem = ctx.Types.UdfTypeCache[std::make_tuple(TString(name), TString(typeConfig), userType)];
-            auto& cachedFuncType = std::get<0>(cacheItem);
-            auto& cachedRunConfigType = std::get<1>(cacheItem);
-            auto& cachedNormalizedUserType = std::get<2>(cacheItem);
-            auto& cachedSupportsBlocks = std::get<3>(cacheItem);
-            auto& cachedIsStrict = std::get<4>(cacheItem);
-            if (!cachedFuncType) {
+            auto& cached = ctx.Types.UdfTypeCache[std::make_tuple(TString(name), TString(typeConfig), userType)];
+            if (!cached.FunctionType) {
                 IUdfResolver::TFunction description;
                 description.Pos = ctx.Expr.GetPosition(input->Pos());
                 description.Name = TString(name);
@@ -7132,11 +7127,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                cachedFuncType = description.CallableType;
-                cachedRunConfigType = description.RunConfigType ? description.RunConfigType : ctx.Expr.MakeType<TVoidExprType>();
-                cachedNormalizedUserType = description.UserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
-                cachedSupportsBlocks = description.SupportsBlocks;
-                cachedIsStrict = description.IsStrict;
+                cached.FunctionType = description.CallableType;
+                cached.RunConfigType = description.RunConfigType ? description.RunConfigType : ctx.Expr.MakeType<TVoidExprType>();
+                cached.NormalizedUserType = description.UserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
+                cached.SupportsBlocks = description.SupportsBlocks;
+                cached.IsStrict = description.IsStrict;
             }
 
             TStringBuf typeConfig = "";
@@ -7144,19 +7139,19 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 typeConfig = input->Child(3)->Content();
             }
 
-            const auto callableTypeNode = ExpandType(input->Pos(), *cachedFuncType, ctx.Expr);
-            const auto runConfigTypeNode = ExpandType(input->Pos(), *cachedRunConfigType, ctx.Expr);
+            const auto callableTypeNode = ExpandType(input->Pos(), *cached.FunctionType, ctx.Expr);
+            const auto runConfigTypeNode = ExpandType(input->Pos(), *cached.RunConfigType, ctx.Expr);
             TExprNode::TPtr runConfigValue;
             if (input->ChildrenSize() > 1 && !input->Child(1)->IsCallable("Void")) {
                 runConfigValue = input->ChildPtr(1);
             } else {
-                if (cachedRunConfigType->GetKind() == ETypeAnnotationKind::Void) {
+                if (cached.RunConfigType->GetKind() == ETypeAnnotationKind::Void) {
                     runConfigValue = ctx.Expr.NewCallable(input->Pos(), "Void", {});
-                } else if (cachedRunConfigType->GetKind() == ETypeAnnotationKind::Optional) {
+                } else if (cached.RunConfigType->GetKind() == ETypeAnnotationKind::Optional) {
                     runConfigValue = ctx.Expr.NewCallable(input->Pos(), "Nothing", { runConfigTypeNode });
                 } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Missing run config value for type: "
-                        << *cachedRunConfigType << " in function " << name));
+                        << *cached.RunConfigType << " in function " << name));
                     return IGraphTransformer::TStatus::Error;
                 }
             }
@@ -7167,7 +7162,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Callable("Udf")
                     .Add(0, input->HeadPtr())
                     .Add(1, runConfigValue)
-                    .Add(2, ExpandType(input->Pos(), *cachedNormalizedUserType, ctx.Expr))
+                    .Add(2, ExpandType(input->Pos(), *cached.NormalizedUserType, ctx.Expr))
                     .Atom(3, typeConfig)
                     .Add(4, callableTypeNode)
                     .Add(5, runConfigTypeNode)
@@ -7175,13 +7170,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .List(7)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             ui32 settingIndex = 0;
-                            if (cachedSupportsBlocks) {
+                            if (cached.SupportsBlocks) {
                                 parent.List(settingIndex++)
                                     .Atom(0, "blocks")
                                     .Seal();
                             }
 
-                            if (cachedIsStrict) {
+                            if (cached.IsStrict) {
                                 parent.List(settingIndex++)
                                     .Atom(0, "strict")
                                     .Seal();

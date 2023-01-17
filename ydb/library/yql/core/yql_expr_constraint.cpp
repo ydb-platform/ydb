@@ -745,7 +745,7 @@ private:
                 std::unordered_set<std::string_view> set(size);
                 columns.resize(size, std::make_pair(TConstraintNode::TPathType(), columns.back().second));
                 auto it = columns.begin();
-                for (auto i = 0U; i < columns.size(); ++i) {
+                for (auto i = 0U; i < size; ++i) {
                     if (const auto child = keySelectorBody.Child(i); child->IsCallable({"Member", "Nth"}) && &child->Head() == &keySelectorArg) {
                         if (set.emplace(child->Tail().Content()).second)
                             it++->first.emplace_back(child->Tail().Content());
@@ -753,6 +753,7 @@ private:
                             it = columns.erase(it);
                     } else {
                         columns.resize(i);
+                        break;
                     }
                 }
             } else

@@ -1725,3 +1725,48 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
 }
+
+message TYdbVersion {
+    optional uint32 Year = 1;
+    optional uint32 Major = 2;
+    optional uint32 Minor = 3;
+    optional uint32 Hotfix = 4;
+}
+
+message TCompatibilityRule {
+    enum EComponentId {
+        Any = 0;
+        Test1 = 1;
+        Test2 = 2;
+    }
+
+    optional string Build = 1;
+    optional TYdbVersion BottomLimit = 2;
+    optional TYdbVersion UpperLimit = 3;
+
+    // don't use enum, because stored data can have values from newer YDB versions, 
+    // which are not included in current version
+    optional uint32 ComponentId = 4;
+
+    // don't use Forbidden until it's absolutely necessary
+    optional bool Forbidden = 5 [default = false];
+}
+
+message TCurrentCompatibilityInformation {
+    required string Build = 1;
+
+    // if YdbVersion is empty, build is assumed to be non-stable
+    optional TYdbVersion YdbVersion = 2;
+
+    repeated TCompatibilityRule CanLoadFrom = 3;
+    repeated TCompatibilityRule StoresReadableBy = 4;
+}
+
+message TStoredCompatibilityInformation {
+    required string Build = 1;
+
+    // if YdbVersion is empty, build is assumed to be non-stable
+    optional TYdbVersion YdbVersion = 2;
+
+    repeated TCompatibilityRule ReadableBy = 3;
+}

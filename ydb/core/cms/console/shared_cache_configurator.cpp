@@ -2,6 +2,7 @@
 #include "configs_dispatcher.h"
 #include "console.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -32,12 +33,20 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "TSharedCacheConfigurator: got new config: " << record.GetConfig().ShortDebugString());
 
+        auto* appData = AppData(ctx);
+
         NKikimrSharedCache::TSharedCacheConfig cfg;
-        if (record.GetConfig().HasBootstrapConfig() && record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
-            cfg.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
+        if (record.GetConfig().HasBootstrapConfig()) {
+            if (record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
+                cfg.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
+            }
+        } else if (appData->BootstrapConfig.HasSharedCacheConfig()) {
+                cfg.MergeFrom(appData->BootstrapConfig.GetSharedCacheConfig());
         }
         if (record.GetConfig().HasSharedCacheConfig()) {
             cfg.MergeFrom(record.GetConfig().GetSharedCacheConfig());
+        } else if (appData->SharedCacheConfig) {
+            cfg.MergeFrom(*appData->SharedCacheConfig);
         }
 
         ApplyConfig(std::move(cfg), ctx);

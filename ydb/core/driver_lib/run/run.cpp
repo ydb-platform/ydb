@@ -1052,6 +1052,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig();
     }
 
+    if (runConfig.AppConfig.HasSharedCacheConfig()) {
+        AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

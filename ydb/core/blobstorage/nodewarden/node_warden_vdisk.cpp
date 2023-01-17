@@ -301,6 +301,9 @@ namespace NKikimr::NStorage {
         if (!vdisk.RuntimeData) {
             return;
         }
+        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+            return; // group is decomitted, VDisks will be deleted soon
+        }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;
         Y_VERIFY(newInfo->GroupID == currentInfo->GroupID);

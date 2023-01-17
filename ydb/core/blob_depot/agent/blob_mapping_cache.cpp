@@ -46,10 +46,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     const TResolvedValueChain *TBlobDepotAgent::TBlobMappingCache::ResolveKey(TString key, TQuery *query,
-            TRequestContext::TPtr context) {
+            TRequestContext::TPtr context, bool force) {
         const TStringBuf keyBuf = key;
         auto& entry = Cache.try_emplace(std::move(key), keyBuf).first->second;
-        if (!entry.Values.empty()) {
+        if (!entry.Values.empty() && !force) {
             return &entry.Values;
         }
         if (!entry.ResolveInFlight) {

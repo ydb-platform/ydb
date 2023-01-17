@@ -262,7 +262,7 @@ namespace NKikimr::NBlobDepot {
                     // special case -- forward scan and we have some data in memory
                     auto callback = [&](const TKey& key, const TValue& /*value*/) {
                         LastScannedKey = key;
-                        return ++NumKeysRead != maxKeys;
+                        return !DecommitBlobs.empty() || ++NumKeysRead != maxKeys;
                     };
                     if (!Self->Data->ScanRange(begin, Self->Data->LastLoadedKey, flags | EScanFlags::INCLUDE_END, callback)) {
                         continue; // we have read all the keys required (MaxKeys limit hit)
@@ -296,7 +296,7 @@ namespace NKikimr::NBlobDepot {
                             if (matchBegin && matchEnd) {
                                 const TValue *value = Self->Data->FindKey(key);
                                 Y_VERIFY(value); // value must exist as it was just loaded into memory and exists in the database
-                                if (++NumKeysRead == maxKeys) {
+                                if (DecommitBlobs.empty() && ++NumKeysRead == maxKeys) {
                                     // we have hit the MaxItems limit, exit
                                     return true;
                                 }

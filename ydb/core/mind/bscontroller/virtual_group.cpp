@@ -188,6 +188,8 @@ namespace NKikimr::NBsController {
             std::function<void(TGroupInfo&)> Callback;
 
         public:
+            TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_GROUP; }
+
             TTxUpdateGroup(TVirtualGroupSetupMachine *machine, std::function<void(TGroupInfo&)>&& callback)
                 : TTransactionBase(machine->Self)
                 , Machine(machine)
@@ -496,15 +498,14 @@ namespace NKikimr::NBsController {
                 , Ev(ev)
             {}
 
-//            TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DROP_DONOR; }
+            TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DECOMMIT_GROUP; }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
-                State->CheckConsistency();
                 Action(*State);
-                State->CheckConsistency();
                 TString error;
                 if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error)) {
+                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "failed to commit update", (Error, error));
                     State->Rollback();
                     State.reset();
                 }
@@ -516,7 +517,6 @@ namespace NKikimr::NBsController {
                 TGroupInfo *group = state.Groups.FindForUpdate(groupId);
                 if (!group) {
                     std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group not found");
-                    return;
                 } else if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
                     Status = NKikimrProto::ALREADY;
                 } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS) {
@@ -529,6 +529,9 @@ namespace NKikimr::NBsController {
                     group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::DONE;
                     group->ContentChanged = true;
                 }
+
+                STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "decommission update processed", (Status, Status),
+                    (ErrorReason, ErrorReason));
             }
 
             void Complete(const TActorContext&) override {
@@ -539,10 +542,15 @@ namespace NKikimr::NBsController {
                 if (ErrorReason) {
                     ev->Record.SetErrorReason(ErrorReason);
                 }
-                Self->Send(Ev->Sender, ev.release(), 0, Ev->Cookie);
+                auto reply = std::make_unique<IEventHandle>(Ev->Sender, Self->SelfId(), ev.release(), 0, Ev->Cookie);
+                if (Ev->InterconnectSession) {
+                    reply->Rewrite(TEvInterconnect::EvForward, Ev->InterconnectSession);
+                }
+                TActivationContext::Send(std::move(reply));
             }
         };
 
+        STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "TEvControllerGroupDecommittedNotify received", (Msg, ev->Get()->Record));
         Execute(new TTxDecommitGroup(this, ev));
     }
 

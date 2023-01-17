@@ -103,13 +103,13 @@ namespace NKikimr::NBlobDepot {
 
         switch (const ui32 type = ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvAssimilateResult, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
             cFunc(TEvents::TSystem::Poison, PassAway);
 
@@ -121,13 +121,19 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::Action() {
+        Y_VERIFY(!ActionInProgress);
+        ActionInProgress = true;
+
         if (Self->DecommitState < EDecommitState::BlobsFinished) {
             SendAssimilateRequest();
         } else if (Self->DecommitState < EDecommitState::BlobsCopied) {
             ScanDataForCopying();
         } else if (Self->DecommitState == EDecommitState::BlobsCopied) {
+            Y_VERIFY(!PipeId);
             CreatePipe();
         } else if (Self->DecommitState != EDecommitState::Done) {
+            Y_UNREACHABLE();
+        } else {
             Y_UNREACHABLE();
         }
     }
@@ -138,13 +144,6 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(Self->Config.GetIsDecommittingGroup());
         SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), new TEvBlobStorage::TEvAssimilate(SkipBlocksUpTo,
             SkipBarriersUpTo, SkipBlobsUpTo));
-    }
-
-    void TAssimilator::Handle(TEvents::TEvUndelivered::TPtr ev) {
-        STLOG(PRI_ERROR, BLOB_DEPOT, BDT55, "received TEvUndelivered", (Id, Self->GetLogId()), (Sender, ev->Sender),
-            (Cookie, ev->Cookie), (Type, ev->Get()->SourceType), (Reason, ev->Get()->Reason));
-        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {},
-            nullptr, 0));
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev) {
@@ -259,6 +258,7 @@ namespace NKikimr::NBlobDepot {
                         Self->Self->ProcessRegisterAgentQ();
                     }
 
+                    Self->ActionInProgress = false;
                     Self->Action();
                 }
             }
@@ -270,6 +270,7 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_INFO, BLOB_DEPOT, BDT75, "TEvAssimilate failed", (Id, Self->GetLogId()),
                 (Status, ev->Get()->Status), (ErrorReason, ev->Get()->ErrorReason));
 
+            ActionInProgress = false;
             Action();
         }
     }
@@ -315,7 +316,11 @@ namespace NKikimr::NBlobDepot {
                 (EntriesToProcess, EntriesToProcess), (Timeout, timeout), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
 
             if (timeout) { // timeout hit, reschedule work
-                TActivationContext::Send(new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
+                if (!ResumeScanDataForCopyingInFlight) {
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
+                    ResumeScanDataForCopyingInFlight = true;
+                }
+                break;
             } else if (!ScanQ.empty()) {
                 using TQuery = TEvBlobStorage::TEvGet::TQuery;
                 const ui32 sz = ScanQ.size();
@@ -342,6 +347,12 @@ namespace NKikimr::NBlobDepot {
                 EntriesToProcess = false;
             }
         }
+    }
+
+    void TAssimilator::HandleResumeScanDataForCopying() {
+        Y_VERIFY(ResumeScanDataForCopyingInFlight);
+        ResumeScanDataForCopyingInFlight = false;
+        ScanDataForCopying();
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
@@ -379,7 +390,9 @@ namespace NKikimr::NBlobDepot {
         }
         if (!it->second) {
             GetIdToUnprocessedPuts.erase(it);
-            Action();
+            if (!ResumeScanDataForCopyingInFlight) {
+                ScanDataForCopying();
+            }
         }
     }
 
@@ -388,7 +401,9 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(it != GetIdToUnprocessedPuts.end());
         if (!--it->second) {
             GetIdToUnprocessedPuts.erase(it);
-            Action();
+            if (!ResumeScanDataForCopyingInFlight) {
+                ScanDataForCopying();
+            }
         }
     }
 
@@ -409,6 +424,7 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::OnCopyDone() {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT38, "data copying is done", (Id, Self->GetLogId()));
+        Y_VERIFY(GetIdToUnprocessedPuts.empty());
 
         class TTxFinishCopying : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             TAssimilator* const Self;
@@ -431,10 +447,12 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                Self->ActionInProgress = false;
                 Self->Action();
             }
         };
 
+        Y_VERIFY(ActionInProgress);
         Self->Execute(std::make_unique<TTxFinishCopying>(this));
     }
 
@@ -463,7 +481,7 @@ namespace NKikimr::NBlobDepot {
         const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT41, "received TEvControllerGroupDecommittedResponse", (Id, Self->GetLogId()),
             (Status, status));
-        if (status == NKikimrProto::OK) {
+        if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
             class TTxFinishDecommission : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             public:
                 TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_FINISH_DECOMMISSION; }
@@ -489,7 +507,7 @@ namespace NKikimr::NBlobDepot {
             PassAway();
         } else {
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
-            Action();
+            TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
     }
 
@@ -516,7 +534,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::StartGroupAssimilator() {
-        if (Config.GetIsDecommittingGroup()) {
+        if (Config.GetIsDecommittingGroup() && DecommitState != EDecommitState::Done) {
            Y_VERIFY(!GroupAssimilatorId);
            Y_VERIFY(Data->IsLoaded());
            GroupAssimilatorId = RegisterWithSameMailbox(new TGroupAssimilator(this));

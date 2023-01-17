@@ -4,11 +4,14 @@
 
 namespace NKikimr::NBlobDepot {
 
+    static constexpr ui32 MaxNodataTryCount = 3;
+
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGet>(std::unique_ptr<IEventHandle> ev) {
         class TGetQuery : public TBlobStorageQuery<TEvBlobStorage::TEvGet> {
             std::unique_ptr<TEvBlobStorage::TEvGetResult> Response;
             ui32 AnswersRemain;
+            std::unordered_map<ui32, ui32> RetryCount;
 
             struct TResolveKeyContext : TRequestContext {
                 ui32 QueryIdx;
@@ -122,6 +125,27 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA35, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
                     (Tag, tag), (Status, status), (Buffer.size, status == NKikimrProto::OK ? buffer.size() : 0),
                     (ErrorReason, status != NKikimrProto::OK ? buffer : ""));
+
+                if (status == NKikimrProto::NODATA) { // we have to retry this read, this may be a race between blob movement
+                    const auto& q = Request.Queries[tag];
+
+                    if (++RetryCount[tag] == MaxNodataTryCount) {
+                        STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA39, "NODATA retry count exceeded for blob -- it may be lost",
+                            (VirtualGroupId, Agent.VirtualGroupId),
+                            (BlobId, q.Id),
+                            (Status, status));
+                        status = NKikimrProto::ERROR;
+                    } else {
+                        const TResolvedValueChain *value = Agent.BlobMappingCache.ResolveKey(
+                            q.Id.AsBinaryString(),
+                            this,
+                            std::make_shared<TResolveKeyContext>(tag),
+                            true);
+                        Y_VERIFY(!value);
+                        return;
+                    }
+                }
+
                 auto& resp = Response->Responses[tag];
                 Y_VERIFY(resp.Status == NKikimrProto::UNKNOWN);
                 resp.Status = status;

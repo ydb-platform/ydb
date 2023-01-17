@@ -28,7 +28,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg, TRequestContext::TPtr context);
-        const TResolvedValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
+        const TResolvedValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context, bool force = false);
         void ProcessResponse(ui64 tag, TRequestContext::TPtr /*context*/, TResponse response) override;
     };
 

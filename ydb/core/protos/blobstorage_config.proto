@@ -571,6 +571,12 @@ enum ETriStateBool {
     kNotSet = 2;
 }
 
+enum ENodeType {
+    NT_UNKNOWN = 0;
+    NT_STATIC = 1;
+    NT_DYNAMIC = 2;
+}
+
 message TBaseConfig {
     message TPDisk {
         uint32 NodeId = 1;
@@ -629,6 +635,7 @@ message TBaseConfig {
         uint64 LastConnectTimestamp = 5; // TInstant
         uint64 LastDisconnectTimestamp = 6; // TInstant
         uint64 LastSeenTimestamp = 7; // when seen working for the last time
+        ENodeType Type = 8;
     }
 
     repeated TPDisk PDisk = 1;

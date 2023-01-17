@@ -1,3 +1,4 @@
+import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 from collections import defaultdict
@@ -12,6 +13,7 @@ def add_options(p):
 def do(args):
     all_columns = [
         'NodeId',
+        'NodeType',
         'FQDN',
         'IcPort',
         'DC',
@@ -19,6 +21,7 @@ def do(args):
     ]
     visible_columns = [
         'NodeId',
+        'NodeType',
         'FQDN',
         'IcPort',
         'DC',
@@ -32,6 +35,7 @@ def do(args):
     node_map = defaultdict(dict)
     for node in base_config.Node:
         node_data = node_map[node.NodeId]
+        node_data['NodeType'] = kikimr_bsconfig.ENodeType.Name(node.Type)
         node_data['FQDN'] = node.HostKey.Fqdn
         node_data['IcPort'] = node.HostKey.IcPort
         node_data['DC'] = node.Location.DataCenter

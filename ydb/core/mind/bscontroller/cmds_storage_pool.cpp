@@ -537,6 +537,14 @@ namespace NKikimr::NBsController {
 
             auto& node = nodes[record.NodeId];
             node.SetNodeId(record.NodeId);
+            auto config = AppData()->DynamicNameserviceConfig;
+            if (config && record.NodeId <= config->MaxStaticNodeId) {
+                node.SetType(NKikimrBlobStorage::NT_STATIC);
+            } else if (config && record.NodeId <= config->MaxDynamicNodeId) {
+                node.SetType(NKikimrBlobStorage::NT_DYNAMIC);
+            } else {
+                node.SetType(NKikimrBlobStorage::NT_UNKNOWN);
+            }
             node.SetPhysicalLocation(s.Str());
             record.Location.Serialize(node.MutableLocation(), false); // this field has been introduced recently, so it doesn't have compatibility format
             const auto& nodes = Nodes.Get();

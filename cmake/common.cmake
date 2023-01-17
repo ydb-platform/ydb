@@ -210,3 +210,48 @@ function(use_export_script Target ExportFile)
     LINK_DEPENDS ${OutPath}
   )
 endfunction()
+
+function(add_yunittest)
+  set(opts "")
+  set(oneval_args NAME TEST_TARGET)
+  set(multival_args TEST_ARG)
+  cmake_parse_arguments(YUNITTEST_ARGS
+    "${opts}"
+    "${oneval_args}"
+    "${multival_args}"
+    ${ARGN}
+  )
+  get_property(SPLIT_FACTOR TARGET ${YUNITTEST_ARGS_TEST_TARGET} PROPERTY SPLIT_FACTOR)
+  if (${SPLIT_FACTOR} EQUAL 1)
+  	add_test(NAME ${YUNITTEST_ARGS_NAME} COMMAND ${YUNITTEST_ARGS_TARGET} ${YUNITTEST_ARGS_TEST_ARG})
+  	return()
+  endif()
+
+  foreach(Idx RANGE ${SPLIT_FACTOR})
+    add_test(NAME ${YUNITTEST_ARGS_NAME}_${Idx}
+      COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/split_unittest.py --split-factor ${SPLIT_FACTOR} --shard ${Idx}
+       $<TARGET_FILE:${YUNITTEST_ARGS_TEST_TARGET}> ${YUNITTEST_ARGS_TEST_ARG})
+  endforeach()
+endfunction()
+
+function(set_yunittest_property)
+  set(opts "")
+  set(oneval_args TEST PROPERTY)
+  set(multival_args )
+  cmake_parse_arguments(YUNITTEST_ARGS
+    "${opts}"
+    "${oneval_args}"
+    "${multival_args}"
+    ${ARGN}
+  )
+  get_property(SPLIT_FACTOR TARGET ${YUNITTEST_ARGS_TEST} PROPERTY SPLIT_FACTOR)
+  
+  if (${SPLIT_FACTOR} EQUAL 1)
+    set_property(TEST ${YUNITTEST_ARGS_TEST} PROPERTY ${YUNITTEST_ARGS_PROPERTY} ${YUNITTEST_ARGS_UNPARSED_ARGUMENTS})
+  	return()
+  endif()
+
+  foreach(Idx RANGE ${SPLIT_FACTOR})
+    set_property(TEST ${YUNITTEST_ARGS_TEST}_${Idx} PROPERTY ${YUNITTEST_ARGS_PROPERTY} ${YUNITTEST_ARGS_UNPARSED_ARGUMENTS})
+  endforeach()
+endfunction()

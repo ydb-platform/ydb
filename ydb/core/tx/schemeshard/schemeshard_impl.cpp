@@ -139,8 +139,8 @@ ui64 TSchemeShard::Generation() const {
 }
 
 struct TAttachOrder {
-    TGlobalTimestamp DropAt;
-    TGlobalTimestamp CreateAt;
+    TVirtualTimestamp DropAt;
+    TVirtualTimestamp CreateAt;
     TPathId PathId;
 
     explicit TAttachOrder(TPathElement::TPtr path)

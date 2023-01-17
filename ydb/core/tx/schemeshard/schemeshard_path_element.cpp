@@ -156,12 +156,12 @@ bool TPathElement::IsCreateFinished() const {
     return (IsRoot() && CreateTxId) || StepCreated;
 }
 
-TGlobalTimestamp TPathElement::GetCreateTS() const {
-    return TGlobalTimestamp(StepCreated, CreateTxId);
+TVirtualTimestamp TPathElement::GetCreateTS() const {
+    return TVirtualTimestamp(StepCreated, CreateTxId);
 }
 
-TGlobalTimestamp TPathElement::GetDropTS() const {
-    return TGlobalTimestamp(StepDropped, DropTxId);
+TVirtualTimestamp TPathElement::GetDropTS() const {
+    return TVirtualTimestamp(StepDropped, DropTxId);
 }
 
 void TPathElement::SetDropped(TStepId step, TTxId txId) {

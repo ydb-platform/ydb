@@ -378,8 +378,8 @@ public:
     bool IsLikeDirectory() const;
     bool HasActiveChanges() const;
     bool IsCreateFinished() const;
-    TGlobalTimestamp GetCreateTS() const;
-    TGlobalTimestamp GetDropTS() const;
+    TVirtualTimestamp GetCreateTS() const;
+    TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);
     bool NormalState() const;
     bool Dropped() const;

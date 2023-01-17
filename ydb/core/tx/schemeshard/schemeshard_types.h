@@ -39,11 +39,11 @@ struct TSchemeLimits {
 
 using ETabletType = TTabletTypes;
 
-struct TGlobalTimestamp {
+struct TVirtualTimestamp {
     TStepId Step = InvalidStepId;
     TTxId TxId = InvalidTxId;
 
-    TGlobalTimestamp(TStepId step, TTxId txId)
+    TVirtualTimestamp(TStepId step, TTxId txId)
         : Step(step)
         , TxId(txId)
     {}
@@ -56,13 +56,13 @@ struct TGlobalTimestamp {
         return !Empty();
     }
 
-    bool operator < (const TGlobalTimestamp& ts) const {
+    bool operator < (const TVirtualTimestamp& ts) const {
         Y_VERIFY_DEBUG(Step, "Comparing with unset timestamp");
         Y_VERIFY_DEBUG(ts.Step, "Comparing with unset timestamp");
         return Step < ts.Step || Step == ts.Step && TxId < ts.TxId;
     }
 
-    bool operator == (const TGlobalTimestamp& ts) const {
+    bool operator == (const TVirtualTimestamp& ts) const {
         return Step == ts.Step && TxId == ts.TxId;
     }
 

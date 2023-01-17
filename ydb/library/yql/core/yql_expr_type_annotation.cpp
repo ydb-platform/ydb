@@ -388,16 +388,11 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             if (!pos) {
                 switch (newField->GetItemType()->GetKind()) {
                 case ETypeAnnotationKind::Null:
-                case ETypeAnnotationKind::EmptyList:
-                case ETypeAnnotationKind::EmptyDict:
-                case ETypeAnnotationKind::Void:
                     field = ctx.Builder(node->Pos())
                         .Callable(ToString(newField->GetItemType()->GetKind())).Seal()
                         .Build();
                     break;
                 case ETypeAnnotationKind::Optional:
-                case ETypeAnnotationKind::List:
-                case ETypeAnnotationKind::Dict:
                 case ETypeAnnotationKind::Pg:
                     field = ctx.Builder(node->Pos())
                         .Callable(GetEmptyCollectionName(newField->GetItemType()->GetKind()))

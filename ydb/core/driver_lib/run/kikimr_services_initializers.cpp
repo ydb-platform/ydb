@@ -555,6 +555,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasNumPreallocatedBuffers()) {
         result.NumPreallocatedBuffers = config.GetNumPreallocatedBuffers();
     }
+    if (config.HasEnableExternalDataChannel()) {
+        result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
+    }
 
     return result;
 }

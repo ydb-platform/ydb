@@ -520,6 +520,7 @@ namespace NActors {
                 request.SetRequestModernFrame(true);
                 request.SetRequestAuthOnly(Common->Settings.TlsAuthOnly);
                 request.SetRequestExtendedTraceFmt(true);
+                request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
 
                 SendExBlock(request, "ExRequest");
 
@@ -551,6 +552,7 @@ namespace NActors {
                 Params.UseModernFrame = success.GetUseModernFrame();
                 Params.AuthOnly = Params.Encryption && success.GetAuthOnly();
                 Params.UseExtendedTraceFmt = success.GetUseExtendedTraceFmt();
+                Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -708,6 +710,7 @@ namespace NActors {
                 Params.UseModernFrame = request.GetRequestModernFrame();
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
                 Params.UseExtendedTraceFmt = request.GetRequestExtendedTraceFmt();
+                Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
 
                 if (request.HasClientScopeId()) {
                     ParsePeerScopeId(request.GetClientScopeId());
@@ -734,6 +737,7 @@ namespace NActors {
                     success.SetUseModernFrame(Params.UseModernFrame);
                     success.SetAuthOnly(Params.AuthOnly);
                     success.SetUseExtendedTraceFmt(Params.UseExtendedTraceFmt);
+                    success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     SendExBlock(record, "ExReply");
 
                     // extract sender actor id (self virtual id)
@@ -877,7 +881,7 @@ namespace NActors {
                 addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
             } else {
                 Y_VERIFY(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain 
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
                     + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
             }
 

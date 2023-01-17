@@ -93,6 +93,7 @@ namespace NInterconnect {
                                 TABLEH() { str << "LastSessionDieTime"; }
                                 TABLEH() { str << "TotalOutputQueueSize"; }
                                 TABLEH() { str << "Connected"; }
+                                TABLEH() { str << "XDC"; }
                                 TABLEH() { str << "Host"; }
                                 TABLEH() { str << "Port"; }
                                 TABLEH() { str << "LastErrorTimestamp"; }
@@ -129,6 +130,7 @@ namespace NInterconnect {
                                     }
                                     TABLED() { str << kv.second.TotalOutputQueueSize; }
                                     TABLED() { str << (kv.second.Connected ? "yes" : "<strong>no</strong>"); }
+                                    TABLED() { str << (kv.second.ExternalDataChannel ? "yes" : "no"); }
                                     TABLED() { str << kv.second.Host; }
                                     TABLED() { str << kv.second.Port; }
                                     TABLED() {
@@ -164,6 +166,7 @@ namespace NInterconnect {
                     JSON(LastSessionDieTime, toString)
                     JSON(TotalOutputQueueSize, id)
                     JSON(Connected, id)
+                    JSON(ExternalDataChannel, id)
                     JSON(Host, id)
                     JSON(Port, id)
                     JSON(LastErrorTimestamp, toString)

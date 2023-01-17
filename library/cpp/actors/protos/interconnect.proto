@@ -72,6 +72,7 @@ message THandshakeRequest {
     optional bool RequestModernFrame = 18;
     optional bool RequestAuthOnly = 19;
     optional bool RequestExtendedTraceFmt = 20;
+    optional bool RequestExternalDataChannel = 21;
 }
 
 message THandshakeSuccess {
@@ -94,6 +95,7 @@ message THandshakeSuccess {
     optional bool UseModernFrame = 11;
     optional bool AuthOnly = 12;
     optional bool UseExtendedTraceFmt = 13;
+    optional bool UseExternalDataChannel = 14;
 }
 
 message THandshakeReply {

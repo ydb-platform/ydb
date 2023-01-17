@@ -1137,6 +1137,7 @@ namespace NActors {
     }
 
                             MON_VAR(Created)
+                            MON_VAR(Params.UseExternalDataChannel)
                             MON_VAR(NewConnectionSet)
                             MON_VAR(ReceiverId)
                             MON_VAR(MessagesGot)

@@ -41,6 +41,7 @@ namespace NActors {
             TInstant LastSessionDieTime;
             ui64 TotalOutputQueueSize;
             bool Connected;
+            bool ExternalDataChannel;
             TString Host;
             ui16 Port;
             TInstant LastErrorTimestamp;

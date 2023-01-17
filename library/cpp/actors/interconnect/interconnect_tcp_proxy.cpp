@@ -887,6 +887,7 @@ namespace NActors {
         stats.LastSessionDieTime = LastSessionDieTime;
         stats.TotalOutputQueueSize = Session ? Session->TotalOutputQueueSize : 0;
         stats.Connected = Session ? (bool)Session->Socket : false;
+        stats.ExternalDataChannel = Session && Session->Params.UseExternalDataChannel;
         stats.Host = TechnicalPeerHostName;
         stats.Port = 0;
         ui32 rep = 0;

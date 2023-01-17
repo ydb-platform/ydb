@@ -1669,7 +1669,7 @@ public:
 
     TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
         YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.Locks.empty());
+        YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
 
         auto containOnlyPureStages = [](const auto& request) {

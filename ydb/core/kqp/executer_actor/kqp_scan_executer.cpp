@@ -49,7 +49,7 @@ public:
         : TBase(std::move(request), database, userToken, counters, TWilsonKqp::ScanExecuter, "ScanExecuter")
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
-        YQL_ENSURE(Request.Locks.empty());
+        YQL_ENSURE(Request.DataShardLocks.empty());
         YQL_ENSURE(!Request.ValidateLocks);
         YQL_ENSURE(!Request.EraseLocks);
         YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);

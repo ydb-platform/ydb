@@ -37,41 +37,36 @@ void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShar
     }
 }
 
-TMap<ui64, TVector<NKikimrTxDataShard::TLock>> ExtractLocks(const TVector<NYql::NDq::TMkqlValueRef>& locks) {
+NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock) {
     auto ensureMemberDataType = [] (const NKikimrMiniKQL::TMember& member, const TString& name, ui32 scheme) {
         YQL_ENSURE(member.GetName() == name);
         YQL_ENSURE(member.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Data);
         YQL_ENSURE(member.GetType().GetData().GetScheme() == scheme);
     };
 
-    TMap<ui64, TVector<NKikimrTxDataShard::TLock>> locksMap;
-    for (auto& lock : locks) {
-        const auto& type = lock.GetType();
-        const auto& value = lock.GetValue();
+    const auto& type = lock.GetType();
+    const auto& value = lock.GetValue();
 
-        YQL_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
-        auto& structType = type.GetStruct();
+    YQL_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
+    auto& structType = type.GetStruct();
 
-        YQL_ENSURE(structType.MemberSize() == 6);
-        ensureMemberDataType(structType.GetMember(0), "Counter", NKikimr::NUdf::TDataType<ui64>::Id);
-        ensureMemberDataType(structType.GetMember(1), "DataShard", NKikimr::NUdf::TDataType<ui64>::Id);
-        ensureMemberDataType(structType.GetMember(2), "Generation", NKikimr::NUdf::TDataType<ui32>::Id);
-        ensureMemberDataType(structType.GetMember(3), "LockId", NKikimr::NUdf::TDataType<ui64>::Id);
-        ensureMemberDataType(structType.GetMember(4), "PathId", NKikimr::NUdf::TDataType<ui64>::Id);
-        ensureMemberDataType(structType.GetMember(5), "SchemeShard", NKikimr::NUdf::TDataType<ui64>::Id);
+    YQL_ENSURE(structType.MemberSize() == 6);
+    ensureMemberDataType(structType.GetMember(0), "Counter", NKikimr::NUdf::TDataType<ui64>::Id);
+    ensureMemberDataType(structType.GetMember(1), "DataShard", NKikimr::NUdf::TDataType<ui64>::Id);
+    ensureMemberDataType(structType.GetMember(2), "Generation", NKikimr::NUdf::TDataType<ui32>::Id);
+    ensureMemberDataType(structType.GetMember(3), "LockId", NKikimr::NUdf::TDataType<ui64>::Id);
+    ensureMemberDataType(structType.GetMember(4), "PathId", NKikimr::NUdf::TDataType<ui64>::Id);
+    ensureMemberDataType(structType.GetMember(5), "SchemeShard", NKikimr::NUdf::TDataType<ui64>::Id);
 
-        NKikimrTxDataShard::TLock dsLock;
-        dsLock.SetCounter(value.GetStruct(0).GetUint64());
-        dsLock.SetDataShard(value.GetStruct(1).GetUint64());
-        dsLock.SetGeneration(value.GetStruct(2).GetUint32());
-        dsLock.SetLockId(value.GetStruct(3).GetUint64());
-        dsLock.SetPathId(value.GetStruct(4).GetUint64());
-        dsLock.SetSchemeShard(value.GetStruct(5).GetUint64());
+    NKikimrTxDataShard::TLock dsLock;
+    dsLock.SetCounter(value.GetStruct(0).GetUint64());
+    dsLock.SetDataShard(value.GetStruct(1).GetUint64());
+    dsLock.SetGeneration(value.GetStruct(2).GetUint32());
+    dsLock.SetLockId(value.GetStruct(3).GetUint64());
+    dsLock.SetPathId(value.GetStruct(4).GetUint64());
+    dsLock.SetSchemeShard(value.GetStruct(5).GetUint64());
 
-        locksMap[dsLock.GetDataShard()].emplace_back(std::move(dsLock));
-    }
-
-    return locksMap;
+    return dsLock;
 }
 
 } // namespace NKikimr::NKqp

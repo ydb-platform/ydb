@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -1275,8 +1276,10 @@ public:
                         << " EraseLocks: " << request.EraseLocks);
 
                 for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
-                    request.Locks.emplace_back(lock.GetValueRef(txCtx.Locks.LockType));
+                    auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
+                    request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
                 }
+
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
@@ -1288,7 +1291,7 @@ public:
             QueryState->Orbit,
             QueryState->CurrentTx,
             request.Transactions.size(),
-            request.Locks.size(),
+            txCtx.Locks.Size(),
             request.AcquireLocksTxId.Defined());
 
         SendToExecuter(std::move(request));
@@ -1886,8 +1889,10 @@ public:
 
         // Should tx with empty LocksMap be aborted?
         for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {
-            request.Locks.emplace_back(lock.GetValueRef(txCtx->Locks.LockType));
+            auto dsLock = ExtractLock(lock.GetValueRef(txCtx->Locks.LockType));
+            request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
         }
+
         SendToExecuter(std::move(request), true);
     }
 

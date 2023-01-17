@@ -1858,7 +1858,7 @@ private:
             // Transactions with topics must always use generic readsets
             !topicTxs.empty());
 
-        if (auto locksMap = ExtractLocks(Request.Locks);
+        if (auto locksMap = Request.DataShardLocks;
             !locksMap.empty() ||
             VolatileTx ||
             Request.TopicOperations.HasReadOperations())

@@ -807,7 +807,10 @@ namespace NKikimr::NYaml {
         for(auto hostConfig: json["host_configs"].GetArraySafe()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
             NProtobufJson::MergeJson2Proto(hostConfig, *hostConfigProto, GetJsonToProtoConfig());
-            hostConfigProto->SetItemConfigGeneration(itemConfigGeneration);
+            // KIKIMR-16712
+            // Avoid checking the version number for "host_config" configuration items.
+            // This allows to add new host configuration items after the initial cluster setup.
+            hostConfigProto->SetItemConfigGeneration(Max<ui64>());
         }
 
         auto *defineBox = result.AddCommand()->MutableDefineBox();

@@ -626,7 +626,7 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
         return;
     }
 
-    TSnapshotKey snapshotKey = TSnapshotKey(tableId.PathId.OwnerId, tableId.PathId.LocalPathId, record.GetSnapshotStep(), record.GetSnapshotTxId());
+    const TSnapshotKey snapshotKey(tableId.PathId, record.GetSnapshotStep(), record.GetSnapshotTxId());
     const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
     if (!snapshot) {
         badRequest(TStringBuilder()

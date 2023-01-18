@@ -52,7 +52,7 @@ public:
             Y_VERIFY(tx->GetStep() != 0);
 
             DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
-                TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, tx->GetStep(), tx->GetTxId()),
+                TSnapshotKey(pathId, tx->GetStep(), tx->GetTxId()),
                 params.GetSnapshotName(), TSnapshot::FlagScheme, TDuration::Zero());
         }
 

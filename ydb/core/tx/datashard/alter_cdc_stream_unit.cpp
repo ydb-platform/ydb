@@ -48,7 +48,7 @@ public:
                     const auto& snapshot = params.GetDropSnapshot();
                     Y_VERIFY(snapshot.GetStep() != 0);
 
-                    const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, snapshot.GetStep(), snapshot.GetTxId());
+                    const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
                     DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
                 } else {
                     Y_VERIFY_DEBUG(false, "Absent snapshot");

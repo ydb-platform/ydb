@@ -10,6 +10,7 @@
 add_executable(ydb-library-yql-parser-pg_catalog-ut)
 target_include_directories(ydb-library-yql-parser-pg_catalog-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
   contrib-libs-cxxsupp
@@ -17,6 +18,7 @@ target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-parser-pg_catalog
+  yql-parser-pg_wrapper
 )
 target_link_options(ydb-library-yql-parser-pg_catalog-ut PRIVATE
   -Wl,-no_deduplicate
@@ -26,6 +28,7 @@ target_link_options(ydb-library-yql-parser-pg_catalog-ut PRIVATE
 )
 target_sources(ydb-library-yql-parser-pg_catalog-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_consts_ut.cpp
 )
 add_test(
   NAME

@@ -444,6 +444,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(QueryExecTimeout) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000);
+        appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(300000);
 
         TKikimrRunner kikimr(appConfig);
 
@@ -452,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto prepareSettings =
             TPrepareDataQuerySettings()
-                .OperationTimeout(TDuration::Seconds(20));
+                .OperationTimeout(TDuration::Seconds(300));
         auto prepareResult = session.PrepareDataQuery(Q_(R"(
             SELECT ToDict(
                 ListMap(

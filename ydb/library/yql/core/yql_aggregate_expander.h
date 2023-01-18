@@ -39,6 +39,7 @@ public:
     }
     
     TExprNode::TPtr ExpandAggregate();
+    static TExprNode::TPtr CountAggregateRewrite(const NNodes::TCoAggregate& node, TExprContext& ctx, bool useBlocks);
 
 private:
     using TIdxSet = std::set<ui32>;
@@ -135,8 +136,6 @@ inline TExprNode::TPtr ExpandAggregatePeepholeImpl(const TExprNode::TPtr& node, 
     return aggExpander.ExpandAggregate();
 }
 
-inline TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.UseBlocks);
-}
+TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 
 }

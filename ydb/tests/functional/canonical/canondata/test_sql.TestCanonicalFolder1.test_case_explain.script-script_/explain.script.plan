@@ -70,9 +70,6 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "Name": "Aggregate"
-                                                    },
-                                                    {
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
@@ -81,7 +78,7 @@
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
-                                                "Node Type": "Aggregate-TableFullScan"
+                                                "Node Type": "TableFullScan"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -91,9 +88,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "ResultSet",
@@ -168,6 +172,8 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "GroupBy": "0",
+                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
                                                         "Name": "Aggregate"
                                                     },
                                                     {
@@ -189,9 +195,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "Precompute_0",
@@ -235,9 +248,6 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "Name": "Aggregate"
-                                                    },
-                                                    {
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
@@ -246,7 +256,7 @@
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
-                                                "Node Type": "Aggregate-TableFullScan"
+                                                "Node Type": "TableFullScan"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -256,9 +266,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "ResultSet",
@@ -333,6 +350,8 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "GroupBy": "0",
+                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
                                                         "Name": "Aggregate"
                                                     },
                                                     {
@@ -354,9 +373,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "Precompute_0",

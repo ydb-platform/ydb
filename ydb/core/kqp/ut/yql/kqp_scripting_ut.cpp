@@ -485,7 +485,9 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(planJson, &plan, true);
-        auto node = FindPlanNodeByKv(plan.GetMap().at("queries").GetArray()[2], "Node Type", "Aggregate-TableFullScan");
+        Cerr << plan.GetStringRobust() << Endl;
+        auto node = FindPlanNodeByKv(plan.GetMap().at("queries").GetArray()[2], "Node Type", "Aggregate-Limit-Aggregate");
+        UNIT_ASSERT(node.IsDefined());
         UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 1);
     }
 

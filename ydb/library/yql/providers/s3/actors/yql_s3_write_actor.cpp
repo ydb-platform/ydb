@@ -144,7 +144,7 @@ public:
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
-        LOG_D("TS3FileWriteActor", __func__ << " by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
+        LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
         if (Parts->IsSealed() && Parts->Size() <= 1) {
             Become(&TS3FileWriteActor::SinglepartWorkingStateFunc);
             const size_t size = Max<size_t>(Parts->Volume(), 1);
@@ -186,6 +186,9 @@ public:
     }
 
     void Finish() {
+        if (IsFinishing())
+            return;
+
         Parts->Seal();
 
         if (!UploadId.empty()) {
@@ -425,7 +428,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3WriteActor", __func__);
+        LOG_D("TS3WriteActor", "Bootstrap");
         Become(&TS3WriteActor::StateFunc);
     }
 
@@ -492,7 +495,12 @@ private:
         }
 
         if (finished) {
-            std::for_each(FileWriteActors.cbegin(), FileWriteActors.cend(), [](const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item){ item.second.back()->Finish(); });
+            std::for_each(
+                FileWriteActors.cbegin(),
+                FileWriteActors.cend(),
+                [](const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
+                    item.second.back()->Finish();
+                });
             Finished = true;
             FinishIfNeeded();
         }

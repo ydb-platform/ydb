@@ -283,7 +283,7 @@ private:
 
         if (keysCount) {
             if (isSingleRowPerFileFormat) {
-                ctx.AddError(TIssue(ctx.GetPosition(format->Pos()), TStringBuilder() << "Partitioned isn't supporter for " << format->Content() << " output format."));
+                ctx.AddError(TIssue(ctx.GetPosition(format->Pos()), TStringBuilder() << "Partitioned isn't supported for " << format->Content() << " output format."));
                 return TStatus::Error;
             }
             for (auto i = 0U; i < keysCount; ++i) {

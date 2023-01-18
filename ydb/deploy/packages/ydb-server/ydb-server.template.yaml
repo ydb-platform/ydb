@@ -1,0 +1,43 @@
+name: ydb-server
+arch: "${DEB_ARCH}"
+platform: linux
+version: "${YDB_VERSION_STRING}"
+
+vendor: "YDB Platform"
+homepage: https://ydb.tech
+license: Apache2.0
+section: database
+priority: optional
+maintainer: "info@ydb.tech"
+description: |
+  YDB is an open-source Distributed SQL Database that combines
+  high availability and scalability with strong consistency and ACID transactions.
+
+provides: []
+depends:
+  - "${YDB_PACKAGE_DEPENDS_LIBC}"
+recommends: []
+suggests: []
+
+contents:
+  - src: "${RELEASE_DIR}/bin/ydbd"
+    dst: /opt/ydb/bin/ydbd
+  - src: "${RELEASE_DIR}/lib/*"
+    dst: /opt/ydb/lib
+  - src: ydb/deploy/yaml_config_examples/single-node-in-memory.yaml
+    dst: /opt/ydb/cfg/config.yaml
+  - src: ydb/deploy/packages/ydb-server/ydb-server-storage.service
+    dst: /lib/systemd/system/ydb-server/ydb-server-storage.service
+  - src: "${RELEASE_DIR}/AUTHORS"
+    dst: /usr/share/doc/ydb-server/AUTHORS
+  - src: "${RELEASE_DIR}/LICENSE"
+    dst: /usr/share/doc/ydb-server/LICENSE
+  - src: "${RELEASE_DIR}/README.md"
+    dst: /usr/share/doc/ydb-server/README.md
+
+scripts:
+  postinstall: ydb/deploy/packages/ydb-server/ydb-server.postinstall
+
+deb:
+  fields:
+    Source: "YDB Platform"

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# create ydb user & group
+groupadd ydb
+useradd ydb -g ydb
+
+# to make sure that YDB has access to block disks to run
+usermod -aG disk ydb
+
+# fix ownership of ydb stuff
+chown -R ydb:ydb /opt/ydb

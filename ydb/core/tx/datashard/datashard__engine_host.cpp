@@ -536,7 +536,13 @@ public:
 
         if (VolatileTxId) {
             Y_VERIFY(!LockTxId);
-            VolatileCommitTxIds.insert(VolatileTxId);
+            if (VolatileCommitTxIds.insert(VolatileTxId).second) {
+                // Update TxMap to include the new commit
+                auto it = TxMaps.find(tableId.PathId);
+                if (it != TxMaps.end()) {
+                    it->second->Add(VolatileTxId, WriteVersion);
+                }
+            }
             return VolatileTxId;
         }
 
@@ -549,14 +555,17 @@ public:
         }
 
         auto baseTxMap = Self->GetVolatileTxManager().GetTxMap();
-        if (!baseTxMap && !VolatileTxId && !LockTxId) {
-            // Don't use tx map when there's nothing we want to view as committed
-            return nullptr;
-        }
 
-        // Don't use tx map when we know there's no write lock for a table
-        // Note: currently write lock implies uncommitted changes
-        if (!baseTxMap && !VolatileTxId && LockTxId && !Self->SysLocksTable().HasCurrentWriteLock(tableId)) {
+        bool needTxMap = (
+            // We need tx map when there are waiting volatile transactions
+            baseTxMap ||
+            // We need tx map to see committed volatile tx changes
+            VolatileTxId && !VolatileCommitTxIds.empty() ||
+            // We need tx map when current lock has uncommitted changes
+            LockTxId && Self->SysLocksTable().HasCurrentWriteLock(tableId));
+
+        if (!needTxMap) {
+            // We don't need tx map
             return nullptr;
         }
 
@@ -567,8 +576,7 @@ public:
                 // Uncommitted changes are visible in all possible snapshots
                 ptr->Add(LockTxId, TRowVersion::Min());
             } else if (VolatileTxId) {
-                // We want volatile changes to be visible at the write vrsion
-                ptr->Add(VolatileTxId, WriteVersion);
+                // We want committed volatile changes to be visible at the write version
                 for (ui64 commitTxId : VolatileCommitTxIds) {
                     ptr->Add(commitTxId, WriteVersion);
                 }
@@ -579,38 +587,40 @@ public:
     }
 
     NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId) const override {
-        if (TSysTables::IsSystemTable(tableId) || !LockTxId)
+        if (TSysTables::IsSystemTable(tableId))
             return nullptr;
 
-        if (!Self->GetVolatileTxManager().GetTxMap() &&
-            !Self->SysLocksTable().HasWriteLocks(tableId))
-        {
-            // We don't have any uncommitted changes, so there's nothing we
-            // could possibly conflict with.
+        bool needObserver = (
+            // We need observer when there are waiting changes in the tx map
+            Self->GetVolatileTxManager().GetTxMap() ||
+            // We need observer for locked reads when there are active write locks
+            LockTxId && Self->SysLocksTable().HasWriteLocks(tableId));
+
+        if (!needObserver) {
+            // We don't need tx observer
             return nullptr;
         }
 
         auto& ptr = TxObservers[tableId.PathId];
         if (!ptr) {
-            // This observer is supposed to find conflicts
-            ptr = new TReadTxObserver(this, tableId);
+            if (LockTxId) {
+                ptr = new TLockedReadTxObserver(this);
+            } else {
+                ptr = new TReadTxObserver(this);
+            }
         }
 
         return ptr;
     }
 
-    class TReadTxObserver : public NTable::ITransactionObserver {
+    class TLockedReadTxObserver : public NTable::ITransactionObserver {
     public:
-        TReadTxObserver(const TDataShardEngineHost* host, const TTableId& tableId)
+        TLockedReadTxObserver(const TDataShardEngineHost* host)
             : Host(host)
-            , TableId(tableId)
-        {
-            Y_UNUSED(Host);
-            Y_UNUSED(TableId);
-        }
+        { }
 
         void OnSkipUncommitted(ui64 txId) override {
-            Host->AddReadConflict(TableId, txId);
+            Host->AddReadConflict(txId);
         }
 
         void OnSkipCommitted(const TRowVersion&) override {
@@ -622,21 +632,50 @@ public:
         }
 
         void OnApplyCommitted(const TRowVersion& rowVersion) override {
-            Host->CheckReadConflict(TableId, rowVersion);
+            Host->CheckReadConflict(rowVersion);
         }
 
         void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) override {
-            Host->CheckReadConflict(TableId, rowVersion);
+            Host->CheckReadConflict(rowVersion);
             Host->CheckReadDependency(txId);
         }
 
     private:
         const TDataShardEngineHost* const Host;
-        const TTableId TableId;
     };
 
-    void AddReadConflict(const TTableId& tableId, ui64 txId) const {
-        Y_UNUSED(tableId);
+    class TReadTxObserver : public NTable::ITransactionObserver {
+    public:
+        TReadTxObserver(const TDataShardEngineHost* host)
+            : Host(host)
+        { }
+
+        void OnSkipUncommitted(ui64) override {
+            // We don't care about uncommitted changes
+            // Any future commit is supposed to be above our read version
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {
+            // We already use InvisibleRowSkips for these
+        }
+
+        void OnSkipCommitted(const TRowVersion&, ui64) override {
+            // We already use InvisibleRowSkips for these
+        }
+
+        void OnApplyCommitted(const TRowVersion&) override {
+            // Not needed
+        }
+
+        void OnApplyCommitted(const TRowVersion&, ui64 txId) override {
+            Host->CheckReadDependency(txId);
+        }
+
+    private:
+        const TDataShardEngineHost* const Host;
+    };
+
+    void AddReadConflict(ui64 txId) const {
         Y_VERIFY(LockTxId);
 
         // We have detected uncommitted changes in txId that could affect
@@ -645,8 +684,7 @@ public:
         Self->SysLocksTable().AddReadConflict(txId);
     }
 
-    void CheckReadConflict(const TTableId& tableId, const TRowVersion& rowVersion) const {
-        Y_UNUSED(tableId);
+    void CheckReadConflict(const TRowVersion& rowVersion) const {
         Y_VERIFY(LockTxId);
 
         if (rowVersion > ReadVersion) {
@@ -663,9 +701,18 @@ public:
 
     void CheckReadDependency(ui64 txId) const {
         if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
-            if (info->State == EVolatileTxState::Waiting) {
-                // We are reading undecided changes and need to wait until they are resolved
-                VolatileReadDependencies.insert(info->TxId);
+            switch (info->State) {
+                case EVolatileTxState::Waiting:
+                    // We are reading undecided changes and need to wait until they are resolved
+                    EngineBay.GetKqpComputeCtx().AddVolatileReadDependency(info->TxId);
+                    break;
+                case EVolatileTxState::Committed:
+                    // Committed changes are immediately visible and don't need a dependency
+                    break;
+                case EVolatileTxState::Aborting:
+                    // We just read something that we know is aborting, we would have to retry later
+                    EngineBay.GetKqpComputeCtx().AddVolatileReadDependency(info->TxId);
+                    break;
             }
         }
     }
@@ -810,11 +857,11 @@ public:
             // later, so we need to switch transaction to volatile writes mid
             // flight. This is only needed so we don't block writes and still
             // commit changes in the correct order.
-            if (!VolatileTxId && info->State != EVolatileTxState::Aborted) {
+            if (!VolatileTxId && info->State != EVolatileTxState::Aborting) {
                 Y_FAIL("TODO: implement switching to volatile writes mid-transaction");
             }
-            // Add dependency on undecided transactions
-            if (info->State == EVolatileTxState::Waiting) {
+            // Add dependency on uncommitted transactions
+            if (VolatileTxId && info->State != EVolatileTxState::Committed) {
                 VolatileDependencies.insert(info->TxId);
             }
         } else {
@@ -845,7 +892,6 @@ private:
     mutable absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
     mutable absl::flat_hash_set<ui64> VolatileCommitTxIds;
     mutable absl::flat_hash_set<ui64> VolatileDependencies;
-    mutable absl::flat_hash_set<ui64> VolatileReadDependencies;
 };
 
 //

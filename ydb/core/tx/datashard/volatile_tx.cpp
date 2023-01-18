@@ -40,11 +40,9 @@ namespace NKikimr::NDataShard {
 
             Self->VolatileTxManager.PersistRemoveVolatileTx(TxId, txc);
 
-            Self->VolatileTxManager.RemoveFromTxMap(info);
-
             Self->VolatileTxManager.UnblockDependents(info);
 
-            // TODO: unblock waiting operations?
+            Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(TxId);
             return true;
@@ -80,7 +78,7 @@ namespace NKikimr::NDataShard {
             Self->VolatileTxManager.RunPendingAbortTx();
 
             auto* info = Self->VolatileTxManager.FindByTxId(TxId);
-            Y_VERIFY(info && info->State == EVolatileTxState::Aborted);
+            Y_VERIFY(info && info->State == EVolatileTxState::Aborting);
 
             for (auto& pr : Self->GetUserTables()) {
                 auto tid = pr.second->LocalTid;
@@ -94,19 +92,19 @@ namespace NKikimr::NDataShard {
             // TODO: abort change records
 
             Self->VolatileTxManager.PersistRemoveVolatileTx(TxId, txc);
-
-            Self->VolatileTxManager.UnblockDependents(info);
-
-            // TODO: restart waiting operations before commit?
             return true;
         }
 
         void Complete(const TActorContext&) override {
             auto* info = Self->VolatileTxManager.FindByTxId(TxId);
-            Y_VERIFY(info && info->State == EVolatileTxState::Aborted);
+            Y_VERIFY(info && info->State == EVolatileTxState::Aborting);
 
             // Run callbacks only after we successfully persist aborted tx
             Self->VolatileTxManager.RunAbortCallbacks(info);
+
+            Self->VolatileTxManager.UnblockDependents(info);
+
+            Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(TxId);
         }
@@ -174,8 +172,9 @@ namespace NKikimr::NDataShard {
                 case EVolatileTxState::Committed:
                     PendingCommits.push_back(pr.first);
                     break;
-                case EVolatileTxState::Aborted:
+                case EVolatileTxState::Aborting:
                     PendingAborts.push_back(pr.first);
+                    Y_FAIL("FIXME: unexpected persistent aborting state");
                     break;
             }
         }
@@ -226,7 +225,7 @@ namespace NKikimr::NDataShard {
                     }
 
                     // Waiting and Committed transactions need to be added to TxMap until they are fully resolved
-                    // Note that aborted transactions are removed from TxMap and don't need to be re-added
+                    // Note that aborting transactions are deleted and we should never observe it as a persistent state
                     for (ui64 commitTxId : info->CommitTxIds) {
                         auto res2 = VolatileTxByCommitTxId.emplace(commitTxId, info);
                         Y_VERIFY_S(res2.second, "Unexpected duplicate commitTxId# " << commitTxId);
@@ -236,8 +235,8 @@ namespace NKikimr::NDataShard {
                     for (auto it = info->Dependencies.begin(); it != info->Dependencies.end(); /* nothing */) {
                         ui64 dependencyTxId = *it;
                         auto* dependency = FindByTxId(dependencyTxId);
-                        if (!dependency || dependency->State == EVolatileTxState::Aborted) {
-                            // Skip dependencies that have been aborted already
+                        if (!dependency) {
+                            // Skip dependencies that have been removed already
                             info->Dependencies.erase(it++);
                             continue;
                         }
@@ -248,9 +247,10 @@ namespace NKikimr::NDataShard {
                     return;
                 }
 
-                case EVolatileTxState::Aborted: {
-                    // Aborted transactions don't have dependencies
+                case EVolatileTxState::Aborting: {
+                    // Aborting transactions don't have dependencies
                     info->Dependencies.clear();
+                    Y_FAIL("FIXME: unexpected persistent aborting state");
                     return;
                 }
             }
@@ -366,9 +366,6 @@ namespace NKikimr::NDataShard {
             auto* dependency = FindByTxId(dependencyTxId);
             Y_VERIFY_S(dependency, "Cannot find dependency txId# " << dependencyTxId
                 << " for volatile txId# " << txId << " @" << version);
-            Y_VERIFY_S(dependency->State != EVolatileTxState::Aborted,
-                "Unexpected aborted dependency txId# " << dependencyTxId
-                << " for volatile txId# " << txId << " @" << version);
             dependency->Dependents.insert(txId);
         }
 
@@ -406,7 +403,6 @@ namespace NKikimr::NDataShard {
             if (info->State == EVolatileTxState::Committed) {
                 RunCommitCallbacks(info);
             }
-            // TODO: unblock waiting operations?
         });
         txc.OnRollback([txId]() {
             Y_VERIFY_S(false, "Unexpected rollback of volatile txId# " << txId);
@@ -467,7 +463,7 @@ namespace NKikimr::NDataShard {
                 }
                 break;
 
-            case EVolatileTxState::Aborted:
+            case EVolatileTxState::Aborting:
                 // The rollback transaction will handle callbacks
                 it->second->Callbacks.push_back(std::move(callback));
                 break;
@@ -476,16 +472,32 @@ namespace NKikimr::NDataShard {
         return true;
     }
 
+    bool TVolatileTxManager::AttachBlockedOperation(ui64 txId, ui64 dependentTxId) {
+        auto it = VolatileTxs.find(txId);
+        if (it == VolatileTxs.end()) {
+            return false;
+        }
+
+        switch (it->second->State) {
+            case EVolatileTxState::Waiting:
+            case EVolatileTxState::Aborting:
+                it->second->BlockedOperations.insert(dependentTxId);
+                return true;
+
+            case EVolatileTxState::Committed:
+                break;
+        }
+
+        return false;
+    }
+
     void TVolatileTxManager::AbortWaitingTransaction(TVolatileTxInfo* info) {
         Y_VERIFY(info && info->State == EVolatileTxState::Waiting);
 
         ui64 txId = info->TxId;
 
-        // Move tx to aborted, but don't persist yet, we need a separate transaction for that
-        info->State = EVolatileTxState::Aborted;
-
-        // We don't need aborted transactions in tx map
-        RemoveFromTxMap(info);
+        // Move tx to aborting, but don't persist yet, we need a separate transaction for that
+        info->State = EVolatileTxState::Aborting;
 
         // Aborted transactions don't have dependencies
         for (ui64 dependencyTxId : info->Dependencies) {
@@ -586,7 +598,6 @@ namespace NKikimr::NDataShard {
             if (info->Dependencies.empty()) {
                 AddPendingCommit(txId);
             }
-            // TODO: unblock waiting operations?
         }
     }
 
@@ -596,6 +607,7 @@ namespace NKikimr::NDataShard {
         for (auto& callback : callbacks) {
             callback->OnCommit();
         }
+        UnblockOperations(info, true);
     }
 
     void TVolatileTxManager::RunAbortCallbacks(TVolatileTxInfo* info) {
@@ -604,6 +616,7 @@ namespace NKikimr::NDataShard {
         for (auto& callback : callbacks) {
             callback->OnAbort();
         }
+        UnblockOperations(info, false);
     }
 
     void TVolatileTxManager::RemoveFromTxMap(TVolatileTxInfo* info) {
@@ -620,11 +633,40 @@ namespace NKikimr::NDataShard {
             Y_VERIFY_S(dependent, "Unexpected failure to find dependent tx "
                 << dependentTxId << " that depended on " << info->TxId);
             dependent->Dependencies.erase(info->TxId);
-            if (dependent->Dependencies.empty() && dependent->State == EVolatileTxState::Committed) {
-                AddPendingCommit(dependentTxId);
+            if (dependent->Dependencies.empty()) {
+                switch (dependent->State) {
+                    case EVolatileTxState::Waiting:
+                        break;
+                    case EVolatileTxState::Committed:
+                        AddPendingCommit(dependentTxId);
+                        break;
+                    case EVolatileTxState::Aborting:
+                        Y_FAIL("FIXME: unexpected dependency removed from aborting tx");
+                        break;
+                }
             }
         }
         info->Dependents.clear();
+    }
+
+    void TVolatileTxManager::UnblockOperations(TVolatileTxInfo* info, bool success) {
+        bool added = false;
+        for (ui64 dependentTxId : info->BlockedOperations) {
+            // Note: operation may have been cancelled, it's ok when missing
+            if (auto op = Self->Pipeline.FindOp(dependentTxId)) {
+                op->RemoveVolatileDependency(info->TxId, success);
+                if (!op->HasVolatileDependencies() && !op->HasRuntimeConflicts()) {
+                    Self->Pipeline.AddCandidateOp(op);
+                    added = true;
+                }
+            }
+        }
+        info->BlockedOperations.clear();
+
+        if (added && Self->Pipeline.CanRunAnotherOp()) {
+            auto ctx = TActivationContext::ActorContextFor(Self->SelfId());
+            Self->PlanQueue.Progress(ctx);
+        }
     }
 
     void TVolatileTxManager::AddPendingCommit(ui64 txId) {

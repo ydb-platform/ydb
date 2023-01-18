@@ -27,8 +27,8 @@ namespace NKikimr::NDataShard {
         Waiting = 0,
         // Volatile transaction is logically committed, but not yet committed in storage
         Committed = 1,
-        // Volatile transaction is aborted, waiting to be garbage collected
-        Aborted = 2,
+        // Volatile transaction is aborting, waiting to be persistently removed
+        Aborting = 2,
     };
 
     class IVolatileTxCallback : public TThrRefBase {
@@ -49,7 +49,7 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> Dependents;
         absl::flat_hash_set<ui64> Participants;
         bool AddCommitted = false;
-        absl::flat_hash_set<ui64> BlockedTransactions;
+        absl::flat_hash_set<ui64> BlockedOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
     };
 
@@ -136,6 +136,9 @@ namespace NKikimr::NDataShard {
         bool AttachVolatileTxCallback(
             ui64 txId, IVolatileTxCallback::TPtr callback);
 
+        bool AttachBlockedOperation(
+            ui64 txId, ui64 dependentTxId);
+
         void AbortWaitingTransaction(TVolatileTxInfo* info);
 
         void ProcessReadSet(
@@ -160,6 +163,7 @@ namespace NKikimr::NDataShard {
         void RunAbortCallbacks(TVolatileTxInfo* info);
         void RemoveFromTxMap(TVolatileTxInfo* info);
         void UnblockDependents(TVolatileTxInfo* info);
+        void UnblockOperations(TVolatileTxInfo* info, bool success);
         void AddPendingCommit(ui64 txId);
         void AddPendingAbort(ui64 txId);
         void RunPendingCommitTx();

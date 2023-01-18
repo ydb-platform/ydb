@@ -166,6 +166,17 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
         }
 
+        bool keepOutReadSets = !op->HasVolatilePrepareFlag();
+
+        Y_DEFER {
+            // We need to clear OutReadSets and AwaitingDecisions for
+            // volatile transactions, except when we commit them.
+            if (!keepOutReadSets) {
+                tx->OutReadSets().clear();
+                tx->AwaitingDecisions().clear();
+            }
+        };
+
         const bool validated = op->HasVolatilePrepareFlag()
             ? KqpValidateVolatileTx(tabletId, tx, DataShard.SysLocksTable())
             : KqpValidateLocks(tabletId, tx, DataShard.SysLocksTable());
@@ -264,6 +275,22 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             return OnTabletNotReady(*tx, *dataTx, txc, ctx);
         }
 
+        if (!result && computeCtx.HasVolatileReadDependencies()) {
+            for (ui64 txId : computeCtx.GetVolatileReadDependencies()) {
+                op->AddVolatileDependency(txId);
+                bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
+                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << txId);
+            }
+
+            allocGuard.Release();
+
+            dataTx->ResetCollectedChanges();
+
+            tx->ReleaseTxData(txc, ctx);
+
+            return EExecutionStatus::Continue;
+        }
+
         if (Pipeline.AddLockDependencies(op, guardLocks)) {
             allocGuard.Release();
             dataTx->ResetCollectedChanges();
@@ -304,6 +331,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             if (!op->OutReadSets().empty()) {
                 DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
             }
+            keepOutReadSets = true;
         }
 
         // Note: may erase persistent locks, must be after we persist volatile tx

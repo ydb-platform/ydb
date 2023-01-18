@@ -511,6 +511,10 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
 
     MKQL_ENSURE_S(runStatus == NYql::NDq::ERunStatus::Finished);
 
+    if (computeCtx.HasVolatileReadDependencies()) {
+        return nullptr;
+    }
+
     auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA,
         origin, txId, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
 
@@ -741,8 +745,9 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
     YQL_ENSURE(kqpTx.GetUseGenericReadSets());
 
     // We may have some stale data since before the restart
-    tx->OutReadSets().clear();
-    tx->AwaitingDecisions().clear();
+    // We expect all stale data to be cleared on restarts
+    Y_VERIFY(tx->OutReadSets().empty());
+    Y_VERIFY(tx->AwaitingDecisions().empty());
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision

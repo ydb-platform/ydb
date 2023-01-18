@@ -736,6 +736,7 @@ public:
                 for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (auto* out = output[i]; out != nullptr) {
                         *out = s.Aggs_[i]->FinishOne(ptr);
+                        s.Aggs_[i]->DestroyState(ptr);
                     }
 
                     ptr += s.Aggs_[i]->StateSize;
@@ -1195,16 +1196,17 @@ private:
     void Iterate(THash& hash, const TVector<std::unique_ptr<IKeyColumnBuilder>>& keyBuilders,
         const TVector<std::unique_ptr<IAggColumnBuilder>>& aggBuilders,
         NUdf::TUnboxedValue*const* output, TState& s) const {
+        MKQL_ENSURE(s.IsFinished_, "Supposed to be called at the end");
         for (auto iter = hash.Begin(); iter != hash.End(); hash.Advance(iter)) {
             if (!hash.IsValid(iter)) {
                 continue;
             }
 
             const TKey& key = hash.GetKey(iter);
-            auto payload = (const char*)hash.GetPayload(iter);
-            const char* ptr;
+            auto payload = (char*)hash.GetMutablePayload(iter);
+            char* ptr;
             if constexpr (UseArena) {
-                ptr = *(const char**)payload;
+                ptr = *(char**)payload;
             } else {
                 ptr = payload;
             }
@@ -1225,6 +1227,7 @@ private:
             for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                 if (output[Keys_.size() + i]) {
                     aggBuilders[i]->Add(ptr);
+                    s.Aggs_[i]->DestroyState(ptr);
                 }
 
                 ptr += s.Aggs_[i]->StateSize;

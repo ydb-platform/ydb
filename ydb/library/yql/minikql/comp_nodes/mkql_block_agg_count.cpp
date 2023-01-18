@@ -59,6 +59,11 @@ public:
         new(state) TState();
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TState>::value);
+        Y_UNUSED(state);
+    }
+
     void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
         auto typedState = static_cast<TState*>(state);
         Y_UNUSED(columns);
@@ -92,6 +97,11 @@ public:
         UpdateKey(state, columns, row);
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TState>::value);
+        Y_UNUSED(state);
+    }
+
     void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         Y_UNUSED(columns);
         Y_UNUSED(row);
@@ -118,6 +128,11 @@ public:
     void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TState();
         UpdateState(state, columns, row);
+    }
+
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TState>::value);
+        Y_UNUSED(state);
     }
 
     void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
@@ -155,6 +170,11 @@ public:
 
     void InitState(void* state) final {
         new(state) TState();
+    }
+
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TState>::value);
+        Y_UNUSED(state);
     }
 
     void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
@@ -217,6 +237,11 @@ public:
     void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TState();
         UpdateKey(state, columns, row);
+    }
+
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TState>::value);
+        Y_UNUSED(state);
     }
 
     void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {

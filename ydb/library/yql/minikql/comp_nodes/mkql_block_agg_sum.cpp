@@ -193,6 +193,11 @@ public:
         new(state) TSumState<TSum>();
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TSumState<TSum>>::value);
+        Y_UNUSED(state);
+    }
+
     void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
         auto typedState = static_cast<TSumState<TSum>*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
@@ -324,6 +329,11 @@ public:
         UpdateKey(state, columns, row);
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TSumState<TSum>>::value);
+        Y_UNUSED(state);
+    }
+
     void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         auto typedState = static_cast<TSumState<TSum>*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
@@ -357,6 +367,11 @@ public:
         UpdateState(state, columns, row);
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TSumState<TSum>>::value);
+        Y_UNUSED(state);
+    }
+
     void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         auto typedState = static_cast<TSumState<TSum>*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
@@ -387,6 +402,11 @@ public:
 
     void InitState(void* state) final {
         new(state) TSumSimpleState<TSum>();
+    }
+
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TSumSimpleState<TSum>>::value);
+        Y_UNUSED(state);
     }
 
     void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
@@ -447,6 +467,11 @@ public:
         UpdateKey(state, columns, row);
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TSumSimpleState<TSum>>::value);
+        Y_UNUSED(state);
+    }
+
     void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         auto typedState = static_cast<TSumSimpleState<TSum>*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
@@ -480,6 +505,11 @@ public:
         UpdateState(state, columns, row);
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TSumSimpleState<TSum>>::value);
+        Y_UNUSED(state);
+    }
+
     void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         auto typedState = static_cast<TSumSimpleState<TSum>*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
@@ -510,6 +540,11 @@ public:
 
     void InitState(void* state) final {
         new(state) TAvgState();
+    }
+
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TAvgState>::value);
+        Y_UNUSED(state);
     }
 
     void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
@@ -616,6 +651,11 @@ public:
         UpdateKey(state, columns, row);
     }
 
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TAvgState>::value);
+        Y_UNUSED(state);
+    }
+
     void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         auto typedState = static_cast<TAvgState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
@@ -663,6 +703,11 @@ public:
     void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TAvgState();
         UpdateState(state, columns, row);
+    }
+
+    void DestroyState(void* state) noexcept final {
+        static_assert(std::is_trivially_destructible<TAvgState>::value);
+        Y_UNUSED(state);
     }
 
     void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {

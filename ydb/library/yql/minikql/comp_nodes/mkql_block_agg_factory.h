@@ -24,6 +24,8 @@ public:
     explicit IBlockAggregatorBase(ui32 stateSize)
         : StateSize(stateSize)
     {}
+
+    virtual void DestroyState(void* state) noexcept = 0;
 };
 
 

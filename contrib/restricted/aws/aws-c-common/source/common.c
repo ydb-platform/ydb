@@ -38,6 +38,12 @@ int (*g_numa_node_of_cpu_ptr)(int cpu) = NULL;
 void *g_libnuma_handle = NULL;
 
 void aws_secure_zero(void *pBuf, size_t bufsize) {
+    /* don't pass NULL to memset(), it's undefined behavior */
+    if (pBuf == NULL || bufsize == 0) {
+        AWS_ASSERT(bufsize == 0); /* if you believe your NULL buffer has a size, then you have issues */
+        return;
+    }
+
 #if defined(_WIN32)
     SecureZeroMemory(pBuf, bufsize);
 #else

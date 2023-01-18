@@ -144,9 +144,42 @@ enum aws_text_encoding {
 AWS_STATIC_IMPL enum aws_text_encoding aws_text_detect_encoding(const uint8_t *bytes, size_t size);
 
 /*
- * Returns true if the supplied bytes are encoded as UTF8 or ASCII.
+ * Returns true if aws_text_detect_encoding() determines the text is UTF8 or ASCII.
+ * Note that this immediately returns true if the UTF8 BOM is seen.
+ * To fully validate every byte, use aws_text_is_valid_utf8().
  */
 AWS_STATIC_IMPL bool aws_text_is_utf8(const uint8_t *bytes, size_t size);
+
+/**
+ * Scans every byte, and returns true if it is valid UTF8/ASCII as defined in RFC-3629.
+ * The text does not need to begin with a UTF8 BOM.
+ */
+AWS_COMMON_API bool aws_text_is_valid_utf8(struct aws_byte_cursor bytes);
+
+/**
+ * A UTF8 validator scans every byte of text, incrementally,
+ * and raises AWS_ERROR_INVALID_UTF8 if isn't valid UTF8/ASCII as defined in RFC-3629.
+ * The text does not need to begin with a UTF8 BOM.
+ * To validate text all at once, simply use aws_text_is_valid_utf8().
+ */
+struct aws_utf8_validator;
+
+AWS_COMMON_API struct aws_utf8_validator *aws_utf8_validator_new(struct aws_allocator *allocator);
+AWS_COMMON_API void aws_utf8_validator_destroy(struct aws_utf8_validator *validator);
+AWS_COMMON_API void aws_utf8_validator_reset(struct aws_utf8_validator *validator);
+
+/**
+ * Update the validator with more bytes of text.
+ * Raises AWS_ERROR_INVALID_UTF8 if invalid UTF8 is encountered.
+ */
+AWS_COMMON_API int aws_utf8_validator_update(struct aws_utf8_validator *validator, struct aws_byte_cursor bytes);
+
+/**
+ * Tell the validator that you've reached the end of your text.
+ * Raises AWS_ERROR_INVALID_UTF8 if the text did not end with a complete UTF8 codepoint.
+ * This also resets the validator.
+ */
+AWS_COMMON_API int aws_utf8_validator_finalize(struct aws_utf8_validator *validator);
 
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/encoding.inl>

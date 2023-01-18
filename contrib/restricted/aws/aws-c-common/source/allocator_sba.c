@@ -289,6 +289,11 @@ size_t aws_small_block_allocator_page_size(struct aws_allocator *sba_allocator) 
     return AWS_SBA_PAGE_SIZE;
 }
 
+size_t aws_small_block_allocator_page_size_available(struct aws_allocator *sba_allocator) {
+    (void)sba_allocator;
+    return AWS_SBA_PAGE_SIZE - sizeof(struct page_header);
+}
+
 /* NOTE: Expects the mutex to be held by the caller */
 static void *s_sba_alloc_from_bin(struct sba_bin *bin) {
     /* check the free list, hand chunks out in FIFO order */

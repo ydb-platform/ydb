@@ -198,6 +198,12 @@ size_t aws_small_block_allocator_bytes_reserved(struct aws_allocator *sba_alloca
 AWS_COMMON_API
 size_t aws_small_block_allocator_page_size(struct aws_allocator *sba_allocator);
 
+/*
+ * Returns the amount of memory in each page available to user allocations
+ */
+AWS_COMMON_API
+size_t aws_small_block_allocator_page_size_available(struct aws_allocator *sba_allocator);
+
 AWS_EXTERN_C_END
 
 #endif /* AWS_COMMON_ALLOCATOR_H */

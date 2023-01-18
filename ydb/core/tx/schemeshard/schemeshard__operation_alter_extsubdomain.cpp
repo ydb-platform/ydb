@@ -951,9 +951,6 @@ TVector<ISubOperationBase::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId 
         if (!context.SS->CheckApplyIf(tx, explain)) {
             return errorResult(NKikimrScheme::StatusPreconditionFailed, explain);
         }
-        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterExtSubDomain, explain)) {
-            return errorResult(NKikimrScheme::StatusResourceExhausted, explain);
-        }
     }
 
     // Check params and build change delta

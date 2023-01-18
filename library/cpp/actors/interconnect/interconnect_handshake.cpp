@@ -263,11 +263,18 @@ namespace NActors {
         }
 
         template<typename T>
+        void SetupCompatibilityInfo(T& proto) {
+            if (Common->CompatibilityInfo) {
+                proto.SetCompatibilityInfo(*Common->CompatibilityInfo);
+            }
+        }
+
+        template<typename T>
         void SetupVersionTag(T& proto) {
             if (Common->VersionInfo) {
                 proto.SetVersionTag(Common->VersionInfo->Tag);
                 for (const TString& accepted : Common->VersionInfo->AcceptedTags) {
-                     proto.AddAcceptedVersionTags(accepted);
+                    proto.AddAcceptedVersionTags(accepted);
                 }
             }
         }
@@ -278,6 +285,21 @@ namespace NActors {
             pb->SetClusterUUID(Common->ClusterUUID);
             for (const TString& uuid : Common->AcceptUUID) {
                 pb->AddAcceptUUID(uuid);
+            }
+        }
+
+        template<typename T, typename TCallback>
+        void ValidateCompatibilityInfo(const T& proto, TCallback&& errorCallback) {
+            // if possible, use new CompatibilityInfo field
+            if (Common->ValidateCompatibilityInfo && proto.HasCompatibilityInfo()) {
+                TString errorReason;
+                if (!Common->ValidateCompatibilityInfo(proto.GetCompatibilityInfo(), errorReason)) {
+                    TStringStream s("Local and peer CompatibilityInfo are incompatible");
+                    s << ", errorReason# " << errorReason;
+                    errorCallback(s.Str());
+                }
+            } else {
+                ValidateVersionTag(proto, std::forward<TCallback>(errorCallback));
             }
         }
 
@@ -493,6 +515,7 @@ namespace NActors {
                     request.SetUUID(Common->ClusterUUID);
                 }
                 SetupClusterUUID(request);
+                SetupCompatibilityInfo(request);
                 SetupVersionTag(request);
 
                 if (const ui32 size = Common->HandshakeBallastSize) {
@@ -542,7 +565,7 @@ namespace NActors {
 
                 const auto& success = reply.GetSuccess();
                 ValidateClusterUUID(success, generateError);
-                ValidateVersionTag(success, generateError);
+                ValidateCompatibilityInfo(success, generateError);
 
                 const auto& s = success.GetSenderActorId();
                 PeerVirtualId.Parse(s.data(), s.size());
@@ -677,7 +700,7 @@ namespace NActors {
                     generateError(Sprintf("ReceiverHostName# %s mismatch, expected# %s", request.GetReceiverHostName().data(),
                         Common->TechnicalSelfHostName.data()));
                 }
-                ValidateVersionTag(request, generateError);
+                ValidateCompatibilityInfo(request, generateError);
 
                 // check peer node
                 auto peerNodeInfo = GetPeerNodeInfo();
@@ -729,6 +752,7 @@ namespace NActors {
                     Y_VERIFY(record.HasSuccess());
                     auto& success = *record.MutableSuccess();
                     SetupClusterUUID(success);
+                    SetupCompatibilityInfo(success);
                     SetupVersionTag(success);
                     success.SetStartEncryption(Params.Encryption);
                     if (Common->LocalScopeId != TScopeId()) {

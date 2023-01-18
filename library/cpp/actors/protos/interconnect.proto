@@ -73,6 +73,8 @@ message THandshakeRequest {
     optional bool RequestAuthOnly = 19;
     optional bool RequestExtendedTraceFmt = 20;
     optional bool RequestExternalDataChannel = 21;
+
+    optional bytes CompatibilityInfo = 22;
 }
 
 message THandshakeSuccess {
@@ -96,6 +98,8 @@ message THandshakeSuccess {
     optional bool AuthOnly = 12;
     optional bool UseExtendedTraceFmt = 13;
     optional bool UseExternalDataChannel = 14;
+
+    optional bytes CompatibilityInfo = 15;
 }
 
 message THandshakeReply {

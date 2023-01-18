@@ -101,7 +101,11 @@ namespace NActors {
             TSet<TString> AcceptedTags; // we accept all enlisted version tags of peer nodes, but no others; empty = accept all
         };
 
+        // obsolete compatibility control
         TMaybe<TVersionInfo> VersionInfo;
+
+        std::optional<TString> CompatibilityInfo;
+        std::function<bool(const TString&, TString&)> ValidateCompatibilityInfo;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

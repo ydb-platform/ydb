@@ -18,8 +18,6 @@ const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrentCompatibilityInfo() {
     return CompatibilityInfo;
 }
 
-
-
 // Last stable YDB release, which doesn't include version control change
 // When the compatibility information is not present in component's data,
 // we assume component's version to be this version

@@ -1739,6 +1739,7 @@ message TCompatibilityRule {
         Any = 0;
         Test1 = 1;
         Test2 = 2;
+        Interconnect = 3;
     }
 
     optional string Build = 1;

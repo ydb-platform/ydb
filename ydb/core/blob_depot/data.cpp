@@ -159,13 +159,13 @@ namespace NKikimr::NBlobDepot {
             auto row = NIceDb::TNiceDb(txc.DB).Table<Schema::Data>().Key(key.MakeBinaryKey());
             switch (outcome) {
                 case EUpdateOutcome::DROP:
+                    if (wasGoingToAssimilate) {
+                        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] -= key.GetBlobId().BlobSize();
+                    }
                     UncertaintyResolver->DropKey(key);
                     Data.erase(it);
                     row.Delete();
                     ValidateRecords();
-                    if (wasGoingToAssimilate) {
-                        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] -= key.GetBlobId().BlobSize();
-                    }
                     return true;
 
                 case EUpdateOutcome::CHANGE:

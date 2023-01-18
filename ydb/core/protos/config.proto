@@ -1753,7 +1753,7 @@ message TCompatibilityRule {
     optional bool Forbidden = 5 [default = false];
 }
 
-message TCurrentCompatibilityInformation {
+message TCurrentCompatibilityInfo {
     required string Build = 1;
 
     // if YdbVersion is empty, build is assumed to be non-stable
@@ -1763,7 +1763,7 @@ message TCurrentCompatibilityInformation {
     repeated TCompatibilityRule StoresReadableBy = 4;
 }
 
-message TStoredCompatibilityInformation {
+message TStoredCompatibilityInfo {
     required string Build = 1;
 
     // if YdbVersion is empty, build is assumed to be non-stable

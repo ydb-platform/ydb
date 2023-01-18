@@ -3,19 +3,19 @@
 #include <library/cpp/actors/interconnect/interconnect_common.h>
 #include <ydb/core/protos/config.pb.h>
 
-const NKikimrConfig::TCurrentCompatibilityInformation* GetCurrentCompatibilityInformation();
-const NKikimrConfig::TStoredCompatibilityInformation* GetUnknownYdbRelease();
+const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrentCompatibilityInfo();
+const NKikimrConfig::TStoredCompatibilityInfo* GetUnknownYdbRelease();
 
-NKikimrConfig::TStoredCompatibilityInformation MakeStoredCompatibiltyInformation(ui32 componentId,
-        const NKikimrConfig::TCurrentCompatibilityInformation* current);
+NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(ui32 componentId,
+        const NKikimrConfig::TCurrentCompatibilityInfo* current);
 
-NKikimrConfig::TStoredCompatibilityInformation MakeStoredCompatibiltyInformation(ui32 componentId);
+NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(ui32 componentId);
 
-bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInformation* current,
-        const NKikimrConfig::TStoredCompatibilityInformation* stored,
+bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+        const NKikimrConfig::TStoredCompatibilityInfo* stored,
         ui32 componentId, TString& errorReason);
 
-bool CheckVersionCompatibility(const NKikimrConfig::TStoredCompatibilityInformation* stored,
+bool CheckVersionCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
         ui32 componentId, TString& errorReason);
 
 // obsolete version control

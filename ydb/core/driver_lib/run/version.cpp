@@ -2,20 +2,20 @@
 #include "version.h"
 
 
-NKikimrConfig::TCurrentCompatibilityInformation* CompatibilityInformation = nullptr;
+NKikimrConfig::TCurrentCompatibilityInfo* CompatibilityInfo = nullptr;
 
-const NKikimrConfig::TCurrentCompatibilityInformation* GetCurrentCompatibilityInformation() {
+const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrentCompatibilityInfo() {
     static TSpinLock lock;
     TGuard<TSpinLock> g(lock);
 
-    if (!CompatibilityInformation) {
-        CompatibilityInformation = new NKikimrConfig::TCurrentCompatibilityInformation();
+    if (!CompatibilityInfo) {
+        CompatibilityInfo = new NKikimrConfig::TCurrentCompatibilityInfo();
         // Look for protobuf message format in ydb/core/protos/config.proto
         // To be changed in new release:
-        CompatibilityInformation->SetBuild("trunk");
+        CompatibilityInfo->SetBuild("trunk");
     }
 
-    return CompatibilityInformation;
+    return CompatibilityInfo;
 }
 
 
@@ -23,13 +23,13 @@ const NKikimrConfig::TCurrentCompatibilityInformation* GetCurrentCompatibilityIn
 // Last stable YDB release, which doesn't include version control change
 // When the compatibility information is not present in component's data,
 // we assume component's version to be this version
-NKikimrConfig::TStoredCompatibilityInformation* UnknownYdbRelease = nullptr;
-const NKikimrConfig::TStoredCompatibilityInformation* GetUnknownYdbRelease() {
+NKikimrConfig::TStoredCompatibilityInfo* UnknownYdbRelease = nullptr;
+const NKikimrConfig::TStoredCompatibilityInfo* GetUnknownYdbRelease() {
     static TSpinLock lock;
     TGuard<TSpinLock> g(lock);
 
     if (!UnknownYdbRelease) {
-        UnknownYdbRelease = new NKikimrConfig::TStoredCompatibilityInformation();
+        UnknownYdbRelease = new NKikimrConfig::TStoredCompatibilityInfo();
         UnknownYdbRelease->SetBuild("ydb");
 
         auto* version = UnknownYdbRelease->MutableYdbVersion();
@@ -42,11 +42,11 @@ const NKikimrConfig::TStoredCompatibilityInformation* GetUnknownYdbRelease() {
     return UnknownYdbRelease;
 }
 
-NKikimrConfig::TStoredCompatibilityInformation MakeStoredCompatibiltyInformation(
-        ui32 componentId, const NKikimrConfig::TCurrentCompatibilityInformation* current) {
+NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(
+        ui32 componentId, const NKikimrConfig::TCurrentCompatibilityInfo* current) {
     Y_VERIFY(current);
 
-    NKikimrConfig::TStoredCompatibilityInformation stored;
+    NKikimrConfig::TStoredCompatibilityInfo stored;
     stored.SetBuild(current->GetBuild());
     if (current->HasYdbVersion()) {
         stored.MutableYdbVersion()->CopyFrom(current->GetYdbVersion());
@@ -69,8 +69,8 @@ NKikimrConfig::TStoredCompatibilityInformation MakeStoredCompatibiltyInformation
     return stored;
 }
 
-NKikimrConfig::TStoredCompatibilityInformation MakeStoredCompatibiltyInformation(ui32 componentId) {
-    return MakeStoredCompatibiltyInformation(componentId, GetCurrentCompatibilityInformation());
+NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(ui32 componentId) {
+    return MakeStoredCompatibilityInfo(componentId, GetCurrentCompatibilityInfo());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -126,10 +126,10 @@ i32 CompareVersions(const NKikimrConfig::TYdbVersion& left, const NKikimrConfig:
     return 0;
 }
 
-// If StoredCompatibilityInformation is not present, we:
+// If StoredCompatibilityInfo is not present, we:
 // compare current to UnknownYdbRelease, if current version is stable, otherwise
 // we consider versions compatible
-bool CheckNonPresent(const NKikimrConfig::TCurrentCompatibilityInformation* current,
+bool CheckNonPresent(const NKikimrConfig::TCurrentCompatibilityInfo* current,
         ui32 componentId, TString& errorReason) {
     if (!current->HasYdbVersion()) {
         return true;
@@ -187,8 +187,8 @@ bool CheckRule(TString build, const NKikimrConfig::TYdbVersion* version,
             (!rule.HasUpperLimit() || CompareVersions(*version, rule.GetUpperLimit()) < 1);
 }
 
-bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInformation* current,
-        const NKikimrConfig::TStoredCompatibilityInformation* stored, ui32 componentId, TString& errorReason) {
+bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+        const NKikimrConfig::TStoredCompatibilityInfo* stored, ui32 componentId, TString& errorReason) {
     if (stored == nullptr) {
         // version record is not found
         return CheckNonPresent(current, componentId, errorReason);
@@ -251,9 +251,9 @@ bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInforma
     }
 }
 
-bool CheckVersionCompatibility(const NKikimrConfig::TStoredCompatibilityInformation* stored,
+bool CheckVersionCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
         ui32 componentId, TString& errorReason) {
-    return CheckVersionCompatibility(GetCurrentCompatibilityInformation(), 
+    return CheckVersionCompatibility(GetCurrentCompatibilityInfo(), 
             stored, componentId, errorReason);
 }
 

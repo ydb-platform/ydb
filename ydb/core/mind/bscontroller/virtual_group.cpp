@@ -567,6 +567,7 @@ namespace NKikimr::NBsController {
                                 TABLEH() { out << "GroupId"; }
                                 TABLEH() { out << "StoragePoolName"; }
                                 TABLEH() { out << "Name"; }
+                                TABLEH() { out << "BlobDepotId"; }
                                 TABLEH() { out << "State"; }
                                 TABLEH() { out << "HiveId"; }
                                 TABLEH() { out << "ErrorReason"; }
@@ -591,6 +592,13 @@ namespace NKikimr::NBsController {
                                     TABLED() {
                                         if (group->VirtualGroupName) {
                                             out << *group->VirtualGroupName;
+                                        } else {
+                                            out << "<i>null</i>";
+                                        }
+                                    }
+                                    TABLED() {
+                                        if (group->BlobDepotId) {
+                                            out << *group->BlobDepotId;
                                         } else {
                                             out << "<i>null</i>";
                                         }

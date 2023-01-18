@@ -759,6 +759,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 icCommon->VersionInfo = VERSION;
                 CheckVersionTag();
 
+                icCommon->CompatibilityInfo = TString();
                 Y_VERIFY(MakeStoredCompatibilityInfo((ui32)NKikimrConfig::TCompatibilityRule::Interconnect).SerializeToString(&*icCommon->CompatibilityInfo));
                 icCommon->ValidateCompatibilityInfo = [&](const TString& peer, TString& errorReason) {
                     NKikimrConfig::TStoredCompatibilityInfo peerPB;

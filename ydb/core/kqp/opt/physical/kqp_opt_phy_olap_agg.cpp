@@ -56,7 +56,7 @@ bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
     auto aggApply = trait.Cast<TCoAggApply>();
     auto aggName = aggApply.Name();
     if (aggName == "count" || aggName == "count_all" || aggName == "sum"
-        || aggName == "min" || aggName == "max" || aggName == "avg")
+        || aggName == "min" || aggName == "max" || aggName == "avg" || aggName == "some")
     {
         return true;
     }

@@ -924,7 +924,7 @@ TStatus AnnotateOlapAgg(const TExprNode::TPtr& node, TExprContext& ctx) {
                 return TStatus::Error;
             }
             aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), resultType));
-        } else if (opType->Content() == "min" || opType->Content() == "max") {
+        } else if (opType->Content() == "min" || opType->Content() == "max" || opType->Content() == "some") {
             auto colType = structType->FindItemType(colName->Content());
             aggTypes.push_back(ctx.MakeType<TItemExprType>(aggName->Content(), colType));
         } else {

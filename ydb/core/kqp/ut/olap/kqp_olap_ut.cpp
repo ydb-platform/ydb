@@ -2363,6 +2363,144 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregations({ testCase });
     }
 
+    Y_UNIT_TEST(Aggregation_Some) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id=1
+            )")
+            .SetExpectedReply("[[[1]]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Some_Null) {
+        // Wait for KIKIMR-16831 fix
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id > 5
+            )")
+            .SetExpectedReply("[[#]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Some_GroupBy) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    id, SOME(level)
+                FROM `/Root/tableWithNulls`
+                WHERE id BETWEEN 4 AND 5
+                GROUP BY id
+                ORDER BY id;
+            )")
+            .SetExpectedReply("[[[4];[4]];[[5];[5]]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Some_NullGroupBy) {
+        // Wait for KIKIMR-16831 fix
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    id, SOME(level)
+                FROM `/Root/tableWithNulls`
+                WHERE id BETWEEN 6 AND 7
+                GROUP BY id
+                ORDER BY id;
+            )")
+            .SetExpectedReply("[[[6];#];[[7];#]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Some_NullMixGroupBy) {
+        // Wait for KIKIMR-16831 fix
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    id, SOME(level)
+                FROM `/Root/tableWithNulls`
+                WHERE id > 4 AND id < 7
+                GROUP BY id
+                ORDER BY id;
+            )")
+            .SetExpectedReply("[[[5];[5]];[[6];#]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Some_GroupByNullMix) {
+        // Wait for KIKIMR-16831 fix
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    level, SOME(id), SOME(level)
+                FROM `/Root/tableWithNulls`
+                WHERE id BETWEEN 5 AND 6
+                GROUP BY level
+                ORDER BY level;
+            )")
+            .SetExpectedReply("[[#;[6];#];[[5];[5];[5]]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Aggregation_Some_GroupByNull) {
+        // Wait for KIKIMR-16831 fix
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    level, SOME(id), SOME(level)
+                FROM `/Root/tableWithNulls`
+                WHERE id = 6
+                GROUP BY level
+                ORDER BY level;
+            )")
+            .SetExpectedReply("[[#;[6];#]]")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("TKqpOlapAgg");
+#else
+            .AddExpectedPlanOptions("CombineCore");
+#endif
+
+        TestTableWithNulls({ testCase });
+    }
+
     Y_UNIT_TEST(ClickBenchSmoke) {
         TAggregationTestCase q7;
         q7.SetQuery(R"(

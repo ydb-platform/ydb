@@ -273,6 +273,28 @@ struct TEvKqp {
             return false;
         }
 
+        ui64 GetRequestSize() const {
+            return Record.GetRequest().ByteSizeLong();
+        }
+
+        ui64 GetQuerySize() const {
+            return Record.GetRequest().GetQuery().size();
+        }
+
+        ui64 GetParametersSize() const {
+            if (ParametersSize > 0) {
+                return ParametersSize;
+            }
+
+            ParametersSize += Record.GetRequest().GetParameters().ByteSizeLong();
+            for(const auto& [name, param]: Record.GetRequest().GetYdbParameters()) {
+                ParametersSize += name.size();
+                ParametersSize += param.ByteSizeLong();
+            }
+
+            return ParametersSize;
+        }
+
         ui32 CalculateSerializedSize() const override {
             PrepareRemote();
             return Record.ByteSize();
@@ -308,6 +330,7 @@ struct TEvKqp {
                 RequestCtx.reset();
             }
         }
+        mutable ui64 ParametersSize = 0;
         mutable NKikimrKqp::TEvQueryRequest Record;
     private:
         mutable std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RequestCtx;

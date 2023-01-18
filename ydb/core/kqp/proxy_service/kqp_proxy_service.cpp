@@ -468,7 +468,8 @@ public:
             dbCounters = Counters->GetDbCounters(request.GetDatabase());
         }
 
-        LogRequest(request, requestInfo, ev->Sender, dbCounters);
+        Counters->ReportCreateSession(dbCounters, request.ByteSize());
+        KQP_PROXY_LOG_D("Received create session request, trace_id: " << event.GetTraceId());
 
         responseEv->Record.SetResourceExhausted(result.ResourceExhausted);
         responseEv->Record.SetYdbStatus(result.YdbStatus);
@@ -490,7 +491,6 @@ public:
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
                 request.GetDatabase(), false, result))
             {
-                LogRequest(request, requestInfo, ev->Sender, requestId, Counters->GetDbCounters(request.GetDatabase()));
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
@@ -506,26 +506,24 @@ public:
         }
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
-        LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
+        Counters->ReportQueryRequest(dbCounters, ev->Get()->GetRequestSize(), ev->Get()->GetParametersSize(), ev->Get()->GetQuerySize());
+        Counters->ReportQueryAction(dbCounters, request.GetAction());
+        Counters->ReportQueryType(dbCounters, request.GetType());
 
         auto queryLimitBytes = TableServiceConfig.GetQueryLimitBytes();
-        if (queryLimitBytes && IsSqlQuery(request.GetType())) {
-            auto querySizeBytes = request.GetQuery().size();
-            if (querySizeBytes > queryLimitBytes) {
-                TString error = TStringBuilder() << "Query text size exceeds limit (" << querySizeBytes << "b > " << queryLimitBytes << "b)";
-                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
-                return;
-            }
+        if (queryLimitBytes && IsSqlQuery(request.GetType()) && ev->Get()->GetQuerySize() > queryLimitBytes) {
+            TString error = TStringBuilder() << "Query text size exceeds limit ("
+                << ev->Get()->GetQuerySize() << "b > " << queryLimitBytes << "b)";
+            ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+            return;
         }
 
         auto paramsLimitBytes = TableServiceConfig.GetParametersLimitBytes();
-        if (paramsLimitBytes) {
-            auto paramsBytes = request.GetParameters().ByteSizeLong();
-            if (paramsBytes > paramsLimitBytes) {
-                TString error = TStringBuilder() << "Parameters size exceeds limit (" << paramsBytes << "b > " << paramsLimitBytes << "b)";
-                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
-                return;
-            }
+        if (paramsLimitBytes && ev->Get()->GetParametersSize() > paramsLimitBytes) {
+            TString error = TStringBuilder() << "Parameters size exceeds limit ("
+                << ev->Get()->GetParametersSize() << "b > " << paramsLimitBytes << "b)";
+            ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+            return;
         }
 
         if (request.HasTxControl() && request.GetTxControl().has_begin_tx()) {
@@ -573,7 +571,7 @@ public:
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
 
-        LogRequest(request, requestInfo, ev->Sender, dbCounters);
+        Counters->ReportCloseSession(dbCounters, request.ByteSize());
 
         if (LocalSessions->IsPendingShutdown(sessionId) && dbCounters) {
             Counters->ReportSessionGracefulShutdownHit(dbCounters);
@@ -601,7 +599,8 @@ public:
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
-        LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
+        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId << ", trace_id: " << traceId);
+        Counters->ReportPingSession(dbCounters, request.ByteSize());
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1056,39 +1055,6 @@ private:
         const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters)
     {
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
-    }
-
-    void LogRequest(const NKikimrKqp::TCloseSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received close session request, sender: " << sender << ", SessionId: " << request.GetSessionId());
-        Counters->ReportCloseSession(dbCounters, request.ByteSize());
-    }
-
-    void LogRequest(const NKikimrKqp::TQueryRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received new query request, sender: " << sender << ", RequestId: " << requestId
-            << ", Query: \"" << request.GetQuery().substr(0, 10000) << "\"");
-        Counters->ReportQueryRequest(dbCounters, request);
-    }
-
-    void LogRequest(const NKikimrKqp::TCreateSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received create session request, sender: " << sender);
-        Counters->ReportCreateSession(dbCounters, request.ByteSize());
-    }
-
-    void LogRequest(const NKikimrKqp::TPingSessionRequest& request,
-        const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
-        TKqpDbCountersPtr dbCounters)
-    {
-        KQP_PROXY_LOG_D(requestInfo << "Received ping session request, sender: " << sender << " selfID: " << SelfId() << ", RequestId: " << requestId);
-        Counters->ReportPingSession(dbCounters, request.ByteSize());
     }
 
     bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)

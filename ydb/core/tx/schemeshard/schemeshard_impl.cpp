@@ -3624,7 +3624,7 @@ TTabletTypes::EType TSchemeShard::GetTabletType(TTabletId tabletId) const {
     return pShardInfo->TabletType;
 }
 
-TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx) const {
+TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const {
     if (!PathsById.contains(pathId)) {
         return GetGlobalHive(ctx);
     }
@@ -3632,7 +3632,8 @@ TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx) co
     TSubDomainInfo::TPtr subdomain = ResolveDomainInfo(pathId);
 
     // for paths inside subdomain and their shards we choose Hive according to that order: tenant, shared, global
-    if (subdomain->GetTenantHiveID()) {
+
+    if (selection != EHiveSelection::IGNORE_TENANT && subdomain->GetTenantHiveID()) {
         return subdomain->GetTenantHiveID();
     }
 
@@ -3643,12 +3644,16 @@ TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx) co
     return GetGlobalHive(ctx);
 }
 
+TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx) const {
+    return ResolveHive(pathId, ctx, EHiveSelection::ANY);
+}
+
 TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const {
     if (!ShardInfos.contains(shardIdx)) {
         return GetGlobalHive(ctx);
     }
 
-    return ResolveHive(ShardInfos.at(shardIdx).PathId, ctx);
+    return ResolveHive(ShardInfos.at(shardIdx).PathId, ctx, EHiveSelection::ANY);
 }
 
 void TSchemeShard::DoShardsDeletion(const THashSet<TShardIdx>& shardIdxs, const TActorContext& ctx) {

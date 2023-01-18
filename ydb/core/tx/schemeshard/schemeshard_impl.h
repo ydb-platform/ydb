@@ -725,6 +725,13 @@ public:
     void PersistStorageBillingTime(NIceDb::TNiceDb& db);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
+
+    enum class EHiveSelection : uint8_t {
+        ANY,
+        IGNORE_TENANT,
+    };
+
+    TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const;
     TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx) const;
     TTabletId ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const;
     TShardIdx GetShardIdx(TTabletId tabletId) const;

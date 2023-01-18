@@ -193,8 +193,8 @@ struct TEvTaskRunFinished
     TEvTaskRunFinished() = default;
     TEvTaskRunFinished(
         NDq::ERunStatus runStatus,
-        THashMap<ui32, ui64>&& inputMap,
-        THashMap<ui32,  ui64>&& sourcesMap,
+        THashMap<ui32, i64>&& inputChannelsMap,
+        THashMap<ui32, i64>&& sourcesMap,
         const TTaskRunnerActorSensors& sensors = {},
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
@@ -204,7 +204,7 @@ struct TEvTaskRunFinished
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
         , Sensors(sensors)
-        , InputChannelFreeSpace(std::move(inputMap))
+        , InputChannelFreeSpace(std::move(inputChannelsMap))
         , SourcesFreeSpace(std::move(sourcesMap))
         , ProfileStats(profileStats)
         , MkqlMemoryLimit(mkqlMemoryLimit)
@@ -217,8 +217,8 @@ struct TEvTaskRunFinished
     NDq::ERunStatus RunStatus;
     TTaskRunnerActorSensors Sensors;
 
-    THashMap<ui32, ui64> InputChannelFreeSpace;
-    THashMap<ui32, ui64> SourcesFreeSpace;
+    THashMap<ui32, i64> InputChannelFreeSpace;
+    THashMap<ui32, i64> SourcesFreeSpace;
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
     THolder<NDqProto::TMiniKqlProgramState> ProgramState;
@@ -342,11 +342,13 @@ struct TEvAsyncInputPushFinished
     : NActors::TEventLocal<TEvAsyncInputPushFinished, TTaskRunnerEvents::ES_ASYNC_INPUT_PUSH_FINISHED>
 {
     TEvAsyncInputPushFinished() = default;
-    TEvAsyncInputPushFinished(ui64 index)
+    TEvAsyncInputPushFinished(ui64 index, i64 freeSpaceLeft)
         : Index(index)
+        , FreeSpaceLeft(freeSpaceLeft)
     { }
 
     ui64 Index;
+    i64 FreeSpaceLeft;
 };
 
 struct TEvSinkPop

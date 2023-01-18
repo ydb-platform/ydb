@@ -270,7 +270,7 @@ private:
                     new IEventHandle(
                         parentId,
                         selfId,
-                        new TEvAsyncInputPushFinished(index),
+                        new TEvAsyncInputPushFinished(index, source->GetFreeSpace()),
                         /*flags=*/0,
                         cookie));
             } catch (...) {
@@ -514,8 +514,8 @@ private:
                 auto response = taskRunner->Run();
                 auto res = static_cast<NDq::ERunStatus>(response.GetResult());
 
-                THashMap<ui32, ui64> inputChannelFreeSpace;
-                THashMap<ui32, ui64> sourcesFreeSpace;
+                THashMap<ui32, i64> inputChannelFreeSpace;
+                THashMap<ui32, i64> sourcesFreeSpace;
                 if (res == ERunStatus::PendingInput) {
                     for (auto& channelId : inputMap) {
                         inputChannelFreeSpace[channelId] = taskRunner->GetInputChannel(channelId)->GetFreeSpace();

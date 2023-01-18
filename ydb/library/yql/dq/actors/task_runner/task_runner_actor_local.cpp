@@ -151,8 +151,8 @@ private:
 
         const TInstant start = TInstant::Now();
         NYql::NDq::ERunStatus res = ERunStatus::Finished;
-        THashMap<ui32, ui64> inputChannelFreeSpace;
-        THashMap<ui32, ui64> sourcesFreeSpace;
+        THashMap<ui32, i64> inputChannelFreeSpace;
+        THashMap<ui32, i64> sourcesFreeSpace;
 
         const bool shouldHandleWatermark = ev->Get()->WatermarkRequest.Defined()
             && ev->Get()->WatermarkRequest->Watermark > TaskRunner->GetWatermark().WatermarkIn;
@@ -165,17 +165,14 @@ private:
             }
 
             res = TaskRunner->Run();
-            LOG_T("Resume execution, run status: " << res);
         }
 
-        if (res == ERunStatus::PendingInput) {
-            for (auto& channelId : inputMap) {
-                inputChannelFreeSpace[channelId] = TaskRunner->GetInputChannel(channelId)->GetFreeSpace();
-            }
+        for (auto& channelId : inputMap) {
+            inputChannelFreeSpace[channelId] = TaskRunner->GetInputChannel(channelId)->GetFreeSpace();
+        }
 
-            for (auto& index : Sources) {
-                sourcesFreeSpace[index] = TaskRunner->GetSource(index)->GetFreeSpace();
-            }
+        for (auto& index : Sources) {
+            sourcesFreeSpace[index] = TaskRunner->GetSource(index)->GetFreeSpace();
         }
 
         auto watermarkInjectedToOutputs = false;
@@ -308,7 +305,7 @@ private:
         }
         Send(
             ParentId,
-            new TEvAsyncInputPushFinished(index),
+            new TEvAsyncInputPushFinished(index, source->GetFreeSpace()),
             /*flags=*/0,
             cookie);
     }

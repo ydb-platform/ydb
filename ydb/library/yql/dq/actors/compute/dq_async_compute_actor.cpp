@@ -423,7 +423,7 @@ private:
         return inputChannel->FreeSpace;
     }
 
-    i64 AsyncIoFreeSpace(TAsyncInputInfoBase& source) override {
+    i64 AsyncInputFreeSpace(TAsyncInputInfoBase& source) override {
         return source.FreeSpace;
     }
 
@@ -494,6 +494,12 @@ private:
                 it->second.FreeSpace = freeSpace;
             }
         }
+        for (const auto& [inputIndex, freeSpace] : ev->Get()->SourcesFreeSpace) {
+            auto it = SourcesMap.find(inputIndex);
+            if (it != SourcesMap.end()) {
+                it->second.FreeSpace = freeSpace;
+            }
+        }
 
         if (status != ERunStatus::Finished) {
             PollSources(std::move(sourcesState));
@@ -545,10 +551,10 @@ private:
         Y_VERIFY(it != SourcesMap.end());
         auto& source = it->second;
         source.PushStarted = false;
-        // source.FreeSpace = ev->Get()->FreeSpace; TODO:XXX get freespace on run
+        source.FreeSpace = ev->Get()->FreeSpaceLeft;
         ProcessSourcesState.Inflight--;
         if (ProcessSourcesState.Inflight == 0) {
-            CA_LOG_T("send TEvContinueRun on OnAsyncInputPushFinished");
+            CA_LOG_T("Send TEvContinueRun on OnAsyncInputPushFinished");
             AskContinueRun(std::make_unique<NTaskRunnerActor::TEvContinueRun>(GetWatermarkRequest(), Nothing(), false));
         }
     }

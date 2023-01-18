@@ -884,7 +884,7 @@ protected:
         const NDqProto::EWatermarksMode WatermarksMode;
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
-        ui64 FreeSpace = 0;
+        i64 FreeSpace = 0;
 
         explicit TInputChannelInfo(
                 const TString& logPrefix,
@@ -1061,7 +1061,7 @@ protected:
         }
     }
 
-    virtual i64 AsyncIoFreeSpace(TAsyncInputInfoBase& source) {
+    virtual i64 AsyncInputFreeSpace(TAsyncInputInfoBase& source) {
         return source.Buffer->GetFreeSpace();
     }
 
@@ -1614,7 +1614,7 @@ protected:
             return;
         }
 
-        const i64 freeSpace = AsyncIoFreeSpace(info);
+        const i64 freeSpace = AsyncInputFreeSpace(info);
         if (freeSpace > 0) {
             TMaybe<TInstant> watermark;
             NKikimr::NMiniKQL::TUnboxedValueVector batch;
@@ -1647,6 +1647,9 @@ protected:
             }
 
             AsyncInputPush(std::move(batch), info, space, finished);
+        } else {
+            CA_LOG_D("Skip polling async input[" << inputIndex << "]: no free space: " << freeSpace);
+            ContinueExecute(); // If there is no free space in buffer, => we have something to process
         }
     }
 
@@ -1906,7 +1909,7 @@ public:
             if (TDerived::HasAsyncTaskRunner) {
                 protoTask->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
             }
-                
+
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
 
                 ui64 egressBytes = sinkInfo.AsyncOutput ? sinkInfo.AsyncOutput->GetEgressBytes() : 0;

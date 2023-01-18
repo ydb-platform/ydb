@@ -258,6 +258,9 @@ message TRtmrClusterConfig {
     repeated TRtmrPqConsumerInfo PqConsumerMapping = 15;
     optional uint32 MaxPqPartitions = 16;
     optional uint32 PreviewCollectTimeoutMs = 17;
+    optional string SbdTvmSecretFile = 18;
+    optional uint64 SbdTvmClientId = 19;
+    optional uint64 SbdTvmServerId = 20 [default = 2021848];
     repeated TAttr Settings = 101;
 }
 

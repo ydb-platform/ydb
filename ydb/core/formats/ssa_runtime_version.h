@@ -23,8 +23,8 @@ namespace NKikimr::NSsa {
 #endif
 
 // History:
-// v1 supports filter and cast(timestamp to uint64) pushdowns.
-// v2 supports COUNT(col), COUNT(*), SUM(), MIN(), MAX(), SOME() aggregations.
+// v1 is the version supported by kikimr-22-4. Supports filter and cast(timestamp to uint64) pushdowns.
+// v2 is the version supported by kikimr-23-1. Supports COUNT(col), COUNT(*), SUM(), MIN(), MAX(), AVG(), SOME() aggregations.
 constexpr ui32 RuntimeVersion = SSA_RUNTIME_VERSION;
 
 }

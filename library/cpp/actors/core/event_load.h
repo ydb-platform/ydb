@@ -19,39 +19,59 @@ namespace NActors {
         size_t Size;
     };
 
+    struct TEventSectionInfo {
+        size_t Headroom = 0; // headroom to be created on the receiving side
+        size_t Size = 0; // full size of serialized event section (a chunk in rope)
+        size_t Tailroom = 0; // tailroom for the chunk
+        size_t Alignment = 0; // required alignment
+    };
+
+    struct TEventSerializationInfo {
+        bool IsExtendedFormat = {};
+        std::vector<TEventSectionInfo> Sections;
+        // total sum of Size for every section must match actual serialized size of the event
+    };
+
     class TEventSerializedData
        : public TThrRefBase
     {
         TRope Rope;
-        bool ExtendedFormat = false;
+        TEventSerializationInfo SerializationInfo;
 
     public:
         TEventSerializedData() = default;
 
-        TEventSerializedData(TRope&& rope, bool extendedFormat)
+        TEventSerializedData(TRope&& rope, TEventSerializationInfo&& serializationInfo)
             : Rope(std::move(rope))
-            , ExtendedFormat(extendedFormat)
+            , SerializationInfo(std::move(serializationInfo))
         {}
 
         TEventSerializedData(const TEventSerializedData& original, TString extraBuffer)
             : Rope(original.Rope)
-            , ExtendedFormat(original.ExtendedFormat)
+            , SerializationInfo(original.SerializationInfo)
         {
+            if (!SerializationInfo.Sections.empty()) {
+                SerializationInfo.Sections.push_back(TEventSectionInfo{0, extraBuffer.size(), 0, 0});
+            }
             Append(std::move(extraBuffer));
         }
 
-        TEventSerializedData(TString buffer, bool extendedFormat)
-            : ExtendedFormat(extendedFormat)
+        TEventSerializedData(TString buffer, TEventSerializationInfo&& serializationInfo)
+            : SerializationInfo(std::move(serializationInfo))
         {
             Append(std::move(buffer));
         }
 
-        void SetExtendedFormat() {
-            ExtendedFormat = true;
+        void SetSerializationInfo(TEventSerializationInfo&& serializationInfo) {
+            SerializationInfo = std::move(serializationInfo);
         }
 
-        bool IsExtendedFormat() const {
-            return ExtendedFormat;
+        const TEventSerializationInfo& GetSerializationInfo() const {
+            return SerializationInfo;
+        }
+
+        TEventSerializationInfo ReleaseSerializationInfo() {
+            return std::move(SerializationInfo);
         }
 
         TRope::TConstIterator GetBeginIter() const {

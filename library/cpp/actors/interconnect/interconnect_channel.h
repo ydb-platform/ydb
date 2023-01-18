@@ -114,7 +114,7 @@ namespace NActors {
         std::list<TEventHolder> NotYetConfirmed;
         TRope::TConstIterator Iter;
         TCoroutineChunkSerializer Chunker;
-        bool ExtendedFormat = false;
+        TEventSerializationInfo SerializationInfo;
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
 

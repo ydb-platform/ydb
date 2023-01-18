@@ -56,10 +56,8 @@ namespace NActors {
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
 
-        inline TIntrusivePtr<TEventSerializedData> Release(bool extendedFormat) {
-            if (extendedFormat) {
-                Buffers->SetExtendedFormat();
-            }
+        inline TIntrusivePtr<TEventSerializedData> Release(TEventSerializationInfo&& serializationInfo) {
+            Buffers->SetSerializationInfo(std::move(serializationInfo));
             return std::move(Buffers);
         }
 
@@ -160,10 +158,6 @@ namespace NActors {
             return true;
         }
 
-        bool IsExtendedFormat() const override {
-            return static_cast<bool>(Payload);
-        }
-
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
             // serialize payload first
             if (Payload) {
@@ -236,7 +230,7 @@ namespace NActors {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 ui64 size = input->GetSize();
 
-                if (input->IsExtendedFormat()) {
+                if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
                     // check marker
                     if (!iter.Valid() || *iter.ContiguousData() != PayloadMarker) {
                         Y_FAIL("invalid event");
@@ -286,6 +280,28 @@ namespace NActors {
 
         void InvalidateCachedByteSize() {
             CachedByteSize = 0;
+        }
+
+        TEventSerializationInfo CreateSerializationInfo() const override {
+            TEventSerializationInfo info;
+
+            if (Payload) {
+                char temp[MaxNumberBytes];
+                info.Sections.push_back(TEventSectionInfo{0, 1, 0, 0}); // payload marker
+                info.Sections.push_back(TEventSectionInfo{0, SerializeNumber(Payload.size(), temp), 0, 0});
+                for (const TRope& payload : Payload) {
+                    info.Sections.push_back(TEventSectionInfo{0, SerializeNumber(payload.GetSize(), temp), 0, 0}); // length
+                    info.Sections.push_back(TEventSectionInfo{0, payload.GetSize(), 0, 0}); // data
+                }
+                info.IsExtendedFormat = true;
+            } else {
+                info.IsExtendedFormat = false;
+            }
+
+            const int byteSize = Max(0, Record.ByteSize());
+            info.Sections.push_back(TEventSectionInfo{0, static_cast<size_t>(byteSize), 0, 0});
+
+            return info;
         }
 
     public:

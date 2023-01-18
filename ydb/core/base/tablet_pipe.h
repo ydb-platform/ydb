@@ -69,7 +69,7 @@ namespace NKikimr {
             TEvPush() {}
 
             TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TIntrusivePtr<TEventSerializedData>& buffer,
-                ui64 cookie, bool extendedFormat, bool supportsDataInPayload)
+                ui64 cookie, TEventSerializationInfo&& serializationInfo, bool supportsDataInPayload)
             {
                 Record.SetTabletId(tabletId);
                 Record.SetType(type);
@@ -80,7 +80,7 @@ namespace NKikimr {
                     Record.SetBuffer(buffer->GetString());
                 }
                 Record.SetCookie(cookie);
-                Record.SetExtendedFormat(extendedFormat);
+                Record.SetExtendedFormat(serializationInfo.IsExtendedFormat);
             }
 
             void SetSeqNo(ui64 seqNo) {

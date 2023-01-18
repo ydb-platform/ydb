@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(ActorSystemMon) {
         TAllocChunkSerializer ser;
         const bool success = ev->SerializeToArcadiaStream(&ser);
         Y_VERIFY(success);
-        auto buffer = ser.Release(false);
+        auto buffer = ser.Release(ev->CreateSerializationInfo());
         std::unique_ptr<TEvRemoteHttpInfo> restored(dynamic_cast<TEvRemoteHttpInfo*>(TEvRemoteHttpInfo::Load(buffer.Get())));
         UNIT_ASSERT(restored->Query == ev->Query);
         UNIT_ASSERT(restored->Query.size());

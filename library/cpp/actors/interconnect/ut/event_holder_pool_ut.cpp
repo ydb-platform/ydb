@@ -29,16 +29,16 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         std::list<TEventHolder> q;
 
         auto& ev1 = pool.Allocate(q);
-        ev1.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), true);
+        ev1.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), TEventSerializationInfo{});
 
         auto& ev2 = pool.Allocate(q);
-        ev2.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), true);
+        ev2.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), TEventSerializationInfo{});
 
         auto& ev3 = pool.Allocate(q);
-        ev3.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), true);
+        ev3.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), TEventSerializationInfo{});
 
         auto& ev4 = pool.Allocate(q);
-        ev4.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), true);
+        ev4.Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), TEventSerializationInfo{});
 
         pool.Release(q, q.begin());
         pool.Release(q, q.begin());

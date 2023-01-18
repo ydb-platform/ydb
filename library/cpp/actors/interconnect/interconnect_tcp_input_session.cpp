@@ -39,7 +39,7 @@ namespace NActors {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
         Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
-        LastReceiveTimestamp = TActivationContext::Now();
+        LastReceiveTimestamp = TActivationContext::Monotonic();
         ReceiveData();
     }
 
@@ -440,7 +440,7 @@ namespace NActors {
             }
         }
 
-        LastReceiveTimestamp = TActivationContext::Now();
+        LastReceiveTimestamp = TActivationContext::Monotonic();
 
         return true;
     }
@@ -476,7 +476,7 @@ namespace NActors {
     }
 
     void TInputSessionTCP::HandleCheckDeadPeer() {
-        const TInstant now = TActivationContext::Now();
+        const TMonotonic now = TActivationContext::Monotonic();
         if (now >= LastReceiveTimestamp + DeadPeerTimeout) {
             ReceiveData();
             if (Socket && now >= LastReceiveTimestamp + DeadPeerTimeout) {
@@ -484,7 +484,7 @@ namespace NActors {
                 DestroySession(TDisconnectReason::DeadPeer());
             }
         }
-        Schedule(LastReceiveTimestamp + DeadPeerTimeout - now, new TEvCheckDeadPeer);
+        Schedule(LastReceiveTimestamp + DeadPeerTimeout, new TEvCheckDeadPeer);
     }
 
     void TInputSessionTCP::HandlePingResponse(TDuration passed) {

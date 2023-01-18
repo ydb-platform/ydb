@@ -8,7 +8,7 @@ namespace NActors {
         const TDuration Timeout;
         const TCallback Callback;
 
-        TInstant LastResetTimestamp;
+        TMonotonic LastResetTimestamp;
         TEvent* ExpectedEvent = nullptr;
         ui32 Iteration = 0;
 
@@ -29,7 +29,7 @@ namespace NActors {
         }
 
         void Reset() {
-            LastResetTimestamp = TActivationContext::Now();
+            LastResetTimestamp = TActivationContext::Monotonic();
         }
 
         void Disarm() {
@@ -38,11 +38,11 @@ namespace NActors {
 
         void operator()(typename TEvent::TPtr& ev) {
             if (ev->Get() == ExpectedEvent) {
-                const TInstant now = TActivationContext::Now();
-                const TInstant barrier = LastResetTimestamp + Timeout;
+                const TMonotonic now = TActivationContext::Monotonic();
+                const TMonotonic barrier = LastResetTimestamp + Timeout;
                 if (now < barrier) {
                     // the time hasn't come yet
-                    Schedule(barrier - now, TActorIdentity(ev->Recipient));
+                    Schedule(barrier, TActorIdentity(ev->Recipient));
                 } else if (Iteration < NumIterationsBeforeFiring) {
                     // time has come, but we will still give actor a chance to process some messages and rearm timer
                     ++Iteration;
@@ -57,7 +57,8 @@ namespace NActors {
         }
 
     private:
-        void Schedule(TDuration timeout, const TActorIdentity& actor) {
+        template<typename T>
+        void Schedule(T&& timeout, const TActorIdentity& actor) {
             auto ev = MakeHolder<TEvent>();
             ExpectedEvent = ev.Get();
             Iteration = 0;

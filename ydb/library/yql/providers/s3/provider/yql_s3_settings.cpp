@@ -14,6 +14,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, BlockSizeMemoryLimit);
     REGISTER_SETTING(*this, SerializeMemoryLimit);
     REGISTER_SETTING(*this, InFlightMemoryLimit);
+    REGISTER_SETTING(*this, JsonListSizeLimit).Upper(100'000);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

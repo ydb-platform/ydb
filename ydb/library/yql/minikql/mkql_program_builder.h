@@ -493,7 +493,7 @@ public:
         const TNarrowLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
     TRuntimeNode NarrowSqueezeToHashedDict(TRuntimeNode stream, bool all, const TNarrowLambda& keySelector,
         const TNarrowLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
-    TRuntimeNode SqueezeToList(TRuntimeNode flow, TRuntimeNode sizeHint);
+    TRuntimeNode SqueezeToList(TRuntimeNode flow, TRuntimeNode limit);
 
     // return list of 2-item tuples with key and payload
     TRuntimeNode DictItems(TRuntimeNode dict);

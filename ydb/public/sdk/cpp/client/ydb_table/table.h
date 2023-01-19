@@ -991,7 +991,7 @@ public:
     //! Returns new table builder
     TTableBuilder GetTableBuilder();
     //! Returns new params builder
-    TParamsBuilder GetParamsBuilder();
+    TParamsBuilder GetParamsBuilder() const;
     //! Returns new type builder
     TTypeBuilder GetTypeBuilder();
 

@@ -3156,7 +3156,7 @@ TTableBuilder TTableClient::GetTableBuilder() {
     return TTableBuilder();
 }
 
-TParamsBuilder TTableClient::GetParamsBuilder() {
+TParamsBuilder TTableClient::GetParamsBuilder() const {
     return TParamsBuilder();
 }
 

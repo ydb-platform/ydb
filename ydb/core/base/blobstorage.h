@@ -932,7 +932,7 @@ struct TEvBlobStorage {
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
                    id.ToString().data(), Buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer.GetContiguousSpan.Data(), Buffer.size());
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer.GetContiguousSpan().Data(), Buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&handleClass, sizeof(handleClass));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));

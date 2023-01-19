@@ -178,8 +178,11 @@ public:
             TBlobInfo& blob = Blobs[blobIdx];
             Blackboard.RegisterBlobForPut(blob.BlobId, &blob.ExtraBlockChecks, &blob.Span);
             for (ui32 i = 0; i < totalParts; ++i) {
-                REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(partSets[blobIdx].Parts[i].OwnedString.Data(),
-                        partSets[blobIdx].Parts[i].OwnedString.Size());
+#ifdef WITH_VALGRIND
+                for (auto [data, size] : partSets[blobIdx].Parts[i].OwnedString) {
+                    REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
+                }
+#endif
                 Blackboard.AddPartToPut(blob.BlobId, i, partSets[blobIdx].Parts[i].OwnedString);
             }
             Blackboard.MarkBlobReadyToPut(blob.BlobId, blobIdx);

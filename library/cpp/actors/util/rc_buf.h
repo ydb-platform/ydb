@@ -32,61 +32,69 @@ namespace NContiguousDataDetails {
 class TContiguousSpan
 {
 private:
-    const char *Data = nullptr;
-    size_t Size = 0;
+    const char *Data_ = nullptr;
+    size_t Size_ = 0;
 
 public:
     TContiguousSpan() = default;
 
     TContiguousSpan(const char *data, size_t size)
-        : Data(data)
-        , Size(size)
+        : Data_(data)
+        , Size_(size)
     {}
 
     TContiguousSpan(const TString& str)
-        : Data(str.data())
-        , Size(str.size())
+        : Data_(str.data())
+        , Size_(str.size())
     {}
 
     TContiguousSpan(const TStringBuf& str)
-        : Data(str.data())
-        , Size(str.size())
+        : Data_(str.data())
+        , Size_(str.size())
     {}
 
     TContiguousSpan(const TArrayRef<char>& ref)
-        : Data(ref.data())
-        , Size(ref.size())
+        : Data_(ref.data())
+        , Size_(ref.size())
     {}
 
     TContiguousSpan(const TArrayRef<const char>& ref)
-        : Data(ref.data())
-        , Size(ref.size())
+        : Data_(ref.data())
+        , Size_(ref.size())
     {}
 
     TContiguousSpan(const NActors::TSharedData& data)
-        : Data(data.data())
-        , Size(data.size())
+        : Data_(data.data())
+        , Size_(data.size())
     {}
 
     const char& operator[](size_t index) const {
-        Y_VERIFY_DEBUG(index < Size);
-        return Data[index];
+        Y_VERIFY_DEBUG(index < Size_);
+        return Data_[index];
     }
 
     const char *data() const noexcept {
-        return Data;
+        return Data_;
     }
 
     size_t size() const noexcept {
-        return Size;
+        return Size_;
     }
 
     const char *GetData() const noexcept {
-        return Data;
+        return Data_;
     }
 
     size_t GetSize() const noexcept {
-        return Size;
+        return Size_;
+    }
+
+    const char *Data() const noexcept {
+        return Data_;
+    }
+
+    size_t Size() const noexcept {
+        return Size_;
     }
 
     TContiguousSpan SubSpan(size_t pos, size_t n) const noexcept {
@@ -100,8 +108,8 @@ public:
     {
         static_assert(Index < 2,
                       "Index out of bounds for TContiguousSpan");
-        if constexpr (Index == 0) return Data;
-        if constexpr (Index == 1) return Size;
+        if constexpr (Index == 0) return Data_;
+        if constexpr (Index == 1) return Size_;
     }
 
     friend bool operator==(const TContiguousSpan& x, const TContiguousSpan& y) { return Compare(x, y) == 0; }
@@ -119,6 +127,8 @@ private:
         return x.size() - y.size();
     }
 };
+
+
 
 namespace std
 {
@@ -953,6 +963,10 @@ public:
     }
 
     const char* data() const {
+        return GetData();
+    }
+
+    const char* Data() const {
         return GetData();
     }
 

@@ -124,8 +124,12 @@ namespace {
             }
 
             if (const auto u = (*input)->Unique) {
-                internal = external = u->RenameFields(ctx, [&](const std::string_view& name) -> std::vector<std::string_view> {
-                    return {ctx.AppendString((*input)->FullName(name))};
+                internal = external = u->RenameFields(ctx, [&](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+                    if (path.empty())
+                        return {};
+                    auto newPath = path;
+                    newPath.front() = ctx.AppendString((*input)->FullName(newPath.front()));
+                    return {std::move(newPath)};
                 });
             }
 

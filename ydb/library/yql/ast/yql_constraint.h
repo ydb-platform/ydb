@@ -78,16 +78,15 @@ public:
                       "Should be derived from TConstraintNode");
 
         const auto ret = dynamic_cast<const T*>(this);
-        YQL_ENSURE(ret, "Cannot cast " << TString{Name_}.Quote() << " constraint to " << T::Name());
+        YQL_ENSURE(ret, "Cannot cast '" << Name_ << "' constraint to " << T::Name());
         return ret;
     }
 
-    std::string_view GetName() const {
+    const std::string_view& GetName() const {
         return Name_;
     }
 
     static const TTypeAnnotationNode* GetSubTypeByPath(const TPathType& path, const TTypeAnnotationNode& type);
-    static TString PathToString(const TPathType& path);
 protected:
     ui64 Hash_;
     std::string_view Name_;
@@ -197,7 +196,7 @@ public:
 
     static const TUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType&)>& predicate) const;
-    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<std::vector<std::string_view>(const std::string_view&)>& reduce) const;
+    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<std::vector<TPathType>(const TPathType&)>& reduce) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
@@ -259,20 +258,19 @@ public:
     static const TGroupByConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 };
 
-class TPartOfUniqueConstraintNode final: public TConstraintNode {
+template<class TOriginalConstraintNode>
+class TPartOfConstraintNode : public TConstraintNode {
 public:
     using TPartType = NSorted::TSimpleMap<TPathType, TPathType>;
     using TReversePartType = NSorted::TSimpleMap<TPathType, NSorted::TSimpleSet<TPathType>>;
-    using TMapType = std::unordered_map<const TUniqueConstraintNode*, TPartType>;
+    using TMapType = std::unordered_map<const TOriginalConstraintNode*, TPartType>;
 private:
     friend struct TExprContext;
 
-    TPartOfUniqueConstraintNode(TPartOfUniqueConstraintNode&& constr);
-    TPartOfUniqueConstraintNode(TExprContext& ctx, TMapType&& mapping);
+    TPartOfConstraintNode(TPartOfConstraintNode&& constr);
+    TPartOfConstraintNode(TExprContext& ctx, TMapType&& mapping);
 public:
-    static constexpr std::string_view Name() {
-        return "PartOfUnique";
-    }
+    static constexpr std::string_view Name();
 
     const TMapType& GetColumnMapping() const;
     TMapType GetColumnMapping(const std::string_view& asField) const;
@@ -282,20 +280,27 @@ public:
     void Out(IOutputStream& out) const override;
     void ToJson(NJson::TJsonWriter& out) const override;
 
-    const TPartOfUniqueConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
-    const TPartOfUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType& front)>& predicate) const;
+    const TPartOfConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
+    const TPartOfConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType& front)>& predicate) const;
 
-    static const TPartOfUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+    static const TPartOfConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
-    static TMapType GetCommonMapping(const TUniqueConstraintNode* complete, const TPartOfUniqueConstraintNode* incomplete = nullptr, const std::string_view& field = {});
+    static TMapType GetCommonMapping(const TOriginalConstraintNode* complete, const TPartOfConstraintNode* incomplete = nullptr, const std::string_view& field = {});
     static void UniqueMerge(TMapType& output, TMapType&& input);
     static void FilterFields(TMapType& mapping, const std::function<bool(const std::string_view& front)>& predicate);
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
-    static const TUniqueConstraintNode* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TUniqueConstraintNode* original);
+    static const TOriginalConstraintNode* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TOriginalConstraintNode* original);
 private:
     TMapType Mapping_;
 };
+
+using TPartOfUniqueConstraintNode = TPartOfConstraintNode<TUniqueConstraintNode>;
+
+template<>
+constexpr std::string_view TPartOfUniqueConstraintNode::Name() {
+    return "PartOfUnique";
+}
 
 class TPassthroughConstraintNode final: public TConstraintNode {
 public:

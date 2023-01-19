@@ -24,6 +24,7 @@ struct TReadBlobRangeOptions {
     bool CacheAfterRead;
     bool Fallback;
     bool IsBackgroud;
+    bool WithDeadline = true;
 };
 
 struct TEvBlobCache {

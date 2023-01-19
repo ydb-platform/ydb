@@ -14,25 +14,6 @@
 
 namespace NKikimr::NBlobCache {
 
-namespace {
-    // Blobs with same tagret can be read in a single request
-    // (e.g. DS blobs from the same tablet residing on the same DS group, or 2 small blobs from the same tablet)
-    std::tuple<ui64, ui32, NKikimrBlobStorage::EGetHandleClass> BlobSource(const TUnifiedBlobId& blobId,
-                                                                           NKikimrBlobStorage::EGetHandleClass cls) {
-        Y_VERIFY(blobId.IsValid());
-
-        if (blobId.IsDsBlob()) {
-            // Tablet & group restriction
-            return {blobId.GetTabletId(), blobId.GetDsGroup(), cls};
-        } else if (blobId.IsSmallBlob()) {
-            // Tablet restriction, no group restrictions
-            return {blobId.GetTabletId(), 0, cls};
-        }
-
-        return {0, 0, NKikimrBlobStorage::FastRead};
-    }
-}
-
 using namespace NActors;
 
 class TBlobCache: public TActorBootstrapped<TBlobCache> {
@@ -46,11 +27,53 @@ private:
         {}
     };
 
-    struct TReadItem {
+    struct TReadItem : public TReadBlobRangeOptions {
+        enum class EReadVariant {
+            FAST = 0,
+            DEFAULT,
+            DEFAULT_NO_DEADLINE,
+        };
+
         TBlobRange BlobRange;
-        NKikimrBlobStorage::EGetHandleClass ReadClass = NKikimrBlobStorage::FastRead;
-        bool PromoteInCache;
-        bool Fallback;
+
+        TReadItem(const TReadBlobRangeOptions& opts, const TBlobRange& blobRange)
+            : TReadBlobRangeOptions(opts)
+            , BlobRange(blobRange)
+        {}
+
+        bool PromoteInCache() const {
+            return CacheAfterRead;
+        }
+
+        static NKikimrBlobStorage::EGetHandleClass ReadClass(EReadVariant readVar) {
+            return (readVar == EReadVariant::FAST)
+                ? NKikimrBlobStorage::FastRead
+                : NKikimrBlobStorage::AsyncRead;
+        }
+
+        EReadVariant ReadVariant() const {
+            return IsBackgroud
+                ? (WithDeadline ? EReadVariant::DEFAULT : EReadVariant::DEFAULT_NO_DEADLINE)
+                : EReadVariant::FAST;
+        }
+
+        // Blobs with same tagret can be read in a single request
+        // (e.g. DS blobs from the same tablet residing on the same DS group, or 2 small blobs from the same tablet)
+        std::tuple<ui64, ui32, EReadVariant> BlobSource() const {
+            const TUnifiedBlobId& blobId = BlobRange.BlobId;
+
+            Y_VERIFY(blobId.IsValid());
+
+            if (blobId.IsDsBlob()) {
+                // Tablet & group restriction
+                return {blobId.GetTabletId(), blobId.GetDsGroup(), ReadVariant()};
+            } else if (blobId.IsSmallBlob()) {
+                // Tablet restriction, no group restrictions
+                return {blobId.GetTabletId(), 0, ReadVariant()};
+            }
+
+            return {0, 0, EReadVariant::FAST};
+        }
     };
 
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
@@ -176,16 +199,10 @@ private:
         const TBlobRange& blobRange = ev->Get()->BlobRange;
         const bool promote = ev->Get()->ReadOptions.CacheAfterRead;
         const bool fallback = ev->Get()->ReadOptions.Fallback;
-        const bool isBackgroud = ev->Get()->ReadOptions.IsBackgroud;
 
         LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback);
 
-        TReadItem readItem {
-            .BlobRange = blobRange,
-            .ReadClass = (isBackgroud ? NKikimrBlobStorage::AsyncRead : NKikimrBlobStorage::FastRead),
-            .PromoteInCache = promote,
-            .Fallback = fallback
-        };
+        TReadItem readItem(ev->Get()->ReadOptions, blobRange);
         HandleSingleRangeRead(std::move(readItem), ev->Sender, ctx);
 
         MakeReadRequests(ctx);
@@ -195,7 +212,7 @@ private:
         const TBlobRange& blobRange = readItem.BlobRange;
 
         // Is in cache?
-        auto it = readItem.PromoteInCache ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
+        auto it = readItem.PromoteInCache() ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
@@ -207,14 +224,14 @@ private:
         // Disable promoting reads for external blobs if MaxCacheExternalDataSize is zero. But keep promoting hits.
         // For now MaxCacheExternalDataSize is just a disabled/enabled flag. TODO: real MaxCacheExternalDataSize
         if (readItem.Fallback && MaxCacheExternalDataSize == 0) {
-            readItem.PromoteInCache = false;
+            readItem.CacheAfterRead = false;
         }
 
         // Is outstanding?
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt != OutstandingReads.end()) {
             readIt->second.Waiting.push_back(sender);
-            readIt->second.Cache |= readItem.PromoteInCache;
+            readIt->second.Cache |= readItem.PromoteInCache();
             return;
         }
 
@@ -223,18 +240,10 @@ private:
 
     void Handle(TEvBlobCache::TEvReadBlobRangeBatch::TPtr& ev, const TActorContext& ctx) {
         const auto& ranges = ev->Get()->BlobRanges;
-        const bool promote = ev->Get()->ReadOptions.CacheAfterRead;
-        const bool fallback = ev->Get()->ReadOptions.Fallback;
-        const bool isBackgroud = ev->Get()->ReadOptions.IsBackgroud;
         LOG_S_DEBUG("Batch read request: " << JoinStrings(ranges.begin(), ranges.end(), " "));
 
         for (const auto& blobRange : ranges) {
-            TReadItem readItem {
-                .BlobRange = blobRange,
-                .ReadClass = (isBackgroud ? NKikimrBlobStorage::AsyncRead : NKikimrBlobStorage::FastRead),
-                .PromoteInCache = promote,
-                .Fallback = fallback
-            };
+            TReadItem readItem(ev->Get()->ReadOptions, blobRange);
             HandleSingleRangeRead(std::move(readItem), ev->Sender, ctx);
         }
 
@@ -299,7 +308,7 @@ private:
         const auto& blobRange = readItem.BlobRange;
         TReadInfo& blobInfo = OutstandingReads[blobRange];
         blobInfo.Waiting.push_back(sender);
-        blobInfo.Cache = readItem.PromoteInCache;
+        blobInfo.Cache = readItem.PromoteInCache();
 
         LOG_S_DEBUG("Enqueue read range: " << blobRange);
 
@@ -308,19 +317,19 @@ private:
     }
 
     void SendBatchReadRequest(const std::vector<TBlobRange>& blobRanges,
-        NKikimrBlobStorage::EGetHandleClass readClass, const ui64 cookie, const TActorContext& ctx)
+        TReadItem::EReadVariant readVariant, const ui64 cookie, const TActorContext& ctx)
     {
         Y_VERIFY(!blobRanges.empty());
 
         if (blobRanges.front().BlobId.IsSmallBlob()) {
             SendBatchReadRequestToTablet(blobRanges, cookie, ctx);
         } else {
-            SendBatchReadRequestToDS(blobRanges, readClass, cookie, ctx);
+            SendBatchReadRequestToDS(blobRanges, readVariant, cookie, ctx);
         }
     }
 
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges,
-        NKikimrBlobStorage::EGetHandleClass readClass, const ui64 cookie, const TActorContext& ctx)
+        TReadItem::EReadVariant readVariant, const ui64 cookie, const TActorContext& ctx)
     {
         const ui32 dsGroup = blobRanges.front().BlobId.GetDsGroup();
 
@@ -334,8 +343,8 @@ private:
             queires[i].Set(blobRanges[i].BlobId.GetLogoBlobId(), blobRanges[i].Offset, blobRanges[i].Size);
         }
 
-        const TInstant deadline = AppData(ctx)->TimeProvider->Now() +
-            ((readClass == NKikimrBlobStorage::FastRead) ? FAST_READ_DEADLINE : DEFAULT_READ_DEADLINE);
+        NKikimrBlobStorage::EGetHandleClass readClass = TReadItem::ReadClass(readVariant);
+        TInstant deadline = ReadDeadline(readVariant);
         SendToBSProxy(ctx,
                 dsGroup,
                 new TEvBlobStorage::TEvGet(queires, blobRanges.size(), deadline, readClass, false),
@@ -344,8 +353,17 @@ private:
         ReadRequests->Inc();
     }
 
+    static TInstant ReadDeadline(TReadItem::EReadVariant variant) {
+        if (variant == TReadItem::EReadVariant::FAST) {
+            return TAppData::TimeProvider->Now() + FAST_READ_DEADLINE;
+        } else if (variant == TReadItem::EReadVariant::DEFAULT) {
+            return TAppData::TimeProvider->Now() + DEFAULT_READ_DEADLINE;
+        }
+        return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE
+    }
+
     void MakeReadRequests(const TActorContext& ctx) {
-        THashMap<std::tuple<ui64, ui32, NKikimrBlobStorage::EGetHandleClass>, std::vector<TBlobRange>> groupedBlobRanges;
+        THashMap<std::tuple<ui64, ui32, TReadItem::EReadVariant>, std::vector<TBlobRange>> groupedBlobRanges;
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> fallbackRanges;
 
         while (!ReadQueue.empty()) {
@@ -363,7 +381,7 @@ private:
                 }
                 InFlightDataSize += blobRange.Size;
 
-                auto blobSrc = BlobSource(blobRange.BlobId, readItem.ReadClass);
+                auto blobSrc = readItem.BlobSource();
                 groupedBlobRanges[blobSrc].push_back(blobRange);
             }
 
@@ -382,11 +400,11 @@ private:
 
         for (auto& [target, rangesGroup] : groupedBlobRanges) {
             ui64 requestSize = 0;
-            NKikimrBlobStorage::EGetHandleClass readClass = std::get<2>(target);
+            TReadItem::EReadVariant readVariant = std::get<2>(target);
 
             for (auto& blobRange : rangesGroup) {
                 if (requestSize && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
-                    SendBatchReadRequest(CookieToRange[cookie], readClass, cookie, ctx);
+                    SendBatchReadRequest(CookieToRange[cookie], readVariant, cookie, ctx);
                     cookie = ++ReadCookie;
                     requestSize = 0;
                 }
@@ -395,7 +413,7 @@ private:
                 CookieToRange[cookie].emplace_back(std::move(blobRange));
             }
             if (requestSize) {
-                SendBatchReadRequest(CookieToRange[cookie], readClass, cookie, ctx);
+                SendBatchReadRequest(CookieToRange[cookie], readVariant, cookie, ctx);
                 cookie = ++ReadCookie;
                 requestSize = 0;
             }

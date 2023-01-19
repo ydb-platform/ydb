@@ -111,7 +111,8 @@ private:
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = false,
             .Fallback = false,
-            .IsBackgroud = true
+            .IsBackgroud = true,
+            .WithDeadline = false
         };
         Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));
     }

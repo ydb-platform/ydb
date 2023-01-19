@@ -258,9 +258,6 @@ void TCompatibilityInfo::Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurr
     CompatibilityInfo = newCurrent;
 }
 
-void TCompatibilityInfoTest::Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent) {
-    TCompatibilityInfo::Reset(newCurrent);
-}
 // obsolete version control
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary

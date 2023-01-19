@@ -3,8 +3,6 @@
 #include <library/cpp/actors/interconnect/interconnect_common.h>
 #include <ydb/core/protos/config.pb.h>
 
-class TCompatibilityInfoTest;
-
 class TCompatibilityInfo {
     friend class TCompatibilityInfoTest;
 
@@ -31,13 +29,6 @@ private:
     static NKikimrConfig::TStoredCompatibilityInfo* UnknownYdbRelease;
 
     // functions that modify compatibility information are only accessible from friend classes
-    static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent);
-};
-
-class TCompatibilityInfoTest {
-public:
-    TCompatibilityInfoTest() = delete;
-
     static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent);
 };
 

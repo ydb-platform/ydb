@@ -1,6 +1,15 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "version.h"
 
+class TCompatibilityInfoTest {
+public:
+    TCompatibilityInfoTest() = delete;
+
+    static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent) {
+        TCompatibilityInfo::Reset(newCurrent);
+    }
+};
+
 Y_UNIT_TEST_SUITE(VersionParser) {
     Y_UNIT_TEST(Basic) {
         UNIT_ASSERT_VALUES_EQUAL(GetBranchName("svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia"), "trunk");

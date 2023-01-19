@@ -45,15 +45,44 @@ target_sources(ydb-core-tx-datashard-ut_erase_rows PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_erase_rows.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-tx-datashard-ut_erase_rows
+  PROPERTY
+  SPLIT_FACTOR
+  15
+)
+add_yunittest(
   NAME
   ydb-core-tx-datashard-ut_erase_rows
-  COMMAND
+  TEST_TARGET
   ydb-core-tx-datashard-ut_erase_rows
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_erase_rows
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_erase_rows
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_erase_rows
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-tx-datashard-ut_erase_rows)

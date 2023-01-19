@@ -33,15 +33,44 @@ target_link_options(ydb-core-erasure-ut_rope PRIVATE
 target_sources(ydb-core-erasure-ut_rope PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_rope_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-erasure-ut_rope
+  PROPERTY
+  SPLIT_FACTOR
+  30
+)
+add_yunittest(
   NAME
   ydb-core-erasure-ut_rope
-  COMMAND
+  TEST_TARGET
   ydb-core-erasure-ut_rope
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_rope
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_rope
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_rope
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-erasure-ut_rope)

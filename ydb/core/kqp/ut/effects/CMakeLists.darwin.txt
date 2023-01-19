@@ -37,15 +37,44 @@ target_sources(ydb-core-kqp-ut-effects PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_inplace_update_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_write_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-kqp-ut-effects
+  PROPERTY
+  SPLIT_FACTOR
+  50
+)
+add_yunittest(
   NAME
   ydb-core-kqp-ut-effects
-  COMMAND
+  TEST_TARGET
   ydb-core-kqp-ut-effects
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-effects
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-effects
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-effects
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-kqp-ut-effects)

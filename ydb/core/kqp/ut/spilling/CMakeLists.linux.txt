@@ -43,15 +43,44 @@ target_link_options(ydb-core-kqp-ut-spilling PRIVATE
 target_sources(ydb-core-kqp-ut-spilling PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/spilling/kqp_scan_spilling_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-kqp-ut-spilling
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-kqp-ut-spilling
-  COMMAND
+  TEST_TARGET
   ydb-core-kqp-ut-spilling
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-spilling
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-spilling
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-spilling
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-kqp-ut-spilling)

@@ -43,15 +43,44 @@ target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_insert_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_logs_engine.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-tx-columnshard-engines-ut
+  PROPERTY
+  SPLIT_FACTOR
+  60
+)
+add_yunittest(
   NAME
   ydb-core-tx-columnshard-engines-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-tx-columnshard-engines-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-columnshard-engines-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-columnshard-engines-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-columnshard-engines-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-tx-columnshard-engines-ut)

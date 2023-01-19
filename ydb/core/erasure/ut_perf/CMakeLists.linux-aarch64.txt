@@ -32,15 +32,44 @@ target_link_options(ydb-core-erasure-ut_perf PRIVATE
 target_sources(ydb-core-erasure-ut_perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_perf_test.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-erasure-ut_perf
+  PROPERTY
+  SPLIT_FACTOR
+  30
+)
+add_yunittest(
   NAME
   ydb-core-erasure-ut_perf
-  COMMAND
+  TEST_TARGET
   ydb-core-erasure-ut_perf
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_perf
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_perf
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-erasure-ut_perf
+  PROPERTY
+  TIMEOUT
+  60
 )
 vcs_info(ydb-core-erasure-ut_perf)

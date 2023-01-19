@@ -33,15 +33,44 @@ target_link_options(client-extensions-discovery_mutator-ut PRIVATE
 target_sources(client-extensions-discovery_mutator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  client-extensions-discovery_mutator-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   client-extensions-discovery_mutator-ut
-  COMMAND
+  TEST_TARGET
   client-extensions-discovery_mutator-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  client-extensions-discovery_mutator-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  client-extensions-discovery_mutator-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  client-extensions-discovery_mutator-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(client-extensions-discovery_mutator-ut)

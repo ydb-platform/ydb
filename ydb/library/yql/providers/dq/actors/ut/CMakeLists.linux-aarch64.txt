@@ -37,15 +37,37 @@ target_link_options(ydb-library-yql-providers-dq-actors-ut PRIVATE
 target_sources(ydb-library-yql-providers-dq-actors-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-yql-providers-dq-actors-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-library-yql-providers-dq-actors-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-yql-providers-dq-actors-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-providers-dq-actors-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-providers-dq-actors-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-library-yql-providers-dq-actors-ut)

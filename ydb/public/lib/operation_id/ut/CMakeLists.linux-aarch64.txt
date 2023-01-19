@@ -33,15 +33,37 @@ target_link_options(ydb-public-lib-operation_id-ut PRIVATE
 target_sources(ydb-public-lib-operation_id-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id/operation_id_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-public-lib-operation_id-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-public-lib-operation_id-ut
-  COMMAND
+  TEST_TARGET
   ydb-public-lib-operation_id-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-operation_id-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-operation_id-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-public-lib-operation_id-ut)

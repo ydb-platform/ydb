@@ -38,15 +38,37 @@ target_link_options(ydb-core-tx-long_tx_service-ut PRIVATE
 target_sources(ydb-core-tx-long_tx_service-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/long_tx_service_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-tx-long_tx_service-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-core-tx-long_tx_service-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-tx-long_tx_service-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-long_tx_service-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-long_tx_service-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-core-tx-long_tx_service-ut)

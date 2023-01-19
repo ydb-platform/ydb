@@ -44,15 +44,44 @@ target_sources(ydb-core-cms-console-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/modifications_validator_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/net_classifier_updater_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-cms-console-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-cms-console-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-cms-console-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-cms-console-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-cms-console-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-cms-console-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-cms-console-ut)

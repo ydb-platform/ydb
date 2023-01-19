@@ -34,15 +34,44 @@ target_sources(ydb-core-kesus-proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/ut_helpers.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-kesus-proxy-ut
+  PROPERTY
+  SPLIT_FACTOR
+  20
+)
+add_yunittest(
   NAME
   ydb-core-kesus-proxy-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-kesus-proxy-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kesus-proxy-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kesus-proxy-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kesus-proxy-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-kesus-proxy-ut)

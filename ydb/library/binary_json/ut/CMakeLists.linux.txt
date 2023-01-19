@@ -48,15 +48,44 @@ target_sources(ydb-library-binary_json-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/test_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/valid_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-binary_json-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-library-binary_json-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-binary_json-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-library-binary_json-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-library-binary_json-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-binary_json-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-library-binary_json-ut)

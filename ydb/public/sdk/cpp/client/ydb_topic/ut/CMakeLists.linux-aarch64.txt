@@ -45,15 +45,44 @@ target_link_options(ydb-public-sdk-cpp-client-ydb_topic-ut PRIVATE
 target_sources(ydb-public-sdk-cpp-client-ydb_topic-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/ut/basic_usage_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-public-sdk-cpp-client-ydb_topic-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-public-sdk-cpp-client-ydb_topic-ut
-  COMMAND
+  TEST_TARGET
   ydb-public-sdk-cpp-client-ydb_topic-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_topic-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_topic-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_topic-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_topic-ut)

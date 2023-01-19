@@ -37,15 +37,44 @@ target_sources(with_offset_ranges_mode_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/compress_executor_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/retry_policy_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  with_offset_ranges_mode_ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   with_offset_ranges_mode_ut
-  COMMAND
+  TEST_TARGET
   with_offset_ranges_mode_ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  with_offset_ranges_mode_ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  with_offset_ranges_mode_ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  with_offset_ranges_mode_ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(with_offset_ranges_mode_ut)

@@ -37,15 +37,44 @@ target_link_options(ydb-services-ydb-index_ut PRIVATE
 target_sources(ydb-services-ydb-index_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-services-ydb-index_ut
+  PROPERTY
+  SPLIT_FACTOR
+  5
+)
+add_yunittest(
   NAME
   ydb-services-ydb-index_ut
-  COMMAND
+  TEST_TARGET
   ydb-services-ydb-index_ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-index_ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-index_ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-index_ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-services-ydb-index_ut)

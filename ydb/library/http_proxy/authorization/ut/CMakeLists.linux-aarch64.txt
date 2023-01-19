@@ -34,15 +34,37 @@ target_sources(ydb-library-http_proxy-authorization-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/auth_helpers_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/signature_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-http_proxy-authorization-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-library-http_proxy-authorization-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-http_proxy-authorization-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-library-http_proxy-authorization-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-library-http_proxy-authorization-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-library-http_proxy-authorization-ut)

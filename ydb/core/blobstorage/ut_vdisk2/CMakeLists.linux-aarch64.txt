@@ -36,15 +36,44 @@ target_link_options(ydb-core-blobstorage-ut_vdisk2 PRIVATE
 target_sources(ydb-core-blobstorage-ut_vdisk2 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk2/huge.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-blobstorage-ut_vdisk2
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-blobstorage-ut_vdisk2
-  COMMAND
+  TEST_TARGET
   ydb-core-blobstorage-ut_vdisk2
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_vdisk2
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_vdisk2
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_vdisk2
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-blobstorage-ut_vdisk2)

@@ -40,15 +40,44 @@ target_sources(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/codecs_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-blobstorage-vdisk-synclog-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-blobstorage-vdisk-synclog-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-blobstorage-vdisk-synclog-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-synclog-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-synclog-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-synclog-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-blobstorage-vdisk-synclog-ut)

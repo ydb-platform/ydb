@@ -41,15 +41,37 @@ target_link_options(ydb-core-wrappers-ut PRIVATE
 target_sources(ydb-core-wrappers-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-wrappers-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-wrappers-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-wrappers-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-wrappers-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-core-wrappers-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-core-wrappers-ut)

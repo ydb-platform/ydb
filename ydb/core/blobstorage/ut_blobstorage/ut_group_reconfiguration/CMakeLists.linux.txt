@@ -34,15 +34,44 @@ target_link_options(ut_group_reconfiguration PRIVATE
 target_sources(ut_group_reconfiguration PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/race.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ut_group_reconfiguration
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ut_group_reconfiguration
-  COMMAND
+  TEST_TARGET
   ut_group_reconfiguration
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ut_group_reconfiguration
+  PROPERTY
+  LABELS
+  LARGE
+)
+set_yunittest_property(
+  TEST
+  ut_group_reconfiguration
+  PROPERTY
+  PROCESSORS
+  4
+)
+set_yunittest_property(
+  TEST
+  ut_group_reconfiguration
+  PROPERTY
+  TIMEOUT
+  3600
 )
 vcs_info(ut_group_reconfiguration)

@@ -36,15 +36,44 @@ target_sources(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
 )
-add_test(
+set_property(
+  TARGET
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   blobstorage-ut_blobstorage-ut_blob_depot_fat
-  COMMAND
+  TEST_TARGET
   blobstorage-ut_blobstorage-ut_blob_depot_fat
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
+  PROPERTY
+  LABELS
+  LARGE
+)
+set_yunittest_property(
+  TEST
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
+  PROPERTY
+  TIMEOUT
+  3600
 )
 vcs_info(blobstorage-ut_blobstorage-ut_blob_depot_fat)

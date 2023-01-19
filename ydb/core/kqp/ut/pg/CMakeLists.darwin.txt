@@ -37,15 +37,37 @@ target_link_options(ydb-core-kqp-ut-pg PRIVATE
 target_sources(ydb-core-kqp-ut-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/kqp_pg_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-kqp-ut-pg
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-kqp-ut-pg
-  COMMAND
+  TEST_TARGET
   ydb-core-kqp-ut-pg
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-pg
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-pg
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-core-kqp-ut-pg)

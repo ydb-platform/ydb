@@ -45,15 +45,44 @@ target_sources(ydb-core-tx-datashard-ut_reassign PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_reassign.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-tx-datashard-ut_reassign
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-core-tx-datashard-ut_reassign
-  COMMAND
+  TEST_TARGET
   ydb-core-tx-datashard-ut_reassign
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_reassign
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_reassign
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-datashard-ut_reassign
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-tx-datashard-ut_reassign)

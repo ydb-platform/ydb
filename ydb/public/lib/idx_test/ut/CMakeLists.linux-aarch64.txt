@@ -32,15 +32,44 @@ target_link_options(ydb-public-lib-idx_test-ut PRIVATE
 target_sources(ydb-public-lib-idx_test-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/idx_test/ut/idx_test_data_provider_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-public-lib-idx_test-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-public-lib-idx_test-ut
-  COMMAND
+  TEST_TARGET
   ydb-public-lib-idx_test-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-idx_test-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-idx_test-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-idx_test-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-public-lib-idx_test-ut)

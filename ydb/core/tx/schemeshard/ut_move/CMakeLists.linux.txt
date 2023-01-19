@@ -45,15 +45,44 @@ target_link_options(ydb-core-tx-schemeshard-ut_move PRIVATE
 target_sources(ydb-core-tx-schemeshard-ut_move PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_move.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-tx-schemeshard-ut_move
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-tx-schemeshard-ut_move
-  COMMAND
+  TEST_TARGET
   ydb-core-tx-schemeshard-ut_move
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_move
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_move
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_move
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-tx-schemeshard-ut_move)

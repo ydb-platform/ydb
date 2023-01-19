@@ -39,15 +39,37 @@ target_link_options(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
 target_sources(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_ru_calculator.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-tx-schemeshard-ut_ru_calculator
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-core-tx-schemeshard-ut_ru_calculator
-  COMMAND
+  TEST_TARGET
   ydb-core-tx-schemeshard-ut_ru_calculator
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_ru_calculator
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_ru_calculator
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-core-tx-schemeshard-ut_ru_calculator)

@@ -34,15 +34,37 @@ target_link_options(ydb-core-yq-libs-signer-ut PRIVATE
 target_sources(ydb-core-yq-libs-signer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/signer/ut/signer_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-yq-libs-signer-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-core-yq-libs-signer-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-yq-libs-signer-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-yq-libs-signer-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-core-yq-libs-signer-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-core-yq-libs-signer-ut)

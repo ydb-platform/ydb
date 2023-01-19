@@ -75,15 +75,44 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut/re2_udf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-services-ydb-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-services-ydb-ut
-  COMMAND
+  TEST_TARGET
   ydb-services-ydb-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-services-ydb-ut
+  PROPERTY
+  TIMEOUT
+  300
 )
 vcs_info(ydb-services-ydb-ut)

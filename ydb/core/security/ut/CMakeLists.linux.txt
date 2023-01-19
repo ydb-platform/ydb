@@ -38,15 +38,44 @@ target_link_options(ydb-core-security-ut PRIVATE
 target_sources(ydb-core-security-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/security/ticket_parser_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-security-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-security-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-security-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-security-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-security-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-security-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-security-ut)

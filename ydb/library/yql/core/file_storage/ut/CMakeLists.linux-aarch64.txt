@@ -38,15 +38,37 @@ target_sources(ydb-library-yql-core-file_storage-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/sized_cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/storage_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-yql-core-file_storage-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-library-yql-core-file_storage-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-yql-core-file_storage-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-file_storage-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-file_storage-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-library-yql-core-file_storage-ut)

@@ -43,15 +43,44 @@ target_sources(ydb-core-formats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/ut_arrow.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/ut_program_step.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-formats-ut
+  PROPERTY
+  SPLIT_FACTOR
+  60
+)
+add_yunittest(
   NAME
   ydb-core-formats-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-formats-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-formats-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-formats-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-formats-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-formats-ut)

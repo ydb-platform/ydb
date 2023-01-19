@@ -34,15 +34,37 @@ target_sources(ydb-library-yql-public-udf-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-yql-public-udf-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-library-yql-public-udf-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-yql-public-udf-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-public-udf-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-public-udf-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-library-yql-public-udf-ut)

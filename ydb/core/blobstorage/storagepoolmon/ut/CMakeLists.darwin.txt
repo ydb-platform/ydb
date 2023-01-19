@@ -31,15 +31,44 @@ target_link_options(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
 target_sources(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/ut/storagepoolmon_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-blobstorage-storagepoolmon-ut
+  PROPERTY
+  SPLIT_FACTOR
+  20
+)
+add_yunittest(
   NAME
   ydb-core-blobstorage-storagepoolmon-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-blobstorage-storagepoolmon-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-storagepoolmon-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-storagepoolmon-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-storagepoolmon-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-blobstorage-storagepoolmon-ut)

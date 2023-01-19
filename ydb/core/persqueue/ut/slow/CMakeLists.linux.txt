@@ -42,15 +42,44 @@ target_link_options(ydb-core-persqueue-ut-slow PRIVATE
 target_sources(ydb-core-persqueue-ut-slow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/slow/pq_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-persqueue-ut-slow
+  PROPERTY
+  SPLIT_FACTOR
+  20
+)
+add_yunittest(
   NAME
   ydb-core-persqueue-ut-slow
-  COMMAND
+  TEST_TARGET
   ydb-core-persqueue-ut-slow
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-persqueue-ut-slow
+  PROPERTY
+  LABELS
+  LARGE
+)
+set_yunittest_property(
+  TEST
+  ydb-core-persqueue-ut-slow
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-persqueue-ut-slow
+  PROPERTY
+  TIMEOUT
+  3600
 )
 vcs_info(ydb-core-persqueue-ut-slow)

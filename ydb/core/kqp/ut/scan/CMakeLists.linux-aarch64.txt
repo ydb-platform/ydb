@@ -38,15 +38,44 @@ target_sources(ydb-core-kqp-ut-scan PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/scan/kqp_flowcontrol_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/scan/kqp_scan_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-kqp-ut-scan
+  PROPERTY
+  SPLIT_FACTOR
+  50
+)
+add_yunittest(
   NAME
   ydb-core-kqp-ut-scan
-  COMMAND
+  TEST_TARGET
   ydb-core-kqp-ut-scan
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-scan
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-scan
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-scan
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-kqp-ut-scan)

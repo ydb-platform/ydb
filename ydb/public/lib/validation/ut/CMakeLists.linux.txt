@@ -36,15 +36,37 @@ target_link_options(ydb-public-lib-validation-ut PRIVATE
 target_sources(ydb-public-lib-validation-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-public-lib-validation-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-public-lib-validation-ut
-  COMMAND
+  TEST_TARGET
   ydb-public-lib-validation-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-validation-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-validation-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-public-lib-validation-ut)

@@ -34,15 +34,44 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
 target_sources(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-blobstorage-vdisk-hulldb-cache_block-ut
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-blobstorage-vdisk-hulldb-cache_block-ut
-  COMMAND
+  TEST_TARGET
   ydb-core-blobstorage-vdisk-hulldb-cache_block-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-hulldb-cache_block-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-hulldb-cache_block-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-hulldb-cache_block-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut)

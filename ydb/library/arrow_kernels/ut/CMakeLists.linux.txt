@@ -42,15 +42,44 @@ target_sources(ydb-library-arrow_kernels-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_math.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_round.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-arrow_kernels-ut
+  PROPERTY
+  SPLIT_FACTOR
+  60
+)
+add_yunittest(
   NAME
   ydb-library-arrow_kernels-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-arrow_kernels-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-library-arrow_kernels-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-library-arrow_kernels-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-arrow_kernels-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-library-arrow_kernels-ut)

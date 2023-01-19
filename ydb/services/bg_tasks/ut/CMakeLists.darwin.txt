@@ -43,15 +43,37 @@ target_sources(ydb-services-bg_tasks-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/ut_tasks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/task_emulator.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-services-bg_tasks-ut
+  PROPERTY
+  SPLIT_FACTOR
+  60
+)
+add_yunittest(
   NAME
   ydb-services-bg_tasks-ut
-  COMMAND
+  TEST_TARGET
   ydb-services-bg_tasks-ut
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-services-bg_tasks-ut
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-services-bg_tasks-ut
+  PROPERTY
+  PROCESSORS
+  1
 )
 vcs_info(ydb-services-bg_tasks-ut)

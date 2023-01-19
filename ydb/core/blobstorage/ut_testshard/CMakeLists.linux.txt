@@ -51,15 +51,44 @@ target_link_options(ydb-core-blobstorage-ut_testshard PRIVATE
 target_sources(ydb-core-blobstorage-ut_testshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_testshard/main.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-blobstorage-ut_testshard
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-core-blobstorage-ut_testshard
-  COMMAND
+  TEST_TARGET
   ydb-core-blobstorage-ut_testshard
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_testshard
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_testshard
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_testshard
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-blobstorage-ut_testshard)

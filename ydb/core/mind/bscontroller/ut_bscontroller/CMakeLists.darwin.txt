@@ -36,15 +36,44 @@ target_link_options(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
 target_sources(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_bscontroller/main.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-mind-bscontroller-ut_bscontroller
+  PROPERTY
+  SPLIT_FACTOR
+  10
+)
+add_yunittest(
   NAME
   ydb-core-mind-bscontroller-ut_bscontroller
-  COMMAND
+  TEST_TARGET
   ydb-core-mind-bscontroller-ut_bscontroller
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-mind-bscontroller-ut_bscontroller
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-mind-bscontroller-ut_bscontroller
+  PROPERTY
+  PROCESSORS
+  4
+)
+set_yunittest_property(
+  TEST
+  ydb-core-mind-bscontroller-ut_bscontroller
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-mind-bscontroller-ut_bscontroller)

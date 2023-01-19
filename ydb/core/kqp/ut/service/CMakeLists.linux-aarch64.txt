@@ -40,15 +40,44 @@ target_sources(ydb-core-kqp-ut-service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_query_service_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_service_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-core-kqp-ut-service
+  PROPERTY
+  SPLIT_FACTOR
+  50
+)
+add_yunittest(
   NAME
   ydb-core-kqp-ut-service
-  COMMAND
+  TEST_TARGET
   ydb-core-kqp-ut-service
+  TEST_ARG
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-service
+  PROPERTY
+  LABELS
+  MEDIUM
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-service
+  PROPERTY
+  PROCESSORS
+  1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-service
+  PROPERTY
+  TIMEOUT
+  600
 )
 vcs_info(ydb-core-kqp-ut-service)

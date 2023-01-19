@@ -383,6 +383,30 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTS_MAX,
     };
 
+    static constexpr std::string_view RequestTypeScopeNames[ERequestTypeScope::RTS_MAX] = {
+        "CreateQuery",
+        "ListQueries",
+        "DescribeQuery",
+        "GetQueryStatus",
+        "ModifyQuery",
+        "DeleteQuery",
+        "ControlQuery",
+        "GetResultData",
+        "ListJobs",
+        "DescribeJob",
+        "CreateConnection",
+        "ListConnections",
+        "DescribeConnection",
+        "ModifyConnection",
+        "DeleteConnection",
+        "CreateBinding",
+        "ListBindings",
+        "DescribeBinding",
+        "ModifyBinding",
+        "DeleteBinding",
+        "PingTask"
+    };
+
     enum ERequestTypeCommon {
         RTC_WRITE_RESULT_DATA,
         RTC_GET_TASK,
@@ -509,43 +533,21 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             TMetricsScope key{cloudId, scope};
             TMaybe<TScopeCountersPtr> cacheVal;
             ScopeCounters.Get(key, &cacheVal);
-            if (cacheVal) {
-                return (**cacheVal)[type];
+
+            if (!cacheVal) {
+                cacheVal = std::make_shared<TScopeCounters>();
+                ScopeCounters.Put(key, cacheVal);
             }
 
-            auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
-                { MakeIntrusive<TRequestScopeCounters>("CreateQuery") },
-                { MakeIntrusive<TRequestScopeCounters>("ListQueries") },
-                { MakeIntrusive<TRequestScopeCounters>("DescribeQuery") },
-                { MakeIntrusive<TRequestScopeCounters>("GetQueryStatus") },
-                { MakeIntrusive<TRequestScopeCounters>("ModifyQuery") },
-                { MakeIntrusive<TRequestScopeCounters>("DeleteQuery") },
-                { MakeIntrusive<TRequestScopeCounters>("ControlQuery") },
-                { MakeIntrusive<TRequestScopeCounters>("GetResultData") },
-                { MakeIntrusive<TRequestScopeCounters>("ListJobs") },
-                { MakeIntrusive<TRequestScopeCounters>("DescribeJob") },
-                { MakeIntrusive<TRequestScopeCounters>("CreateConnection") },
-                { MakeIntrusive<TRequestScopeCounters>("ListConnections") },
-                { MakeIntrusive<TRequestScopeCounters>("DescribeConnection") },
-                { MakeIntrusive<TRequestScopeCounters>("ModifyConnection") },
-                { MakeIntrusive<TRequestScopeCounters>("DeleteConnection") },
-                { MakeIntrusive<TRequestScopeCounters>("CreateBinding") },
-                { MakeIntrusive<TRequestScopeCounters>("ListBindings") },
-                { MakeIntrusive<TRequestScopeCounters>("DescribeBinding") },
-                { MakeIntrusive<TRequestScopeCounters>("ModifyBinding") },
-                { MakeIntrusive<TRequestScopeCounters>("DeleteBinding") },
-                { MakeIntrusive<TRequestScopeCounters>("PingTask") },
-            }));
+            auto scopeRequests = *cacheVal;
 
-            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
-                                    ->GetSubgroup("scope", scope);
-
-            for (auto& request: *scopeRequests) {
-                request->Register(scopeCounters);
+            if (!(*scopeRequests)[type]) {
+                auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)->GetSubgroup("scope", scope);
+                auto requestScoupeCounters = MakeIntrusive<TRequestScopeCounters>(std::string(RequestTypeScopeNames[type]));
+                requestScoupeCounters->Register(scopeCounters);
+                (*scopeRequests)[type] = requestScoupeCounters;
             }
 
-            cacheVal = scopeRequests;
-            ScopeCounters.Put(key, cacheVal);
             return (*scopeRequests)[type];
         }
     };

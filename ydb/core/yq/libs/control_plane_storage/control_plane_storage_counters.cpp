@@ -39,7 +39,7 @@ NMonitoring::IHistogramCollectorPtr TRequestCommonCounters::GetLatencyHistogramB
 }
 
 TRequestCommonCounters::~TRequestCommonCounters() {
-    Counters->RemoveSubgroup("request_scope", Name);
+    Counters->RemoveSubgroup("request_common", Name);
 }
 
 TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters)

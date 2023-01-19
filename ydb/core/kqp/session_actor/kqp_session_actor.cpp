@@ -129,7 +129,7 @@ public:
 struct TKqpQueryState {
     TActorId Sender;
     ui64 ProxyRequestId = 0;
-    NKikimrKqp::TQueryRequest Request;
+    NKikimrKqp::TQueryRequest RequestProto;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
@@ -162,6 +162,124 @@ struct TKqpQueryState {
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
+
+    NKikimrKqp::EQueryAction GetAction() const {
+        return RequestProto.GetAction();
+    }
+
+    bool GetKeepSession() const {
+        return RequestProto.GetKeepSession();
+    }
+
+    const TString& GetQuery() const {
+        return RequestProto.GetQuery();
+    }
+
+    const TString& GetPreparedQuery() const {
+        return RequestProto.GetPreparedQuery();
+    }
+
+    NKikimrKqp::EQueryType GetType() const {
+        return RequestProto.HasType() ? RequestProto.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED;
+    }
+
+    void EnsureAction() {
+        YQL_ENSURE(RequestProto.HasAction());
+    }
+
+    bool GetUsePublicResponseDataFormat() const {
+        return RequestProto.GetUsePublicResponseDataFormat();
+    }
+
+    void SetQueryDeadlines(const NKikimrConfig::TTableServiceConfig& service) {
+        auto now = TAppData::TimeProvider->Now();
+        if (RequestProto.GetCancelAfterMs()) {
+            QueryDeadlines.CancelAt = now + TDuration::MilliSeconds(RequestProto.GetCancelAfterMs());
+        }
+
+        auto timeoutMs = GetQueryTimeout(GetType(), RequestProto.GetTimeoutMs(), service);
+        QueryDeadlines.TimeoutAt = now + timeoutMs;
+    }
+
+    bool HasTopicOperations() const {
+        return RequestProto.HasTopicOperations();
+    }
+
+    const ::Ydb::Table::QueryCachePolicy& GetQueryCachePolicy() const {
+        return RequestProto.GetQueryCachePolicy();
+    }
+
+    const TString& GetDatabase() const {
+        return RequestProto.GetDatabase();
+    }
+
+    TString ExtractQueryText() const {
+        if (CompileResult) {
+            if (CompileResult->Query) {
+                return CompileResult->Query->Text;
+            }
+            return {};
+        }
+        return RequestProto.GetQuery();
+    }
+
+    const ::NKikimrKqp::TTopicOperations& GetTopicOperations() const {
+        return RequestProto.GetTopicOperations();
+    }
+
+    bool NeedPersistentSnapshot() const {
+        auto type = GetType();
+        return (
+            type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
+            type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
+            type == NKikimrKqp::QUERY_TYPE_SQL_QUERY // TODO: Switch to MVCC snapshots after moving to separate executer.
+        );
+    }
+
+    bool HasTxControl() const {
+        return RequestProto.HasTxControl();
+    }
+
+    const ::Ydb::Table::TransactionControl& GetTxControl() const {
+        return RequestProto.GetTxControl();
+    }
+
+    const ::NKikimrMiniKQL::TParams& GetParameters() const {
+        return RequestProto.GetParameters();
+    }
+
+    const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
+        return RequestProto.GetYdbParameters();
+    }
+
+    Ydb::Table::QueryStatsCollection::Mode GetStatsMode() const {
+        if (!RequestProto.HasCollectStats()) {
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        }
+
+        if (RequestProto.GetCollectStats() == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED) {
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        }
+
+        return RequestProto.GetCollectStats();
+    }
+
+    bool CollectStatsDefined() const {
+        return GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+    }
+
+    bool HasPreparedQuery() const {
+        return RequestProto.HasPreparedQuery();
+    }
+
+    bool IsStreamResult() const {
+        auto type = GetType();
+        return (
+            type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
+            type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
+            type == NKikimrKqp::QUERY_TYPE_SQL_QUERY
+        );
+    }
 
     void ResetTimer() {
         if (CurrentTimer) {
@@ -260,24 +378,11 @@ public:
         return result;
     }
 
-    NYql::TKikimrQueryDeadlines GetQueryDeadlines(const NKikimrKqp::TQueryRequest& queryRequest) {
-        NYql::TKikimrQueryDeadlines res;
-
-        auto now = TAppData::TimeProvider->Now();
-        if (queryRequest.GetCancelAfterMs()) {
-            res.CancelAt = now + TDuration::MilliSeconds(queryRequest.GetCancelAfterMs());
-        }
-
-        auto timeoutMs = GetQueryTimeout(queryRequest.GetType(), queryRequest.GetTimeoutMs(), Settings.Service);
-        res.TimeoutAt = now + timeoutMs;
-        return res;
-    }
-
-    void MakeNewQueryState(NKikimrKqp::TQueryRequest* request) {
+    void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
         QueryState = std::make_shared<TKqpQueryState>();
-        QueryState->Request.Swap(request);
+        QueryState->RequestProto.Swap(ev->Get()->Record.MutableRequest());
     }
 
     bool ConvertParameters(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -298,6 +403,8 @@ public:
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ev->Get()->Record.MutableRequest()->Swap(&QueryState->RequestProto);
+
         if (!ConvertParameters(ev))
             return;
 
@@ -336,10 +443,9 @@ public:
     }
 
     void RollbackTx() {
-        auto& queryRequest = QueryState->Request;
-        YQL_ENSURE(queryRequest.HasTxControl(),
+        YQL_ENSURE(QueryState->HasTxControl(),
                 "Can't perform ROLLBACK_TX: TxControl isn't set in TQueryRequest");
-        const auto& txControl = queryRequest.GetTxControl();
+        const auto& txControl = QueryState->GetTxControl();
         QueryState->Commit = txControl.commit_tx();
         TULID txId;
         txId.ParseString(txControl.tx_id());
@@ -357,13 +463,10 @@ public:
     }
 
     void CommitTx() {
-        auto& queryRequest = QueryState->Request;
-
-        YQL_ENSURE(queryRequest.HasTxControl());
-
-        auto& txControl = queryRequest.GetTxControl();
+        YQL_ENSURE(QueryState->HasTxControl());
+        const auto& txControl = QueryState->GetTxControl();
         YQL_ENSURE(txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId, "Can't commit transaction - "
-                << " there is no TxId in Query's TxControl, queryRequest: " << queryRequest.DebugString());
+            << " there is no TxId in Query's TxControl");
 
         QueryState->Commit = txControl.commit_tx();
 
@@ -386,7 +489,6 @@ public:
         }
 
         bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true);
-
         if (!replied) {
             Become(&TKqpSessionActor::ExecuteState);
         }
@@ -460,15 +562,13 @@ public:
             return;
         }
 
-        MakeNewQueryState(event.MutableRequest());
+        MakeNewQueryState(ev);
         TTimerGuard timer(this);
-        auto& queryRequest = QueryState->Request;
+        YQL_ENSURE(QueryState->GetDatabase() == Settings.Database,
+                "Wrong database, expected:" << Settings.Database << ", got: " << QueryState->GetDatabase());
 
-        YQL_ENSURE(queryRequest.GetDatabase() == Settings.Database,
-                "Wrong database, expected:" << Settings.Database << ", got: " << queryRequest.GetDatabase());
-
-        YQL_ENSURE(queryRequest.HasAction());
-        auto action = queryRequest.GetAction();
+        QueryState->EnsureAction();
+        auto action = QueryState->GetAction();
 
         NWilson::TTraceId id;
         if (false) { // change to enable Wilson tracing
@@ -479,10 +579,10 @@ public:
 
         LWTRACK(KqpSessionQueryRequest,
             QueryState->Orbit,
-            queryRequest.GetDatabase(),
-            queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED,
+            QueryState->GetDatabase(),
+            QueryState->GetType(),
             action,
-            queryRequest.GetQuery());
+            QueryState->GetQuery());
 
         QueryState->Sender = ev->Sender;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -490,20 +590,20 @@ public:
         QueryState->IsDocumentApiRestricted = IsDocumentApiRestricted(event.GetRequestType());
         QueryState->StartTime = TInstant::Now();
         QueryState->UserToken = event.GetUserToken();
-        QueryState->QueryDeadlines = GetQueryDeadlines(queryRequest);
+        QueryState->SetQueryDeadlines(Settings.Service);
 
         LOG_D("received request,"
             << " proxyRequestId: " << proxyRequestId
-            << " prepared: " << queryRequest.HasPreparedQuery()
-            << " tx_control: " << queryRequest.HasTxControl()
+            << " prepared: " << QueryState->HasPreparedQuery()
+            << " tx_control: " << QueryState->HasTxControl()
             << " action: " << action
-            << " type: " << (queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED)
-            << " text: " << (queryRequest.HasQuery() ? queryRequest.GetQuery() : "")
+            << " type: " << QueryState->GetType()
+            << " text: " << QueryState->GetQuery()
         );
 
-        QueryState->ParametersSize = queryRequest.GetParameters().ByteSize();
+        QueryState->ParametersSize = ev->Get()->GetParametersSize();
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
-        QueryState->KeepSession = Settings.LongSession || queryRequest.GetKeepSession();
+        QueryState->KeepSession = Settings.LongSession || QueryState->GetKeepSession();
 
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
@@ -513,8 +613,7 @@ public:
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
             case NKikimrKqp::QUERY_ACTION_PREPARE:
             case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED: {
-                YQL_ENSURE(queryRequest.HasType());
-                auto type = queryRequest.GetType();
+                auto type = QueryState->GetType();
                 YQL_ENSURE(type != NKikimrKqp::QUERY_TYPE_UNDEFINED, "query type is undefined");
 
                 if (action == NKikimrKqp::QUERY_ACTION_PREPARE) {
@@ -525,39 +624,32 @@ public:
                 }
 
                 if (!IsQueryTypeSupported(type)) {
-                    event.MutableRequest()->Swap(&QueryState->Request);
-                    ForwardRequest(ev);
-                    return;
+                    return ForwardRequest(ev);
                 }
                 break;
             }
             case NKikimrKqp::QUERY_ACTION_BEGIN_TX: {
-                YQL_ENSURE(queryRequest.HasTxControl(),
+                YQL_ENSURE(QueryState->HasTxControl(),
                     "Can't perform BEGIN_TX: TxControl isn't set in TQueryRequest");
-                auto& txControl = queryRequest.GetTxControl();
+                const auto& txControl = QueryState->GetTxControl();
                 QueryState->Commit = txControl.commit_tx();
                 BeginTx(txControl.begin_tx());
                 ReplySuccess();
                 return;
             }
             case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX: {
-                RollbackTx();
-                return;
+                return RollbackTx();
             }
             case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
-                CommitTx();
-                return;
+                return CommitTx();
             // not supported yet
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             case NKikimrKqp::QUERY_ACTION_VALIDATE:
             case NKikimrKqp::QUERY_ACTION_PARSE:
-                event.MutableRequest()->Swap(&QueryState->Request);
-                ForwardRequest(ev);
-                return;
+                return ForwardRequest(ev);
 
             case NKikimrKqp::QUERY_ACTION_TOPIC:
-                AddOffsetsToTransaction(ctx);
-                return;
+                return AddOffsetsToTransaction(ctx);
         }
 
         CompileQuery();
@@ -569,9 +661,9 @@ public:
             return;
         }
 
-        YQL_ENSURE(QueryState->Request.HasTopicOperations());
+        YQL_ENSURE(QueryState->HasTopicOperations());
 
-        const NKikimrKqp::TTopicOperations& operations = QueryState->Request.GetTopicOperations();
+        const NKikimrKqp::TTopicOperations& operations = QueryState->GetTopicOperations();
 
         TMaybe<TString> consumer;
         if (operations.HasConsumer()) {
@@ -582,7 +674,7 @@ public:
 
         for (auto& topic : operations.GetTopics()) {
             auto path =
-                CanonizePath(NPersQueue::GetFullTopicPath(ctx, QueryState->Request.GetDatabase(), topic.path()));
+                CanonizePath(NPersQueue::GetFullTopicPath(ctx, QueryState->GetDatabase(), topic.path()));
 
             for (auto& partition : topic.partitions()) {
                 if (partition.partition_offsets().empty()) {
@@ -600,7 +692,7 @@ public:
         }
 
         auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = CanonizePath(QueryState->Request.GetDatabase());
+        navigate->DatabaseName = CanonizePath(QueryState->GetDatabase());
         QueryState->TopicOperations.FillSchemeCacheNavigate(*navigate,
                                                             std::move(consumer));
         navigate->UserToken = new NACLib::TUserToken(QueryState->UserToken);
@@ -611,26 +703,24 @@ public:
 
     void CompileQuery() {
         YQL_ENSURE(QueryState);
-        auto& queryRequest = QueryState->Request;
-
         TMaybe<TKqpQueryId> query;
         TMaybe<TString> uid;
 
         bool keepInCache = false;
-        switch (queryRequest.GetAction()) {
+        switch (QueryState->GetAction()) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
-                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), queryRequest.GetType());
-                keepInCache = queryRequest.GetQueryCachePolicy().keep_in_cache() && query->IsSql();
+                query = TKqpQueryId(Settings.Cluster, Settings.Database, QueryState->GetQuery(), QueryState->GetType());
+                keepInCache = QueryState->GetQueryCachePolicy().keep_in_cache() && query->IsSql();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_PREPARE:
-                query = TKqpQueryId(Settings.Cluster, Settings.Database, queryRequest.GetQuery(), queryRequest.GetType());
+                query = TKqpQueryId(Settings.Cluster, Settings.Database, QueryState->GetQuery(), QueryState->GetType());
                 keepInCache = query->IsSql();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-                uid = queryRequest.GetPreparedQuery();
-                keepInCache = queryRequest.GetQueryCachePolicy().keep_in_cache();
+                uid = QueryState->GetPreparedQuery();
+                keepInCache = QueryState->GetQueryCachePolicy().keep_in_cache();
                 break;
 
             default:
@@ -684,10 +774,8 @@ public:
         QueryState->CompileResult = compileResult;
         QueryState->CompileStats.Swap(&ev->Get()->Stats);
         QueryState->PreparedQuery = compileResult->PreparedQuery;
-        QueryState->Request.SetQuery(QueryState->PreparedQuery->GetText());
 
-        auto& queryRequest = QueryState->Request;
-        if (queryRequest.GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
             ReplyPrepareResult(compileResult);
             return;
         }
@@ -700,20 +788,13 @@ public:
 
         QueryState->TxCtx->OnBeginQuery();
 
-        if (queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
-            || queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN
-        ) {
-            AcquirePersistentSnapshot();
-            return;
-        } else if (queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_QUERY) {
-            // TODO: Switch to MVCC snapshots after moving to separate executer.
-            AcquirePersistentSnapshot();
-            return;
+
+        if (QueryState->NeedPersistentSnapshot()) {
+            return AcquirePersistentSnapshot();
         } else if (NeedSnapshot(*QueryState->TxCtx, *Config, /*rollback*/ false, QueryState->Commit,
             QueryState->PreparedQuery->GetPhysicalQuery()))
         {
-            AcquireMvccSnapshot();
-            return;
+            return AcquireMvccSnapshot();
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
@@ -832,10 +913,8 @@ public:
     }
 
     bool PrepareQueryTransaction() {
-        auto& queryRequest = QueryState->Request;
-
-        if (queryRequest.HasTxControl()) {
-            auto& txControl = queryRequest.GetTxControl();
+        if (QueryState->HasTxControl()) {
+            const auto& txControl = QueryState->GetTxControl();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
@@ -888,9 +967,8 @@ public:
             return false;
         }
 
-        auto& queryRequest = QueryState->Request;
-        auto action = queryRequest.GetAction();
-        auto type = queryRequest.GetType();
+        auto action = QueryState->GetAction();
+        auto type = QueryState->GetType();
 
         if (action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_SQL_DML
             || action == NKikimrKqp::QUERY_ACTION_EXECUTE && type == NKikimrKqp::QUERY_TYPE_AST_DML)
@@ -916,8 +994,8 @@ public:
                 YQL_ENSURE(false, "Unexpected query action: " << action);
         }
 
-        ParseParameters(QueryState->Request.GetParameters());
-        ParseParameters(QueryState->Request.GetYdbParameters());
+        ParseParameters(QueryState->GetParameters());
+        ParseParameters(QueryState->GetYdbParameters());
         return true;
     }
 
@@ -972,8 +1050,7 @@ public:
                 request.CancelAfter = cancelAt - now;
             }
 
-            EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
-            request.StatsMode = GetStatsMode(statsMode);
+            request.StatsMode = queryState->GetStatsMode();
         }
 
         const auto& limits = GetQueryLimits(Settings);
@@ -1472,21 +1549,10 @@ public:
         ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "Got AbortExecution", MessageFromIssues(issues));
     }
 
-    TString ExtractQueryText() const {
-        auto compileResult = QueryState->CompileResult;
-        if (compileResult) {
-            if (compileResult->Query) {
-                return compileResult->Query->Text;
-            }
-            return {};
-        }
-        return QueryState->Request.GetQuery();
-    }
-
     void CollectSystemViewQueryStats(const NKqpProto::TKqpStatsQuery* stats, TDuration queryDuration,
         const TString& database, ui64 requestUnits)
     {
-        auto type = QueryState->Request.GetType();
+        auto type = QueryState->GetType();
         switch (type) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
             case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
@@ -1494,7 +1560,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
             case NKikimrKqp::QUERY_TYPE_SQL_QUERY: {
-                TString text = ExtractQueryText();
+                TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
                     NSysView::CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
@@ -1519,24 +1585,20 @@ public:
 
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         YQL_ENSURE(QueryState);
-        const auto& queryRequest = QueryState->Request;
-
-        if (IsExecuteAction(queryRequest.GetAction())) {
+        if (IsExecuteAction(QueryState->GetAction())) {
             auto ru = NRuCalc::CalcRequestUnit(*stats);
             record->SetConsumedRu(ru);
 
             auto now = TInstant::Now();
             auto queryDuration = now - QueryState->StartTime;
-            CollectSystemViewQueryStats(stats, queryDuration, queryRequest.GetDatabase(), ru);
+            CollectSystemViewQueryStats(stats, queryDuration, QueryState->GetDatabase(), ru);
             SlowLogQuery(TlsActivationContext->AsActorContext(), Config.Get(), requestInfo, queryDuration,
                 record->GetYdbStatus(), QueryState->UserToken, QueryState->ParametersSize, record,
-                [this]() { return this->ExtractQueryText(); });
+                [this]() { return this->QueryState->ExtractQueryText(); });
         }
 
-        bool reportStats = (GetStatsModeInt(queryRequest) != EKikimrStatsMode::None);
-        if (reportStats) {
+        if (QueryState->CollectStatsDefined()) {
             response->SetQueryPlan(SerializeAnalyzePlan(*stats));
-
             response->MutableQueryStats()->Swap(stats);
         }
     }
@@ -1574,7 +1636,7 @@ public:
         auto now = TInstant::Now();
         auto queryDuration = now - QueryState->StartTime;
 
-        Counters->ReportQueryLatency(Settings.DbCounters, QueryState->Request.GetAction(), queryDuration);
+        Counters->ReportQueryLatency(Settings.DbCounters, QueryState->GetAction(), queryDuration);
 
         if (QueryState->MaxReadType == ETableReadType::FullScan) {
             Counters->ReportQueryWithFullScan(Settings.DbCounters);
@@ -1631,15 +1693,14 @@ public:
 
         bool replyQueryId = false;
         bool replyQueryParameters = false;
-        auto& queryRequest = QueryState->Request;
-        switch (queryRequest.GetAction()) {
+        switch (QueryState->GetAction()) {
             case NKikimrKqp::QUERY_ACTION_PREPARE:
                 replyQueryId = true;
                 replyQueryParameters = true;
                 break;
 
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
-                replyQueryParameters = replyQueryId = queryRequest.GetQueryCachePolicy().keep_in_cache();
+                replyQueryParameters = replyQueryId = QueryState->GetQueryCachePolicy().keep_in_cache();
                 break;
 
             case NKikimrKqp::QUERY_ACTION_PARSE:
@@ -1665,15 +1726,9 @@ public:
             response->SetPreparedQuery(queryId);
         }
 
-        bool useYdbResponseFormat = QueryState->Request.GetUsePublicResponseDataFormat();
-
+        bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
         // Result for scan query is sent directly to target actor.
-        bool streamResult =
-            QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
-            QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
-            QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_QUERY;
-
-        if (QueryState->PreparedQuery && !streamResult) {
+        if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 auto& rb = phyQuery.GetResultBindings(i);
@@ -1703,7 +1758,7 @@ public:
         }
 
         resEv->Record.GetRef().SetYdbStatus(Ydb::StatusIds::SUCCESS);
-        LOG_D("Create QueryResponse for action: " << queryRequest.GetAction() << " with SUCCESS status");
+        LOG_D("Create QueryResponse for action: " << QueryState->GetAction() << " with SUCCESS status");
 
         QueryResponse = std::move(resEv);
 
@@ -1714,12 +1769,10 @@ public:
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         FillCompileStatus(compileResult, QueryResponse->Record);
 
-        auto& queryRequest = QueryState->Request;
         TULID txId = CreateEmptyULID();
         TString txId_Human = "";
-        if (queryRequest.HasTxControl()) {
-            auto& txControl = queryRequest.GetTxControl();
-
+        if (QueryState->HasTxControl()) {
+            const auto& txControl = QueryState->GetTxControl();
             if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
                 txId.ParseString(txControl.tx_id());
                 txId_Human = txControl.tx_id();

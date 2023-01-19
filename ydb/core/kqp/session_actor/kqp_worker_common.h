@@ -126,7 +126,6 @@ void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* co
     const TDuration& duration, Ydb::StatusIds::StatusCode status, const TString& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText);
 
-NYql::EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest);
 NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
 inline bool IsDocumentApiRestricted(const TString& requestType) {

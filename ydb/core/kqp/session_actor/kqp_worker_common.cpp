@@ -66,21 +66,6 @@ bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TVariantType& actual, const NKiki
 
 } // namespace
 
-EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) {
-    switch (queryRequest.GetCollectStats()) {
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
-            return EKikimrStatsMode::None;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            return EKikimrStatsMode::Basic;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
-            return EKikimrStatsMode::Full;
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
-            return EKikimrStatsMode::Profile;
-        default:
-            return EKikimrStatsMode::None;
-    }
-}
-
 TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
     const auto& queryLimitsProto = settings.Service.GetQueryLimits();
     const auto& phaseLimitsProto = queryLimitsProto.GetPhaseLimits();

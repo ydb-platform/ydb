@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   ydb-core-base
   core-engine-minikql
   ydb-core-keyvalue
+  core-kqp-common
   ydb-core-metering
   core-persqueue-codecs
   core-persqueue-config

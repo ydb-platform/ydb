@@ -8,14 +8,18 @@ namespace NGRpcService {
 
 enum EServiceId {
     EvSubscribeGrpcCancel = EventSpaceBegin(TKikimrEvents::ES_GRPC_CANCELATION),
+    EvClientLost
 };
 
 struct TEvSubscribeGrpcCancel : public TEventPB<TEvSubscribeGrpcCancel, NKikimrGRpcService::TEvSubscribeGrpcCancel, EvSubscribeGrpcCancel> {
     TEvSubscribeGrpcCancel() = default;
-    TEvSubscribeGrpcCancel(const NActors::TActorId& subscriber, ui64 wakeupTag) {
+    TEvSubscribeGrpcCancel(const NActors::TActorId& subscriber) {
         ActorIdToProto(subscriber, Record.MutableSubscriber());
-        Record.SetWakeupTag(wakeupTag);
     }
+};
+
+struct TEvClientLost : public TEventPB<TEvClientLost, NKikimrGRpcService::TEvClientLost, EvClientLost> {
+    TEvClientLost() = default;
 };
 
 }

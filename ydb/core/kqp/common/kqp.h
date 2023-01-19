@@ -9,6 +9,7 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
+#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -310,14 +311,14 @@ struct TEvKqp {
             return req;
         }
 
-        void SetClientLostAction(TActorId actorId, ui64 wakeupTag, NActors::TActorSystem* as) {
+        void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as) {
             if (RequestCtx) {
-                RequestCtx->SetClientLostAction([actorId, wakeupTag, as]() {
-                    as->Send(actorId, new TEvents::TEvWakeup(wakeupTag));
+                RequestCtx->SetClientLostAction([actorId, as]() {
+                    as->Send(actorId, new NGRpcService::TEvClientLost());
                 });
             } else if (Record.HasCancelationActor()) {
                 auto cancelationActor = ActorIdFromProto(Record.GetCancelationActor());
-                NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, wakeupTag, as);
+                NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, as);
             }
         }
 

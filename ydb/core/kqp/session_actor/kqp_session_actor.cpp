@@ -325,10 +325,6 @@ private:
     TKqpSessionActor* This;
 };
 
-enum EWakeupTag {
-    ClientLost,
-};
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
@@ -514,22 +510,16 @@ public:
         }
     }
 
-    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
-        switch ((EWakeupTag) ev->Get()->Tag) {
-            case EWakeupTag::ClientLost:
-                LOG_D("Got TEvWakeup ClientLost event, send AbortExecution to executor: "
-                     << ExecuterId);
+    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+        LOG_D("Got ClientLost event, send AbortExecution to executor: "
+            << ExecuterId);
 
-                if (ExecuterId) {
-                    auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
+        if (ExecuterId) {
+            auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
 
-                    Send(ExecuterId, abortEv.Release());
-                }
-                Cleanup();
-                break;
-            default:
-                YQL_ENSURE(false, "Unexpected Wakeup tag for HandleWakeup: " << (ui64) ev->Get()->Tag);
+            Send(ExecuterId, abortEv.Release());
         }
+        Cleanup();
     }
 
     void HandleReady(TEvKqp::TEvQueryRequest::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -607,7 +597,7 @@ public:
 
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
-        ev->Get()->SetClientLostAction(selfId, EWakeupTag::ClientLost, as);
+        ev->Get()->SetClientLostAction(selfId, as);
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
@@ -2158,7 +2148,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleTxResponse);
-                hFunc(TEvents::TEvWakeup, HandleWakeup);
+                hFunc(NGRpcService::TEvClientLost, HandleClientLost);
             default:
                 UnexpectedEvent("CompileState", ev);
             }
@@ -2185,7 +2175,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvents::TEvWakeup, HandleWakeup);
+                hFunc(NGRpcService::TEvClientLost, HandleClientLost);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
@@ -2211,7 +2201,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(TEvents::TEvWakeup, HandleNoop);
+                hFunc(NGRpcService::TEvClientLost, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);

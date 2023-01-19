@@ -1,3 +1,8 @@
+---
+title: "Instructions for authenticating when connecting to the server side in {{ ydb-short-name }}"
+description: "The section contains code recipes with authentication settings in different {{ ydb-short-name }} SDKs."
+---
+
 # Authentication
 
 {% include [work in progress message](_includes/addition.md) %}

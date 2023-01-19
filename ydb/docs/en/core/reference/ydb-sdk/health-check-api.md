@@ -1,3 +1,8 @@
+---
+title: "Instructions for initiating Health Check API in {{ ydb-short-name }}"
+description: "The article will tell you how to initiate the check using the Health Check API built-in self-diagnostic system in {{ ydb-short-name }}."
+---
+
 # Health Check API
 
 {{ ydb-short-name }} has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing problems.

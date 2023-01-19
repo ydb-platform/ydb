@@ -1,4 +1,7 @@
-
+---
+title: "Overview of client load balancing in {{ ydb-short-name }}"
+description: "The section contains code recipes with client load balancing settings in different {{ ydb-short-name }} SDKs."
+---
 # Balancing
 
 {% include [work in progress message](_includes/addition.md) %}

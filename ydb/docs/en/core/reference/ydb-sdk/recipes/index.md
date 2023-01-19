@@ -1,3 +1,8 @@
+---
+title: "Overview of code recipes when working with the {{ ydb-short-name }} SDK."
+description: "This section contains code recipes in different programming languages for a variety of tasks that are common when working with the {{ ydb-short-name }} SDK."
+---
+
 # Code recipes
 
 {% include [work in progress message](_includes/addition.md) %}
@@ -26,4 +31,3 @@ Table of contents:
    - [Enable logging](debug-logs.md)
    - [Enable metrics in Prometheus](debug-prometheus.md)
    - [Enable tracing in Jaeger](debug-jaeger.md)
-

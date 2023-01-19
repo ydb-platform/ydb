@@ -14,7 +14,8 @@ target_include_directories(restricted-boost-crc INTERFACE
 target_link_libraries(restricted-boost-crc INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  yutil
+  restricted-boost-array
   restricted-boost-config
   restricted-boost-integer
+  restricted-boost-type_traits
 )

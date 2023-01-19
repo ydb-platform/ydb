@@ -42,8 +42,21 @@ user@host:~$ cd ~/github/ydb
 user@host:~/github/ydb$ ydb_root=$(pwd)
 user@host:~/github/ydb$ export PATH=${PATH}:${ydb_root}/ydb/apps/dstool
 user@host:~/github/ydb$ export PYTHONPATH=${PYTHONPATH}:${ydb_root}
-user@host:~/github/ydb$ alias ydb-dstool=ydb-dstool.py
+user@host:~/github/ydb$ alias ydb-dstool=${PWD}/main.py
 user@host:~/github/ydb$ ydb-dstool -e ydb.endpoint cluster list
+```
+
+# How to install ydb-dstool package from source
+
+```bash
+user@host:~$ mkdir github
+user@host:~$ cd github
+user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
+user@host:~/github$ cd ydb
+user@host:~/github/ydb$ ydb_root=$(pwd)
+user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
+user@host:~/github/ydb$ cp ydb/apps/dstool/setup.py .
+user@host:~/github/ydb$ pip install .
 ```
 
 # How to do things with ydb-dstool

@@ -3,20 +3,43 @@
 #include <library/cpp/actors/interconnect/interconnect_common.h>
 #include <ydb/core/protos/config.pb.h>
 
-const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrentCompatibilityInfo();
-const NKikimrConfig::TStoredCompatibilityInfo* GetUnknownYdbRelease();
+class TCompatibilityInfoTest;
 
-NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(ui32 componentId,
-        const NKikimrConfig::TCurrentCompatibilityInfo* current);
+class TCompatibilityInfo {
+    friend class TCompatibilityInfoTest;
 
-NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(ui32 componentId);
+public:
+    TCompatibilityInfo() = delete;
+    static const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrent();
+    static const NKikimrConfig::TStoredCompatibilityInfo* GetUnknown();
 
-bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
-        const NKikimrConfig::TStoredCompatibilityInfo* stored,
-        ui32 componentId, TString& errorReason);
+    static NKikimrConfig::TStoredCompatibilityInfo MakeStored(NKikimrConfig::TCompatibilityRule::EComponentId componentId);
 
-bool CheckVersionCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
-        ui32 componentId, TString& errorReason);
+    static bool CheckCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
+            ui32 componentId, TString& errorReason);
+
+    static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+            const NKikimrConfig::TStoredCompatibilityInfo* stored,
+            ui32 componentId, TString& errorReason);
+
+    static NKikimrConfig::TStoredCompatibilityInfo MakeStored(ui32 componentId,
+            const NKikimrConfig::TCurrentCompatibilityInfo* current);
+
+private:
+    static TSpinLock LockCurrent;
+    static NKikimrConfig::TCurrentCompatibilityInfo* CompatibilityInfo;
+    static NKikimrConfig::TStoredCompatibilityInfo* UnknownYdbRelease;
+
+    // functions that modify compatibility information are only accessible from friend classes
+    static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent);
+};
+
+class TCompatibilityInfoTest {
+public:
+    TCompatibilityInfoTest() = delete;
+
+    static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent);
+};
 
 // obsolete version control
 // TODO: remove in the next major release

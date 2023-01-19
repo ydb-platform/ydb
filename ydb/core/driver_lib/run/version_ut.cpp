@@ -11,6 +11,7 @@ Y_UNIT_TEST_SUITE(VersionParser) {
 }
 
 Y_UNIT_TEST_SUITE(YdbVersion) {
+    using EComponentId = NKikimrConfig::TCompatibilityRule;
     struct TYdbVersion {
         std::optional<ui32> Year;
         std::optional<ui32> Major;
@@ -113,8 +114,8 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         TString errorReason;
         auto currentPB = current.ToPB();
         auto storePB = store.ToPB();
-        auto storedPB = MakeStoredCompatibilityInfo((ui32)NKikimrConfig::TCompatibilityRule::Test1, &storePB);
-        UNIT_ASSERT_EQUAL_C(CheckVersionCompatibility(&currentPB, &storedPB, 
+        auto storedPB = TCompatibilityInfo::MakeStored((ui32)NKikimrConfig::TCompatibilityRule::Test1, &storePB);
+        UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, &storedPB, 
             (ui32)NKikimrConfig::TCompatibilityRule::Test1, errorReason), expected, errorReason);
     }
 
@@ -593,7 +594,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                         TCompatibilityRule{
                             .BottomLimit = TYdbVersion{ .Year = 1, .Major = 1 },
                             .UpperLimit = TYdbVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
-                            .ComponentId = (ui32)NKikimrConfig::TCompatibilityRule::Test1,
+                            .ComponentId = (ui32)EComponentId::Test1,
                         },
                     }
                 }, 
@@ -611,7 +612,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                         TCompatibilityRule{
                             .BottomLimit = TYdbVersion{ .Year = 1, .Major = 1 },
                             .UpperLimit = TYdbVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
-                            .ComponentId = (ui32)NKikimrConfig::TCompatibilityRule::Test2,
+                            .ComponentId = (ui32)EComponentId::Test2,
                         },
                     }
                 }, 
@@ -623,10 +624,8 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
     }
 
     Y_UNIT_TEST(CompatibleWithSelf) {
-        auto* current = GetCurrentCompatibilityInfo();
-        auto stored = MakeStoredCompatibilityInfo((ui32)NKikimrConfig::TCompatibilityRule::Test1);
+        auto stored = TCompatibilityInfo::MakeStored(EComponentId::Test1);
         TString errorReason;
-        UNIT_ASSERT_C(CheckVersionCompatibility(current, &stored, 
-                (ui32)NKikimrConfig::TCompatibilityRule::Test1, errorReason), errorReason);
+        UNIT_ASSERT_C(TCompatibilityInfo::CheckCompatibility(&stored, EComponentId::Test1, errorReason), errorReason);
     }
 }

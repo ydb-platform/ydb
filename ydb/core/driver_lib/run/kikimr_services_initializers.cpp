@@ -760,14 +760,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 CheckVersionTag();
 
                 icCommon->CompatibilityInfo = TString();
-                Y_VERIFY(MakeStoredCompatibilityInfo((ui32)NKikimrConfig::TCompatibilityRule::Interconnect).SerializeToString(&*icCommon->CompatibilityInfo));
+                Y_VERIFY(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect).SerializeToString(&*icCommon->CompatibilityInfo));
                 icCommon->ValidateCompatibilityInfo = [&](const TString& peer, TString& errorReason) {
                     NKikimrConfig::TStoredCompatibilityInfo peerPB;
                     if (!peerPB.ParseFromString(peer)) {
                         errorReason = "Cannot parse given CompatibilityInfo";
                         return false;
                     }
-                    return CheckVersionCompatibility(&peerPB, NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                    return TCompatibilityInfo::CheckCompatibility(&peerPB, (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                 };
             }
 

@@ -1,12 +1,10 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include "version.h"
 
-
-NKikimrConfig::TCurrentCompatibilityInfo* CompatibilityInfo = nullptr;
-
-const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrentCompatibilityInfo() {
-    static TSpinLock lock;
-    TGuard<TSpinLock> g(lock);
+NKikimrConfig::TCurrentCompatibilityInfo* TCompatibilityInfo::CompatibilityInfo = nullptr;
+TSpinLock TCompatibilityInfo::LockCurrent = TSpinLock();
+const NKikimrConfig::TCurrentCompatibilityInfo* TCompatibilityInfo::GetCurrent() {
+    TGuard<TSpinLock> g(TCompatibilityInfo::LockCurrent);
 
     if (!CompatibilityInfo) {
         CompatibilityInfo = new NKikimrConfig::TCurrentCompatibilityInfo();
@@ -21,8 +19,8 @@ const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrentCompatibilityInfo() {
 // Last stable YDB release, which doesn't include version control change
 // When the compatibility information is not present in component's data,
 // we assume component's version to be this version
-NKikimrConfig::TStoredCompatibilityInfo* UnknownYdbRelease = nullptr;
-const NKikimrConfig::TStoredCompatibilityInfo* GetUnknownYdbRelease() {
+NKikimrConfig::TStoredCompatibilityInfo* TCompatibilityInfo::UnknownYdbRelease = nullptr;
+const NKikimrConfig::TStoredCompatibilityInfo* TCompatibilityInfo::GetUnknown() {
     static TSpinLock lock;
     TGuard<TSpinLock> g(lock);
 
@@ -40,8 +38,8 @@ const NKikimrConfig::TStoredCompatibilityInfo* GetUnknownYdbRelease() {
     return UnknownYdbRelease;
 }
 
-NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(
-        ui32 componentId, const NKikimrConfig::TCurrentCompatibilityInfo* current) {
+NKikimrConfig::TStoredCompatibilityInfo TCompatibilityInfo::MakeStored(ui32 componentId,
+        const NKikimrConfig::TCurrentCompatibilityInfo* current) {
     Y_VERIFY(current);
 
     NKikimrConfig::TStoredCompatibilityInfo stored;
@@ -67,8 +65,9 @@ NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(
     return stored;
 }
 
-NKikimrConfig::TStoredCompatibilityInfo MakeStoredCompatibilityInfo(ui32 componentId) {
-    return MakeStoredCompatibilityInfo(componentId, GetCurrentCompatibilityInfo());
+NKikimrConfig::TStoredCompatibilityInfo TCompatibilityInfo::MakeStored(
+        NKikimrConfig::TCompatibilityRule::EComponentId componentId) {
+    return MakeStored((ui32)componentId, GetCurrent());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -132,10 +131,10 @@ bool CheckNonPresent(const NKikimrConfig::TCurrentCompatibilityInfo* current,
     if (!current->HasYdbVersion()) {
         return true;
     }
-    const auto* lastUnsupported = GetUnknownYdbRelease();
+    const auto* lastUnsupported = TCompatibilityInfo::GetUnknown();
     Y_VERIFY(lastUnsupported);
     TString errorReason1;
-    if (!CheckVersionCompatibility(current, lastUnsupported, componentId, errorReason1)) {
+    if (!TCompatibilityInfo::CheckCompatibility(current, lastUnsupported, componentId, errorReason1)) {
         errorReason = "No stored YDB version found, last unsupported release is incompatible: " + errorReason1;
         return false;
     } else {
@@ -185,7 +184,7 @@ bool CheckRule(TString build, const NKikimrConfig::TYdbVersion* version,
             (!rule.HasUpperLimit() || CompareVersions(*version, rule.GetUpperLimit()) < 1);
 }
 
-bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
         const NKikimrConfig::TStoredCompatibilityInfo* stored, ui32 componentId, TString& errorReason) {
     if (stored == nullptr) {
         // version record is not found
@@ -249,12 +248,19 @@ bool CheckVersionCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* c
     }
 }
 
-bool CheckVersionCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
+bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
         ui32 componentId, TString& errorReason) {
-    return CheckVersionCompatibility(GetCurrentCompatibilityInfo(), 
-            stored, componentId, errorReason);
+    return CheckCompatibility(GetCurrent(), stored, componentId, errorReason);
 }
 
+void TCompatibilityInfo::Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent) {
+    TGuard<TSpinLock> g(TCompatibilityInfo::LockCurrent);
+    CompatibilityInfo = newCurrent;
+}
+
+void TCompatibilityInfoTest::Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent) {
+    TCompatibilityInfo::Reset(newCurrent);
+}
 // obsolete version control
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary

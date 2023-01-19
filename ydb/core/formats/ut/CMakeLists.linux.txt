@@ -50,7 +50,7 @@ set_property(
   ydb-core-formats-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 add_yunittest(
   NAME

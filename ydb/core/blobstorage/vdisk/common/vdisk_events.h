@@ -103,6 +103,14 @@ namespace NKikimr {
                 }
             }
 
+            EQueueClientType GetType() const {
+                return Type;
+            }
+
+            ui64 GetIdentifier() const {
+                return Identifier;
+            }
+
             void Serialize(NKikimrBlobStorage::TMsgQoS *msgQoS) const {
                 switch (Type) {
                     case EQueueClientType::None:
@@ -274,6 +282,42 @@ namespace NKikimr {
         };
 
     } // NBackpressure
+
+    struct TVDiskSkeletonTrace {
+        static constexpr ui32 BufferSize = 32;
+        const char * Marks[BufferSize];
+        ui32 MarkCount = 0;
+        std::shared_ptr<TVDiskSkeletonTrace> AdditionalTrace;
+
+        TVDiskSkeletonTrace() = default;
+
+        void Clear() {
+            MarkCount = 0;
+            AdditionalTrace.reset();
+        }
+
+        void AddMark(const char * const mark) {
+            if (MarkCount < BufferSize) {
+                Marks[MarkCount++] = mark;
+            }
+        }
+
+        TString ToString() const {
+            TStringBuilder msg;
+            msg << "[";
+            for (ui32 idx = 0; idx < MarkCount; ++idx) {
+                if (idx) {
+                    msg << ',';
+                }
+                msg << '"' << Marks[idx] << '"';
+            }
+            msg << "]";
+            if (AdditionalTrace) {
+                msg << '+' << AdditionalTrace->ToString();
+            }
+            return msg;
+        }
+    };
 
     struct TVMsgContext {
         const NBackpressure::TQueueClientId ClientId;
@@ -1423,6 +1467,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
 
         TEvVSpecialPatchBase() = default;
 
@@ -1816,6 +1861,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
 
         TEvVPatchStart() = default;
 
@@ -1901,6 +1947,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
 
         TEvVPatchDiff() = default;
 
@@ -1975,6 +2022,7 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
+        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
 
         TEvVPatchXorDiff() = default;
 

@@ -570,17 +570,6 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TBlockExprType>(r);
-                } else if (content == TStringBuf("ChunkedBlock")) {
-                    if (node.GetChildrenCount() != 2) {
-                        AddError(node, "Bad chunked block type annotation");
-                        return nullptr;
-                    }
-
-                    auto r = CompileTypeAnnotationNode(*node.GetChild(1));
-                    if (!r)
-                        return nullptr;
-
-                    return Expr.MakeType<TChunkedBlockExprType>(r);
                 } else if (content == TStringBuf("Scalar")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad scalar type annotation");
@@ -844,14 +833,6 @@ namespace {
         {
             auto type = annotation.Cast<TBlockExprType>();
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Block"), pool);
-            auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
-            return TAstNode::NewList(TPosition(), pool, self, itemType);
-        }
-
-        case ETypeAnnotationKind::ChunkedBlock:
-        {
-            auto type = annotation.Cast<TChunkedBlockExprType>();
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("ChunkedBlock"), pool);
             auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
@@ -3390,15 +3371,6 @@ const TBlockExprType* TMakeTypeImpl<TBlockExprType>::Make(TExprContext& ctx, con
         return found;
 
     return AddType<TBlockExprType>(ctx, hash, itemType);
-}
-
-const TChunkedBlockExprType* TMakeTypeImpl<TChunkedBlockExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
-    const auto hash = TChunkedBlockExprType::MakeHash(itemType);
-    TChunkedBlockExprType sample(hash, itemType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TChunkedBlockExprType>(ctx, hash, itemType);
 }
 
 const TScalarExprType* TMakeTypeImpl<TScalarExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {

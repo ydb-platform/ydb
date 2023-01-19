@@ -203,12 +203,9 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyDict();
     }
 
-    case ETypeAnnotationKind::ChunkedBlock:
     case ETypeAnnotationKind::Block: {
-        auto blockItem = annotation.GetKind() == ETypeAnnotationKind::Block ?
-            annotation.Cast<TBlockExprType>()->GetItemType() :
-            annotation.Cast<TChunkedBlockExprType>()->GetItemType();
-        auto itemType = BuildType(*blockItem, pgmBuilder, err, withTagged);
+        auto block = annotation.Cast<TBlockExprType>();
+        auto itemType = BuildType(*block->GetItemType(), pgmBuilder, err, withTagged);
         if (!itemType) {
             return nullptr;
         }

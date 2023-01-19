@@ -96,6 +96,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange_split.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record_body_serializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_async_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_cdc_stream.cpp

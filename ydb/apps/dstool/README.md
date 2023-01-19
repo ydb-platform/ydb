@@ -46,7 +46,7 @@ user@host:~/github/ydb$ alias ydb-dstool=${PWD}/main.py
 user@host:~/github/ydb$ ydb-dstool -e ydb.endpoint cluster list
 ```
 
-# How to install ydb-dstool package from source
+# How to build and upload ydb-dstool package
 
 ```bash
 user@host:~$ mkdir github
@@ -55,8 +55,9 @@ user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
 user@host:~/github$ cd ydb
 user@host:~/github/ydb$ ydb_root=$(pwd)
 user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
-user@host:~/github/ydb$ cp ydb/apps/dstool/setup.py .
-user@host:~/github/ydb$ pip install .
+user@host:~/github/ydb$ mv ydb/apps/dstool/setup.py .
+user@host:~/github/ydb$ python3 -m build
+user@host:~/github/ydb$ python3 -m twine upload dist/*
 ```
 
 # How to do things with ydb-dstool

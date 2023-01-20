@@ -1,6 +1,6 @@
 items:
-- name: Установка ydb-dstool
-  href: ydb-dstool.md
+# - name: Установка ydb-dstool
+#   href: ydb-dstool.md
 - name: Способы предотвращения выхода за модель отказа
   href: failure_model.md
 - name: Балансировка нагрузки на диски

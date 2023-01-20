@@ -7,6 +7,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
 #include <vector>
+#include <unordered_set>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -14,6 +15,16 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
+static const std::unordered_set<std::string> SupportedAggFuncs = {
+    "count",
+    "count_all",
+    "sum",
+    "min",
+    "max",
+    "avg",
+    "some"
+};
 
 struct TAggInfo {
     TAggInfo(const std::string& aggName, const std::string& colName, const std::string& opType)
@@ -55,9 +66,7 @@ bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
     }
     auto aggApply = trait.Cast<TCoAggApply>();
     auto aggName = aggApply.Name();
-    if (aggName == "count" || aggName == "count_all" || aggName == "sum"
-        || aggName == "min" || aggName == "max" || aggName == "avg" || aggName == "some")
-    {
+    if (SupportedAggFuncs.find(aggName.StringValue()) != SupportedAggFuncs.end()) {
         return true;
     }
     YQL_CLOG(DEBUG, ProviderKqp) << "Unsupported type of aggregation: " << aggName.StringValue();

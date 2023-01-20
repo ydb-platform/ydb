@@ -1,7 +1,6 @@
 #include "config.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
-#include "version.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>
@@ -44,6 +43,8 @@
 #include <ydb/core/cms/http.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
+
+#include <ydb/core/driver_lib/version/version.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>

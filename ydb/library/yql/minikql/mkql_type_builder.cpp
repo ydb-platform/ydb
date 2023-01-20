@@ -1510,12 +1510,14 @@ void TFunctionTypeInfoBuilder::Unused2() {
 void TFunctionTypeInfoBuilder::Unused3() {
 }
 
-void TFunctionTypeInfoBuilder::SupportsBlocks() {
+NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::SupportsBlocks() {
     SupportsBlocks_ = true;
+    return *this;
 }
 
-void TFunctionTypeInfoBuilder::IsStrict() {
+NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::IsStrict() {
     IsStrict_ = true;
+    return *this;
 }
 
 bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {

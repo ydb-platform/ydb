@@ -177,6 +177,9 @@ namespace NUdf {
 #define SIMPLE_UDF(udfName, signature) \
     UDF(udfName, builder.SimpleSignature<signature>();)
 
+#define SIMPLE_STRICT_UDF(udfName, signature) \
+    UDF(udfName, builder.SimpleSignature<signature>().IsStrict();)
+
 #define SIMPLE_UDF_WITH_IR(udfName, signature, irResourceId, irFunctionName) \
     UDF_IMPL(udfName, builder.SimpleSignature<signature>();, ;, ;, irResourceId, irFunctionName)
 

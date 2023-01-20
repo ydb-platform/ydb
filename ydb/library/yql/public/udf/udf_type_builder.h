@@ -638,8 +638,8 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
 class IFunctionTypeInfoBuilder15: public IFunctionTypeInfoBuilder14 {
 public:
-    virtual void SupportsBlocks() = 0;
-    virtual void IsStrict() = 0;
+    virtual IFunctionTypeInfoBuilder15& SupportsBlocks() = 0;
+    virtual IFunctionTypeInfoBuilder15& IsStrict() = 0;
 };
 #endif
 

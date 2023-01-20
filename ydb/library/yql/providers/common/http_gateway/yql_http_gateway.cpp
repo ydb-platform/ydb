@@ -731,6 +731,7 @@ private:
     void Download(
         TString url,
         THeaders headers,
+        size_t offset,
         size_t sizeLimit,
         TOnResult callback,
         TString data,
@@ -748,7 +749,7 @@ private:
             if (easy->AddCallback(callback))
                 return;
 
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), 0U, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig);
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig);
         entry = easy;
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);

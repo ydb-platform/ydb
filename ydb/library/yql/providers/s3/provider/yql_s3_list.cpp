@@ -150,6 +150,7 @@ private:
                             url,
                             std::move(headers),
                             0U,
+                            0U,
                             std::bind(&OnDiscovery,
                                       IHTTPGateway::TWeakPtr(gateway),
                                       std::placeholders::_1,
@@ -245,6 +246,7 @@ private:
         Gateway->Download(
             url,
             std::move(headers),
+            0U,
             0U,
             std::bind(&OnDiscovery,
                       IHTTPGateway::TWeakPtr(Gateway),

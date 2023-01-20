@@ -76,6 +76,7 @@ public:
     virtual void Download(
         TString url,
         THeaders headers,
+        std::size_t offset,
         std::size_t sizeLimit,
         TOnResult callback,
         TString data = {},

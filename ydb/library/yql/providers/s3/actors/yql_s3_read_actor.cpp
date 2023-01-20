@@ -308,7 +308,7 @@ public:
         auto id = index + StartPathIndex;
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
-        Gateway->Download(url, MakeHeaders(Token, requestId), std::min(std::get<size_t>(path), SizeLimit),
+        Gateway->Download(url, MakeHeaders(Token, requestId), 0U, std::min(std::get<size_t>(path), SizeLimit),
             std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id), {}, RetryPolicy);
     }
 

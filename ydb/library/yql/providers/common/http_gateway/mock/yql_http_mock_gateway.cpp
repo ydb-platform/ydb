@@ -48,6 +48,7 @@ public:
     void Download(
             TString url,
             THeaders headers,
+            std::size_t offset,
             std::size_t sizeLimit,
             TOnResult callback,
             TString data,
@@ -55,6 +56,7 @@ public:
     {
 
         Y_UNUSED(sizeLimit);
+        Y_UNUSED(offset);
         Y_UNUSED(retryPolicy);
 
         auto key = TKeyType(url, headers, data);

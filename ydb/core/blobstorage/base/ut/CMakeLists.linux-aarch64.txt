@@ -43,7 +43,7 @@ set_property(
   ydb-core-blobstorage-base-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 add_yunittest(
   NAME
@@ -62,7 +62,7 @@ set_yunittest_property(
   ydb-core-blobstorage-base-ut
   PROPERTY
   LABELS
-  MEDIUM
+  SMALL
 )
 set_yunittest_property(
   TEST
@@ -70,12 +70,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-base-ut
-  PROPERTY
-  TIMEOUT
-  600
 )
 vcs_info(ydb-core-blobstorage-base-ut)

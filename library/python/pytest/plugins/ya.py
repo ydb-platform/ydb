@@ -617,19 +617,9 @@ def colorize(longrepr):
             return io.getvalue().strip()
         return yatest_lib.tools.to_utf8(longrepr)
 
+    # Use arcadia style colorization
     text = yatest_lib.tools.to_utf8(longrepr)
-    pos = text.find("E   ")
-    if pos == -1:
-        return text
-
-    bt, error = text[:pos], text[pos:]
-    filters = [
-        # File path, line number and function name
-        (re.compile(r"^(.*?):(\d+): in (\S+)", flags=re.MULTILINE), r"[[unimp]]\1[[rst]]:[[alt2]]\2[[rst]]: in [[alt1]]\3[[rst]]"),
-    ]
-    for regex, substitution in filters:
-        bt = regex.sub(substitution, bt)
-    return "{}[[bad]]{}".format(bt, error)
+    return tools.colorize_pytest_error(text)
 
 
 class TestItem(object):

@@ -415,8 +415,7 @@ public:
     }
 
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
-        TlsActivationContext->Send(new IEventHandle(Owner, SelfId(), ev->Release().Release(), ev->Flags, ev->Cookie,
-                                    nullptr, std::move(ev->TraceId)));
+        QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
         Cleanup();
     }
 

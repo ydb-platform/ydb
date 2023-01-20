@@ -39,7 +39,7 @@ set_property(
   ydb-core-erasure-ut_perf
   PROPERTY
   SPLIT_FACTOR
-  30
+  1
 )
 add_yunittest(
   NAME
@@ -66,12 +66,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-erasure-ut_perf
-  PROPERTY
-  TIMEOUT
-  60
 )
 vcs_info(ydb-core-erasure-ut_perf)

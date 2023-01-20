@@ -79,6 +79,17 @@ downcase_identifier(const char *ident, int len, bool warn, bool truncate)
 	return result;
 }
 
+char *
+copy_identifier(const char *ident, int len)
+{
+    char	   *result;
+
+    result = palloc(len + 1);
+    memcpy(result, ident, len);
+    result[len] = '\0';
+
+    return result;
+}
 
 /*
  * truncate_identifier() --- truncate an identifier to NAMEDATALEN-1 bytes.

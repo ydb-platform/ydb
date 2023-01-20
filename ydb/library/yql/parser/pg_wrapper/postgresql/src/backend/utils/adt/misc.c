@@ -767,7 +767,7 @@ parse_ident(PG_FUNCTION_ARGS)
 			 * being too long. It's easy enough for the user to get the
 			 * truncated names by casting our output to name[].
 			 */
-			downname = downcase_identifier(curname, len, false, false);
+			downname = copy_identifier(curname, len);
 			part = cstring_to_text_with_len(downname, len);
 			astate = accumArrayResult(astate, PointerGetDatum(part), false,
 									  TEXTOID, CurrentMemoryContext);

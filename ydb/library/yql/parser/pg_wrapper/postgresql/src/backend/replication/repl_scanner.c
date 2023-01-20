@@ -1516,7 +1516,7 @@ YY_RULE_SETUP
 {
 					int len = strlen(yytext);
 
-					yylval.str = downcase_identifier(yytext, len, false, false);
+					yylval.str = copy_identifier(yytext, len);
 					return IDENT;
 				}
 	YY_BREAK

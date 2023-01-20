@@ -20,6 +20,8 @@ extern char *downcase_truncate_identifier(const char *ident, int len,
 extern char *downcase_identifier(const char *ident, int len,
 								 bool warn, bool truncate);
 
+extern char * copy_identifier(const char *ident, int len);
+
 extern void truncate_identifier(char *ident, int len, bool warn);
 
 extern bool scanner_isspace(char ch);

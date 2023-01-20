@@ -314,6 +314,16 @@ public:
         TBase::Init();
     }
 
+    explicit TRobinHoodHashMap(ui32 payloadSize, const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
+        : TBase(initialCapacity, hash, equal)
+        , CellSize(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
+        , PayloadSize(payloadSize)
+    {
+        TmpPayload.resize(PayloadSize);
+        TmpPayload2.resize(PayloadSize);
+        TBase::Init();
+    }
+
     ui32 GetCellSize() const {
         return CellSize;
     }
@@ -367,6 +377,13 @@ public:
         TBase::Init();
     }
 
+    explicit TRobinHoodHashFixedMap(const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
+        : TBase(initialCapacity, hash, equal)
+    {
+        TBase::Init();
+    }
+
+
     ui32 GetCellSize() const {
         return sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + sizeof(TPayload);
     }
@@ -403,7 +420,7 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashSet(ui64 initialCapacity, THash hash, TEqual equal)
+    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)
         : TBase(initialCapacity, hash, equal) {
         TBase::Init();
     }

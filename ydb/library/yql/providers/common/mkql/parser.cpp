@@ -354,6 +354,7 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
     if (auto extraColumnsSetting = GetSetting(wrapper.Settings().Cast().Ref(), "extraColumns")) {
         extraColumns = MkqlBuildExpr(extraColumnsSetting->Tail(), ctx);
         extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        MKQL_ENSURE(extraType->GetItems(), "Extra column type must not be an empty struct");
     }
 
     std::unordered_map<TString, ui32> metadataColumns;

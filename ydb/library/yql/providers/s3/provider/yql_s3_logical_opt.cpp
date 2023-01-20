@@ -170,6 +170,7 @@ public:
         AddHandler(0, &TDqSourceWrap::Match, HNDL(ApplyPrunedPath));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSource));
         AddHandler(0, &TDqSourceWrap::Match, HNDL(MergeS3Paths));
+        AddHandler(0, &TDqSourceWrap::Match, HNDL(CleanupExtraColumns));
 #undef HNDL
     }
 
@@ -637,6 +638,33 @@ public:
             .Input(sourceSettings)
             .Settings(newSettings)
             .Done();
+    }
+
+    TMaybeNode<TExprBase> CleanupExtraColumns(TExprBase node, TExprContext& ctx) const {
+        const TDqSourceWrap dqSource = node.Cast<TDqSourceWrap>();
+        if (dqSource.DataSource().Category() != S3ProviderName) {
+            return node;
+        }
+
+        TMaybeNode<TExprBase> settings = dqSource.Settings();
+        if (!settings) {
+            return node;
+        }
+
+        if (auto extraColumnsSetting = GetSetting(settings.Cast().Ref(), "extraColumns")) {
+            const TStructExprType* extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            auto extraTypeItems = extraType->GetItems();
+            if (!extraTypeItems) {
+                auto newSettings =  TExprBase(RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx));
+                return Build<TDqSourceWrap>(ctx, dqSource.Pos())
+                    .InitFrom(dqSource)
+                    .Settings(newSettings)
+                    .Done();
+            }
+        }
+
+        return node;
+
     }
 
 private:

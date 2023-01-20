@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
         alterAndCheck(5);
         alterAndCheck(10);
         alterAndCheck(15);
-        ydbDriver = nullptr;
+        ydbDriver->Stop(true);
     }
 
     Y_UNIT_TEST(NoMapping) {
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
         alterAndCheck(2);
         alterAndCheck(4);
         alterAndCheck(12);
-//        ydbDriver = nullptr;
+        ydbDriver->Stop(true);
     }
 }
 

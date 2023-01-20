@@ -363,9 +363,10 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvResolve::TPtr Ev; // original resolve request
             ui32 NumRangesInFlight;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs = {};
-            std::vector<std::tuple<TLogoBlobID, TLogoBlobID>> Errors = {};
+            std::vector<TKey> ResolutionErrors = {};
+            std::deque<TKey> DropNodataBlobs = {};
         };
-        ui64 LastRangeId = 0;
+        ui64 LastResolveQueryId = 0;
         THashMap<ui64, TResolveDecommitContext> ResolveDecommitContexts;
 
         class TTxIssueGC;
@@ -456,7 +457,7 @@ namespace NKikimr::NBlobDepot {
         void AddLoadSkip(TKey key);
         void AddDataOnLoad(TKey key, TString value, bool uncertainWrite, bool skip);
         bool AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
-            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie, bool suppressLoadedCheck = false);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
@@ -501,6 +502,10 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);
+        void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+
+        template<typename TCallback>
+        void HandleResolutionResult(ui64 id, TCallback&& callback);
 
         ui64 GetTotalStoredDataSize() const {
             return TotalStoredDataSize;

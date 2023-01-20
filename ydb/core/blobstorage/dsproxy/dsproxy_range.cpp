@@ -26,8 +26,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     const bool Decommission;
     TInstant StartTime;
 
-    TAutoPtr<TEvBlobStorage::TEvRangeResult> Reply;
-
     TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus;
     TBlobStorageGroupInfo::TGroupVDisks FailedDisks;
 
@@ -285,7 +283,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
             Y_VERIFY(response.Id == BlobsToGet[i].BlobId);
 
             if (getResult.Responses[i].Status == NKikimrProto::OK) {
-                result->Responses.emplace_back(response.Id, response.Buffer);
+                result->Responses.emplace_back(response.Id, std::move(response.Buffer), response.Keep, response.DoNotKeep);
             } else if (getResult.Responses[i].Status != NKikimrProto::NODATA || BlobsToGet[i].RequiredToBePresent) {
                 // it's okay to get NODATA if blob wasn't confirmed -- this blob is simply thrown out of resulting
                 // set; otherwise we return error about lost data

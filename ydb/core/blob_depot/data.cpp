@@ -352,8 +352,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
-            NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        Y_VERIFY_S(Loaded || IsKeyLoaded(TKey(blob.Id)), "Id# " << Self->GetLogId() << " Blob# " << blob.ToString());
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie, bool suppressLoadedCheck) {
+        Y_VERIFY_S(suppressLoadedCheck || Loaded || IsKeyLoaded(TKey(blob.Id)), "Id# " << Self->GetLogId()
+            << " Blob# " << blob.ToString());
 
         return UpdateKey(TKey(blob.Id), txc, cookie, "AddDataOnDecommit", [&](TValue& value, bool inserted) {
             bool change = inserted;

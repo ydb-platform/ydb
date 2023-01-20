@@ -1788,9 +1788,11 @@ struct TEvBlobStorage {
             TResponse()
             {}
 
-            TResponse(const TLogoBlobID &id, const TString &x)
+            TResponse(const TLogoBlobID &id, const TString &x, bool keep = false, bool doNotKeep = false)
                 : Id(id)
                 , Buffer(x)
+                , Keep(keep)
+                , DoNotKeep(doNotKeep)
             {}
         };
 

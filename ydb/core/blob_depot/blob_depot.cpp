@@ -88,7 +88,7 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Data->Handle);
-                hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
+                hFunc(TEvBlobStorage::TEvGetResult, Data->Handle);
 
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);

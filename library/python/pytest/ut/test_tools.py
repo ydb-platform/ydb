@@ -80,6 +80,7 @@ def test_split_node_id_with_test_suffix(parameters, node_id, expected_class_name
         ("/arcadia/data/b/a/test.py::test_b_a", "b.a.test.py", "test_b_a"),
         ("/arcadia/data/a/test.py::test_a", "a.test.py", "test_a"),
         ("/arcadia/data/test.py::test", "test.py", "test"),
+        ("b/a/test.py::test_b_a", "b.a.test.py", "test_b_a"),
     ],
 )
 def test_path_resolving_for_local_conftest_load_policy(

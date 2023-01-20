@@ -366,7 +366,9 @@ def _unify_path(path):
         assert path.endswith(py_ext), path
         parts = path[:-len(py_ext)].split(SEP)
 
-        for p in reversed(parts):
+        # Use SEP as trailing terminator to make an extra step
+        # and find a proper match when parts is a full matching path
+        for p in reversed([SEP] + parts):
             if p in node:
                 node = node[p]
                 res.append(p)

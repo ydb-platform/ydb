@@ -42,7 +42,7 @@ set_property(
   ydb-core-io_formats-ut
   PROPERTY
   SPLIT_FACTOR
-  60
+  1
 )
 add_yunittest(
   NAME
@@ -61,7 +61,7 @@ set_yunittest_property(
   ydb-core-io_formats-ut
   PROPERTY
   LABELS
-  MEDIUM
+  SMALL
 )
 set_yunittest_property(
   TEST
@@ -69,12 +69,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-io_formats-ut
-  PROPERTY
-  TIMEOUT
-  600
 )
 vcs_info(ydb-core-io_formats-ut)

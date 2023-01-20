@@ -210,12 +210,8 @@ public:
             return TStatus::Error;
         }
 
-        if (TS3ReadObject::Match(input->Child(TS3ReadObject::idx_Object))) {
+        if (!TS3Object::Match(input->Child(TS3ReadObject::idx_Object))) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ReadObject::idx_Object)->Pos()), "Expected S3 object."));
-            return TStatus::Error;
-        }
-
-        if (!EnsureType(*input->Child(TS3ReadObject::idx_RowType), ctx)) {
             return TStatus::Error;
         }
 
@@ -227,6 +223,34 @@ public:
         const TTypeAnnotationNode* rowType = rowTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         if (!EnsureStructType(rowTypeNode.Pos(), *rowType, ctx)) {
             return TStatus::Error;
+        }
+
+        {
+            THashSet<TStringBuf> columns;
+            const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+            for (const TItemExprType* item : structRowType->GetItems()) {
+                columns.emplace(item->GetName());
+            }
+
+            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            if (TMaybeNode<TExprBase> settings = s3Object.Settings()) {
+                for (auto& settingNode : settings.Raw()->ChildrenList()) {
+                    const TStringBuf name = settingNode->Head().Content();
+                    if (name == "partitionedby"sv) {
+                        for (size_t i = 1; i < settingNode->ChildrenSize(); ++i) {
+                            const auto& column = settingNode->Child(i);
+                            if (!EnsureAtom(*column, ctx)) {
+                                return TStatus::Error;
+                            }
+                            columns.erase(column->Content());
+                        }
+                        if (columns.empty()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Table contains no columns except partitioning columns"));
+                            return TStatus::Error;
+                        }
+                    }
+                }
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{

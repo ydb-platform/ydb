@@ -1461,7 +1461,7 @@ namespace NKikimr::NDataStreams::V1 {
                 auto record = Result.add_records();
                 record->set_data(proto.GetData());
                 record->set_timestamp(r.GetCreateTimestampMS());
-                record->set_encryption(Ydb::DataStreams::V1::EncryptionType::NONE);
+                record->set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
                 record->set_partition_key(r.GetPartitionKey());
                 record->set_sequence_number(std::to_string(r.GetOffset()).c_str());
                 if (proto.GetCodec() > 0) {

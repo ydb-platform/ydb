@@ -70,7 +70,7 @@ message Record {
     // Data blob
     bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     // Encryption type used on record
-    EncryptionType encryption = 3;
+    EncryptionType encryption_type = 3;
     // Identifies shard in the stream the record is assigned to
     string partition_key = 4;
     // Unique id of the record within shard

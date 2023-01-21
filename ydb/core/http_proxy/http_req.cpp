@@ -478,7 +478,8 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body);
+                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body,
+                                HttpContext.ContentType == MIME_CBOR);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ReportLatencyCounters(ctx);
@@ -792,10 +793,41 @@ namespace NKikimr::NHttpProxy {
     }
 
     TString THttpResponseData::DumpBody(MimeTypes contentType) {
+        // according to https://json.nlohmann.me/features/binary_formats/cbor/#serialization
+        auto cborBinaryTagBySize = [](size_t size) -> ui8 {
+            if (size <= 23) {
+                return 0x40 + static_cast<ui32>(size);
+            } else if (size <= 255) {
+                return 0x58;
+            } else if (size <= 65536) {
+                return 0x59;
+            }
+
+            return 0x5A;
+        };
         switch (contentType) {
         case MIME_CBOR: {
+            bool gotData = false;
+            std::function<bool(int, nlohmann::json::parse_event_t, nlohmann::basic_json<>&)> bz =
+                [&gotData, &cborBinaryTagBySize](int, nlohmann::json::parse_event_t event, nlohmann::json& parsed) {
+                    if (event == nlohmann::json::parse_event_t::key and parsed == nlohmann::json("Data")) {
+                        gotData = true;
+                        return true;
+                    }
+                    if (event == nlohmann::json::parse_event_t::value and gotData) {
+                        gotData = false;
+                        std::string data = parsed.get<std::string>();
+                        parsed = nlohmann::json::binary({data.begin(), data.end()},
+                                                        cborBinaryTagBySize(data.size()));
+                        return true;
+                    }
+                    return true;
+                };
+
             auto toCborStr = NJson::WriteJson(Body, false);
-            auto toCbor = nlohmann::json::to_cbor(nlohmann::json::parse(toCborStr, nullptr, false));
+            auto json =
+                nlohmann::json::parse(TStringBuf(toCborStr).begin(), TStringBuf(toCborStr).end(), bz, false);
+            auto toCbor = nlohmann::json::to_cbor(json);
             return {(char*)&toCbor[0], toCbor.size()};
         }
         default: {

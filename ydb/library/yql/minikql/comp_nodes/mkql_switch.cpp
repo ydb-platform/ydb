@@ -1,4 +1,5 @@
 #include "mkql_switch.h"
+#include "mkql_llvm_base.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
@@ -32,6 +33,7 @@ using TSwitchHandlersList = std::vector<TSwitchHandler, TMKQLAllocator<TSwitchHa
 class TState : public TComputationValue<TState> {
     typedef TComputationValue<TState> TBase;
 public:
+    using TLLVMBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     TState(TMemoryUsageInfo* memInfo, ui32 size)
         : TBase(memInfo), ChildReadIndex(size)
     {}
@@ -40,12 +42,57 @@ public:
     NUdf::EFetchStatus InputStatus = NUdf::EFetchStatus::Ok;
 };
 
+#ifndef MKQL_DISABLE_CODEGEN
+class TLLVMFieldsStructureForState: public TState::TLLVMBase {
+private:
+    using TBase = TState::TLLVMBase;
+    llvm::IntegerType* IndexType;
+    llvm::IntegerType* StatusType;
+    const ui32 FieldsCount = 0;
+protected:
+    using TBase::Context;
+    ui32 GetFieldsCount() const {
+        return FieldsCount;
+    }
+
+    std::vector<llvm::Type*> GetFields() {
+        std::vector<llvm::Type*> result = TBase::GetFields();
+        result.emplace_back(IndexType);     // index
+        result.emplace_back(StatusType);    // status
+
+        return result;
+    }
+
+public:
+    std::vector<llvm::Type*> GetFieldsArray() {
+        return GetFields();
+    }
+
+    llvm::Constant* GetIndex() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+    }
+
+    llvm::Constant* GetStatus() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+    }
+
+    TLLVMFieldsStructureForState(llvm::LLVMContext& context)
+        : TBase(context)
+        , IndexType(Type::getInt32Ty(context))
+        , StatusType(Type::getInt32Ty(context)) 
+        , FieldsCount(GetFields().size())
+    {
+    }
+};
+#endif
+
 template <bool IsInputVariant, bool TrackRss>
 class TSwitchFlowWrapper : public TStatefulFlowCodegeneratorNode<TSwitchFlowWrapper<IsInputVariant, TrackRss>> {
     typedef TStatefulFlowCodegeneratorNode<TSwitchFlowWrapper<IsInputVariant, TrackRss>> TBaseComputation;
 private:
     class TFlowState : public TState {
     public:
+        using TLLVMBase = TLLVMFieldsStructureForState;
         TFlowState(TMemoryUsageInfo* memInfo, TAlignedPagePool& pool, ui32 size)
             : TState(memInfo, size), Buffer(pool)
         {}
@@ -178,6 +225,35 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
 private:
+    class TLLVMFieldsStructureForFlowState: public TFlowState::TLLVMBase {
+    private:
+        using TBase = typename TFlowState::TLLVMBase;
+        llvm::PointerType* StructPtrType;
+        llvm::IntegerType* IndexType;
+    protected:
+        using TBase::Context;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFields();
+            result.emplace_back(IndexType);     // position
+            result.emplace_back(StructPtrType); // buffer
+            return result;
+        }
+
+        llvm::Constant* GetPosition() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        }
+
+        llvm::Constant* GetBuffer() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        }
+
+        TLLVMFieldsStructureForFlowState(llvm::LLVMContext& context)
+            : TBase(context)
+            , StructPtrType(PointerType::getUnqual(StructType::get(context)))
+            , IndexType(Type::getInt32Ty(context)) {
+        }
+    };
     Function* GenerateHandler(ui32 i, const NYql::NCodegen::ICodegen::TPtr& codegen) const {
         auto& module = codegen->GetModule();
         auto& context = codegen->GetContext();
@@ -203,17 +279,8 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            indexType,                  // index
-            statusType,                 // status
-            indexType,                  // position
-            structPtrType               // buffer
-        });
+        TLLVMFieldsStructureForFlowState fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
         auto block = main;
@@ -225,7 +292,7 @@ private:
         const auto state = new LoadInst(statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto posPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 7)}, "pos_ptr", block);
+        const auto posPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetPosition() }, "pos_ptr", block);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -299,17 +366,8 @@ public:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            indexType,                  // index
-            statusType,                 // status
-            indexType,                  // position
-            structPtrType               // buffer
-        });
+        TLLVMFieldsStructureForFlowState fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
@@ -335,7 +393,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 5)}, "index_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetIndex() }, "index_ptr", block);
 
         BranchInst::Create(more, block);
 
@@ -358,7 +416,7 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 6)}, "last", block);
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
 
             const auto last = new LoadInst(statusPtr, "last", block);
 
@@ -559,6 +617,8 @@ private:
 
     class TValueBase : public TState {
     public:
+        using TLLVMBase = TLLVMFieldsStructureForState;
+
         void Add(NUdf::TUnboxedValue&& item) {
             Buffer.Add(std::move(item));
         }
@@ -705,6 +765,22 @@ private:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
+    class TLLVMFieldsStructureForValueBase: public TValueBase::TLLVMBase {
+    private:
+        using TBase = typename TValueBase::TLLVMBase;
+    protected:
+        using TBase::Context;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFields();
+            return result;
+        }
+
+        TLLVMFieldsStructureForValueBase(llvm::LLVMContext& context)
+            : TBase(context) {
+        }
+    };
+
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         SwitchFunc = GenerateSwitch(codegen);
         codegen->ExportSymbol(SwitchFunc);
@@ -730,16 +806,8 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            indexType,                  // index
-            statusType,                 // status
-            structPtrType               // buffer
-        });
+        TLLVMFieldsStructureForValueBase fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, false);
 
@@ -757,7 +825,7 @@ private:
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
         auto block = main;
 
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 5)}, "index_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetIndex() }, "index_ptr", block);
 
         const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", block);
         new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
@@ -784,7 +852,7 @@ private:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 6)}, "last", block);
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
 
             const auto last = new LoadInst(statusPtr, "last", block);
 

@@ -32,6 +32,8 @@ target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp

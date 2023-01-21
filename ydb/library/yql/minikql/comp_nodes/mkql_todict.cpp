@@ -1,4 +1,5 @@
 #include "mkql_todict.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_list_adapter.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
@@ -814,6 +815,32 @@ private:
     bool UseIHash;
 };
 
+#ifndef MKQL_DISABLE_CODEGEN
+template <class TLLVMBase>
+class TLLVMFieldsStructureStateWithAccum: public TLLVMBase {
+private:
+    using TBase = TLLVMBase;
+    llvm::PointerType* StructPtrType;
+protected:
+    using TBase::Context;
+public:
+    std::vector<llvm::Type*> GetFieldsArray() {
+        std::vector<llvm::Type*> result = TBase::GetFields();
+        result.emplace_back(StructPtrType); //accumulator
+        return result;
+    }
+
+    llvm::Constant* GetAccumulator() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+    }
+
+    TLLVMFieldsStructureStateWithAccum(llvm::LLVMContext& context)
+        : TBase(context)
+        , StructPtrType(PointerType::getUnqual(StructType::get(context))) {
+    }
+};
+#endif
+
 template <typename TSetAccumulator>
 class TSqueezeSetFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>>;
@@ -821,6 +848,7 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
+        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
             : TBase(memInfo), SetAccum(std::move(setAccum)) {}
 
@@ -879,14 +907,8 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            structPtrType               // accumulator
-        });
+        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
@@ -1006,6 +1028,7 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
+        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
             : TBase(memInfo), SetAccum(std::move(setAccum)) {}
 
@@ -1070,14 +1093,8 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            structPtrType               // accumulator
-        });
+        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
@@ -1329,6 +1346,7 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
+        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
             : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
 
@@ -1389,15 +1407,8 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            structPtrType               // accumulator
-        });
+        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
@@ -1522,6 +1533,7 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
+        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
             : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
 
@@ -1590,14 +1602,8 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            structPtrType               // accumulator
-        });
+        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 

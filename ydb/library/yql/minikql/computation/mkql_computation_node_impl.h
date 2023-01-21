@@ -1031,7 +1031,11 @@ private:
     using TBase = TComputationValueBase<TDerived, TBaseExt>;
 protected:
     inline TMemoryUsageInfo* GetMemInfo() const {
+#ifndef NDEBUG
         return static_cast<TMemoryUsageInfo*>(M_.MemInfo);
+#else
+        return nullptr;
+#endif
     }
     using TWithMiniKQLAlloc<MemoryPool>::AllocWithSize;
     using TWithMiniKQLAlloc<MemoryPool>::FreeWithSize;
@@ -1039,17 +1043,25 @@ public:
     template <typename... Args>
     TComputationValueImpl(TMemoryUsageInfo* memInfo, Args&&... args)
         : TBase(std::forward<Args>(args)...) {
+#ifndef NDEBUG
         M_.MemInfo = memInfo;
         MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived), __MKQL_LOCATION__);
+#else
+        Y_UNUSED(memInfo);
+#endif
     }
 
     ~TComputationValueImpl() {
+#ifndef NDEBUG
         MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
+#endif
     }
 private:
+#ifndef NDEBUG
     struct {
         void* MemInfo; // used for tracking memory usage during execution
     } M_;
+#endif
 };
 
 template <typename TDerived, typename TBaseExt = NUdf::IBoxedValue>

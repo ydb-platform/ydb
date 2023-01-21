@@ -1,4 +1,5 @@
 #include "mkql_join.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
@@ -1186,13 +1187,8 @@ public:
         new StoreInst(initV, values, atTop);
         new StoreInst(initF, fields, atTop);
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-        });
+        TLLVMFieldsStructure<TComputationValue<TNull>> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 

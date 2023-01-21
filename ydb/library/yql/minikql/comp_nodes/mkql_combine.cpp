@@ -1,4 +1,5 @@
 #include "mkql_combine.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -67,16 +68,16 @@ struct TCombineCoreNodes {
     }
 };
 
-class TState : public TComputationValue<TState> {
-using TBase = TComputationValue<TState>;
-using TStateMap = std::unordered_map<
-    NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod,
-    THashFunc, TEqualsFunc,
-    TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod>>>;
+class TState: public TComputationValue<TState> {
+    using TBase = TComputationValue<TState>;
+    using TStateMap = std::unordered_map<
+        NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod,
+        THashFunc, TEqualsFunc,
+        TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod>>>;
 public:
+    using TLLVMBase = TLLVMFieldsStructure<TBase>;
     TState(TMemoryUsageInfo* memInfo, const THashFunc& hash, const TEqualsFunc& equal)
-        : TBase(memInfo), States(0, hash, equal)
-    {
+        : TBase(memInfo), States(0, hash, equal) {
         States.max_load_factor(1.2f);
     }
 
@@ -120,6 +121,39 @@ public:
 private:
     TStateMap States;
 };
+
+#ifndef MKQL_DISABLE_CODEGEN
+class TLLVMFieldsStructureState: public TState::TLLVMBase {
+private:
+    using TBase = typename TState::TLLVMBase;
+    llvm::PointerType* StructPtrType;
+    llvm::IntegerType* StatusType;
+protected:
+    using TBase::Context;
+public:
+    std::vector<llvm::Type*> GetFieldsArray() {
+        std::vector<llvm::Type*> result = TBase::GetFields();
+        result.emplace_back(StatusType);    // status
+        result.emplace_back(StructPtrType); // map
+
+        return result;
+    }
+
+    llvm::Constant* GetStatus() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+    }
+
+    llvm::Constant* GetMap() {
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+    }
+
+    TLLVMFieldsStructureState(llvm::LLVMContext& context)
+        : TBase(context)
+        , StructPtrType(PointerType::getUnqual(StructType::get(context)))
+        , StatusType(Type::getInt32Ty(context)) {
+    }
+};
+#endif
 
 template <bool IsMultiRowState, bool StateContainerOpt, bool TrackRss>
 class TCombineCoreFlowWrapper: public std::conditional_t<IsMultiRowState,
@@ -227,15 +261,8 @@ public:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            statusType,                 // status
-            structPtrType               // map
-        });
+        TLLVMFieldsStructureState fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
@@ -290,7 +317,7 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 5)}, "last", block);
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
 
             const auto last = new LoadInst(statusPtr, "last", block);
 
@@ -702,15 +729,10 @@ private:
         const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            statusType,                 // status
-            structPtrType               // map
-        });
+
+        TLLVMFieldsStructureState fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
+
         const auto statePtrType = PointerType::getUnqual(stateType);
         const auto funcType = IsMultiRowState ?
             FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType, ptrValueType}, false):
@@ -791,7 +813,7 @@ private:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 5)}, "last", block);
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
 
             const auto last = new LoadInst(statusPtr, "last", block);
 

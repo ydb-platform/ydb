@@ -29,6 +29,8 @@ target_link_options(packer PRIVATE
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(packer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/packer/packer.cpp

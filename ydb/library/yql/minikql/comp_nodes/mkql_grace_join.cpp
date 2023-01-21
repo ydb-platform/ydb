@@ -1,5 +1,6 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -638,14 +639,8 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         new StoreInst(initV, values, atTop);
         new StoreInst(initF, fields, atTop);
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            // ....
-        });
+        TLLVMFieldsStructure<TComputationValue<TNull>> fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 

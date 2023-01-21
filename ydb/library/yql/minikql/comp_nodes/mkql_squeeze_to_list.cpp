@@ -1,5 +1,5 @@
-
 #include "mkql_squeeze_to_list.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -10,21 +10,22 @@ namespace NMiniKQL {
 
 namespace {
 
-class TSqueezeToListWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper> {
-using TBase = TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper>;
+class TSqueezeToListWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper> {
+    using TBase = TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper>;
 public:
-    class TState : public TComputationValue<TState> {
+    class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
+        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, ui64 limit)
-            : TBase(memInfo), Limit(limit)
-        {}
+            : TBase(memInfo), Limit(limit) {
+        }
 
         NUdf::TUnboxedValuePod Pull(TComputationContext& ctx) {
             if (Accumulator.empty())
                 return ctx.HolderFactory.GetEmptyContainer();
 
-            NUdf::TUnboxedValue *items = nullptr;
+            NUdf::TUnboxedValue* items = nullptr;
             const auto list = ctx.HolderFactory.CreateDirectArrayHolder(Accumulator.size(), items);
             std::move(Accumulator.begin(), Accumulator.end(), items);
             Accumulator.clear();
@@ -42,8 +43,8 @@ public:
 
     TSqueezeToListWrapper(TComputationMutables& mutables, IComputationNode* flow, IComputationNode* limit)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
-        , Flow(flow), Limit(limit)
-    {}
+        , Flow(flow), Limit(limit) {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
@@ -63,21 +64,34 @@ public:
         }
         Y_UNREACHABLE();
     }
+
 #ifndef MKQL_DISABLE_CODEGEN
+    class TLLVMFieldsStructureForState: public TState::TLLVMBase {
+    private:
+        using TBase = typename TState::TLLVMBase;
+        llvm::PointerType* StructPtrType;
+    protected:
+        using TBase::Context;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFields();
+            return result;
+        }
+
+        TLLVMFieldsStructureForState(llvm::LLVMContext& context)
+            : TBase(context)
+            , StructPtrType(PointerType::getUnqual(StructType::get(context))) {
+        }
+    };
+
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        const auto stateType = StructType::get(context, {
-            structPtrType,              // vtbl
-            Type::getInt32Ty(context),  // ref
-            Type::getInt16Ty(context),  // abi
-            Type::getInt16Ty(context),  // reserved
-            structPtrType,              // meminfo
-            structPtrType               // accumulator
-        });
+        TLLVMFieldsStructureForState fieldsStruct(context);
+        const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 

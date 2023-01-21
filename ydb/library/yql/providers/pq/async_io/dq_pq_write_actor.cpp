@@ -197,9 +197,14 @@ public:
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;
+            EgressBytes = stateProto.GetEgressBytes();
             return;
         }
         ythrow yexception() << "Invalid state version " << data.GetVersion();
+    }
+
+    ui64 GetEgressBytes() override {
+        return EgressBytes;
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -307,6 +312,7 @@ private:
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
+        stateProto.SetEgressBytes(EgressBytes);
         TString serializedState;
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
@@ -321,7 +327,9 @@ private:
     void WriteNextMessage(NYdb::NPersQueue::TContinuationToken&& token) {
         SINK_LOG_T("Write data: \"" << Buffer.front() << "\" with seq no " << NextSeqNo);
         WriteSession->Write(std::move(token), Buffer.front(), NextSeqNo++);
-        WaitingAcks.push(GetItemSize(Buffer.front()));
+        auto itemSize = GetItemSize(Buffer.front());
+        WaitingAcks.push(itemSize);
+        EgressBytes += itemSize;
         Buffer.pop();
     }
 
@@ -400,6 +408,7 @@ private:
     const TString LogPrefix;
     i64 FreeSpace = 0;
     bool Finished = false;
+    ui64 EgressBytes = 0;
 
     NYdb::NPersQueue::TPersQueueClient PersQueueClient;
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> WriteSession;

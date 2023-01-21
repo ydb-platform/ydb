@@ -159,6 +159,7 @@ public:
         }
 
         stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
+        stateProto.SetIngressBytes(IngressBytes);
 
         TString stateBlob;
         YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
@@ -173,6 +174,7 @@ public:
 
     void LoadState(const NDqProto::TSourceState& state) override {
         TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
+        ui64 ingressBytes = 0;
         for (const auto& stateData : state.GetData()) {
             const auto& data = stateData.GetStateData();
             if (data.GetVersion() == StateVersion) { // Current version
@@ -189,11 +191,13 @@ public:
                     }
                 }
                 minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
+                ingressBytes += stateProto.GetIngressBytes();
             } else {
                 ythrow yexception() << "Invalid state version " << data.GetVersion();
             }
         }
         StartingMessageTimestamp = minStartingMessageTs;
+        IngressBytes = ingressBytes;
         InitWatermarkTracker();
 
         if (ReadSession) {
@@ -208,6 +212,10 @@ public:
             DeferredCommits.front().second.Commit();
             DeferredCommits.pop();
         }
+    }
+
+    ui64 GetIngressBytes() override {
+        return IngressBytes;
     }
 
     ui64 GetInputIndex() const override {
@@ -433,7 +441,7 @@ private:
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
             for (const auto& message : event.GetMessages()) {
                 const TString& data = message.GetData();
-
+                Self.IngressBytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
                 SRC_LOG_T("Data received: " << message.DebugString(true));
 
@@ -551,6 +559,7 @@ private:
     NThreading::TFuture<void> EventFuture;
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     TInstant StartingMessageTimestamp;
+    ui64 IngressBytes = 0;
     const NActors::TActorId ComputeActorId;
     std::queue<std::pair<ui64, NYdb::NPersQueue::TDeferredCommit>> DeferredCommits;
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;

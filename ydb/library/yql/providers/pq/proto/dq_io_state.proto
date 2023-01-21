@@ -7,6 +7,7 @@ message TDqPqTopicSourceState {
     repeated TTopicDescription Topics = 1;
     repeated TPartitionReadState Partitions = 2;
     uint64 StartingMessageTimestampMs = 3; // StartingMessageTimestamp in ms for ReadSession settings
+    uint64 IngressBytes = 4;
 
     message TTopicDescription {
         string DatabaseId = 1;
@@ -26,4 +27,5 @@ message TDqPqTopicSourceState {
 message TDqPqTopicSinkState {
     string SourceId = 1;
     uint64 ConfirmedSeqNo = 2;
+    uint64 EgressBytes = 3;
 }

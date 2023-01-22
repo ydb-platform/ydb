@@ -1643,63 +1643,6 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"kind", "kind2"} }}, TTenantsManager::COUNTER_REGISTERED_UNITS, 1);
     }
 
-    Y_UNIT_TEST(TestRegisterComputationalUnitsForRunning) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 1}},
-                          SLOT1_TYPE, ZONE1, 1);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 1, 1, 1}}});
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                                  {{ {"host1", 1, "kind1"},
-                                     {"host2", 2, "kind2"} }},
-                                  {});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 1, 1}},
-                          {{"host1", 1, "kind1"}, {"host2", 2, "kind2"}},
-                          SLOT1_TYPE, ZONE1, 1, 1);
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                                  {},
-                                  {{ {"host1", 1, ""} }});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 1, 1}},
-                          {{"host2", 2, "kind2"}},
-                          SLOT1_TYPE, ZONE1, 1, 1);
-
-        RestartConsole(runtime);
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
-                                  {},
-                                  {{ {"host1", 1, "kind1"} }});
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
-                                  {{ {"host2", 2, "kind1"} }},
-                                  {});
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                                  {{ {"host2", 2, "kind2"} }},
-                                  {});
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
-                                  {{ {"host1", 1, "kind1"},
-                                     {"host1", 1, "kind2"} }},
-                                  {});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 1, 1}},
-                          {{"host2", 2, "kind2"}},
-                          SLOT1_TYPE, ZONE1, 1, 1);
-    }
-
     void RunTestNotifyOperationCompletion(TTenantTestRuntime& runtime) {
         TAutoPtr<IEventHandle> handle;
 
@@ -1930,14 +1873,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, TENANT1_1_NAME,
                           Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 3}},
-                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}),
-                          SLOT1_TYPE, ZONE1, 1);
+                          TVector<std::pair<TString, TString>>({{"name1", "value1"}, {"name2", "value2"}}));
+
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
-
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
         UNIT_ASSERT(CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}, {"name2", "value2"}}));
 
@@ -2065,37 +2007,34 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
             TCreateTenantRequest(TENANT1_1_NAME, EType::Common)
                 .WithPools({{"hdd", 1}, {"hdd-1", 3}})
-                .WithSlots(SLOT1_TYPE, ZONE1, 1)
                 .WithPlanResolution(500));
+
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd-1", 1000}}, {});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {}, false);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {});
 
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd-2", 1000}});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}, {"hdd-2", 0, 0}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}, {"hdd-2", 0, 0}}, {});
     }
 
     Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunning) {

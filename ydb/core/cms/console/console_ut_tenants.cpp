@@ -1400,33 +1400,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
     void RunTestRemoveTenant(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}, {"hdd-1", 2}});
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
-                          SLOT1_TYPE, ZONE1, 3, 3,
-                          SLOT2_TYPE, ZONE1, 2, 2,
-                          SLOT3_TYPE, ZONE1, 1, 1);
-
-        CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                                  {{ {"host1", 1, "kind1"},
-                                    {"host2", 2, "kind2"} }},
-                                  {});
-
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}},
-                          {{"host1", 1, "kind1"}, {"host2", 2, "kind2"}},
-                          SLOT1_TYPE, ZONE1, 3, 3,
-                          SLOT2_TYPE, ZONE1, 2, 2,
-                          SLOT3_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {});
 
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
@@ -1435,8 +1415,6 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND);
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8}}});
-
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_REMOVE_REQUESTS, 2);
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1);
         CheckCounter(runtime, {{ {"status", "NOT_FOUND"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1);
@@ -1444,20 +1422,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         RestartConsole(runtime);
 
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}, {"hdd-1", 2}});
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
+        RestartTenantPool(runtime);
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {},
-                          SLOT1_TYPE, ZONE1, 3, 3,
-                          SLOT2_TYPE, ZONE1, 2, 2,
-                          SLOT3_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}, {"hdd-1", 2, 2}}, {});
 
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
@@ -1606,32 +1577,6 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     Y_UNIT_TEST(TestCreateSubSubDomainExtSubdomain) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         RunTestCreateSubSubDomain(runtime);
-    }
-
-    Y_UNIT_TEST(TestDefaultAvailabilityZone) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-
-        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
-
-
-
-        RestartConsole(runtime);
-
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                              {{ {SLOT1_TYPE, "", 1},
-                                 {SLOT2_TYPE, "", 2},
-                                 {SLOT3_TYPE, "", 3} }},
-                              {});
-
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 24, 24, 24}}});
     }
 
     Y_UNIT_TEST(TestRegisterComputationalUnitsForPending) {

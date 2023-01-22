@@ -291,7 +291,7 @@ namespace std {
         using result_type = size_t;
         inline result_type operator()(argument_type const& s) const noexcept {
             auto hasher = std::hash<ui64>();
-            return hasher(s.Hi) ^ hasher(s.Lo);
+            return hasher(s.Hi) * 31 + hasher(s.Lo);
         }
     };
 

@@ -256,10 +256,6 @@ TString SendTenantCreationCommand(
     auto &unit = *request->Record.MutableRequest()->mutable_resources()->add_storage_units();
     unit.set_unit_kind("hdd");
     unit.set_count(1);
-    auto &comp = *request->Record.MutableRequest()->mutable_resources()->add_computational_units();
-    comp.set_unit_kind(SLOT1_TYPE);
-    comp.set_availability_zone(ZONE1);
-    comp.set_count(1);
 
     if (idempotencyKey) {
         request->Record.MutableRequest()->set_idempotency_key(idempotencyKey);
@@ -1693,10 +1689,11 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // with no TEvNotifyOperationCompletionResponse.
         CheckNotificationRequest(runtime, id, Ydb::StatusIds::GENERIC_ERROR);
 
+        RestartTenantPool(runtime);
+
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING,
-                          {{"hdd", 1, 1}}, {},
-                          SLOT1_TYPE, ZONE1, 1, 1);
+                          {{"hdd", 1, 1}}, {});
 
         // Send tenant removal command and store operation id.
         runtime.SetObserverFunc(CatchPoolEvent(captured));

@@ -210,7 +210,7 @@ private:
         auto& tasks = nodeTasks[nodeId];
         auto& cnt = assignedShardsCount[nodeId];
 
-        const ui32 maxScansPerNode = isOlapScan ? 1 : GetMaxTasksPerNodeEstimate(stageInfo);
+        const ui32 maxScansPerNode = isOlapScan ? 16 : GetMaxTasksPerNodeEstimate(stageInfo);
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;

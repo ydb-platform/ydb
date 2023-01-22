@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    TString RunQuery(TDriver& connection, const TString& query) {
+    TString RunQuerySimple(TDriver& connection, const TString& query) {
         auto client = NYdb::NTable::TTableClient(connection);
 
         NYdb::NTable::TStreamExecScanQuerySettings execSettings;
@@ -278,6 +278,18 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         PrintQueryStats(Cerr, *result.QueryStats);
         Cerr << "\n";
         return result.ResultSetYson;
+    }
+
+    TString RunQuery(TDriver& connection, const TString& query) {
+        for(ui32 iter = 0; iter < 3; iter++) {
+            try {
+                return RunQuerySimple(connection, query);
+            } catch(...) {
+                /// o_O
+            }
+        }
+
+        return RunQuerySimple(connection, query);
     }
 
     // Create OLTP and OLAP tables with the same set of columns and same PK

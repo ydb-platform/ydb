@@ -20,12 +20,29 @@ void TDSAccessorBase::Handle(TEvYQLResponse::TPtr& ev) {
     auto& currentFullReply = ev->Get()->GetResponse();
     Ydb::Table::ExecuteQueryResult qResult;
     currentFullReply.operation().result().UnpackTo(&qResult);
-    Y_VERIFY((size_t)qResult.result_sets().size() == SnapshotConstructor->GetManagers().size());
-    auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(qResult, RequestedActuality);
+
+    auto& managers = SnapshotConstructor->GetManagers();
+    Y_VERIFY(managers.size());
+    Ydb::Table::ExecuteQueryResult qResultFull;
+    ui32 replyIdx = 0;
+    for (auto&& i : managers) {
+        auto it = CurrentExistence.find(i->GetStorageTablePath());
+        Y_VERIFY(it != CurrentExistence.end());
+        Y_VERIFY(it->second);
+        if (it->second == 1) {
+            *qResultFull.add_result_sets() = std::move(qResult.result_sets()[replyIdx]);
+            ++replyIdx;
+        } else {
+            qResultFull.add_result_sets();
+        }
+    }
+    Y_VERIFY((int)replyIdx == qResult.result_sets().size());
+    Y_VERIFY((size_t)qResultFull.result_sets().size() == SnapshotConstructor->GetManagers().size());
+    auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(qResultFull, RequestedActuality);
     if (!parsedSnapshot) {
         OnIncorrectSnapshotFromYQL("snapshot is null after parsing");
     } else {
-        OnNewParsedSnapshot(std::move(qResult), parsedSnapshot);
+        OnNewParsedSnapshot(std::move(qResultFull), parsedSnapshot);
     }
 }
 
@@ -60,17 +77,16 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& 
     } else {
         it->second = -1;
     }
-    bool hasNonExist = false;
+    bool hasExists = false;
     for (auto&& i : ExistenceChecks) {
         if (i.second == 0) {
             return;
         }
-        if (i.second == -1) {
-            hasNonExist = true;
-            continue;
+        if (i.second == 1) {
+            hasExists = true;
         }
     }
-    if (hasNonExist) {
+    if (!hasExists) {
         OnNewEnrichedSnapshot(SnapshotConstructor->CreateEmpty(RequestedActuality));
     } else {
         StartSnapshotsFetchingImpl();
@@ -102,8 +118,14 @@ void TDSAccessorBase::StartSnapshotsFetchingImpl() {
     RequestedActuality = TInstant::Now();
     auto& managers = SnapshotConstructor->GetManagers();
     Y_VERIFY(managers.size());
+    CurrentExistence = ExistenceChecks;
     for (auto&& i : managers) {
-        sb << "SELECT * FROM `" + EscapeC(i->GetStorageTablePath()) + "`;";
+        auto it = CurrentExistence.find(i->GetStorageTablePath());
+        Y_VERIFY(it != CurrentExistence.end());
+        Y_VERIFY(it->second);
+        if (it->second == 1) {
+            sb << "SELECT * FROM `" + EscapeC(i->GetStorageTablePath()) + "`;" << Endl;
+        }
     }
     Register(new NRequest::TYQLQuerySessionedActor(sb, NACLib::TSystemUsers::Metadata(), Config, InternalController));
 }

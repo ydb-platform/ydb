@@ -85,6 +85,7 @@ private:
     YDB_READONLY(TInstant, RequestedActuality, TInstant::Zero());
     const NRequest::TConfig Config;
     std::map<TString, i32> ExistenceChecks;
+    std::map<TString, i32> CurrentExistence;
     void StartSnapshotsFetchingImpl();
 protected:
     std::shared_ptr<TRefreshInternalController> InternalController;

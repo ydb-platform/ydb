@@ -35,23 +35,13 @@ private:
     void Activate();
 
     template <class TAction>
-    void ProcessEventWithFetcher(IEventHandle& ev, NFetcher::ISnapshotsFetcher::TPtr fetcher, TAction action) {
-        std::vector<IClassBehaviour::TPtr> needManagers;
-        for (auto&& i : fetcher->GetManagers()) {
-            if (!RegistrationData->Registered.contains(i->GetTypeId())) {
-                needManagers.emplace_back(i);
-            }
+    void ProcessEventWithFetcher(IEventHandle& /*ev*/, NFetcher::ISnapshotsFetcher::TPtr fetcher, TAction action) {
+        auto it = Accessors.find(fetcher->GetComponentId());
+        if (it == Accessors.end()) {
+            THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, fetcher);
+            it = Accessors.emplace(fetcher->GetComponentId(), Register(actor.Release())).first;
         }
-        if (needManagers.empty() || (needManagers.size() == 1 && needManagers[0]->GetTypeId() == NInitializer::TDBInitialization::GetTypeId())) {
-            auto it = Accessors.find(fetcher->GetComponentId());
-            if (it == Accessors.end()) {
-                THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, fetcher);
-                it = Accessors.emplace(fetcher->GetComponentId(), Register(actor.Release())).first;
-            }
-            action(it->second);
-        } else {
-            PrepareManagers(needManagers, ev.ReleaseBase(), ev.Sender);
-        }
+        action(it->second);
     }
 
 public:

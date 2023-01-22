@@ -1525,26 +1525,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
     void RunTestCreateSubSubDomain(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 1}, {"hdd-1", 2}},
-                          SLOT1_TYPE, ZONE1, 3,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 1);
+                          {{"hdd", 1}, {"hdd-1", 2}});
 
-        runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
-                                   {TENANT1_1_NAME, 10, 10, 10}}});
+        RestartTenantPool(runtime);
 
         CheckCreateTenant(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::GENERIC_ERROR,
-                          {{"hdd", 1}},
-                          SLOT1_TYPE, ZONE1, 1,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 3);
+                          {{"hdd", 1}});
         WaitForTenantStatus(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::NOT_FOUND);
 
         // Check unsuccessful tenant creation doesn't break counters.
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 1);
-        CheckCounter(runtime, {{ {"kind", SLOT1_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 3);
-        CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 2);
-        CheckCounter(runtime, {{ {"kind", SLOT3_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 1);
         CheckCounter(runtime, {{ {"kind", "hdd"} }}, TTenantsManager::COUNTER_REQUESTED_STORAGE_UNITS, 1);
         CheckCounter(runtime, {{ {"kind", "hdd"} }}, TTenantsManager::COUNTER_ALLOCATED_STORAGE_UNITS, 1);
         CheckCounter(runtime, {{ {"kind", "hdd-1"} }}, TTenantsManager::COUNTER_REQUESTED_STORAGE_UNITS, 2);
@@ -1554,15 +1544,9 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
         CheckCreateTenant(runtime, TENANT1_1_NAME + "/sub", Ydb::StatusIds::SUCCESS,
-                          {{"hdd", 2}},
-                          SLOT1_TYPE, ZONE1, 1,
-                          SLOT2_TYPE, ZONE1, 2,
-                          SLOT3_TYPE, ZONE1, 3);
+                          {{"hdd", 2}});
 
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 1);
-        CheckCounter(runtime, {{ {"kind", SLOT1_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 1);
-        CheckCounter(runtime, {{ {"kind", SLOT2_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 2);
-        CheckCounter(runtime, {{ {"kind", SLOT3_TYPE}, {"zone", ZONE1 } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 3);
         CheckCounter(runtime, {{ {"kind", "hdd"} }}, TTenantsManager::COUNTER_REQUESTED_STORAGE_UNITS, 2);
         CheckCounter(runtime, {{ {"kind", "hdd"} }}, TTenantsManager::COUNTER_ALLOCATED_STORAGE_UNITS, 2);
         CheckCounter(runtime, {{ {"kind", "hdd-1"} }}, TTenantsManager::COUNTER_REQUESTED_STORAGE_UNITS, 0);

@@ -8,7 +8,6 @@ namespace NKikimr::NBlobDepot {
 
     class TData::TTxDataLoad : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         std::optional<TString> LastTrashKey;
-        std::optional<TString> LastDataKey;
         bool TrashLoaded = false;
         bool SuccessorTx = true;
 
@@ -22,7 +21,6 @@ namespace NKikimr::NBlobDepot {
         TTxDataLoad(TTxDataLoad& predecessor)
             : TTransactionBase(predecessor.Self)
             , LastTrashKey(std::move(predecessor.LastTrashKey))
-            , LastDataKey(std::move(predecessor.LastDataKey))
             , TrashLoaded(predecessor.TrashLoaded)
         {}
 
@@ -67,15 +65,73 @@ namespace NKikimr::NBlobDepot {
                 TrashLoaded = true;
             }
 
-            auto addData = [this](const auto& key, const auto& rows) {
-                auto k = TData::TKey::FromBinaryKey(key, Self->Config);
-                Self->Data->AddDataOnLoad(k, rows.template GetValue<Schema::Data::Value>(),
-                    rows.template GetValueOrDefault<Schema::Data::UncertainWrite>(), false);
-                Y_VERIFY(!Self->Data->LastLoadedKey || *Self->Data->LastLoadedKey < k);
-                Self->Data->LastLoadedKey = std::move(k);
-            };
-            if (!load(db.Table<Schema::Data>(), LastDataKey, addData)) {
-                return progress;
+            for (;;) {
+                // calculate a set of keys we need to load
+                TClosedIntervalSet<TKey> needed;
+                needed |= {TKey::Min(), TKey::Max()};
+                const auto interval = needed.PartialSubtract(Self->Data->LoadedKeys);
+                if (!interval) {
+                    break;
+                }
+
+                const auto& [first, last] = *interval;
+
+                auto makeNeeded = [&] {
+                    TStringStream s("{");
+                    bool flag = true;
+                    needed([&](const TKey& first, const TKey& last) {
+                        s << (std::exchange(flag, false) ? "" : "-");
+                        first.Output(s);
+                        last.Output(s << '-');
+                        return true;
+                    });
+                    s << '}';
+                    return s.Str();
+                };
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT83, "TTxDataLoad iteration", (Id, Self->GetLogId()), (Needed, makeNeeded()),
+                    (FirstKey, first), (LastKey, last));
+
+                bool status = true;
+                std::optional<TKey> lastKey; // the actual last processed key
+
+                auto table = db.Table<Schema::Data>().GreaterOrEqual(first.MakeBinaryKey());
+                static constexpr ui64 PrechargeRows = 10'000;
+                static constexpr ui64 PrechargeBytes = 1'000'000;
+                if (!table.Precharge(PrechargeRows, PrechargeBytes)) {
+                    status = false;
+                } else if (auto rows = table.Select(); !rows.IsReady()) {
+                    status = false;
+                } else {
+                    for (;;) {
+                        if (!rows.IsValid()) { // finished reading the range
+                            lastKey.emplace(last);
+                            break;
+                        }
+                        auto key = TKey::FromBinaryKey(rows.GetKey(), Self->Config);
+                        lastKey.emplace(key);
+                        if (last <= key) { // stop iteration -- we are getting out of range
+                            break;
+                        } else if (first < key && !Self->Data->IsKeyLoaded(key)) {
+                            Self->Data->AddDataOnLoad(std::move(key), rows.template GetValue<Schema::Data::Value>(),
+                                rows.template GetValueOrDefault<Schema::Data::UncertainWrite>());
+                            progress = true;
+                        }
+                        if (!rows.Next()) {
+                            status = false;
+                            break;
+                        }
+                    }
+                }
+
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT84, "TTxDataLoad iteration complete", (Id, Self->GetLogId()),
+                    (FirstKey, first), (LastKey, lastKey), (Status, status), (Progress, progress));
+
+                if (lastKey) {
+                    Self->Data->LoadedKeys |= {first, *lastKey};
+                }
+                if (!status) {
+                    return progress;
+                }
             }
 
             SuccessorTx = false; // everything loaded
@@ -100,7 +156,6 @@ namespace NKikimr::NBlobDepot {
 
     void TData::OnLoadComplete() {
         Loaded = true;
-        LoadSkip.clear();
         Self->OnDataLoadComplete();
         for (auto& [key, record] : RecordsPerChannelGroup) {
             record.CollectIfPossible(this);

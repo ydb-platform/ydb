@@ -178,7 +178,7 @@ namespace NKikimr::NBlobDepot {
 
                 const auto& blob = ResolveDecommitContext.DecommitBlobs.front();
                 if (Self->Data->LastAssimilatedBlobId < blob.Id) {
-                    numItemsRemain -= Self->Data->AddDataOnDecommit(blob, txc, this, true);
+                    numItemsRemain -= Self->Data->AddDataOnDecommit(blob, txc, this);
                 }
                 ResolveDecommitContext.DecommitBlobs.pop_front();
             }
@@ -265,42 +265,31 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                if (end && Self->Data->LastLoadedKey && *end <= *Self->Data->LastLoadedKey) {
+                TClosedIntervalSet<TKey> needed;
+                needed |= {begin.value_or(TKey::Min()), end.value_or(TKey::Max())};
+                needed -= Self->Data->LoadedKeys;
+                if (!needed) {
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT76, "TTxResolve: skipping subrange", (Id, Self->GetLogId()),
                         (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex));
-                    continue; // key is already loaded
+                    continue;
                 }
 
-                if (Self->Data->LastLoadedKey && begin <= Self->Data->LastLoadedKey && !(flags & EScanFlags::REVERSE)) {
-                    Y_VERIFY(!end || *Self->Data->LastLoadedKey < *end);
-
-                    // special case -- forward scan and we have some data in memory
-                    auto callback = [&](const TKey& key, const TValue& /*value*/) {
-                        LastScannedKey = key;
-                        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT83, "TTxResolve: skipping key in memory", (Id, Self->GetLogId()),
-                            (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex), (Key, key));
-                        return !ResolveDecommitContext.DecommitBlobs.empty() || ++NumKeysRead != maxKeys;
-                    };
-                    if (!Self->Data->ScanRange(begin, Self->Data->LastLoadedKey, flags | EScanFlags::INCLUDE_END, callback)) {
-                        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT84, "TTxResolve: skipping remaining subrange", (Id, Self->GetLogId()),
-                            (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex));
-                        continue; // we have read all the keys required (MaxKeys limit hit)
-                    }
-
-                    // adjust range beginning
-                    begin = Self->Data->LastLoadedKey;
-                    flags &= ~EScanFlags::INCLUDE_BEGIN;
-                }
+                std::optional<TKey> boundary;
 
                 auto processRange = [&](auto table) {
+                    bool done = false;
                     for (auto rowset = table.Select();; rowset.Next()) {
                         if (!rowset.IsReady()) {
-                            return false;
+                            return done;
                         } else if (!rowset.IsValid()) {
-                            // no more keys in our direction
+                            // no more keys in our direction -- we have scanned full requested range
+                            boundary.emplace(flags & EScanFlags::REVERSE
+                                ? begin.value_or(TKey::Min())
+                                : end.value_or(TKey::Max()));
                             return true;
                         }
                         auto key = TKey::FromBinaryKey(rowset.template GetValue<Schema::Data::Key>(), Self->Config);
+                        boundary.emplace(key);
                         if (key != LastScannedKey) {
                             LastScannedKey = key;
                             progress = true;
@@ -313,19 +302,18 @@ namespace NKikimr::NBlobDepot {
 
                             if (!isKeyLoaded) {
                                 Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
-                                    rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>(), true);
+                                    rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
                             }
 
                             const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
                             const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
-                            if (matchBegin && matchEnd) {
-                                if (ResolveDecommitContext.DecommitBlobs.empty() && ++NumKeysRead == maxKeys) {
-                                    // we have hit the MaxItems limit, exit
-                                    return true;
-                                }
-                            } else if (flags & EScanFlags::REVERSE ? !matchBegin : !matchEnd) {
-                                // we have exceeded the opposite boundary, exit
-                                return true;
+                            if (matchBegin && matchEnd && ResolveDecommitContext.DecommitBlobs.empty() && ++NumKeysRead == maxKeys) {
+                                // we have hit the MaxItems limit, exit
+                                done = true;
+                            }
+                            if (flags & EScanFlags::REVERSE ? !matchEnd : !matchBegin) {
+                                // we have exceeded our range
+                                done = true;
                             }
                         }
                     }
@@ -346,7 +334,18 @@ namespace NKikimr::NBlobDepot {
                         ? applyBegin(x.Reverse())
                         : applyBegin(std::forward<std::decay_t<decltype(x)>>(x));
                 };
-                if (applyReverse(db.Table<Schema::Data>())) {
+
+                const bool status = applyReverse(db.Table<Schema::Data>());
+
+                if (boundary) {
+                    if (flags & EScanFlags::REVERSE) {
+                        Self->Data->LoadedKeys |= {*boundary, end.value_or(TKey::Max())};
+                    } else {
+                        Self->Data->LoadedKeys |= {begin.value_or(TKey::Min()), *boundary};
+                    }
+                }
+
+                if (status) {
                     continue; // all work done for this item
                 } else if (progress) {
                     // we have already done something, so let's finish this transaction and start a new one, continuing

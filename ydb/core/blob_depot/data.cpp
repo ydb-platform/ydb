@@ -202,7 +202,7 @@ namespace NKikimr::NBlobDepot {
     void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Item, item));
-        Y_VERIFY(Loaded || IsKeyLoaded(key));
+        Y_VERIFY(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "UpdateKey", [&](TValue& value, bool inserted) {
             if (!inserted) { // update value items
                 value.Meta = item.GetMeta();
@@ -225,7 +225,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId));
-        Y_VERIFY(Loaded || IsKeyLoaded(key));
+        Y_VERIFY(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool inserted) {
             if (inserted || value.GoingToAssimilate) {
                 auto *chain = value.ValueChain.Add();
@@ -308,33 +308,14 @@ namespace NKikimr::NBlobDepot {
         return it->second;
     }
 
-    void TData::AddLoadSkip(TKey key) {
-        Y_VERIFY(!Loaded);
-        if (!LastLoadedKey || *LastLoadedKey < key) {
-            LoadSkip.insert(std::move(key));
-        }
-    }
-
-    void TData::AddDataOnLoad(TKey key, TString value, bool uncertainWrite, bool skip) {
-        if (skip) {
-            Y_VERIFY_DEBUG(!LastLoadedKey || *LastLoadedKey < key);
-            AddLoadSkip(key);
-        } else {
-            // delete keys that might have been loaded and deleted while we were still loading data
-            LoadSkip.erase(LoadSkip.begin(), LoadSkip.lower_bound(key));
-
-            // check if we have to skip currently loaded key
-            if (LoadSkip.erase(key)) {
-                return;
-            }
-        }
+    void TData::AddDataOnLoad(TKey key, TString value, bool uncertainWrite) {
+        Y_VERIFY_S(!IsKeyLoaded(key), "Id# " << Self->GetLogId() << " Key# " << key.ToString());
 
         NKikimrBlobDepot::TValue proto;
         const bool success = proto.ParseFromString(value);
         Y_VERIFY(success);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT79, "AddDataOnLoad", (Id, Self->GetLogId()), (Key, key), (Value, proto),
-            (Skip, skip));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT79, "AddDataOnLoad", (Id, Self->GetLogId()), (Key, key), (Value, proto));
 
         // we can only add key that is not loaded before; if key exists, it MUST have been loaded from the dataset
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(proto), uncertainWrite);
@@ -352,9 +333,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
-            NTabletFlatExecutor::TTransactionContext& txc, void *cookie, bool suppressLoadedCheck) {
-        Y_VERIFY_S(suppressLoadedCheck || Loaded || IsKeyLoaded(TKey(blob.Id)), "Id# " << Self->GetLogId()
-            << " Blob# " << blob.ToString());
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        Y_VERIFY_S(IsKeyLoaded(TKey(blob.Id)), "Id# " << Self->GetLogId() << " Blob# " << blob.ToString());
 
         return UpdateKey(TKey(blob.Id), txc, cookie, "AddDataOnDecommit", [&](TValue& value, bool inserted) {
             bool change = inserted;
@@ -394,7 +374,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        Y_VERIFY(Loaded || IsKeyLoaded(key));
+        Y_VERIFY(IsKeyLoaded(key));
         return UpdateKey(std::move(key), txc, cookie, "UpdateKeepState", [&](TValue& value, bool inserted) {
              STLOG(PRI_DEBUG, BLOB_DEPOT, BDT51, "UpdateKeepState", (Id, Self->GetLogId()), (Key, key),
                 (KeepState, keepState), (Value, value));
@@ -484,8 +464,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "OnBarrierShift", (Id, Self->GetLogId()), (TabletId, tabletId),
             (Channel, int(channel)), (Hard, hard), (Previous, previous), (Current, current), (MaxItems, maxItems));
 
-        Y_VERIFY(Loaded || (LastLoadedKey && *LastLoadedKey > TKey(TLogoBlobID(tabletId, current.Generation(), current.Step(),
-            channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode))));
+        Y_VERIFY(Loaded);
 
         const TData::TKey first(TLogoBlobID(tabletId, previous.Generation(), previous.Step(), channel, 0, 0));
         const TData::TKey last(TLogoBlobID(tabletId, current.Generation(), current.Step(), channel,

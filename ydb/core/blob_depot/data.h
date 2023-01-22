@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blob_depot_tablet.h"
+#include "closed_interval_set.h"
 
 #include <util/generic/hash_multi_map.h>
 
@@ -21,10 +22,17 @@ namespace NKikimr::NBlobDepot {
 
             static constexpr size_t TypeLenByteIdx = 31;
             static constexpr size_t MaxInlineStringLen = TypeLenByteIdx;
-            static constexpr char BlobIdType = 32;
-            static constexpr char StringType = 33;
+            static constexpr ui8 MinType = 32;
+            static constexpr ui8 BlobIdType = 33;
+            static constexpr ui8 StringType = 34;
+            static constexpr ui8 MaxType = 255;
 
             static_assert(sizeof(Data) == 32);
+
+        private:
+            explicit TKey(ui8 type) {
+                Data.Type = type;
+            }
 
         public:
             TKey() {
@@ -74,6 +82,9 @@ namespace NKikimr::NBlobDepot {
                 Reset();
             }
 
+            static TKey Min() { return TKey(MinType); }
+            static TKey Max() { return TKey(MaxType); }
+
             TKey& operator =(const TKey& other) {
                 if (this != &other) {
                     if (Data.Type == StringType && other.Data.Type == StringType) {
@@ -121,8 +132,12 @@ namespace NKikimr::NBlobDepot {
             TString MakeBinaryKey() const {
                 if (Data.Type == BlobIdType) {
                     return GetBlobId().AsBinaryString();
-                } else {
+                } else if (Data.Type <= MaxInlineStringLen || Data.Type == StringType) {
                     return TString(GetStringBuf());
+                } else if (Data.Type == MinType) {
+                    return {};
+                } else {
+                    Y_FAIL();
                 }
             }
 
@@ -143,22 +158,43 @@ namespace NKikimr::NBlobDepot {
             void Output(IOutputStream& s) const {
                 if (Data.Type == BlobIdType) {
                     s << GetBlobId();
+                } else if (Data.Type == MinType) {
+                    s << "<min>";
+                } else if (Data.Type == MaxType) {
+                    s << "<max>";
                 } else {
                     s << EscapeC(GetStringBuf());
                 }
             }
 
             static int Compare(const TKey& x, const TKey& y) {
-                if (x.Data.Type == BlobIdType && y.Data.Type == BlobIdType) {
-                    return x.GetBlobId() < y.GetBlobId() ? -1 : y.GetBlobId() < x.GetBlobId() ? 1 : 0;
-                } else if (x.Data.Type == BlobIdType) {
+                const ui8 xType = x.Data.Type <= MaxInlineStringLen ? StringType : x.Data.Type;
+                const ui8 yType = y.Data.Type <= MaxInlineStringLen ? StringType : y.Data.Type;
+                if (xType < yType) {
                     return -1;
-                } else if (y.Data.Type == BlobIdType) {
+                } else if (yType < xType) {
                     return 1;
                 } else {
-                    const TStringBuf sbx = x.GetStringBuf();
-                    const TStringBuf sby = y.GetStringBuf();
-                    return sbx < sby ? -1 : sby < sbx ? 1 : 0;
+                    switch (xType) {
+                        case StringType: {
+                            const TStringBuf sbx = x.GetStringBuf();
+                            const TStringBuf sby = y.GetStringBuf();
+                            return sbx < sby ? -1 : sby < sbx ? 1 : 0;
+                        }
+
+                        case BlobIdType: {
+                            const TLogoBlobID& xId = x.GetBlobId();
+                            const TLogoBlobID& yId = y.GetBlobId();
+                            return xId < yId ? -1 : yId < xId ? 1 : 0;
+                        }
+
+                        case MinType:
+                        case MaxType:
+                            return 0;
+
+                        default:
+                            Y_FAIL();
+                    }
                 }
             }
 
@@ -193,8 +229,10 @@ namespace NKikimr::NBlobDepot {
             TStringBuf GetStringBuf() const {
                 if (Data.Type == StringType) {
                     return GetString();
-                } else {
+                } else if (Data.Type <= MaxInlineStringLen) {
                     return TStringBuf(reinterpret_cast<const char*>(Data.Bytes), DecodeInlineStringLenFromTypeByte(Data.Type));
+                } else {
+                    Y_FAIL();
                 }
             }
 
@@ -346,10 +384,9 @@ namespace NKikimr::NBlobDepot {
 
         bool Loaded = false;
         std::map<TKey, TValue> Data;
-        std::set<TKey> LoadSkip; // keys to skip while loading
+        TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
         THashMap<TLogoBlobID, ui32> RefCount;
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
-        std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         ui64 TotalStoredDataSize = 0;
         ui64 TotalStoredTrashSize = 0;
@@ -454,10 +491,9 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(ui8 channel, ui32 groupId);
 
-        void AddLoadSkip(TKey key);
-        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite, bool skip);
+        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite);
         bool AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
-            NTabletFlatExecutor::TTransactionContext& txc, void *cookie, bool suppressLoadedCheck = false);
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
@@ -498,7 +534,7 @@ namespace NKikimr::NBlobDepot {
         void StartLoad();
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
-        bool IsKeyLoaded(const TKey& key) const { return key <= LastLoadedKey || Data.contains(key) || LoadSkip.contains(key); }
+        bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);

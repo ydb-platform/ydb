@@ -143,11 +143,12 @@ namespace NKikimr::NBlobDepot {
                     auto row = db.Table<Table>().Key(item.GetKey()).Select();
                     if (!row.IsReady()) {
                         success = false;
-                    } else if (row.IsValid()) {
-                        Self->Data->AddDataOnLoad(std::move(key), row.GetValue<Table::Value>(),
-                            row.GetValueOrDefault<Table::UncertainWrite>(), true);
                     } else {
-                        Self->Data->AddLoadSkip(std::move(key));
+                        Self->Data->LoadedKeys |= {key, key};
+                        if (row.IsValid()) {
+                            Self->Data->AddDataOnLoad(std::move(key), row.GetValue<Table::Value>(),
+                                row.GetValueOrDefault<Table::UncertainWrite>());
+                        }
                     }
                 }
                 return success;

@@ -184,8 +184,6 @@ namespace NKikimr::NBlobDepot {
             .HardGenCtr = hardGenCtr,
             .Hard = hard,
         };
-
-        Self->BarrierServer->ValidateBlobInvariant(tabletId, channel);
     }
 
     bool TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier,

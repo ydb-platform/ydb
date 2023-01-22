@@ -11,7 +11,7 @@ using namespace NYdb;
 
 namespace {
 
-std::vector<TString> ScanQuerySelect(
+std::vector<TString> ScanQuerySelectSimple(
     NYdb::NTable::TTableClient client, const TString& tablePath,
     const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema())
 {
@@ -88,6 +88,21 @@ std::vector<TString> ScanQuerySelect(
         }
     }
     return out;
+}
+
+std::vector<TString> ScanQuerySelect(
+    NYdb::NTable::TTableClient client, const TString& tablePath,
+    const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema())
+{
+    for(ui32 iter = 0; iter < 3; iter++) {
+        try {
+            return ScanQuerySelectSimple(client, tablePath, ydbSchema);
+        } catch(...) {
+            /// o_O
+        }
+    }
+
+    return ScanQuerySelectSimple(client, tablePath, ydbSchema);
 }
 
 }

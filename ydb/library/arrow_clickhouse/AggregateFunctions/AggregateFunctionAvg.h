@@ -119,16 +119,17 @@ public:
         size_t row_end,
         AggregateDataPtr __restrict place,
         const IColumn ** columns,
-        Arena *,
-        ssize_t if_argument_pos) const final
+        Arena *) const final
     {
         AggregateFunctionSumData<Numerator> sum_data;
         const auto & column = assert_cast<const ColumnType &>(*columns[0]);
-        if (if_argument_pos >= 0)
+        if (auto * flags = column.null_bitmap_data())
         {
-            const auto & flags = assert_cast<const ColumnUInt8 &>(*columns[if_argument_pos]).raw_values();
-            sum_data.addManyConditional(column.raw_values(), flags, row_begin, row_end);
-            this->data(place).denominator += countBytesInFilter(flags, row_begin, row_end);
+            auto * condition_map = flags + column.offset();
+            auto length = row_end - row_begin;
+
+            sum_data.addManyConditional(column.raw_values(), condition_map, row_begin, row_end);
+            this->data(place).denominator += arrow::internal::CountSetBits(condition_map, row_begin, length);
         }
         else
         {

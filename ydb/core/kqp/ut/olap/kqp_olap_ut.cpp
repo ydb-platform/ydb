@@ -2137,8 +2137,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_NullGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2159,8 +2157,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_NullMixGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2181,8 +2177,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_GroupByNull) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2203,8 +2197,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Avg_GroupByNullMix) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2297,8 +2289,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_NullGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2319,8 +2309,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_NullMixGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2341,8 +2329,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_GroupByNull) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2363,8 +2349,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Sum_GroupByNullMix) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2510,8 +2494,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_Null) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT SOME(level) FROM `/Root/tableWithNulls` WHERE id > 5
@@ -2546,8 +2528,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_NullGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2568,8 +2548,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_NullMixGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2590,8 +2568,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_GroupByNullMix) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2612,8 +2588,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Some_GroupByNull) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT

@@ -3339,9 +3339,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64 NOT NULL,
-                Value1 String,
-                Value2 Int64 NOT NULL,
+                Key Timestamp NOT NULL,
+                Value1 Date,
+                Value2 Datetime NOT NULL,
                 PRIMARY KEY (Key)
             )
             PARTITION BY HASH(Value1, Value2)
@@ -3366,8 +3366,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
-            DROP TABLE `)" << tableName << R"(`;)";
+            ALTER TABLE `)" << tableName << R"(` SET(TTL = Interval("P1D") ON Value1);)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query5 = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(` SET(TTL = Interval("P1D") ON Value2);)";
+        result = session.ExecuteSchemeQuery(query5).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto query6 = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP TABLE `)" << tableName << R"(`;)";
+        result = session.ExecuteSchemeQuery(query6).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 

@@ -577,10 +577,30 @@ protected:
         Terminate(success, TIssues({TIssue(message)}));
     }
 
+    void FillExtraData(NDqProto::TEvComputeActorState& state) {
+        auto* extraData = state.MutableExtraData();
+        for (auto& [index, input] : SourcesMap) {
+            if (auto data = input.AsyncInput->ExtraData()) {
+                auto* entry = extraData->AddSourcesExtraData();
+                entry->SetIndex(index);
+                entry->MutableData()->CopyFrom(*data);
+            }
+        }
+        for (auto& [index, input] : SourcesMap) {
+            if (auto data = input.AsyncInput->ExtraData()) {
+                auto* entry = extraData->AddInputTransformsData();
+                entry->SetIndex(index);
+                entry->MutableData()->CopyFrom(*data);
+            }
+        }
+    }
+
     void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
+
+        FillExtraData(record);
 
         record.SetState(State);
         record.SetStatusCode(statusCode);

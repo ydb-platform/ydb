@@ -176,6 +176,16 @@ private:
         return totalDataSize;
     }
 
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        google::protobuf::Any result;
+        NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
+        for (auto& lock : Locks) {
+            resultInfo.AddLocks()->CopyFrom(lock);
+        }
+        result.PackFrom(resultInfo);
+        return result;
+    }
+
     STFUNC(StateFunc) {
         Y_UNUSED(ctx);
 
@@ -255,6 +265,10 @@ private:
             YQL_ENSURE(continuationToken.GetFirstUnprocessedQuery() <= read.Keys.size());
 
             return RetryTableRead(read, continuationToken);
+        }
+
+        for (auto& lock : record.GetTxLocks()) {
+            Locks.push_back(lock);
         }
 
         YQL_ENSURE(record.GetResultFormat() == NKikimrTxDataShard::EScanDataFormat::CELLVEC);
@@ -612,6 +626,8 @@ private:
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     const TDuration RetryReadTimeout;
+
+    TVector<NKikimrTxDataShard::TLock> Locks;
 };
 
 } // namespace

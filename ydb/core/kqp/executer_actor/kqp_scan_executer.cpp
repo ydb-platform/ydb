@@ -420,7 +420,7 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo);
+                        BuildScanTasksFromSource(stageInfo, Request.Snapshot);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");

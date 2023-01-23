@@ -572,6 +572,14 @@ public:
 
         record.SetResultFormat(Settings.GetDataFormat());
 
+        if (Settings.HasLockTxId()) {
+            record.SetLockTxId(Settings.GetLockTxId());
+        }
+
+        if (Settings.HasLockNodeId()) {
+            record.SetLockNodeId(Settings.GetLockNodeId());
+        }
+
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings.GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", readId = " << id);
@@ -590,11 +598,18 @@ public:
             return;
         }
 
+        if (record.BrokenTxLocksSize()) {
+            return RuntimeError("Transaction locks invalidated.", NYql::NDqProto::StatusIds::ABORTED);
+        }
+
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             for (auto& issue : record.GetStatus().GetIssues()) {
                 CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
             }
             return RetryRead(id);
+        }
+        for (auto& lock : record.GetTxLocks()) {
+            Locks.push_back(lock);
         }
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
@@ -827,6 +842,16 @@ public:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        google::protobuf::Any result;
+        NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
+        for (auto& lock : Locks) {
+            resultInfo.AddLocks()->CopyFrom(lock);
+        }
+        result.PackFrom(resultInfo);
+        return result;
+    }
+
 private:
     NKikimrTxDataShard::TKqpReadRangesSourceSettings Settings;
 
@@ -858,6 +883,8 @@ private:
         }
     };
     TQueue<TResult> Results;
+
+    TVector<NKikimrTxDataShard::TLock> Locks;
 
     ui32 MaxInFlight = 1024;
     const TString LogPrefix;

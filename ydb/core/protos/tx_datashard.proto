@@ -240,6 +240,10 @@ message TKqpTransaction {
     optional bool UseGenericReadSets = 7 [default = false];
 }
 
+message TEvKqpInputActorResultInfo {
+    repeated TLock Locks = 1;
+}
+
 message TKqpReadRangesSourceSettings {
     optional TKqpTransaction.TTableMeta Table = 1;
 
@@ -257,6 +261,9 @@ message TKqpReadRangesSourceSettings {
     optional NKikimrProto.TRowVersion Snapshot = 10;
     optional uint64 ShardIdHint = 11;
     optional bool Sorted = 12;
+
+    optional uint64 LockTxId = 13;
+    optional uint32 LockNodeId = 14;
 }
 
 message TKqpTaskInfo {

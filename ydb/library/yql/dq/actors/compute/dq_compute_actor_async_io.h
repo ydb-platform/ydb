@@ -87,6 +87,8 @@ struct IDqComputeActorAsyncInput {
         return 0;
     }
 
+    virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
+
     // The same signature as IActor::PassAway().
     // It is guaranted that this method will be called with bound MKQL allocator.
     // So, it is the right place to destroy all internal UnboxedValues.

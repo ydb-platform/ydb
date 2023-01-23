@@ -230,6 +230,7 @@ protected:
                 if (Stats) {
                     Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
                 }
+                ExtraData[computeActor].Swap(state.MutableExtraData());
 
                 LastTaskId = taskId;
                 LastComputeActorId = computeActor.ToString();
@@ -650,7 +651,7 @@ protected:
         }
     }
 
-    void BuildScanTasksFromSource(TStageInfo& stageInfo) {
+    void BuildScanTasksFromSource(TStageInfo& stageInfo, IKqpGateway::TKqpSnapshot snapshot, const TMaybe<ui64> lockTxId = {}) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -720,8 +721,10 @@ protected:
                 settings.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
             }
 
-            settings.MutableSnapshot()->SetStep(Request.Snapshot.Step);
-            settings.MutableSnapshot()->SetTxId(Request.Snapshot.TxId);
+            if (snapshot.IsValid()) {
+                settings.MutableSnapshot()->SetStep(snapshot.Step);
+                settings.MutableSnapshot()->SetTxId(snapshot.TxId);
+            }
 
             shardInfo.KeyReadRanges->SerializeTo(&settings);
             settings.SetReverse(reverse);
@@ -732,6 +735,12 @@ protected:
             ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
                 Request.TxAlloc->TypeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
             settings.SetItemsLimit(itemsLimit);
+
+            auto self = static_cast<TDerived*>(this)->SelfId();
+            if (lockTxId) {
+                settings.SetLockTxId(*lockTxId);
+                settings.SetLockNodeId(self.NodeId());
+            }
 
             const auto& stageSource = stage.GetSources(0);
             auto& input = task.Inputs[stageSource.GetInputIndex()];
@@ -1058,6 +1067,8 @@ protected:
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
+    THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
+
     TVector<TProgressStat> LastStats;
 
     TInstant StartResolveTime;

@@ -204,6 +204,24 @@ public:
         response.SetStatus(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
+        auto addLocks = [&](const NYql::NDqProto::TExtraInputData& data) {
+            if (data.GetData().Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
+                NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
+                YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                for (auto& lock : info.GetLocks()) {
+                    Locks.push_back(lock);
+                }
+            }
+        };
+        for (auto& [_, data] : ExtraData) {
+            for (auto& source : data.GetSourcesExtraData()) {
+                addLocks(source);
+            }
+            for (auto& transform : data.GetInputTransformsData()) {
+                addLocks(transform);
+            }
+        }
+
         if (!Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
@@ -1423,6 +1441,12 @@ private:
     }
 
     void Execute() {
+        LockTxId = Request.AcquireLocksTxId;
+        if (LockTxId.Defined() && *LockTxId == 0) {
+            LockTxId = TxId;
+        }
+        Snapshot = Request.Snapshot;
+
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
@@ -1461,7 +1485,7 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            BuildScanTasksFromSource(stageInfo);
+                            BuildScanTasksFromSource(stageInfo, Request.Snapshot, LockTxId);
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -1963,10 +1987,12 @@ private:
     }
 
     void ExecuteTasks() {
-        auto lockTxId = Request.AcquireLocksTxId;
-        if (lockTxId.Defined() && *lockTxId == 0) {
-            lockTxId = TxId;
-            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
+        {
+            auto lockTxId = Request.AcquireLocksTxId;
+            if (lockTxId.Defined() && *lockTxId == 0) {
+                lockTxId = TxId;
+                LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
+            }
         }
 
         NWilson::TSpan sendTasksSpan(TWilsonKqp::DataExecuterSendTasksAndTxs, ExecuterStateSpan.GetTraceId(), "SendTasksAndTxs", NWilson::EFlags::AUTO_END);
@@ -1976,7 +2002,7 @@ private:
         TVector<ui64> computeTaskIds{Reserve(ComputeTasks.size())};
         for (auto&& taskDesc : ComputeTasks) {
             computeTaskIds.emplace_back(taskDesc.GetId());
-            FillInputSettings(taskDesc, lockTxId);
+            FillInputSettings(taskDesc);
             ExecuteDataComputeTask(std::move(taskDesc));
         }
 
@@ -1988,7 +2014,7 @@ private:
 
             for (auto& taskDesc : tasks) {
                 remoteComputeTasksCnt += 1;
-                FillInputSettings(taskDesc, lockTxId);
+                FillInputSettings(taskDesc);
                 PendingComputeTasks.insert(taskDesc.GetId());
                 tasksPerNode[it->second].emplace_back(std::move(taskDesc));
             }
@@ -2069,7 +2095,7 @@ private:
                 LOG_D("datashard task: " << taskId << ", proto: " << protoTask.ShortDebugString());
             }
 
-            ExecuteDatashardTransaction(shardId, shardTx, lockTxId);
+            ExecuteDatashardTransaction(shardId, shardTx, LockTxId);
         }
 
         ExecuteTopicTabletTransactions(TopicTxs);
@@ -2210,7 +2236,7 @@ private:
         }
     }
 
-    void FillInputSettings(NYql::NDqProto::TDqTask& task, const TMaybe<ui64> lockTxId) {
+    void FillInputSettings(NYql::NDqProto::TDqTask& task) {
         for (auto& input : *task.MutableInputs()) {
             if (input.HasTransform()) {
                 auto transform = input.MutableTransform();
@@ -2230,12 +2256,30 @@ private:
                     settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
                 }
 
-                if (lockTxId.Defined()) {
-                    settings.SetLockTxId(*lockTxId);
+                if (LockTxId.Defined()) {
+                    settings.SetLockTxId(*LockTxId);
                 }
 
                 settings.SetImmediateTx(ImmediateTx);
                 transform->MutableSettings()->PackFrom(settings);
+            }
+            if (input.HasSource() && Snapshot != Request.Snapshot && input.GetSource().GetType() == NYql::KqpReadRangesSourceName) {
+                auto source = input.MutableSource();
+                const google::protobuf::Any& settingsAny = source->GetSettings();
+
+                YQL_ENSURE(settingsAny.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(), "Expected settings type: "
+                    << NKikimrTxDataShard::TKqpReadRangesSourceSettings::descriptor()->full_name()
+                    << " , but got: " << settingsAny.type_url());
+
+                NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
+                YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
+
+                if (Snapshot.IsValid()) {
+                    settings.MutableSnapshot()->SetStep(Snapshot.Step);
+                    settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
+                }
+
+                source->MutableSettings()->PackFrom(settings);
             }
         }
     }
@@ -2283,10 +2327,12 @@ private:
     THashSet<ui64> SubscribedNodes;
 
     THashMap<ui64, TVector<NDqProto::TDqTask>> RemoteComputeTasks;
+
     TVector<NDqProto::TDqTask> ComputeTasks;
     TDatashardTxs DatashardTxs;
     TTopicTabletTxs TopicTxs;
 
+    TMaybe<ui64> LockTxId;
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;
     ui64 LastShard = 0;

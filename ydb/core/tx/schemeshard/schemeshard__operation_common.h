@@ -416,7 +416,7 @@ public:
 
 
 class TDone: public TSubOperationState {
-private:
+protected:
     TOperationId OperationId;
 
     TString DebugHint() const override {

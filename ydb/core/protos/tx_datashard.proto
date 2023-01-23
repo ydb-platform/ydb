@@ -1,4 +1,3 @@
-
 option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
@@ -1415,6 +1414,40 @@ message TEvBuildIndexProgressResponse {
 
     optional uint64 RequestSeqNoGeneration = 12;
     optional uint64 RequestSeqNoRound = 13;
+}
+
+message TEvCdcStreamScanRequest {
+    message TLimits {
+        optional uint32 BatchMaxBytes = 1 [default = 512000];
+        optional uint32 BatchMinRows = 2 [default = 10];
+        optional uint32 BatchMaxRows = 3 [default = 1000];
+    };
+
+    optional NKikimrProto.TPathID TablePathId = 1; // which table should be scanned
+    optional uint64 TableSchemaVersion = 2;
+    optional NKikimrProto.TPathID StreamPathId = 3;
+    optional uint64 SnapshotStep = 4;
+    optional uint64 SnapshotTxId = 5;
+    optional TLimits Limits = 6;
+}
+
+message TEvCdcStreamScanResponse {
+    enum EStatus {
+        PENDING = 0;
+        ACCEPTED = 1;
+        IN_PROGRESS = 2;
+        DONE = 3;
+        BAD_REQUEST = 4;
+        SCHEME_ERROR = 5;
+        OVERLOADED = 6;
+        ABORTED = 7;
+    }
+
+    optional uint64 TabletId = 1;
+    optional NKikimrProto.TPathID TablePathId = 2;
+    optional NKikimrProto.TPathID StreamPathId = 3;
+    optional EStatus Status = 4;
+    optional string ErrorDescription = 5;
 }
 
 message TEvKqpScan {

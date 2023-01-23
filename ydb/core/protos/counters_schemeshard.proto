@@ -483,4 +483,6 @@ enum ETxTypes {
     TXTYPE_BLOB_DEPOT_CONFIG_RESULT = 80                  [(TxTypeOpts) = {Name: "TxBlobDepotConfigResult"}];
 
     TXTYPE_ADD_BACKGROUND_TASK_RESULT = 81                [(TxTypeOpts) = {Name: "TxAddBackgroundTaskResult"}];
+
+    TXTYPE_CDC_STREAM_SCAN_PROGRESS = 82                  [(TxTypeOpts) = {Name: "TxCdcStreamScanProgress"}];
 }

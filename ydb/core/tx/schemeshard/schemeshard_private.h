@@ -26,6 +26,7 @@ struct TEvPrivate {
         EvCompleteBarrier,
         EvPersistStats,
         EvConsoleConfigsTimeout,
+        EvRunCdcStreamScan,
         EvEnd
     };
 
@@ -163,6 +164,14 @@ struct TEvPrivate {
     };
 
     struct TEvConsoleConfigsTimeout: public TEventLocal<TEvConsoleConfigsTimeout, EvConsoleConfigsTimeout> {
+    };
+
+    struct TEvRunCdcStreamScan: public TEventLocal<TEvRunCdcStreamScan, EvRunCdcStreamScan> {
+        const TPathId StreamPathId;
+
+        TEvRunCdcStreamScan(const TPathId& streamPathId)
+            : StreamPathId(streamPathId)
+        {}
     };
 
 }; // TEvPrivate

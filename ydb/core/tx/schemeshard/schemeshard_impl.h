@@ -270,6 +270,7 @@ public:
     TActorId SysPartitionStatsCollector;
 
     TActorId SVPMigrator;
+    TActorId CdcStreamScanFinalizer;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -753,13 +754,15 @@ public:
     struct TTxInitTenantSchemeShard;
     NTabletFlatExecutor::ITransaction* CreateTxInitTenantSchemeShard(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev);
 
-    void ActivateAfterInitialization(const TActorContext &ctx,
-                                     TSideEffects::TPublications&& delayPublications = {},
-                                     const TVector<ui64>& exportIds = {},
-                                     const TVector<ui64>& importsIds = {},
-                                     TVector<TPathId>&& tablesToClean = {},
-                                     TDeque<TPathId>&& blockStoreVolumesToClean = {}
-                                     );
+    struct TActivationOpts {
+        TSideEffects::TPublications DelayPublications;
+        TVector<ui64> ExportIds;
+        TVector<ui64> ImportsIds;
+        TVector<TPathId> CdcStreamScans;
+        TVector<TPathId> TablesToClean;
+        TDeque<TPathId> BlockStoreVolumesToClean;
+    };
+    void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 
     struct TTxInitPopulator;
     NTabletFlatExecutor::ITransaction* CreateTxInitPopulator(TSideEffects::TPublications&& publications);
@@ -1195,7 +1198,6 @@ public:
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
-
     void Handle(TEvIndexBuilder::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
@@ -1210,6 +1212,27 @@ public:
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
 
     // } //NIndexBuilder
+
+    // namespace NCdcStreamScan {
+    struct TCdcStreamScan {
+        struct TTxProgress;
+    };
+
+    TDedicatedPipePool<TPathId> CdcStreamScanPipes;
+
+    NTabletFlatExecutor::ITransaction* CreateTxProgressCdcStreamScan(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressCdcStreamScan(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreatePipeRetry(const TPathId& streamPathId, TTabletId tabletId);
+
+    void Handle(TEvPrivate::TEvRunCdcStreamScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev, const TActorContext& ctx);
+
+    void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
+
+    void PersistCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx,
+        const TCdcStreamInfo::TShardStatus& status);
+    void RemoveCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx);
+    // } // NCdcStreamScan
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;

@@ -12,6 +12,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint64" }
@@ -43,7 +45,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
             TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
                 NLs::PathExist,
-                NLs::StreamState(state.GetOrElse(NKikimrSchemeOp::ECdcStreamStateReady)),
                 NLs::StreamVirtualTimestamps(vt),
             });
         });
@@ -123,6 +124,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint64" }
@@ -182,6 +185,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint64" }

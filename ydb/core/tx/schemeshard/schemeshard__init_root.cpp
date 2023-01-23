@@ -144,8 +144,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                          << ", at schemeshard: " << Self->TabletID());
 
         Self->SignalTabletActive(ctx);
-
-        Self->ActivateAfterInitialization(ctx);
+        Self->ActivateAfterInitialization(ctx, {});
     }
 };
 
@@ -440,7 +439,9 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         auto publications = TSideEffects::TPublications();
         publications[TTxId()] = TSideEffects::TPublications::mapped_type{Self->RootPathId()};
 
-        Self->ActivateAfterInitialization(ctx, std::move(publications));
+        Self->ActivateAfterInitialization(ctx, {
+            .DelayPublications = std::move(publications),
+        });
     }
 };
 

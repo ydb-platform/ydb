@@ -449,4 +449,6 @@ enum ETxTypes {
     TXTYPE_REMOVE_LOCK_CHANGE_RECORDS = 72                [(TxTypeOpts) = {Name: "TxRemoveLockChangeRecords"}];
     TXTYPE_VOLATILE_TX_COMMIT = 73                        [(TxTypeOpts) = {Name: "TxVolatileTxCommit"}];
     TXTYPE_VOLATILE_TX_ABORT = 74                         [(TxTypeOpts) = {Name: "TxVolatileTxAbort"}];
+    TXTYPE_CDC_STREAM_SCAN_RUN  = 75                      [(TxTypeOpts) = {Name: "TTxCdcStreamScanRun"}];
+    TXTYPE_CDC_STREAM_SCAN_PROGRESS = 76                  [(TxTypeOpts) = {Name: "TTxCdcStreamScanProgress"}];
 }

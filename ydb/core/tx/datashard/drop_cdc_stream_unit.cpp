@@ -54,6 +54,15 @@ public:
             DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
         }
 
+        auto& scanManager = DataShard.GetCdcStreamScanManager();
+        scanManager.Forget(txc.DB, pathId, streamPathId);
+        if (scanManager.GetStreamPathId() == streamPathId) {
+            if (const auto scanId = scanManager.GetScanId()) {
+                DataShard.CancelScan(tableInfo->LocalTid, scanId);
+            }
+            scanManager.Clear();
+        }
+
         RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(streamPathId));
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

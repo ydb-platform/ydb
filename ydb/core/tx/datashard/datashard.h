@@ -313,6 +313,9 @@ struct TEvDataShard {
         EvGetOpenTxs, /* for tests */
         EvGetOpenTxsResult, /* for tests */
 
+        EvCdcStreamScanRequest,
+        EvCdcStreamScanResponse,
+
         EvEnd
     };
 
@@ -1582,6 +1585,31 @@ struct TEvDataShard {
         { }
     };
 
+    struct TEvCdcStreamScanRequest
+        : public TEventPB<TEvCdcStreamScanRequest,
+                          NKikimrTxDataShard::TEvCdcStreamScanRequest,
+                          EvCdcStreamScanRequest>
+    {
+    };
+
+    struct TEvCdcStreamScanResponse
+        : public TEventPB<TEvCdcStreamScanResponse,
+                          NKikimrTxDataShard::TEvCdcStreamScanResponse,
+                          EvCdcStreamScanResponse>
+    {
+        TEvCdcStreamScanResponse() = default;
+
+        explicit TEvCdcStreamScanResponse(
+                const NKikimrTxDataShard::TEvCdcStreamScanRequest& request, ui64 tabletId,
+                NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus status, const TString& error = {})
+        {
+            Record.SetTabletId(tabletId);
+            Record.MutableTablePathId()->CopyFrom(request.GetTablePathId());
+            Record.MutableStreamPathId()->CopyFrom(request.GetStreamPathId());
+            Record.SetStatus(status);
+            Record.SetErrorDescription(error);
+        }
+    };
 };
 
 IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info);

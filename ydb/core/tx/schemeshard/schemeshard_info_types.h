@@ -2309,6 +2309,17 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
 
+    // shards of the table
+    struct TShardStatus {
+        NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus Status;
+
+        explicit TShardStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus status)
+            : Status(status)
+        {}
+    };
+
+    static constexpr ui32 MaxInProgressShards = 10;
+
     TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, EState state)
         : AlterVersion(version)
         , Mode(mode)
@@ -2349,6 +2360,11 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     EState State;
 
     TCdcStreamInfo::TPtr AlterData = nullptr;
+
+    TMap<TShardIdx, TShardStatus> ScanShards;
+    THashSet<TShardIdx> PendingShards;
+    THashSet<TShardIdx> InProgressShards;
+    THashSet<TShardIdx> DoneShards;
 };
 
 struct TSequenceInfo : public TSimpleRefCount<TSequenceInfo> {

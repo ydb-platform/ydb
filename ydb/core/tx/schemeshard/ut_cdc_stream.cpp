@@ -886,6 +886,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
             .EnableChangefeedInitialScan(true));
+        runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -919,6 +920,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request);
             TestModificationResult(runtime, txId, expectedStatus);
         };
+
+        // try to disable
+        testAlterCdcStream(++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+            Disable {}
+        )", lockTxId, NKikimrScheme::StatusPreconditionFailed);
 
         // without guard & lockTxId
         testAlterCdcStream(++txId, "/MyRoot", R"(
@@ -979,6 +987,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
             .EnableChangefeedInitialScan(true));
+        runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

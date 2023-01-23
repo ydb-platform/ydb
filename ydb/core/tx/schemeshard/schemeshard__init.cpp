@@ -19,6 +19,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TDeque<TPathId> BlockStoreVolumesToClean;
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
+    TVector<TPathId> CdcStreamScansToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -2825,6 +2826,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, state);
                 Self->IncrementPathDbRefCount(pathId);
 
+                if (state == NKikimrSchemeOp::ECdcStreamStateScan) {
+                    Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
+                        << ", cdc stream pathId: " << pathId
+                        << ", parent pathId: " << path->ParentPathId);
+                    auto parent = Self->PathsById.at(path->ParentPathId);
+
+                    if (parent->NormalState()) {
+                        CdcStreamScansToResume.push_back(pathId);
+                    }
+                }
+
                 if (!rowset.Next()) {
                     return false;
                 }
@@ -2882,6 +2894,38 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next()) {
                     return false;
+                }
+            }
+        }
+
+        // Read CdcStreamScanShardStatus
+        {
+            auto rowset = db.Table<Schema::CdcStreamScanShardStatus>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                auto pathId = TPathId(
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::OwnerPathId>(),
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::LocalPathId>()
+                );
+                auto shardIdx = TShardIdx(
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::OwnerShardIdx>(),
+                    rowset.GetValue<Schema::CdcStreamScanShardStatus::LocalShardIdx>()
+                );
+                auto status = rowset.GetValue<Schema::CdcStreamScanShardStatus::Status>();
+
+                Y_VERIFY_S(Self->CdcStreams.contains(pathId), "Cdc stream not found"
+                    << ": pathId# " << pathId);
+
+                auto stream = Self->CdcStreams.at(pathId);
+                stream->ScanShards.emplace(shardIdx, status);
+
+                if (status != NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                    stream->PendingShards.insert(shardIdx);
+                } else {
+                    stream->DoneShards.insert(shardIdx);
                 }
             }
         }
@@ -4727,12 +4771,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return;
         }
 
-        Self->ActivateAfterInitialization(
-            ctx,
-            std::move(delayPublications),
-            ExportsToResume, ImportsToResume,
-            std::move(TablesToClean), std::move(BlockStoreVolumesToClean)
-        );
+        Self->ActivateAfterInitialization(ctx, {
+            .DelayPublications = std::move(delayPublications),
+            .ExportIds = ExportsToResume,
+            .ImportsIds = ImportsToResume,
+            .CdcStreamScans = std::move(CdcStreamScansToResume),
+            .TablesToClean = std::move(TablesToClean),
+            .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
+        });
     }
 };
 

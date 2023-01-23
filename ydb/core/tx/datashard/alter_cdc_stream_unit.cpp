@@ -68,6 +68,15 @@ public:
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
+        auto& scanManager = DataShard.GetCdcStreamScanManager();
+        scanManager.Forget(txc.DB, pathId, streamPathId);
+        if (scanManager.GetStreamPathId() == streamPathId) {
+            if (const auto scanId = scanManager.GetScanId()) {
+                DataShard.CancelScan(tableInfo->LocalTid, scanId);
+            }
+            scanManager.Clear();
+        }
+
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 

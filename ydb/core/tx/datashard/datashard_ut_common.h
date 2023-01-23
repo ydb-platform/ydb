@@ -397,10 +397,12 @@ struct TShardedTableOptions {
     struct TCdcStream {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
+        using EState = NKikimrSchemeOp::ECdcStreamState;
 
         TString Name;
         EMode Mode;
         EFormat Format;
+        TMaybe<EState> InitialState;
         bool VirtualTimestamps = false;
     };
 

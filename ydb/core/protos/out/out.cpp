@@ -161,6 +161,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvCompactTableResult::EStatus, stream,
     stream << NKikimrTxDataShard::TEvCompactTableResult::EStatus_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus, stream, value) {
+    stream << NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryAction, stream, value) {
     stream << NKikimrKqp::EQueryAction_Name(value);
 }

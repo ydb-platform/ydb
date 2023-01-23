@@ -225,7 +225,11 @@ private:
             if (Y_UNLIKELY(outputChannel.Stats)) {
                 outputChannel.Stats->BlockedByCapacity++;
             }
-            CA_LOG_D("Cannot drain channel cause it blocked by capacity, channelId: " << channelId);
+            CA_LOG_D("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
+                << ". To send: " << toSend
+                << ". Free space: " << peerState.PeerFreeSpace
+                << ". Inflight: " << peerState.InFlightBytes
+                << ". Allowed overcommit: " << allowedOvercommit);
             auto ev = MakeHolder<NTaskRunnerActor::TEvChannelPopFinished>(channelId);
             Y_VERIFY(!ev->Finished);
             Send(SelfId(), std::move(ev));  // try again, ev.Finished == false
@@ -687,8 +691,13 @@ private:
             }
         }
 
+        TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(it->second.ChannelId);
+        Y_VERIFY(inputChannel);
+        if (ev->Get()->FreeSpace) {
+            inputChannel->FreeSpace = *ev->Get()->FreeSpace;
+        }
+
         if (it->second.Ack) {
-            TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(it->second.ChannelId);
             Channels->SendChannelDataAck(it->second.ChannelId, inputChannel->FreeSpace);
         }
 

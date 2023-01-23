@@ -306,13 +306,12 @@ struct TEvContinueRun
     )
         : ChannelId(0)
         , MemLimit(0)
-        , FreeSpace(0)
         , WatermarkRequest(std::move(watermarkRequest))
         , CheckpointRequest(std::move(checkpointRequest))
         , CheckpointOnly(checkpointOnly)
     { }
 
-    TEvContinueRun(ui32 channelId, ui64 freeSpace)
+    TEvContinueRun(ui32 channelId, TMaybe<ui64> freeSpace)
         : ChannelId(channelId)
         , AskFreeSpace(false)
         , MemLimit(0)
@@ -330,7 +329,7 @@ struct TEvContinueRun
     bool AskFreeSpace = true;
     const THashSet<ui32> InputChannels;
     ui64 MemLimit;
-    ui64 FreeSpace;
+    TMaybe<ui64> FreeSpace;
     TMaybe<TWatermarkRequest> WatermarkRequest = Nothing();
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;

@@ -269,18 +269,19 @@ private:
             TaskRunner->GetOutputChannel(channelId)->Finish();
             return;
         }
-        ui64 freeSpace = 0;
+        TMaybe<ui64> freeSpace;
+        auto inputChannel = TaskRunner->GetInputChannel(channelId);
         if (hasData) {
-            TaskRunner->GetInputChannel(channelId)->Push(std::move(data));
-            if (askFreeSpace) {
-                freeSpace = TaskRunner->GetInputChannel(channelId)->GetFreeSpace();
-            }
+            inputChannel->Push(std::move(data));
+        }
+        if (askFreeSpace) {
+            freeSpace = inputChannel->GetFreeSpace();
         }
         if (finish) {
-            TaskRunner->GetInputChannel(channelId)->Finish();
+            inputChannel->Finish();
         }
         if (ev->Get()->PauseAfterPush) {
-            TaskRunner->GetInputChannel(channelId)->Pause();
+            inputChannel->Pause();
         }
 
         // run

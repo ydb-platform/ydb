@@ -8,6 +8,7 @@ class TDqInputChannel : public TDqInputImpl<TDqInputChannel, IDqInputChannel> {
     friend TBaseImpl;
 private:
     std::deque<NDqProto::TData> DataForDeserialize;
+    ui64 StoredSerializedBytes = 0;
 
     void PushImpl(NDqProto::TData&& data) {
         const i64 space = data.GetRaw().size();
@@ -26,6 +27,14 @@ private:
         AddBatch(std::move(buffer), space);
     }
 
+    void DeserializeAllData() {
+        while (!DataForDeserialize.empty()) {
+            PushImpl(std::move(DataForDeserialize.front()));
+            DataForDeserialize.pop_front();
+        }
+        StoredSerializedBytes = 0;
+    }
+
 public:
     TDqInputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -41,19 +50,34 @@ public:
         return ChannelId;
     }
 
+    i64 GetFreeSpace() const override {
+        return TBaseImpl::GetFreeSpace() - i64(StoredSerializedBytes);
+    }
+
+    ui64 GetStoredBytes() const override {
+        return StoredBytes + StoredSerializedBytes;
+    }
+
+    bool IsFinished() const override {
+        return DataForDeserialize.empty() && TBaseImpl::IsFinished();
+    }
+
+    [[nodiscard]]
+    bool Empty() const override {
+        return DataForDeserialize.empty() && TBaseImpl::Empty();
+    }
+
+    void Pause() override {
+        DeserializeAllData();
+        TBaseImpl::Pause();
+    }
+
     [[nodiscard]]
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch) override {
         if (Batches.empty()) {
-            if (DataForDeserialize.size()) {
-                PushImpl(std::move(DataForDeserialize.front()));
-                DataForDeserialize.pop_front();
-                return TBaseImpl::Pop(batch);
-            } else {
-                return false;
-            }
-        } else {
-            return TBaseImpl::Pop(batch);
+            DeserializeAllData();
         }
+        return TBaseImpl::Pop(batch);
     }
 
     void Push(NDqProto::TData&& data) override {
@@ -61,6 +85,7 @@ public:
         if (Y_UNLIKELY(data.GetRows() == 0)) {
             return;
         }
+        StoredSerializedBytes += data.GetRaw().size();
         DataForDeserialize.emplace_back(std::move(data));
     }
 

@@ -189,6 +189,9 @@ namespace NUdf {
 #define SIMPLE_UDF_OPTIONS(udfName, signature, options) \
     UDF(udfName, builder.SimpleSignature<signature>(); options;)
 
+#define SIMPLE_STRICT_UDF_OPTIONS(udfName, signature, options) \
+    UDF(udfName, builder.SimpleSignature<signature>().IsStrict(); options;)
+
 #define SIMPLE_UDF_RUN_OPTIONS(udfName, signature, options) \
     UDF_RUN(udfName, builder.SimpleSignature<signature>(); options;)
 

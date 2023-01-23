@@ -148,7 +148,9 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
             } else if (node->IsCallable("DependsOn")) {
                 ++insideDependsOn;
             } else if (isStrict && !insideAssumeStrict && node->IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
-                isStrict = false;
+                if (!node->IsCallable("Udf") || !HasSetting(*node->Child(TCoUdf::idx_Settings), "strict")) {
+                    isStrict = false;
+                }
             } else if (insideDependsOn && node.Get() == args->Child(0)) {
                 withDependsOn = true;
             }

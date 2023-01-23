@@ -27,53 +27,54 @@ using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
-#define STRING_UDF(udfName, function)                \
-    SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) { \
-        const TString input(args[0].AsStringRef());  \
-        const auto& result = function(input);        \
-        return valueBuilder->NewString(result);      \
+#define STRING_UDF(udfName, function)                       \
+    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) { \
+        const TString input(args[0].AsStringRef());         \
+        const auto& result = function(input);               \
+        return valueBuilder->NewString(result);             \
     }
 
-#define STRING_UNSAFE_UDF(udfName, function)                     \
-    SIMPLE_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0);                            \
-        const TString input(args[0].AsStringRef());              \
-        try {                                                    \
-            const auto& result = function(input);                \
-            return valueBuilder->NewString(result);              \
-        } catch (yexception&) {                                  \
-            return TUnboxedValue();                              \
-        }                                                        \
+// 'unsafe' udf is actually strict - it returns null on any exception
+#define STRING_UNSAFE_UDF(udfName, function)                           \
+    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) {\
+        EMPTY_RESULT_ON_EMPTY_ARG(0);                                  \
+        const TString input(args[0].AsStringRef());                    \
+        try {                                                          \
+            const auto& result = function(input);                      \
+            return valueBuilder->NewString(result);                    \
+        } catch (yexception&) {                                        \
+            return TUnboxedValue();                                    \
+        }                                                              \
     }
 
-#define STROKA_UDF(udfName, function)                            \
-    SIMPLE_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0)                             \
-        const TString input(args[0].AsStringRef());              \
-        try {                                                    \
-            TUtf16String wide = UTF8ToWide(input);               \
-            function(wide);                                      \
-            return valueBuilder->NewString(WideToUTF8(wide));    \
-        } catch (yexception&) {                                  \
-            return TUnboxedValue();                              \
-        }                                                        \
+#define STROKA_UDF(udfName, function)                                   \
+    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
+        EMPTY_RESULT_ON_EMPTY_ARG(0)                                    \
+        const TString input(args[0].AsStringRef());                     \
+        try {                                                           \
+            TUtf16String wide = UTF8ToWide(input);                      \
+            function(wide);                                             \
+            return valueBuilder->NewString(WideToUTF8(wide));           \
+        } catch (yexception&) {                                         \
+            return TUnboxedValue();                                     \
+        }                                                               \
     }
 
-#define STROKA_CASE_UDF(udfName, function)                       \
-    SIMPLE_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0)                             \
-        const TString input(args[0].AsStringRef());              \
-        try {                                                    \
-            TUtf16String wide = UTF8ToWide(input);               \
-            function(wide.begin(), wide.size());                 \
-            return valueBuilder->NewString(WideToUTF8(wide));    \
-        } catch (yexception&) {                                  \
-            return TUnboxedValue();                              \
-        }                                                        \
+#define STROKA_CASE_UDF(udfName, function)                              \
+    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
+        EMPTY_RESULT_ON_EMPTY_ARG(0)                                    \
+        const TString input(args[0].AsStringRef());                     \
+        try {                                                           \
+            TUtf16String wide = UTF8ToWide(input);                      \
+            function(wide.begin(), wide.size());                        \
+            return valueBuilder->NewString(WideToUTF8(wide));           \
+        } catch (yexception&) {                                         \
+            return TUnboxedValue();                                     \
+        }                                                               \
     }
 
 #define STROKA_ASCII_CASE_UDF(udfName, function)                 \
-    SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) {             \
+    SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) {      \
         TString input(args[0].AsStringRef());                    \
         if (input.function()) {                                  \
             return valueBuilder->NewString(input);               \
@@ -82,46 +83,46 @@ namespace {
         }                                                        \
     }
 
-#define STROKA_FIND_UDF(udfName, function)                      \
-    SIMPLE_UDF(T##udfName, bool(TOptional<char*>, char*)) {     \
-        Y_UNUSED(valueBuilder);                                 \
-        if (args[0]) {                                          \
-            const TString haystack(args[0].AsStringRef());      \
-            const TString needle(args[1].AsStringRef());        \
-            return TUnboxedValuePod(haystack.function(needle)); \
-        } else {                                                \
-            return TUnboxedValuePod(false);                     \
-        }                                                       \
+#define STROKA_FIND_UDF(udfName, function)                             \
+    SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {     \
+        Y_UNUSED(valueBuilder);                                        \
+        if (args[0]) {                                                 \
+            const TString haystack(args[0].AsStringRef());             \
+            const TString needle(args[1].AsStringRef());               \
+            return TUnboxedValuePod(haystack.function(needle));        \
+        } else {                                                       \
+            return TUnboxedValuePod(false);                            \
+        }                                                              \
     }
 
-#define STRING_TWO_ARGS_UDF(udfName, function)                   \
-    SIMPLE_UDF(T##udfName, bool(TOptional<char*>, char*)) {      \
-        Y_UNUSED(valueBuilder);                                  \
-        if (args[0]) {                                           \
-            const TString haystack(args[0].AsStringRef());       \
-            const TString needle(args[1].AsStringRef());         \
-            return TUnboxedValuePod(function(haystack, needle)); \
-        } else {                                                 \
-            return TUnboxedValuePod(false);                      \
-        }                                                        \
+#define STRING_TWO_ARGS_UDF(udfName, function)                          \
+    SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {      \
+        Y_UNUSED(valueBuilder);                                         \
+        if (args[0]) {                                                  \
+            const TString haystack(args[0].AsStringRef());              \
+            const TString needle(args[1].AsStringRef());                \
+            return TUnboxedValuePod(function(haystack, needle));        \
+        } else {                                                        \
+            return TUnboxedValuePod(false);                             \
+        }                                                               \
     }
 
-#define IS_ASCII_UDF(function)                             \
-    SIMPLE_UDF(T##function, bool(TOptional<char*>)) {      \
-        Y_UNUSED(valueBuilder);                            \
-        if (args[0]) {                                     \
-            const TStringBuf input(args[0].AsStringRef()); \
-            bool result = true;                            \
-            for (auto c : input) {                         \
-                if (!function(c)) {                        \
-                    result = false;                        \
-                    break;                                 \
-                }                                          \
-            }                                              \
-            return TUnboxedValuePod(result);               \
-        } else {                                           \
-            return TUnboxedValuePod(false);                \
-        }                                                  \
+#define IS_ASCII_UDF(function)                                    \
+    SIMPLE_STRICT_UDF(T##function, bool(TOptional<char*>)) {      \
+        Y_UNUSED(valueBuilder);                                   \
+        if (args[0]) {                                            \
+            const TStringBuf input(args[0].AsStringRef());        \
+            bool result = true;                                   \
+            for (auto c : input) {                                \
+                if (!function(c)) {                               \
+                    result = false;                               \
+                    break;                                        \
+                }                                                 \
+            }                                                     \
+            return TUnboxedValuePod(result);                      \
+        } else {                                                  \
+            return TUnboxedValuePod(false);                       \
+        }                                                         \
     }
 
 #define STRING_UDF_MAP(XX)           \
@@ -178,21 +179,21 @@ namespace {
     XX(IsAsciiAlnum)         \
     XX(IsAsciiHex)
 
-    SIMPLE_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
+    SIMPLE_STRICT_UDF(TCollapseText, char*(TAutoMap<char*>, ui64)) {
         TString input(args[0].AsStringRef());
         ui64 maxLength = args[1].Get<ui64>();
         CollapseText(input, maxLength);
         return valueBuilder->NewString(input);
     }
 
-    SIMPLE_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
+    SIMPLE_STRICT_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
         if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
             return valueBuilder->NewString(result);
         else
             return args[0];
     }
 
-    SIMPLE_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
+    SIMPLE_STRICT_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.find(what); index != std::string::npos) {
@@ -202,7 +203,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
+    SIMPLE_STRICT_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.rfind(what); index != std::string::npos) {
@@ -212,7 +213,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_STRICT_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         const std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -229,7 +230,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_STRICT_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -242,7 +243,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_STRICT_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -255,7 +256,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF_OPTIONS(TFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
+    SIMPLE_STRICT_UDF_OPTIONS(TFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
                        builder.OptionalArgs(1)) {
         Y_UNUSED(valueBuilder);
         const TString haystack(args[0].AsStringRef());
@@ -264,8 +265,8 @@ namespace {
         return TUnboxedValuePod(haystack.find(needle, pos));
     }
 
-    SIMPLE_UDF_OPTIONS(TReverseFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_OPTIONS(TReverseFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
+                              builder.OptionalArgs(1)) {
         Y_UNUSED(valueBuilder);
         const TString haystack(args[0].AsStringRef());
         const TString needle(args[1].AsStringRef());
@@ -273,8 +274,8 @@ namespace {
         return TUnboxedValuePod(haystack.rfind(needle, pos));
     }
 
-    SIMPLE_UDF_OPTIONS(TSubstring, char*(TAutoMap<char*>, TOptional<ui64>, TOptional<ui64>),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_OPTIONS(TSubstring, char*(TAutoMap<char*>, TOptional<ui64>, TOptional<ui64>),
+                              builder.OptionalArgs(1)) {
         const TString input(args[0].AsStringRef());
         const ui64 from = args[1].GetOrDefault<ui64>(0);
         const ui64 count = args[2].GetOrDefault<ui64>(TString::npos);
@@ -317,7 +318,7 @@ namespace {
     using TLimitArg = TNamedArg<ui64, limitName>;
 
 
-    SIMPLE_UDF_OPTIONS(TSplitToList, TListType<char*>(
+    SIMPLE_STRICT_UDF_OPTIONS(TSplitToList, TListType<char*>(
                             TOptional<char*>,
                             char*,
                             TDelimeterStringArg,
@@ -353,7 +354,7 @@ namespace {
         return valueBuilder->NewList(result.data(), result.size());
     }
 
-    SIMPLE_UDF(TJoinFromList, char*(TAutoMap<TListType<TOptional<char*>>>, char*)) {
+    SIMPLE_STRICT_UDF(TJoinFromList, char*(TAutoMap<TListType<TOptional<char*>>>, char*)) {
         auto input = args[0].GetListIterator();
         const TString delimeter(args[1].AsStringRef());
         TVector<TString> items;
@@ -368,7 +369,7 @@ namespace {
         return valueBuilder->NewString(JoinSeq(delimeter, items));
     }
 
-    SIMPLE_UDF(TLevensteinDistance, ui64(TAutoMap<char*>, TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TLevensteinDistance, ui64(TAutoMap<char*>, TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const TStringBuf left(args[0].AsStringRef());
         const TStringBuf right(args[1].AsStringRef());
@@ -414,69 +415,69 @@ namespace {
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(THex, char*(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(THex, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << Hex(args[0].Get<ui64>());
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(TSHex, char*(TAutoMap<i64>)) {
+    SIMPLE_STRICT_UDF(TSHex, char*(TAutoMap<i64>)) {
         TStringStream result;
         result << SHex(args[0].Get<i64>());
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(TBin, char*(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TBin, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << Bin(args[0].Get<ui64>());
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(TSBin, char*(TAutoMap<i64>)) {
+    SIMPLE_STRICT_UDF(TSBin, char*(TAutoMap<i64>)) {
         TStringStream result;
         result << SBin(args[0].Get<i64>());
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(THexText, char*(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(THexText, char*(TAutoMap<char*>)) {
         TStringStream result;
         const TStringBuf input(args[0].AsStringRef());
         result << HexText(input);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(TBinText, char*(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TBinText, char*(TAutoMap<char*>)) {
         TStringStream result;
         const TStringBuf input(args[0].AsStringRef());
         result << BinText(input);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(THumanReadableDuration, char*(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(THumanReadableDuration, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << HumanReadable(TDuration::MicroSeconds(args[0].Get<ui64>()));
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(THumanReadableQuantity, char*(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(THumanReadableQuantity, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << HumanReadableSize(args[0].Get<ui64>(), SF_QUANTITY);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(THumanReadableBytes, char*(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(THumanReadableBytes, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << HumanReadableSize(args[0].Get<ui64>(), SF_BYTES);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(TPrec, char*(TAutoMap<double>, ui64)) {
+    SIMPLE_STRICT_UDF(TPrec, char*(TAutoMap<double>, ui64)) {
         TStringStream result;
         result << Prec(args[0].Get<double>(), args[1].Get<ui64>());
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF(TToByteList, TListType<ui8>(char*)) {
+    SIMPLE_STRICT_UDF(TToByteList, TListType<ui8>(char*)) {
         const TStringBuf input(args[0].AsStringRef());
         TUnboxedValue* items = nullptr;
         TUnboxedValue result = valueBuilder->NewArray(input.size(), items);
@@ -486,7 +487,7 @@ namespace {
         return result;
     }
 
-    SIMPLE_UDF(TFromByteList, char*(TListType<ui8>)) {
+    SIMPLE_STRICT_UDF(TFromByteList, char*(TListType<ui8>)) {
         auto input = args[0];
 
         if (auto elems = input.GetElements()) {

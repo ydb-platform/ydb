@@ -76,12 +76,12 @@ public:
 
     STRICT_STFUNC(Handler, {
         cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
-        HFunc(TEvTaskRunnerCreate, OnDqTask);
-        HFunc(TEvContinueRun, OnContinueRun);
-        HFunc(TEvPop, OnChannelPop);
-        HFunc(TEvPush, OnChannelPush);
-        HFunc(TEvSinkPop, OnSinkPop);
-        HFunc(TEvSinkPopFinished, OnSinkPopFinished);
+        hFunc(TEvTaskRunnerCreate, OnDqTask);
+        hFunc(TEvContinueRun, OnContinueRun);
+        hFunc(TEvPop, OnChannelPop);
+        hFunc(TEvPush, OnChannelPush);
+        hFunc(TEvSinkPop, OnSinkPop);
+        hFunc(TEvSinkPopFinished, OnSinkPopFinished);
     })
 
 private:
@@ -191,12 +191,12 @@ private:
         TActor<TTaskRunnerActor>::PassAway();
     }
 
-    void OnContinueRun(TEvContinueRun::TPtr& ev, const TActorContext& ctx) {
-        Run(ev, ctx);
+    void OnContinueRun(TEvContinueRun::TPtr& ev) {
+        Run(ev);
     }
 
-    void OnChannelPush(TEvPush::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+    void OnChannelPush(TEvPush::TPtr& ev) {
+        auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
         auto hasData = ev->Get()->HasData;
@@ -286,8 +286,8 @@ private:
         });
     }
 
-    void OnChannelPop(TEvPop::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+    void OnChannelPop(TEvPop::TPtr& ev) {
+        auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
         auto cookie = ev->Cookie;
@@ -358,8 +358,7 @@ private:
         });
     }
 
-    void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev, const NActors::TActorContext& ctx) {
-        Y_UNUSED(ctx);
+    void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueVector batch;
         for (auto& row: ev->Get()->Strings) {
@@ -375,9 +374,9 @@ private:
             ev->Get()->Changed);
     }
 
-    void OnSinkPop(TEvSinkPop::TPtr& ev, const NActors::TActorContext& ctx) {
+    void OnSinkPop(TEvSinkPop::TPtr& ev) {
         auto selfId = SelfId();
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = TActivationContext::ActorSystem();
 
         Invoker->Invoke([taskRunner=TaskRunner, selfId, actorSystem, ev=std::move(ev), settings=Settings, stageId=StageId] {
             auto cookie = ev->Cookie;
@@ -426,7 +425,7 @@ private:
         });
     }
 
-    void OnDqTask(TEvTaskRunnerCreate::TPtr& ev, const NActors::TActorContext& ctx) {
+    void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
         auto cookie = ev->Cookie;
@@ -454,7 +453,7 @@ private:
             return;
         }
 
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = TActivationContext::ActorSystem();
         {
             Yql::DqsProto::TTaskMeta taskMeta;
             ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
@@ -496,8 +495,8 @@ private:
         });
     }
 
-    void Run(TEvContinueRun::TPtr& ev, const TActorContext& ctx) {
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+    void Run(TEvContinueRun::TPtr& ev) {
+        auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
         auto cookie = ev->Cookie;

@@ -238,13 +238,13 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvPrivate::TEvSourceDataReady, Handle);
+        hFunc(TEvPrivate::TEvSourceDataReady, Handle);
     )
 
-    void Handle(TEvPrivate::TEvSourceDataReady::TPtr&, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvSourceDataReady::TPtr&) {
         SRC_LOG_T("Source data ready");
         SubscribedOnEvent = false;
-        ctx.Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     // IActor & IDqComputeActorAsyncInput

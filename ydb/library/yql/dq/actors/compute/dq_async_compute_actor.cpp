@@ -107,11 +107,11 @@ public:
 private:
     STFUNC(StateFuncBody) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NTaskRunnerActor::TEvTaskRunFinished, OnRunFinished);
-            HFunc(NTaskRunnerActor::TEvAsyncInputPushFinished, OnAsyncInputPushFinished);
-            HFunc(NTaskRunnerActor::TEvChannelPopFinished, OnPopFinished);
-            HFunc(NTaskRunnerActor::TEvTaskRunnerCreateFinished, OnTaskRunnerCreated);
-            HFunc(NTaskRunnerActor::TEvContinueRun, OnContinueRun); // push finished
+            hFunc(NTaskRunnerActor::TEvTaskRunFinished, OnRunFinished);
+            hFunc(NTaskRunnerActor::TEvAsyncInputPushFinished, OnAsyncInputPushFinished);
+            hFunc(NTaskRunnerActor::TEvChannelPopFinished, OnPopFinished);
+            hFunc(NTaskRunnerActor::TEvTaskRunnerCreateFinished, OnTaskRunnerCreated);
+            hFunc(NTaskRunnerActor::TEvContinueRun, OnContinueRun); // push finished
             hFunc(TEvDqCompute::TEvStateRequest, OnStateRequest);
             hFunc(NTaskRunnerActor::TEvStatistics, OnStatisticsResponse);
             hFunc(NTaskRunnerActor::TEvLoadTaskRunnerFromStateDone, OnTaskRunnerLoaded);
@@ -443,7 +443,7 @@ private:
         return guard;
     }
 
-    void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev, const NActors::TActorContext& ) {
+    void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev) {
         const auto& secureParams = ev->Get()->SecureParams;
         const auto& taskParams = ev->Get()->TaskParams;
         const auto& typeEnv = ev->Get()->TypeEnv;
@@ -477,7 +477,7 @@ private:
         return ReadyToCheckpointFlag;
     }
 
-    void OnRunFinished(NTaskRunnerActor::TEvTaskRunFinished::TPtr& ev, const NActors::TActorContext& ) {
+    void OnRunFinished(NTaskRunnerActor::TEvTaskRunFinished::TPtr& ev) {
         if (Stat) {
             Stat->AddCounters2(ev->Get()->Sensors);
         }
@@ -550,7 +550,7 @@ private:
         }
     }
 
-    void OnAsyncInputPushFinished(NTaskRunnerActor::TEvAsyncInputPushFinished::TPtr& ev, const NActors::TActorContext& ) {
+    void OnAsyncInputPushFinished(NTaskRunnerActor::TEvAsyncInputPushFinished::TPtr& ev) {
         auto it = SourcesMap.find(ev->Get()->Index);
         Y_VERIFY(it != SourcesMap.end());
         auto& source = it->second;
@@ -563,7 +563,7 @@ private:
         }
     }
 
-    void OnPopFinished(NTaskRunnerActor::TEvChannelPopFinished::TPtr& ev, const NActors::TActorContext&) {
+    void OnPopFinished(NTaskRunnerActor::TEvChannelPopFinished::TPtr& ev) {
         if (Stat) {
             Stat->AddCounters2(ev->Get()->Sensors);
         }
@@ -674,7 +674,7 @@ private:
         return result;
     }
 
-    void OnContinueRun(NTaskRunnerActor::TEvContinueRun::TPtr& ev, const NActors::TActorContext& ) {
+    void OnContinueRun(NTaskRunnerActor::TEvContinueRun::TPtr& ev) {
         auto it = TakeInputChannelDataRequests.find(ev->Cookie);
         YQL_ENSURE(it != TakeInputChannelDataRequests.end());
 

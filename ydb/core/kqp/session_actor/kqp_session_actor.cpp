@@ -836,14 +836,27 @@ public:
         Send(snapMgrActorId, ev.release());
     }
 
+    Ydb::StatusIds::StatusCode StatusForSnapshotError(NKikimrIssues::TStatusIds::EStatusCode status) {
+        switch (status) {
+            case NKikimrIssues::TStatusIds::SCHEME_ERROR:
+                return Ydb::StatusIds::SCHEME_ERROR;
+            case NKikimrIssues::TStatusIds::TIMEOUT:
+                return Ydb::StatusIds::TIMEOUT;
+            case NKikimrIssues::TStatusIds::OVERLOADED:
+                return Ydb::StatusIds::OVERLOADED;
+            default:
+                // snapshot is acquired before transactions execution, so we can return UNAVAILABLE here
+                return Ydb::StatusIds::UNAVAILABLE;
+        }
+    }
+
     void HandleExecute(TEvKqpSnapshot::TEvCreateSnapshotResponse::TPtr& ev) {
         TTimerGuard timer(this);
         auto *response = ev->Get();
 
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
             auto& issues = response->Issues;
-            LOG_E("failed to acquire snapshot: " << issues.ToString());
-            ReplyQueryError(GetYdbStatus(issues), "", MessageFromIssues(issues));
+            ReplyQueryError(StatusForSnapshotError(response->Status), "", MessageFromIssues(issues));
             return;
         }
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;

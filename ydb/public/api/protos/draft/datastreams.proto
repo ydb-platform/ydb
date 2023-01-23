@@ -66,7 +66,7 @@ message HashKeyRange {
 
 message Record {
     // Timestamp that the record was inserted into the stream
-    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
+    int64 approximate_arrival_timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Data blob
     bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     // Encryption type used on record

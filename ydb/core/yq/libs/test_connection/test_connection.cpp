@@ -193,15 +193,6 @@ public:
             }
             case YandexQuery::ConnectionSetting::kMonitoring: {
                 TString monitoringEndpoint = CommonConfig.GetMonitoringEndpoint();
-                // TODO: get monitoring endpoint from config only after YQ-148
-                if (monitoringEndpoint.Empty()) {
-                    if (CommonConfig.GetObjectStorageEndpoint().Contains("preprod")) {
-                        monitoringEndpoint = "monitoring.api.cloud-preprod.yandex.net";
-                    } else {
-                        monitoringEndpoint = "monitoring.api.cloud.yandex.net";
-                    }
-                }
-
                 Register(CreateTestMonitoringConnectionActor(
                                 *request.mutable_setting()->mutable_monitoring(),
                                 ev->Sender, ev->Cookie, monitoringEndpoint,

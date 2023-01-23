@@ -32,6 +32,7 @@ enum class EComponent {
     ProviderPq,
     ProviderS3,
     CoreDq,
+    HttpGateway,
     // <--- put other log components here
     MaxValue
 };
@@ -73,6 +74,7 @@ struct EComponentHelpers {
         case EComponent::ProviderPq: return TStringBuf("PQ");
         case EComponent::ProviderS3: return TStringBuf("S3");
         case EComponent::CoreDq: return TStringBuf("core dq");
+        case EComponent::HttpGateway: return TStringBuf("http gw");
         default:
             ythrow yexception() << "invalid log component value: "
                                 << ToInt(component);
@@ -103,6 +105,7 @@ struct EComponentHelpers {
         if (str == TStringBuf("PQ")) return EComponent::ProviderPq;
         if (str == TStringBuf("S3")) return EComponent::ProviderS3;
         if (str == TStringBuf("core dq")) return EComponent::CoreDq;
+        if (str == TStringBuf("http gw")) return EComponent::HttpGateway;
         ythrow yexception() << "unknown log component: '" << str << '\'';
     }
 

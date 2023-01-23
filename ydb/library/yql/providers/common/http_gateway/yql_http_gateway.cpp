@@ -1,5 +1,7 @@
 #include "yql_http_gateway.h"
+#include "yql_dns_gateway.h"
 
+#include <ydb/library/yql/utils/log/log.h>
 #include <contrib/libs/curl/include/curl/curl.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
@@ -81,8 +83,8 @@ public:
         PUT
     };
 
-    TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, size_t sizeLimit = 0, size_t bodySize = 0, const TCurlInitConfig& config = TCurlInitConfig())
-        : Headers(headers), Method(method), Offset(offset), SizeLimit(sizeLimit), BodySize(bodySize), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes), Config(config), ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0'), Url(url)
+    TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, size_t sizeLimit = 0, size_t bodySize = 0, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : Headers(headers), Method(method), Offset(offset), SizeLimit(sizeLimit), BodySize(bodySize), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes), Config(config), ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0'), DnsCache(dnsCache), Url(url)
     {
         InitHandles();
         Counter->Inc();
@@ -131,6 +133,10 @@ public:
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
 
+        if (DnsCache != nullptr) {
+            curl_easy_setopt(Handle, CURLOPT_RESOLVE, DnsCache.get());
+        }
+        
         if (!Headers.empty()) {
             CurlHeaders = std::accumulate(Headers.cbegin(), Headers.cend(), CurlHeaders,
                 std::bind(&curl_slist_append, std::placeholders::_1, std::bind(&TString::c_str, std::placeholders::_2)));
@@ -230,6 +236,7 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
     const TCurlInitConfig Config;
     std::vector<char> ErrorBuffer;
+    TDNSGateway<>::TDNSConstCurlListPtr DnsCache;
 public:
     TString Url;
 };
@@ -239,15 +246,15 @@ public:
     using TPtr = std::shared_ptr<TEasyCurlBuffer>;
     using TWeakPtr = std::weak_ptr<TEasyCurlBuffer>;
 
-    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState, const TCurlInitConfig& config = TCurlInitConfig())
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, method, offset, sizeLimit, data.size(), std::move(config)), Data(std::move(data)), Input(Data), Output(Buffer), HeaderOutput(Header), RetryState(std::move(retryState))
+    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, method, offset, sizeLimit, data.size(), std::move(config), std::move(dnsCache)), Data(std::move(data)), Input(Data), Output(Buffer), HeaderOutput(Header), RetryState(std::move(retryState))
     {
         Output.Reserve(sizeLimit);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState, const TCurlInitConfig& config = TCurlInitConfig()) {
-        return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), std::move(retryState), std::move(config));
+    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState, const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr) {
+        return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), std::move(retryState), std::move(config), std::move(dnsCache));
     }
 
     // return true if callback successfully added to this work
@@ -341,8 +348,9 @@ public:
         IHTTPGateway::TOnNewDataPart onNewData,
         IHTTPGateway::TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
-        const TCurlInitConfig& config = TCurlInitConfig())
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, EMethod::GET, offset, sizeLimit, 0ULL, std::move(config))
+        const TCurlInitConfig& config = TCurlInitConfig(),
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, EMethod::GET, offset, sizeLimit, 0ULL, std::move(config), std::move(dnsCache))
         , OnStart(std::move(onStart))
         , OnNewData(std::move(onNewData))
         , OnFinish(std::move(onFinish))
@@ -362,9 +370,10 @@ public:
         IHTTPGateway::TOnNewDataPart onNewData,
         IHTTPGateway::TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
-        const TCurlInitConfig& config = TCurlInitConfig())
+        const TCurlInitConfig& config = TCurlInitConfig(),
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
     {
-        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, std::move(config));
+        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, std::move(config), std::move(dnsCache));
     }
 
     enum class EAction : i8 {
@@ -464,7 +473,8 @@ public:
     explicit THTTPMultiGateway(
         const THttpGatewayConfig* httpGatewaysCfg,
         ::NMonitoring::TDynamicCounterPtr counters)
-        : Counters(std::move(counters))
+        : DnsGateway(httpGatewaysCfg ? httpGatewaysCfg->GetDnsResolverConfig(): TDnsResolverConfig{}, counters)
+        , Counters(std::move(counters))
         , Rps(Counters->GetCounter("Requests", true))
         , InFlight(Counters->GetCounter("InFlight"))
         , InFlightStreams(Counters->GetCounter("InFlightStreams"))
@@ -723,7 +733,7 @@ private:
         Rps->Inc();
 
         const std::unique_lock lock(Sync);
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig);
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         Await.emplace(std::move(easy));
         Wakeup(0U);
     }
@@ -749,7 +759,7 @@ private:
             if (easy->AddCallback(callback))
                 return;
 
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig);
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         entry = easy;
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
@@ -765,7 +775,7 @@ private:
         TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
     {
-        auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter);
+        auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, InitConfig, DnsGateway.GetDNSCurlList());
         const std::unique_lock lock(Sync);
         const auto handle = stream->GetHandle();
         TEasyCurlStream::TWeakPtr weak = stream;
@@ -820,6 +830,8 @@ private:
 
     static std::mutex CreateSync;
     static TWeakPtr Singleton;
+
+    TDNSGateway<> DnsGateway;
 
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Rps;

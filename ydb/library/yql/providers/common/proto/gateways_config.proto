@@ -53,6 +53,24 @@ enum ETokenType {
 
 /////////////////////////////// HTTP GATEWAY //////////////////////
 
+message TExplicitDNSRecord {
+  enum ProtocolVersion {
+    ANY = 0;
+    IPV4 = 1;
+    IPV6 = 2;
+  };
+
+  optional string Address = 1 [default = ""];
+  optional uint32 Port = 2 [default = 443];
+  optional string ExpectedIP = 3 [default = ""];
+  optional ProtocolVersion Protocol = 4 [default = ANY]; 
+}
+
+message TDnsResolverConfig {
+  optional uint32 RefreshMs = 1 [default = 60000];
+  repeated TExplicitDNSRecord ExplicitDNSRecord = 100;
+}
+
 message THttpGatewayConfig {
     optional uint32 MaxInFlightCount = 1;
     optional uint64 MaxSimulatenousDownloadsSize = 2;
@@ -63,6 +81,7 @@ message THttpGatewayConfig {
     optional uint64 RequestTimeoutSeconds = 7;
     optional uint64 LowSpeedTimeSeconds = 8;
     optional uint64 LowSpeedBytesLimit = 9;
+    optional TDnsResolverConfig DnsResolverConfig = 10;
 }
 
 /////////////////////////////// YT ///////////////////////////////

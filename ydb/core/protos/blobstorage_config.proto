@@ -595,6 +595,7 @@ message TBaseConfig {
         NKikimrBlobStorage.TPDiskMetrics PDiskMetrics = 14;
         uint64 DriveStatusChangeTimestamp = 15; // TInstant::GetValue()
         EDecommitStatus DecommitStatus = 16;
+        string ExpectedSerial = 17;
     }
     message TVSlot {
         message TDonorDisk {

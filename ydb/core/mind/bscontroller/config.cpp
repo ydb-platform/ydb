@@ -823,6 +823,7 @@ namespace NKikimr::NBsController {
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);
             pb->MutablePDiskMetrics()->ClearPDiskId();
+            pb->SetExpectedSerial(pdisk.ExpectedSerial);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

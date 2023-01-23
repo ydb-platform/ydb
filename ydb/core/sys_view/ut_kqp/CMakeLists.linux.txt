@@ -70,7 +70,7 @@ set_yunittest_property(
   ydb-core-sys_view-ut_kqp
   PROPERTY
   LABELS
-  LARGE
+  MEDIUM
 )
 set_yunittest_property(
   TEST
@@ -84,6 +84,6 @@ set_yunittest_property(
   ydb-core-sys_view-ut_kqp
   PROPERTY
   TIMEOUT
-  1000
+  600
 )
 vcs_info(ydb-core-sys_view-ut_kqp)

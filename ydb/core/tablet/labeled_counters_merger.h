@@ -14,17 +14,17 @@ public:
                          NKikimrLabeledCounters::TTabletLabeledCounter& target) {
         ui64 value(source.GetValue());
         TLabeledCounterOptions::ECounterType type(source.GetType());
-        NKikimr::TLabeledCounterOptions::EAggregateFunc func(source.GetAggregateFunc());
+        TLabeledCounterOptions::EAggregateFunc func(source.GetAggregateFunc());
         if (type == TLabeledCounterOptions::CT_TIMELAG) {
             type = TLabeledCounterOptions::CT_SIMPLE;
             auto now = TInstant::Now().MilliSeconds();
             value =  now > value ? now - value : 0;
             switch (func) {
-            case NKikimr::TLabeledCounterOptions::EAF_MIN:
-                func = NKikimr::TLabeledCounterOptions::EAF_MAX;
+            case TLabeledCounterOptions::EAF_MIN:
+                func = TLabeledCounterOptions::EAF_MAX;
                 break;
-            case NKikimr::TLabeledCounterOptions::EAF_MAX:
-                func = NKikimr::TLabeledCounterOptions::EAF_MIN;
+            case TLabeledCounterOptions::EAF_MAX:
+                func = TLabeledCounterOptions::EAF_MIN;
                 break;
             default:
                 break;
@@ -32,13 +32,13 @@ public:
         }
         if (target.HasValue()) {
             switch (func) {
-            case NKikimr::TLabeledCounterOptions::EAF_MIN:
+            case TLabeledCounterOptions::EAF_MIN:
                 target.SetValue(std::min(target.GetValue(), value));
                 break;
-            case NKikimr::TLabeledCounterOptions::EAF_MAX:
+            case TLabeledCounterOptions::EAF_MAX:
                 target.SetValue(std::max(target.GetValue(), value));
                 break;
-            case NKikimr::TLabeledCounterOptions::EAF_SUM:
+            case TLabeledCounterOptions::EAF_SUM:
                 target.SetValue(target.GetValue() + value);
                 break;
             }

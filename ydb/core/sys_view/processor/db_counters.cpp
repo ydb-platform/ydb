@@ -146,16 +146,27 @@ static void ResetLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters*
     auto labeledSize = dst->LabeledCounterSize();
     auto* to = dst->MutableLabeledCounter();
     for (size_t i = 0; i < labeledSize; ++i) {
-        auto aggrFunc = (*to)[i].GetAggregateFunc();
+        auto& counter = (*to)[i];
+        TLabeledCounterOptions::ECounterType type(counter.GetType());
+        TLabeledCounterOptions::EAggregateFunc aggrFunc(counter.GetAggregateFunc());
+        const bool switchResetValue = (type == TLabeledCounterOptions::CT_TIMELAG);
         switch (aggrFunc) {
-            case static_cast<int>(TTabletLabeledCountersBase::EAggregateFunc::EAF_MIN):
-                (*to)[i].SetValue(std::numeric_limits<ui64>::max());
+            case TLabeledCounterOptions::EAF_MIN:
+                if (switchResetValue) {
+                    counter.SetValue(0);
+                } else {
+                    counter.SetValue(std::numeric_limits<ui64>::max());
+                }
                 break;
-            case static_cast<int>(TTabletLabeledCountersBase::EAggregateFunc::EAF_MAX):
-                (*to)[i].SetValue(0);
+            case TLabeledCounterOptions::EAF_MAX:
+                if (switchResetValue) {
+                    counter.SetValue(std::numeric_limits<ui64>::max());
+                } else {
+                    counter.SetValue(0);
+                }
                 break;
-            case static_cast<int>(TTabletLabeledCountersBase::EAggregateFunc::EAF_SUM):
-                (*to)[i].SetValue(0);
+            case TLabeledCounterOptions::EAF_SUM:
+                counter.SetValue(0);
                 break;
             default:
                 Y_FAIL("bad aggrFunc value");

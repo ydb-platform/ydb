@@ -234,7 +234,12 @@ class TRealBlockDevice : public IBlockDevice {
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
                 action->SubmitTime = HPNow();
+
+                if (op->GetType() == IAsyncIoOperation::EType::PWrite) {
+                    PDISK_FAIL_INJECTION(1);
+                }
                 ret = Device.IoContext->Submit(op, Device.SharedCallback.Get());
+
                 if (ret == EIoResult::Ok) {
                     return;
                 }

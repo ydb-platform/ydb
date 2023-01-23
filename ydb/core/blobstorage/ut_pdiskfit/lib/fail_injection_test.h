@@ -26,8 +26,13 @@
 class TFailInjector {
     TAtomic FailCounter = 0;
     TAutoEvent FailEvent;
+    TInstant Deadline = TInstant::Max();
 
 public:
+    void SetDeadline(TInstant deadline) {
+        Deadline = deadline;
+    }
+
     void SetFailCounter(ui32 failCounter) {
         AtomicSet(FailCounter, failCounter);
     }
@@ -49,7 +54,7 @@ public:
     }
 
     void WaitForFailure() {
-        FailEvent.WaitI();
+        FailEvent.WaitD(Deadline);
     }
 
 private:
@@ -261,6 +266,10 @@ struct TPDiskFailureInjectionTest {
 
                     ui32 failCounter = GenerateFailCounter(frequentFails);
                     injector.SetFailCounter(failCounter);
+                    if (TestDuration) {
+                        injector.SetDeadline(startTime + *TestDuration);
+                    }
+
                     Cerr << "failCounter# " << failCounter << Endl;
 
                     SetupLWTrace(&injector);

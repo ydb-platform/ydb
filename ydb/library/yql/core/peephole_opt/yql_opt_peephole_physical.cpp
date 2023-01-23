@@ -4598,6 +4598,7 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
         children[3] = ctx.DeepCopyLambda(*children[3], DropUnused(GetLambdaBody(*children[3]), unused));
         children[4] = ctx.DeepCopyLambda(*children[4], DropUnused(GetLambdaBody(*children[4]), unused));
         children[4] = ctx.ChangeChild(*children[4], 0U, ctx.NewArguments(children[4]->Head().Pos(), DropUnused(children[4]->Head().ChildrenList(), unused, children[4]->Head().ChildrenSize() - size)));
+        children[5] = ctx.DeepCopyLambda(*children[5]);
         children[5] = ctx.ChangeChild(*children[5], 0U, ctx.NewArguments(children[5]->Head().Pos(), DropUnused(children[5]->Head().ChildrenList(), unused, children[5]->Head().ChildrenSize() - size)));
 
         return ctx.ChangeChildren(*node, std::move(children));

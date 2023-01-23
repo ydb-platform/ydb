@@ -98,9 +98,10 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
 
         STFUNC(StateFunc) {
-            if (EventsCounter == 0 && ElapsedTime != nullptr) {
+            if (--EventsCounter == 0 && ElapsedTime != nullptr) {
                 *ElapsedTime = Timer.Passed() / TotalEventsAmount;
                 PassAway();
+                return;
             }
 
             if (AllocatesMemory) {
@@ -110,7 +111,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 ev->DropRewrite();
                 SpecialSend(ev, ctx);
             }
-            EventsCounter--;
         }
 
     private:

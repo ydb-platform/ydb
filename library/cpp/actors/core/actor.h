@@ -574,14 +574,6 @@ namespace NActors {
         }
     };
 
-    class IActorVirtual: public IActor {
-    public:
-        IActorVirtual(ui32 activityType = OTHER)
-            : IActor(activityType) {
-
-        }
-    };
-
     template <typename TDerived>
     class TActor: public IActorCallback {
     private:

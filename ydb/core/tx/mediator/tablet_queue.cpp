@@ -121,7 +121,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             TAllocChunkSerializer serializer;
             const bool success = evx.SerializeToArcadiaStream(&serializer);
             Y_VERIFY(success);
-            TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo());
+            TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.IsExtendedFormat());
 
             // todo: we must throttle delivery
             const ui32 sendFlags = IEventHandle::FlagTrackDelivery;

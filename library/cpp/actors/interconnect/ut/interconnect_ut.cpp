@@ -47,7 +47,7 @@ public:
             const TSessionToCookie::iterator s2cIt = SessionToCookie.emplace(SessionId, NextCookie);
             InFlight.emplace(NextCookie, std::make_tuple(s2cIt, MD5::CalcRaw(data)));
             TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Ping, IEventHandle::FlagTrackDelivery, Recipient,
-                SelfId(), MakeIntrusive<TEventSerializedData>(std::move(data), TEventSerializationInfo{}), NextCookie));
+                SelfId(), MakeIntrusive<TEventSerializedData>(std::move(data), false), NextCookie));
 //            Cerr << (TStringBuilder() << "Send# " << NextCookie << Endl);
             ++NextCookie;
         }
@@ -126,7 +126,7 @@ public:
         const TString& data = ev->GetChainBuffer()->GetString();
         const TString& response = MD5::CalcRaw(data);
         TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Pong, 0, ev->Sender, SelfId(),
-            MakeIntrusive<TEventSerializedData>(response, TEventSerializationInfo{}), ev->Cookie));
+            MakeIntrusive<TEventSerializedData>(response, false), ev->Cookie));
     }
 
     STRICT_STFUNC(StateFunc,

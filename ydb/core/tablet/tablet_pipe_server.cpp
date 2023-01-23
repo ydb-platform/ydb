@@ -74,12 +74,9 @@ namespace NTabletPipe {
             }
 
             Y_VERIFY(!msg.GetPayloadCount() || (msg.GetPayloadCount() == 1 && !record.HasBuffer()));
-            TEventSerializationInfo serializationInfo{
-                .IsExtendedFormat = record.GetExtendedFormat(),
-            };
             auto buffer = msg.GetPayloadCount()
-                ? MakeIntrusive<TEventSerializedData>(TRope(msg.GetPayload(0)), std::move(serializationInfo))
-                : MakeIntrusive<TEventSerializedData>(record.GetBuffer(), std::move(serializationInfo));
+                ? MakeIntrusive<TEventSerializedData>(TRope(msg.GetPayload(0)), record.GetExtendedFormat())
+                : MakeIntrusive<TEventSerializedData>(record.GetBuffer(), record.GetExtendedFormat());
 
             auto result = std::make_unique<IEventHandle>(
                     ev->InterconnectSession,

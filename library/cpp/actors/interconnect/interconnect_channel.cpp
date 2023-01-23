@@ -25,7 +25,7 @@ namespace NActors {
         task.Orbit.Take(event.Orbit);
 
         event.Descr.Flags = (event.Descr.Flags & ~IEventHandle::FlagForwardOnNondelivery) |
-            (SerializationInfo.IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
+            (ExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
 
         TChannelPart *part = static_cast<TChannelPart*>(task.GetFreeArea());
         part->Channel = ChannelId | TChannelPart::LastPartFlag;
@@ -85,14 +85,14 @@ namespace NActors {
                         State = EState::CHUNKER;
                         IEventBase *base = event.Event.Get();
                         Chunker.SetSerializingEvent(base);
-                        SerializationInfo = base->CreateSerializationInfo();
+                        ExtendedFormat = base->IsExtendedFormat();
                     } else if (event.Buffer) {
                         State = EState::BUFFER;
                         Iter = event.Buffer->GetBeginIter();
-                        SerializationInfo = event.Buffer->ReleaseSerializationInfo();
+                        ExtendedFormat = event.Buffer->IsExtendedFormat();
                     } else {
                         State = EState::DESCRIPTOR;
-                        SerializationInfo = {};
+                        ExtendedFormat = false;
                     }
                     break;
 

@@ -65,7 +65,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
             TEvBlobStorage::TEvVBlock logCmd(tabletId, Generation, TestCtx->SelfVDiskId, TInstant::Max());
             TAllocChunkSerializer serializer;
             logCmd.SerializeToArcadiaStream(&serializer);
-            TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.CreateSerializationInfo());
+            TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.IsExtendedFormat());
             ctx.Send(TestCtx->LoggerId,
                      new NPDisk::TEvLog(TestCtx->PDiskCtx->Dsk->Owner, TestCtx->PDiskCtx->Dsk->OwnerRound,
                                         TLogSignature::SignatureBlock, TRcBuf(buffers->GetString()), seg, nullptr));

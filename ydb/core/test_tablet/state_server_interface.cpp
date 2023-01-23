@@ -153,7 +153,7 @@ namespace NKikimr::NTestShard {
                 Y_VERIFY(type);
                 ResponseQ.push_back(TResponseInfo{ev->Sender, ev->Cookie, type});
                 auto buffers = ev->ReleaseChainBuffer();
-                Y_VERIFY(!buffers->GetSerializationInfo().IsExtendedFormat);
+                Y_VERIFY(!buffers->IsExtendedFormat());
                 const ui32 len = buffers->GetSize();
                 Y_VERIFY(len <= 64 * 1024 * 1024);
                 TString w = TString::Uninitialized(sizeof(ui32) + len);
@@ -170,8 +170,7 @@ namespace NKikimr::NTestShard {
                 Y_VERIFY(!ResponseQ.empty());
                 TResponseInfo& response = ResponseQ.front();
                 TActivationContext::Send(new IEventHandle(response.Type, 0, response.Sender, self->SelfId(),
-                    MakeIntrusive<TEventSerializedData>(std::move(ReadBuffer), TEventSerializationInfo{}),
-                    response.Cookie));
+                    MakeIntrusive<TEventSerializedData>(std::move(ReadBuffer), false), response.Cookie));
                 ResponseQ.pop_front();
             }
 

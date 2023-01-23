@@ -578,11 +578,11 @@ namespace NTabletPipe {
                     Y_VERIFY(Event, "Sending an empty event without a buffer");
                     TAllocChunkSerializer serializer;
                     Event->SerializeToArcadiaStream(&serializer);
-                    Buffer = serializer.Release(Event->CreateSerializationInfo());
+                    Buffer = serializer.Release(Event->IsExtendedFormat());
                 }
 
                 auto msg = MakeHolder<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,
-                    Buffer->ReleaseSerializationInfo(), supportsDataInPayload);
+                    Buffer->IsExtendedFormat(), supportsDataInPayload);
 
                 if (SeqNo) {
                     msg->SetSeqNo(SeqNo);

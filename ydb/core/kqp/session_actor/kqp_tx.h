@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
+#include <ydb/core/util/ulid.h>
+
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 #include <library/cpp/actors/core/actorid.h>
@@ -240,6 +242,96 @@ public:
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
 };
+
+class TTransactionsCache {
+    TLRUCache<TULID, TIntrusivePtr<TKqpTransactionContext>> Active;
+    std::deque<TIntrusivePtr<TKqpTransactionContext>> ToBeAborted;
+public:
+    ui64 EvictedTx = 0;
+    TDuration IdleTimeout;
+
+    TTransactionsCache(size_t size, TDuration idleTimeout)
+        : Active(size)
+        , IdleTimeout(idleTimeout)
+    {}
+
+    size_t Size() {
+        return Active.Size();
+    }
+
+    size_t MaxSize() {
+        return Active.GetMaxSize();
+    }
+
+    TIntrusivePtr<TKqpTransactionContext> Find(const TULID& id) {
+        if (auto it = Active.Find(id); it != Active.End()) {
+            it.Value()->Touch();
+            return *it;
+        } else {
+            return {};
+        }
+    }
+
+    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TULID& txId) {
+        if (auto it = Active.FindWithoutPromote(txId); it != Active.End()) {
+            auto ret = std::move(it.Value());
+            Active.Erase(it);
+            return ret;
+        }
+        return {};
+    }
+
+    void AddToBeAborted(TIntrusivePtr<TKqpTransactionContext> ctx) {
+        ToBeAborted.emplace_back(std::move(ctx));
+    }
+
+    bool RemoveOldTransactions() {
+        if (Active.Size() < Active.GetMaxSize()) {
+            return true;
+        } else {
+            auto it = Active.FindOldest();
+            auto currentIdle = TInstant::Now() - it.Value()->LastAccessTime;
+            if (currentIdle >= IdleTimeout) {
+                it.Value()->Invalidate();
+                ToBeAborted.emplace_back(std::move(it.Value()));
+                Active.Erase(it);
+                ++EvictedTx;
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    bool CreateNew(const TULID& txId, TIntrusivePtr<TKqpTransactionContext> txCtx) {
+        if (!RemoveOldTransactions()) {
+            return false;
+        }
+        return Active.Insert(std::make_pair(txId, txCtx));
+    }
+
+    void FinalCleanup() {
+        for (auto it = Active.Begin(); it != Active.End(); ++it) {
+            it.Value()->Invalidate();
+            ToBeAborted.emplace_back(std::move(it.Value()));
+        }
+        Active.Clear();
+    }
+
+    size_t ToBeAbortedSize() {
+        return ToBeAborted.size();
+    }
+
+    std::deque<TIntrusivePtr<TKqpTransactionContext>> ReleaseToBeAborted() {
+        return std::exchange(ToBeAborted, {});
+    }
+};
+
+inline TULID CreateEmptyULID() {
+    TULID next;
+    memset(next.Data, 0, sizeof(next.Data));
+    return next;
+}
 
 bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
     NYql::TExprContext& ctx);

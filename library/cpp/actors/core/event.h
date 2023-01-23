@@ -47,12 +47,10 @@ namespace NActors {
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
         virtual bool IsSerializable() const = 0;
-        virtual bool IsExtendedFormat() const {
-            return false;
-        }
         virtual ui32 CalculateSerializedSizeCached() const {
             return CalculateSerializedSize();
         }
+        virtual TEventSerializationInfo CreateSerializationInfo() const { return {}; }
     };
 
     // fat handle

@@ -24,8 +24,9 @@ namespace NActors {
         LWTRACK(SerializeToPacketEnd, event.Orbit, PeerNodeId, ChannelId, OutputQueueSize, task.GetDataSize());
         task.Orbit.Take(event.Orbit);
 
+        Y_VERIFY(SerializationInfo);
         event.Descr.Flags = (event.Descr.Flags & ~IEventHandle::FlagForwardOnNondelivery) |
-            (ExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
+            (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
 
         TChannelPart *part = static_cast<TChannelPart*>(task.GetFreeArea());
         part->Channel = ChannelId | TChannelPart::LastPartFlag;
@@ -81,18 +82,20 @@ namespace NActors {
                 case EState::INITIAL:
                     event.InitChecksum();
                     LWTRACK(SerializeToPacketBegin, event.Orbit, PeerNodeId, ChannelId, OutputQueueSize);
-                    if (event.Event) {
+                    if (event.Buffer) {
+                        State = EState::BUFFER;
+                        Iter = event.Buffer->GetBeginIter();
+                        SerializationInfo = &event.Buffer->GetSerializationInfo();
+                    } else if (event.Event) {
                         State = EState::CHUNKER;
                         IEventBase *base = event.Event.Get();
                         Chunker.SetSerializingEvent(base);
-                        ExtendedFormat = base->IsExtendedFormat();
-                    } else if (event.Buffer) {
-                        State = EState::BUFFER;
-                        Iter = event.Buffer->GetBeginIter();
-                        ExtendedFormat = event.Buffer->IsExtendedFormat();
-                    } else {
+                        SerializationInfoContainer = base->CreateSerializationInfo();
+                        SerializationInfo = &SerializationInfoContainer;
+                    } else { // event without buffer and IEventBase instance
                         State = EState::DESCRIPTOR;
-                        ExtendedFormat = false;
+                        SerializationInfoContainer = {};
+                        SerializationInfo = &SerializationInfoContainer;
                     }
                     break;
 
@@ -167,6 +170,8 @@ namespace NActors {
                     }
                     event.Serial = serial;
                     NotYetConfirmed.splice(NotYetConfirmed.end(), Queue, Queue.begin()); // move event to not-yet-confirmed queue
+                    SerializationInfoContainer = {};
+                    SerializationInfo = nullptr;
                     State = EState::INITIAL;
                     return true; // we have processed whole event, signal to the caller
             }

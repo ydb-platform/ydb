@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         auto serializer = MakeHolder<TAllocChunkSerializer>();
         msg.SerializeToArcadiaStream(serializer.Get());
-        auto buffers = serializer->Release(msg.IsExtendedFormat());
+        auto buffers = serializer->Release(msg.CreateSerializationInfo());
         UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), msg.CalculateSerializedSize());
         TString ser = buffers->GetString();
 
@@ -128,20 +128,20 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         auto serializer1 = MakeHolder<TAllocChunkSerializer>();
         e1.SerializeToArcadiaStream(serializer1.Get());
-        auto buffers1 = serializer1->Release(e1.IsExtendedFormat());
+        auto buffers1 = serializer1->Release(e1.CreateSerializationInfo());
         UNIT_ASSERT_VALUES_EQUAL(buffers1->GetSize(), e1.CalculateSerializedSize());
         TString ser1 = buffers1->GetString();
 
         TEvMessageWithPayload e2(msg);
         auto serializer2 = MakeHolder<TAllocChunkSerializer>();
         e2.SerializeToArcadiaStream(serializer2.Get());
-        auto buffers2 = serializer2->Release(e2.IsExtendedFormat());
+        auto buffers2 = serializer2->Release(e2.CreateSerializationInfo());
         UNIT_ASSERT_VALUES_EQUAL(buffers2->GetSize(), e2.CalculateSerializedSize());
         TString ser2 = buffers2->GetString();
         UNIT_ASSERT_VALUES_EQUAL(ser1, ser2);
 
         // deserialize
-        auto data = MakeIntrusive<TEventSerializedData>(ser1, false);
+        auto data = MakeIntrusive<TEventSerializedData>(ser1, TEventSerializationInfo{});
         THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(static_cast<TEvMessageWithPayloadPreSerialized*>(TEvMessageWithPayloadPreSerialized::Load(data)));
         UNIT_ASSERT_VALUES_EQUAL(parsedEvent->PreSerializedData, ""); // this field is empty after deserialization
         auto& record = parsedEvent->GetRecord();

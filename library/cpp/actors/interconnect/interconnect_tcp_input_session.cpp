@@ -327,12 +327,15 @@ namespace NActors {
                 return ReestablishConnection(TDisconnectReason::ChecksumError());
             }
         }
+        TEventSerializationInfo serializationInfo{
+            .IsExtendedFormat = bool(descr.Flags & IEventHandle::FlagExtendedFormat),
+        };
         auto ev = std::make_unique<IEventHandle>(SessionId,
             descr.Type,
             descr.Flags & ~IEventHandle::FlagExtendedFormat,
             descr.Recipient,
             descr.Sender,
-            MakeIntrusive<TEventSerializedData>(std::move(data), bool(descr.Flags & IEventHandle::FlagExtendedFormat)),
+            MakeIntrusive<TEventSerializedData>(std::move(data), std::move(serializationInfo)),
             descr.Cookie,
             Params.PeerScopeId,
             std::move(descr.TraceId));

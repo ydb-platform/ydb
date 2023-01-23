@@ -84,7 +84,7 @@ TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResu
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     TAllocChunkSerializer serializer;
     Y_VERIFY(ev->SerializeToArcadiaStream(&serializer));
-    return serializer.Release(ev->IsExtendedFormat());
+    return serializer.Release(ev->CreateSerializationInfo());
 }
 
 void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags, ui64 cookie) {

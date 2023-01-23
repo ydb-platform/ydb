@@ -269,10 +269,8 @@ struct TEvKqp {
             return true;
         }
 
-        // Same as TEventPBBase but without Rope
-        bool IsExtendedFormat() const override {
-            return false;
-        }
+        // Same as TEventPBBase but without Rope (but can contain Payload and will lose some data after all)
+        TEventSerializationInfo CreateSerializationInfo() const override { return {}; }
 
         ui64 GetRequestSize() const {
             return Record.GetRequest().ByteSizeLong();

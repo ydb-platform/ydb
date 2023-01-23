@@ -17,7 +17,7 @@ namespace NActors {
         if (Event) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            auto chainBuf = serializer.Release(Event->IsExtendedFormat());
+            auto chainBuf = serializer.Release(Event->CreateSerializationInfo());
             Event.Reset();
             return chainBuf;
         }
@@ -25,12 +25,13 @@ namespace NActors {
     }
 
     TIntrusivePtr<TEventSerializedData> IEventHandle::GetChainBuffer() {
-        if (Buffer)
+        if (Buffer) {
             return Buffer;
+        }
         if (Event) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            Buffer = serializer.Release(Event->IsExtendedFormat());
+            Buffer = serializer.Release(Event->CreateSerializationInfo());
             return Buffer;
         }
         return new TEventSerializedData;

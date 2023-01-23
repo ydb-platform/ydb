@@ -212,7 +212,7 @@ namespace NKikimr {
                     ev->SerializeToArcadiaStream(&serializer);
                     Cerr << "FAKE_COORDINATOR:  Send Plan to tablet " << tabletId << " for txId: " << ev->Record.GetTransactions(0).GetTxId() << " at step: " << step << "\n";
 
-                    Pipes->Send(ctx, tabletId, ev->EventType, serializer.Release(ev->IsExtendedFormat()));
+                    Pipes->Send(ctx, tabletId, ev->EventType, serializer.Release(ev->CreateSerializationInfo()));
                 }
             }
         }

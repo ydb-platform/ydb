@@ -277,6 +277,8 @@ bool IsNull(const TTypeAnnotationNode& type);
 bool IsEmptyList(const TExprNode& node);
 bool IsEmptyList(const TTypeAnnotationNode& type);
 bool IsInstantEqual(const TTypeAnnotationNode& type);
+bool IsFlowOrStream(const TTypeAnnotationNode& type);
+bool IsFlowOrStream(const TExprNode& node);
 
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
@@ -293,7 +295,6 @@ std::optional<ui32> GetFieldPosition(const TMultiExprType& tupleType, const TStr
 std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TStringBuf& field);
 
-bool IsCallableTypeHasStreams(const TCallableExprType* callableType);
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
 bool HasContextFuncs(const TExprNode& input);
 

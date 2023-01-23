@@ -1,6 +1,7 @@
 #include "yql_dq_datasink_type_ann.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -45,12 +46,7 @@ public:
 
 private:
     TStatus AnnotateDqReplicateAlwaysError(const TExprNode::TPtr& input, TExprContext& ctx) {
-        ctx.AddError(
-            TIssue(
-                ctx.GetPosition(input->Pos()),
-                "Reading multiple times from the same source is not supported")
-                .SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR,
-                         TSeverityIds::S_ERROR));
+        ctx.AddError(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::DQ_OPTIMIZE_ERROR, "Reading multiple times from the same source is not supported"));
         return TStatus::Error;
     }
 

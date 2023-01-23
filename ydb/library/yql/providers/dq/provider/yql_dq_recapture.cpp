@@ -25,13 +25,11 @@ namespace {
 
 const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName, S3ProviderName};
 const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName, S3ProviderName};
-const THashSet<TStringBuf> UNSUPPORTED_CALLABLE = { TCoForwardList::CallableName() };
 
 }
 
 namespace NDq {
     bool CheckJoinColumns(const TExprBase& node);
-    bool CheckJoinLinkSettings(const TExprBase& node);
 } // namespace NDq
 
 class TDqsRecaptureTransformer : public TSyncTransformerBase {
@@ -163,14 +161,6 @@ private:
                     Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
                 }
             }
-        } else if (node.IsCallable(UNSUPPORTED_CALLABLE)) {
-            AddInfo(ctx, TStringBuilder() << "unsupported callable '" << node.Content() << "'");
-            good = false;
-        } else if (node.IsCallable(TCoCollect::CallableName())) {
-            if (ETypeAnnotationKind::List != node.Head().GetTypeAnn()->GetKind()) {
-                AddInfo(ctx, TStringBuilder() << "unsupported callable '" << node.Content() << "' over stream/flow");
-                good = false;
-            }
         } else if (auto datasource = TMaybeNode<TCoDataSource>(&node).Category()) {
             if (!VALID_SOURCES.contains(datasource.Cast().Value())) {
                 AddInfo(ctx, TStringBuilder() << "source '" << datasource.Cast().Value() << "' is not supported by DQ");
@@ -236,13 +226,7 @@ private:
             }
         }
         else if (TCoScriptUdf::Match(&node)) {
-            if (!State_->TypeCtx->UdfSupportsYield) {
-                if (IsCallableTypeHasStreams(node.GetTypeAnn()->Cast<TCallableExprType>())) {
-                    AddInfo(ctx, TStringBuilder() << "script udf with streams");
-                    good = false;
-                }
-            }
-            if (NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node.Head().Content()))) {
+            if (good && TCoScriptUdf::Match(&node) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node.Head().Content()))) {
                 AddInfo(ctx, TStringBuilder() << "system python udf");
                 good = false;
             }

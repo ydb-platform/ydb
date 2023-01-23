@@ -2,6 +2,7 @@
 #include "yql_dq_datasource_constraints.h"
 #include "yql_dq_datasource_type_ann.h"
 #include "yql_dq_state.h"
+#include "yql_dq_validate.h"
 
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -221,6 +222,10 @@ public:
 
     bool CanExecute(const TExprNode& node) override {
         return TDqCnResult::Match(&node) || TDqQuery::Match(&node);
+    }
+
+    bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override {
+        return ValidateDqExecution(node, *State->TypeCtx, ctx);
     }
 
     bool CanParse(const TExprNode& node) override {

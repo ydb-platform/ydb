@@ -1528,7 +1528,7 @@ TVector<TStringBuf> GetCommonKeysFromVariantSelector(const NNodes::TCoLambda& la
 }
 
 bool IsIdentityLambda(const TExprNode& lambda) {
-    return lambda.IsLambda() && &lambda.Head().Head() == &lambda.Tail();
+    return lambda.IsLambda() && lambda.Head().ChildrenSize() == 1 && &lambda.Head().Head() == &lambda.Tail();
 }
 
 TExprNode::TPtr MakeExpandMap(TPositionHandle pos, const TVector<TString>& columns, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1574,6 +1574,116 @@ TExprNode::TPtr MakeNarrowMap(TPositionHandle pos, const TVector<TString>& colum
             .Seal()
         .Seal()
         .Build();
+}
+
+TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, const bool udfSupportsYield, const TNodeSet& flowSources) {
+    auto depensOnFlow = [&flowSources](const TExprNode::TPtr& node) {
+        return !!FindNode(node,
+            [](const TExprNode::TPtr& n) {
+                return !TCoDependsOn::Match(n.Get());
+            },
+            [&flowSources](const TExprNode::TPtr& n) {
+                return flowSources.contains(n.Get());
+            }
+        );
+    };
+
+    auto candidates = FindNodes(root,
+        [&flowSources](const TExprNode::TPtr& node) {
+            if (flowSources.contains(node.Get()) || TCoDependsOn::Match(node.Get())) {
+                return false;
+            }
+            if (node->ChildrenSize() > 0 && node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                return false;
+            }
+            return true;
+        },
+        [](const TExprNode::TPtr& node) {
+            return TCoCollect::Match(node.Get())
+                || TCoForwardList::Match(node.Get())
+                || TCoApply::Match(node.Get())
+                || TCoSwitch::Match(node.Get())
+                || node->IsCallable("DqReplicate");
+        }
+    );
+
+    for (auto candidate: candidates) {
+        if (TCoCollect::Match(candidate.Get()) || TCoForwardList::Match(candidate.Get())) {
+            if (depensOnFlow(candidate->HeadPtr())) {
+                return candidate;
+            }
+        } else if (TCoApply::Match(candidate.Get())) {
+            if (AnyOf(candidate->Children().begin() + 1, candidate->Children().end(), depensOnFlow)) {
+                if (!IsFlowOrStream(*candidate)) {
+                    while (TCoApply::Match(candidate.Get())) {
+                        candidate = candidate->HeadPtr();
+                    }
+                    return candidate;
+                }
+                if (!udfSupportsYield) {
+                    while (TCoApply::Match(candidate.Get())) {
+                        candidate = candidate->HeadPtr();
+                    }
+                    if (TCoScriptUdf::Match(candidate.Get())) {
+                        return candidate;
+                    }
+                }
+            }
+        } else if (TCoSwitch::Match(candidate.Get())) {
+            for (size_t i = 3; i < candidate->ChildrenSize(); i += 2) {
+                if (auto node = FindNonYieldTransparentNodeImpl(candidate->Child(i)->TailPtr(), udfSupportsYield, TNodeSet{&candidate->Child(i)->Head().Head()})) {
+                    return node;
+                }
+            }
+        } else if (candidate->IsCallable("DqReplicate")) {
+            for (size_t i = 1; i < candidate->ChildrenSize(); ++i) {
+                if (auto node = FindNonYieldTransparentNodeImpl(candidate->Child(i)->TailPtr(), udfSupportsYield, TNodeSet{&candidate->Child(i)->Head().Head()})) {
+                    return node;
+                }
+            }
+        }
+    }
+    return {};
+}
+
+TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx) {
+    TNodeSet flowSources;
+    TExprNode::TPtr from = root;
+    if (root->IsLambda()) {
+        if (IsIdentityLambda(*root)) {
+            return {};
+        }
+        from = root->TailPtr();
+
+        // Add all flow lambda args
+        root->Head().ForEachChild([&flowSources](const TExprNode& arg) {
+            if (IsFlowOrStream(arg)) {
+                flowSources.insert(&arg);
+            }
+        });
+    }
+
+    static const THashSet<TStringBuf> WHITE_LIST = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
+        TCoToFlow::CallableName(), TCoApply::CallableName(), TCoNth::CallableName(), TCoMux::CallableName()};
+    // Find all other flow sources (readers)
+    auto sources = FindNodes(from,
+        [](const TExprNode::TPtr& node) {
+            return !node->IsCallable(WHITE_LIST)
+                && node->IsCallable()
+                && IsFlowOrStream(*node)
+                && (node->ChildrenSize() == 0 || !IsFlowOrStream(node->Head()));
+        }
+    );
+    std::for_each(sources.cbegin(), sources.cend(), [&flowSources](const TExprNode::TPtr& node) { flowSources.insert(node.Get()); });
+
+    if (flowSources.empty()) {
+        return {};
+    }
+    return FindNonYieldTransparentNodeImpl(from, typeCtx.UdfSupportsYield, flowSources);
+}
+
+bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx) {
+    return !FindNonYieldTransparentNode(root, typeCtx);
 }
 
 }

@@ -617,6 +617,10 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: DQ_OPTIMIZE_ERROR
+  severity: S_ERROR
+}
+ids {
   code: YQL_DUPLICATE_DECLARE
   severity: S_WARNING
 }

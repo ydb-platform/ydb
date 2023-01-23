@@ -836,12 +836,12 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
         }
 
         for (size_t i = 1; i < node->ChildrenSize(); ++i) {
-            if (IsFlowOrStream(node->Child(i))) {
+            if (IsFlowOrStream(*node->Child(i))) {
                 applyStreamChildren.push_back(node->Child(i));
             } else if (node->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
                 if (node->Child(i)->IsCallable("ForwardList")) {
                     applyStreamChildren.push_back(node->Child(i)->Child(0));
-                } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->HeadPtr().Get())) {
+                } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->Head())) {
                     applyStreamChildren.push_back(node->Child(i)->Child(0));
                 }
             }
@@ -858,7 +858,7 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
     writer.OnBeginMap();
     writer.OnKeyedItem("Name");
     writer.OnStringScalar(node->Content());
-    if (TCoFlatMapBase::Match(node) && IsFlowOrStream(node->ChildPtr(1).Get())) {
+    if (TCoFlatMapBase::Match(node) && IsFlowOrStream(*node->Child(1))) {
         writer.OnKeyedItem("Children");
         writer.OnBeginList();
         writer.OnListItem();
@@ -942,12 +942,12 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
         case ETypeAnnotationKind::List: {
             double applyFactor = 0.0;
             for (size_t i = 1; i < node->ChildrenSize(); ++i) {
-                if (IsFlowOrStream(node->Child(i))) {
+                if (IsFlowOrStream(*node->Child(i))) {
                     applyFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx);
                 } else if (node->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
                     if (node->Child(i)->IsCallable("ForwardList")) {
                         applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
-                    } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->HeadPtr().Get())) {
+                    } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->Head())) {
                         applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
                     }
                 }

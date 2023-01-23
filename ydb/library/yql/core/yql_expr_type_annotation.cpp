@@ -4765,6 +4765,15 @@ bool IsEmptyList(const TTypeAnnotationNode& type) {
     return type.GetKind() == ETypeAnnotationKind::EmptyList;
 }
 
+bool IsFlowOrStream(const TTypeAnnotationNode& type) {
+    const auto kind = type.GetKind();
+    return kind == ETypeAnnotationKind::Stream || kind == ETypeAnnotationKind::Flow;
+}
+
+bool IsFlowOrStream(const TExprNode& node) {
+    return IsFlowOrStream(*node.GetTypeAnn());
+}
+
 namespace {
 
 using TIndentPrinter = std::function<void(TStringBuilder& res, size_t)>;
@@ -5247,27 +5256,6 @@ std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TS
     if (const auto find = structType.FindItem(field))
         return {*find};
     return std::nullopt;
-}
-
-bool IsCallableTypeHasStreams(const TCallableExprType* callableType) {
-    for (;;) {
-        if (callableType->GetReturnType()->GetKind() == ETypeAnnotationKind::Stream) {
-            return true;
-        }
-        else {
-            for (auto& arg: callableType->GetArguments()) {
-                if (arg.Type->GetKind() == ETypeAnnotationKind::Stream) {
-                    return true;
-                }
-            }
-        }
-        if (callableType->GetReturnType()->GetKind() == ETypeAnnotationKind::Callable) {
-            callableType = callableType->GetReturnType()->Cast<TCallableExprType>();
-        } else {
-            break;
-        }
-    }
-    return false;
 }
 
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx) {

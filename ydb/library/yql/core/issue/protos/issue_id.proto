@@ -176,6 +176,7 @@ message TIssuesIds {
 // dq
         DQ_GATEWAY_ERROR = 6000;
         DQ_GATEWAY_NEED_FALLBACK_ERROR = 6001;
+        DQ_OPTIMIZE_ERROR = 6002;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

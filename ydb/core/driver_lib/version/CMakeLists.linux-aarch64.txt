@@ -8,8 +8,8 @@
 
 add_subdirectory(ut)
 
-add_library(run)
-target_link_libraries(run PUBLIC
+add_library(version)
+target_link_libraries(version PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -18,6 +18,6 @@ target_link_libraries(run PUBLIC
   library-cpp-svnversion
   ydb-core-protos
 )
-target_sources(run PRIVATE
+target_sources(version PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/version/version.cpp
 )

@@ -54,7 +54,7 @@ target_link_libraries(run PUBLIC
   base_utils
   core-driver_lib-cli_config_base
   cli_utils
-  run
+  version
   ydb-core-formats
   ydb-core-grpc_services
   core-grpc_services-base

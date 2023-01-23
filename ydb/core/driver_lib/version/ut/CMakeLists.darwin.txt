@@ -16,7 +16,7 @@ target_link_libraries(ydb-core-driver_lib-version-ut PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  run
+  version
   yql-sql-pg_dummy
 )
 target_link_options(ydb-core-driver_lib-version-ut PRIVATE

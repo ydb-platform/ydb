@@ -93,7 +93,7 @@ void DeclareAndDefineWithNodes(TTestEnvWithPoolsSupport& env) {
         NTestLs::IsExtSubdomain(ls); //root TSS
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 5 : 4));
     }
 
     {
@@ -126,7 +126,7 @@ void CreateTableInsideAndLs(TTestEnvWithPoolsSupport& env) {
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 5 : 4));
     }
 
     {
@@ -147,7 +147,7 @@ void CreateTableInsideAndLs(TTestEnvWithPoolsSupport& env) {
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 7 : 6));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
@@ -227,7 +227,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateExtSubdomain("/dc-1", subdomain_0));
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsUnavailable(ls); //root TSS not ready yet
+            NTestLs::IsUnavailable(ls);  // extsubdomain is not ready yet
 
             ls = env.GetClient().Ls("/dc-1");
             NTestLs::ChildrenCount(ls, 1);
@@ -243,7 +243,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsExtSubdomain(ls); //root TSS ready
+            NTestLs::IsExtSubdomain(ls);  // extsubdomain's SS is ready
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
             schemeshards[x] = ver.OwnerId;
@@ -251,7 +251,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
                 UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
             }
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 5 : 4));
         }
 
         {
@@ -274,7 +274,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 7 : 6));
 
 
             ls = env.GetClient().Ls("/dc-1");
@@ -288,7 +288,9 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
 
         {
             auto ls = env.GetClient().Ls("/dc-1");
-            NTestLs::NoChildren(ls);
+            //NOTE: no need to check children count because extsubdomain root path
+            // could still exist technically but in a state of being deleted --
+            // -- all that counts is that path status: should be DoesNotExist
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
@@ -296,7 +298,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
 
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
             ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsDoesNotExist(ls); //root TSS deleted
+            NTestLs::IsDoesNotExist(ls); // extsubdomain root deleted
         }
     }
 }
@@ -490,7 +492,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateExtSubdomain("/dc-1", subdomain_0));
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsUnavailable(ls); //root TSS not ready yet
+            NTestLs::IsUnavailable(ls);  // extsubdomain is not ready yet
 
             ls = env.GetClient().Ls("/dc-1");
             NTestLs::ChildrenCount(ls, 1);
@@ -505,7 +507,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsExtSubdomain(ls); //root TSS ready
+            NTestLs::IsExtSubdomain(ls);  // extsubdomain's SS is ready
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
             schemeshards[x] = ver.OwnerId;
@@ -557,7 +559,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsExtSubdomain(ls); //root TSS ready
+            NTestLs::IsExtSubdomain(ls);  // extsubdomain's SS is ready
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
             schemeshards[x] = ver.OwnerId;
@@ -565,7 +567,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
                 UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
             }
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 8 : 7));
 
             NKikimrSubDomains::TDomainDescription description = NTestLs::ExtractDomainDescription(ls);
             UNIT_ASSERT_VALUES_UNEQUAL(description.GetProcessingParams().GetHive(), 0);
@@ -600,13 +602,13 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 1);
         }
 
-        env.GetTenants().Stop();
-
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
 
         {
             auto ls = env.GetClient().Ls("/dc-1");
-            NTestLs::NoChildren(ls);
+            //NOTE: no need to check children count because extsubdomain root path
+            // could still exist technically but in a state of being deleted --
+            // -- all that counts is that path status: should be DoesNotExist
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
@@ -614,8 +616,10 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
 
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
             ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsDoesNotExist(ls); //root TSS deleted
+            NTestLs::IsDoesNotExist(ls); // extsubdomain root deleted
         }
+
+        env.GetTenants().Stop();
     }
 }
 
@@ -710,33 +714,33 @@ Y_UNIT_TEST_SUITE(TExtSubDomainTest) {
         DeclareAndDrop(env);
     }
 
-    Y_UNIT_TEST(DeclareAndDefineWithoutNodes) {
-        TTestEnvWithPoolsSupport env(1, 0, 2);
+    Y_UNIT_TEST_FLAG(DeclareAndDefineWithoutNodes, AlterDatabaseCreateHiveFirst) {
+        TTestEnvWithPoolsSupport env(1, 0, 2, AlterDatabaseCreateHiveFirst);
         DeclareAndDefineWithoutNodes(env);
     }
 
-    Y_UNIT_TEST(DeclareAndDefineWithNodes) {
-        TTestEnvWithPoolsSupport env(1, 1, 2);
+    Y_UNIT_TEST_FLAG(DeclareAndDefineWithNodes, AlterDatabaseCreateHiveFirst) {
+        TTestEnvWithPoolsSupport env(1, 1, 2, AlterDatabaseCreateHiveFirst);
         DeclareAndDefineWithNodes(env);
     }
 
-    Y_UNIT_TEST(CreateTableInsideAndLs) {
-        TTestEnvWithPoolsSupport env(1, 1, 2);
+    Y_UNIT_TEST_FLAG(CreateTableInsideAndLs, AlterDatabaseCreateHiveFirst) {
+        TTestEnvWithPoolsSupport env(1, 1, 2, AlterDatabaseCreateHiveFirst);
         CreateTableInsideAndLs(env);
     }
 
-    Y_UNIT_TEST(DeclareAndAlterPools) {
-        TTestEnvWithPoolsSupport env(1, 1, 2);
+    Y_UNIT_TEST_FLAG(DeclareAndAlterPools, AlterDatabaseCreateHiveFirst) {
+        TTestEnvWithPoolsSupport env(1, 1, 2, AlterDatabaseCreateHiveFirst);
         DeclareAndAlterPools(env);
     }
 
-    Y_UNIT_TEST(CreateTableInsideThenStopTenantAndForceDeleteSubDomain) {
-        TTestEnvWithPoolsSupport env(1, 1, 2);
+    Y_UNIT_TEST_FLAG(CreateTableInsideThenStopTenantAndForceDeleteSubDomain, AlterDatabaseCreateHiveFirst) {
+        TTestEnvWithPoolsSupport env(1, 1, 2, AlterDatabaseCreateHiveFirst);
         CreateTableInsideThenStopTenantAndForceDeleteSubDomain(env);
     }
 
-    Y_UNIT_TEST(CreateTableInsideAndAlterDomainAndTable) {
-        TTestEnvWithPoolsSupport env(1, 1, 2);
+    Y_UNIT_TEST_FLAG(CreateTableInsideAndAlterDomainAndTable, AlterDatabaseCreateHiveFirst) {
+        TTestEnvWithPoolsSupport env(1, 1, 2, AlterDatabaseCreateHiveFirst);
         CreateTableInsideAndAlterDomainAndTable(env);
     }
 

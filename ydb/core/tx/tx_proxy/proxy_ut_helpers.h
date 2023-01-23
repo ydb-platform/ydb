@@ -7,6 +7,23 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
+
+// ad-hoc test parametrization support: only for single boolean flag
+// taken from ydb/core/ut/common/kqp_ut_common.h:Y_UNIT_TEST_TWIN
+//TODO: introduce general support for test parametrization?
+#define Y_UNIT_TEST_FLAG(N, OPT)                                                                                   \
+    template<bool OPT> void Test##N(NUnitTest::TTestContext&);                                                           \
+    struct TTestRegistration##N {                                                                                  \
+        TTestRegistration##N() {                                                                                   \
+            TCurrentTest::AddTest(#N "-" #OPT "-false", static_cast<void (*)(NUnitTest::TTestContext&)>(&Test##N<false>), false); \
+            TCurrentTest::AddTest(#N "-" #OPT "-true", static_cast<void (*)(NUnitTest::TTestContext&)>(&Test##N<true>), false);   \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template<bool OPT>                                                                                             \
+    void Test##N(NUnitTest::TTestContext&)
+
+
 namespace NKikimr {
 namespace NTxProxyUT {
 
@@ -188,13 +205,14 @@ void SetRowInSimpletable(TBaseTestEnv& env, ui64 key, ui64 value, const TString 
 
 class TTestEnvWithPoolsSupport: public TBaseTestEnv {
 public:
-    TTestEnvWithPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 0, ui32 poolsCount = 2)
+    TTestEnvWithPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 0, ui32 poolsCount = 2, bool enableAlterDatabaseCreateHiveFirst = true)
     {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
         GetSettings().SetEnableMockOnSingleNode(false);
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
+        GetSettings().SetEnableAlterDatabaseCreateHiveFirst(enableAlterDatabaseCreateHiveFirst);
         GetSettings().SetEnableSystemViews(false);
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {

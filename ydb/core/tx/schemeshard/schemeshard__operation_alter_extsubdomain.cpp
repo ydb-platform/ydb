@@ -570,7 +570,7 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExtSubDomainCreateHive, basenameId);
 
         // Create subdomain alter
-        TSubDomainInfo::TPtr alter = new TSubDomainInfo(*subdomainInfo, 0, 0);
+        TSubDomainInfo::TPtr alter = new TSubDomainInfo(*subdomainInfo, 0, 0, delta.StoragePoolsAdded);
 
         LOG_D("TAlterExtSubDomainCreateHive Propose"
             << ", opId: " << OperationId
@@ -583,7 +583,7 @@ public:
         // Create shard for the hive to-be.
         {
             TChannelsBindings channelsBinding;
-            if (!context.SS->ResolveSubdomainsChannels(delta.StoragePoolsAdded, channelsBinding)) {
+            if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
                 return result;
             }

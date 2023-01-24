@@ -45,7 +45,7 @@ set_property(
   ydb-core-kqp-ut-arrow
   PROPERTY
   SPLIT_FACTOR
-  50
+  5
 )
 add_yunittest(
   NAME
@@ -72,12 +72,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-kqp-ut-arrow
-  PROPERTY
-  TIMEOUT
-  600
 )
 vcs_info(ydb-core-kqp-ut-arrow)

@@ -30,6 +30,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->SchemaSnapshotManager.Reset();
         Self->S3Uploads.Reset();
         Self->S3Downloads.Reset();
+        Self->CdcStreamScanManager.Reset();
 
         Self->KillChangeSender(ctx);
         Self->ChangesQueue.clear();
@@ -173,6 +174,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::LockConflicts);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileDetails);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
+        PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
 
         if (!ready)
             return false;
@@ -518,6 +520,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     if (Self->State != TShardState::Offline) {
         if (!Self->VolatileTxManager.Load(db)) {
+            return false;
+        }
+    }
+
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::CdcStreamScans::TableId)) {
+        if (!Self->CdcStreamScanManager.Load(db)) {
             return false;
         }
     }

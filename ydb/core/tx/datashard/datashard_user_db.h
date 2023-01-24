@@ -1,6 +1,8 @@
 #pragma once
 #include "datashard_impl.h"
 
+#include <util/generic/maybe.h>
+
 namespace NKikimr::NDataShard {
 
 class IDataShardUserDb {
@@ -12,7 +14,16 @@ public:
             const TTableId& tableId,
             TArrayRef<const TRawTypeValue> key,
             TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row) = 0;
+            NTable::TRowState& row,
+            NTable::TSelectStats& stats,
+            const TMaybe<TRowVersion>& readVersion = {}) = 0;
+
+    virtual NTable::EReady SelectRow(
+            const TTableId& tableId,
+            TArrayRef<const TRawTypeValue> key,
+            TArrayRef<const NTable::TTag> tags,
+            NTable::TRowState& row,
+            const TMaybe<TRowVersion>& readVersion = {}) = 0;
 };
 
 class TDataShardUserDb final : public IDataShardUserDb {
@@ -27,7 +38,16 @@ public:
             const TTableId& tableId,
             TArrayRef<const TRawTypeValue> key,
             TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row) override;
+            NTable::TRowState& row,
+            NTable::TSelectStats& stats,
+            const TMaybe<TRowVersion>& readVersion = {}) override;
+
+    NTable::EReady SelectRow(
+            const TTableId& tableId,
+            TArrayRef<const TRawTypeValue> key,
+            TArrayRef<const NTable::TTag> tags,
+            NTable::TRowState& row,
+            const TMaybe<TRowVersion>& readVersion = {}) override;
 
 private:
     TDataShard& Self;

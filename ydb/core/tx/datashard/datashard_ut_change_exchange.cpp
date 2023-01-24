@@ -1969,7 +1969,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(InitialScanSkipUpdatedRows) {
+    Y_UNIT_TEST(InitialScanUpdatedRows) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -2023,8 +2023,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )");
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":100},"key":[1]})",
             R"({"update":{"value":40},"key":[4]})",
+            R"({"update":{"value":20},"key":[2]})",
             R"({"erase":{},"key":[2]})",
         });
 
@@ -2034,8 +2036,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":100},"key":[1]})",
             R"({"update":{"value":40},"key":[4]})",
+            R"({"update":{"value":20},"key":[2]})",
             R"({"erase":{},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });

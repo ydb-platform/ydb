@@ -214,16 +214,29 @@ public:
             const TTableId& tableId,
             TArrayRef<const TRawTypeValue> key,
             TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row) override
+            NTable::TRowState& row,
+            NTable::TSelectStats& stats,
+            const TMaybe<TRowVersion>& readVersion) override
     {
         auto tid = LocalTableId(tableId);
 
         return DB.Select(
-            tid, key, tags, row,
+            tid, key, tags, row, stats,
             /* readFlags */ 0,
-            ReadVersion,
+            readVersion.GetOrElse(ReadVersion),
             GetReadTxMap(tableId),
             GetReadTxObserver(tableId));
+    }
+
+    NTable::EReady SelectRow(
+            const TTableId& tableId,
+            TArrayRef<const TRawTypeValue> key,
+            TArrayRef<const NTable::TTag> tags,
+            NTable::TRowState& row,
+            const TMaybe<TRowVersion>& readVersion) override
+    {
+        NTable::TSelectStats stats;
+        return SelectRow(tableId, key, tags, row, stats, readVersion);
     }
 
     void SetWriteVersion(TRowVersion writeVersion) {

@@ -955,9 +955,19 @@ class TDataShard
             struct StreamOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
             struct StreamPathId : Column<4, NScheme::NTypeIds::Uint64> {};
             struct LastKey : Column<5, NScheme::NTypeIds::String> {};
+            struct SnapshotStep : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct SnapshotTxId : Column<7, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TableOwnerId, TablePathId, StreamOwnerId, StreamPathId>;
-            using TColumns = TableColumns<TableOwnerId, TablePathId, StreamOwnerId, StreamPathId, LastKey>;
+            using TColumns = TableColumns<
+                TableOwnerId,
+                TablePathId,
+                StreamOwnerId,
+                StreamPathId,
+                LastKey,
+                SnapshotStep,
+                SnapshotTxId
+            >;
         };
 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,

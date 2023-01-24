@@ -56,11 +56,9 @@ public:
 
         auto& scanManager = DataShard.GetCdcStreamScanManager();
         scanManager.Forget(txc.DB, pathId, streamPathId);
-        if (scanManager.GetStreamPathId() == streamPathId) {
-            if (const auto scanId = scanManager.GetScanId()) {
-                DataShard.CancelScan(tableInfo->LocalTid, scanId);
-            }
-            scanManager.Clear();
+        if (const auto* info = scanManager.Get(streamPathId)) {
+            DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
+            scanManager.Complete(streamPathId);
         }
 
         RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(streamPathId));

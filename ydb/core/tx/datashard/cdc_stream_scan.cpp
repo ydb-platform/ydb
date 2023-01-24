@@ -1,7 +1,6 @@
+#include "cdc_stream_scan.h"
 #include "change_record_body_serializer.h"
 #include "datashard_impl.h"
-
-#include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
@@ -16,69 +15,137 @@ using namespace NActors;
 using namespace NTable;
 using namespace NTabletFlatExecutor;
 
-TCdcStreamScanManager::TCdcStreamScanManager() {
-    Clear();
+void TCdcStreamScanManager::Reset() {
+    Scans.clear();
+    TxIdToPathId.clear();
 }
 
-void TCdcStreamScanManager::Enqueue(ui64 txId, ui64 scanId, const TPathId& streamPathId) {
-    TxId = txId;
-    ScanId = scanId;
-    StreamPathId = streamPathId;
-}
-
-void TCdcStreamScanManager::Register(const TActorId& actorId) {
-    ActorId = actorId;
-}
-
-void TCdcStreamScanManager::Clear() {
-    TxId = 0;
-    ScanId = 0;
-    ActorId = TActorId();
-    StreamPathId = TPathId();
-}
-
-void TCdcStreamScanManager::Forget(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId) {
-    NIceDb::TNiceDb nicedb(db);
-    RemoveLastKey(nicedb, tablePathId, streamPathId);
-}
-
-void TCdcStreamScanManager::PersistLastKey(NIceDb::TNiceDb& db, const TSerializedCellVec& value,
-        const TPathId& tablePathId, const TPathId& streamPathId)
-{
-    using Schema = TDataShard::Schema;
-    db.Table<Schema::CdcStreamScans>()
-        .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
-        .Update<Schema::CdcStreamScans::LastKey>(value.GetBuffer());
-}
-
-bool TCdcStreamScanManager::LoadLastKey(NIceDb::TNiceDb& db, TMaybe<TSerializedCellVec>& result,
-        const TPathId& tablePathId, const TPathId& streamPathId)
-{
+bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
-    auto rowset = db.Table<Schema::CdcStreamScans>()
-        .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
-        .Select();
-
+    auto rowset = db.Table<Schema::CdcStreamScans>().Select();
     if (!rowset.IsReady()) {
         return false;
     }
 
-    if (rowset.IsValid()) {
-        result.ConstructInPlace();
-        Y_VERIFY(TSerializedCellVec::TryParse(rowset.GetValue<Schema::CdcStreamScans::LastKey>(), *result));
+    while (!rowset.EndOfSet()) {
+        const auto streamPathId = TPathId(
+            rowset.GetValue<Schema::CdcStreamScans::StreamOwnerId>(),
+            rowset.GetValue<Schema::CdcStreamScans::StreamPathId>()
+        );
+
+        Y_VERIFY(!Scans.contains(streamPathId));
+        auto& info = Scans[streamPathId];
+        info.SnapshotVersion = TRowVersion(
+            rowset.GetValue<Schema::CdcStreamScans::SnapshotStep>(),
+            rowset.GetValue<Schema::CdcStreamScans::SnapshotTxId>()
+        );
+
+        if (rowset.HaveValue<Schema::CdcStreamScans::LastKey>()) {
+            info.LastKey.ConstructInPlace();
+            Y_VERIFY(TSerializedCellVec::TryParse(rowset.GetValue<Schema::CdcStreamScans::LastKey>(), *info.LastKey));
+        }
+
+        if (!rowset.Next()) {
+            return false;
+        }
     }
 
     return true;
 }
 
-void TCdcStreamScanManager::RemoveLastKey(NIceDb::TNiceDb& db,
+void TCdcStreamScanManager::Add(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId,
+        const TRowVersion& snapshotVersion)
+{
+    Y_VERIFY(!Scans.contains(streamPathId));
+    auto& info = Scans[streamPathId];
+    info.SnapshotVersion = snapshotVersion;
+
+    NIceDb::TNiceDb nicedb(db);
+    PersistAdd(nicedb, tablePathId, streamPathId, info);
+}
+
+void TCdcStreamScanManager::Forget(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId) {
+    NIceDb::TNiceDb nicedb(db);
+    PersistRemove(nicedb, tablePathId, streamPathId);
+}
+
+void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId) {
+    Y_VERIFY(Scans.contains(streamPathId));
+    auto& info = Scans.at(streamPathId);
+    info.TxId = txId;
+    info.ScanId = scanId;
+    TxIdToPathId[txId] = streamPathId;
+}
+
+void TCdcStreamScanManager::Register(ui64 txId, const TActorId& actorId) {
+    Y_VERIFY(TxIdToPathId.contains(txId));
+    Scans[TxIdToPathId.at(txId)].ActorId = actorId;
+}
+
+void TCdcStreamScanManager::Complete(const TPathId& streamPathId) {
+    auto it = Scans.find(streamPathId);
+    if (it == Scans.end()) {
+        return;
+    }
+
+    TxIdToPathId.erase(it->second.TxId);
+    Scans.erase(it);
+}
+
+void TCdcStreamScanManager::Complete(ui64 txId) {
+    Y_VERIFY(TxIdToPathId.contains(txId));
+    Complete(TxIdToPathId.at(txId));
+}
+
+TCdcStreamScanManager::TScanInfo* TCdcStreamScanManager::Get(const TPathId& streamPathId) {
+    return Scans.FindPtr(streamPathId);
+}
+
+const TCdcStreamScanManager::TScanInfo* TCdcStreamScanManager::Get(const TPathId& streamPathId) const {
+    return Scans.FindPtr(streamPathId);
+}
+
+bool TCdcStreamScanManager::Has(const TPathId& streamPathId) const {
+    return Scans.contains(streamPathId);
+}
+
+bool TCdcStreamScanManager::Has(ui64 txId) const {
+    return TxIdToPathId.contains(txId);
+}
+
+ui32 TCdcStreamScanManager::Size() const {
+    return Scans.size();
+}
+
+void TCdcStreamScanManager::PersistAdd(NIceDb::TNiceDb& db,
+        const TPathId& tablePathId, const TPathId& streamPathId, const TScanInfo& info)
+{
+    using Schema = TDataShard::Schema;
+    db.Table<Schema::CdcStreamScans>()
+        .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::CdcStreamScans::SnapshotStep>(info.SnapshotVersion.Step),
+            NIceDb::TUpdate<Schema::CdcStreamScans::SnapshotTxId>(info.SnapshotVersion.TxId)
+        );
+}
+
+void TCdcStreamScanManager::PersistRemove(NIceDb::TNiceDb& db,
         const TPathId& tablePathId, const TPathId& streamPathId)
 {
     using Schema = TDataShard::Schema;
     db.Table<Schema::CdcStreamScans>()
         .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
         .Delete();
+}
+
+void TCdcStreamScanManager::PersistLastKey(NIceDb::TNiceDb& db,
+        const TPathId& tablePathId, const TPathId& streamPathId, const TSerializedCellVec& value)
+{
+    using Schema = TDataShard::Schema;
+    db.Table<Schema::CdcStreamScans>()
+        .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
+        .Update<Schema::CdcStreamScans::LastKey>(value.GetBuffer());
 }
 
 class TDataShard::TTxCdcStreamScanProgress
@@ -220,7 +287,12 @@ public:
 
         if (ev.Rows) {
             const auto& [key, _] = ev.Rows.back();
-            Self->CdcStreamScanManager.PersistLastKey(db, key, tablePathId, streamPathId);
+
+            auto* info = Self->CdcStreamScanManager.Get(streamPathId);
+            Y_VERIFY(info);
+
+            info->LastKey = key;
+            Self->CdcStreamScanManager.PersistLastKey(db, tablePathId, streamPathId, key);
         }
 
         Response = MakeHolder<TDataShard::TEvPrivate::TEvCdcStreamScanContinue>();
@@ -452,7 +524,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_SCAN_RUN; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
 
         LOG_D("Run"
@@ -495,16 +567,14 @@ public:
             return true;
         }
 
-        if (Self->CdcStreamScanManager.GetScanId()) {
-            if (Self->CdcStreamScanManager.GetStreamPathId() == streamPathId) {
-                if (const auto& to = Self->CdcStreamScanManager.GetActorId()) {
-                    Response = Request->Forward(to);
-                } else {
-                    // nop, scan actor will report state when it starts
-                }
+        if (const auto* info = Self->CdcStreamScanManager.Get(streamPathId)) {
+            if (const auto& to = info->ActorId) {
+                Response = Request->Forward(to);
                 return true;
+            } else if (info->ScanId) {
+                return true; // nop, scan actor will report state when it starts
             }
-
+        } else if (Self->CdcStreamScanManager.Size()) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::OVERLOADED);
             return true;
         }
@@ -539,26 +609,25 @@ public:
             }
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-        TMaybe<TSerializedCellVec> lastKey;
-        if (!Self->CdcStreamScanManager.LoadLastKey(db, lastKey, tablePathId, streamPathId)) {
-            return false;
-        }
+        const auto* info = Self->CdcStreamScanManager.Get(streamPathId);
+        Y_VERIFY(info);
 
         auto* appData = AppData(ctx);
         const auto& taskName = appData->DataShardConfig.GetCdcInitialScanTaskName();
         const auto taskPrio = appData->DataShardConfig.GetCdcInitialScanTaskPriority();
 
-        const auto readVersion = TRowVersion(snapshotKey.Step, snapshotKey.TxId);
+        const auto snapshotVersion = TRowVersion(snapshotKey.Step, snapshotKey.TxId);
+        Y_VERIFY(info->SnapshotVersion == snapshotVersion);
+
         const ui64 localTxId = ++Self->NextTieBreakerIndex;
         auto scan = MakeHolder<TCdcStreamScan>(Self, Request->Sender, localTxId,
-            tablePathId, streamPathId, readVersion, valueTags, lastKey, record.GetLimits());
+            tablePathId, streamPathId, snapshotVersion, valueTags, info->LastKey, record.GetLimits());
         const ui64 scanId = Self->QueueScan(table->LocalTid, scan.Release(), localTxId,
             TScanOptions()
                 .SetResourceBroker(taskName, taskPrio)
-                .SetSnapshotRowVersion(readVersion)
+                .SetSnapshotRowVersion(snapshotVersion)
         );
-        Self->CdcStreamScanManager.Enqueue(localTxId, scanId, streamPathId);
+        Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId);
 
         LOG_I("Run scan"
             << ": streamPathId# " << streamPathId);
@@ -580,13 +649,13 @@ void TDataShard::Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const T
 }
 
 void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx) {
-    if (CdcStreamScanManager.GetTxId() != ev->Get()->TxId) {
+    if (!CdcStreamScanManager.Has(ev->Get()->TxId)) {
         LOG_W("Unknown cdc stream scan actor registered"
             << ": at: " << TabletID());
         return;
     }
 
-    CdcStreamScanManager.Register(ev->Get()->ActorId);
+    CdcStreamScanManager.Register(ev->Get()->TxId, ev->Get()->ActorId);
 }
 
 void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx) {

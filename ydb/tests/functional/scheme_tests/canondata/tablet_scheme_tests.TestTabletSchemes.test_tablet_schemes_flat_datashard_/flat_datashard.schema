@@ -1824,6 +1824,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "SnapshotTxId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "TableOwnerId",
                 "ColumnType": "Uint64"
@@ -1847,17 +1852,24 @@
                 "ColumnId": 5,
                 "ColumnName": "LastKey",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "SnapshotStep",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

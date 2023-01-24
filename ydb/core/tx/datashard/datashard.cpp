@@ -3675,12 +3675,12 @@ void TDataShard::ScanComplete(NTable::EAbort,
                     << ", at: "<< TabletID());
 
                 InFlightCondErase.Clear();
-            } else if (CdcStreamScanManager.GetScanId() && CdcStreamScanManager.GetTxId() == cookie) {
+            } else if (CdcStreamScanManager.Has(cookie)) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Cdc stream scan complete"
                     << ": cookie: " << cookie
                     << ", at: "<< TabletID());
 
-                CdcStreamScanManager.Clear();
+                CdcStreamScanManager.Complete(cookie);
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                             "Scan complete at " << TabletID() << " for unknown tx " << cookie);

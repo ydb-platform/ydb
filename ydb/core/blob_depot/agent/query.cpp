@@ -92,7 +92,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::ProcessStorageEvent(std::unique_ptr<IEventHandle> ev) {
         TQuery *query = CreateQuery<0>(std::move(ev));
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "new query", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "new query", (AgentId, LogId),
             (QueryId, query->GetQueryId()), (Name, query->GetName()));
         if (!TabletId) {
             query->EndWithError(NKikimrProto::ERROR, "group is in error state");
@@ -145,14 +145,14 @@ namespace NKikimr::NBlobDepot {
     TBlobDepotAgent::TQuery::~TQuery() {
         if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
             STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
-                (VirtualGroupId, Agent.VirtualGroupId), (QueryId, GetQueryId()), (Duration, duration));
+                (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Duration, duration));
         }
         Agent.QueryWatchdogMap.erase(QueryWatchdogMapIter);
     }
 
     void TBlobDepotAgent::TQuery::CheckQueryExecutionTime(TMonotonic now) {
         const auto prio = std::exchange(WatchdogPriority, NLog::PRI_NOTICE);
-        STLOG(prio, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(prio, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (AgentId, Agent.LogId),
             (QueryId, GetQueryId()), (Duration, now - StartTime));
         auto nh = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
         nh.key() = now + WatchdogDuration;
@@ -160,7 +160,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with error", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with error", (AgentId, Agent.LogId),
             (QueryId, GetQueryId()), (Status, status), (ErrorReason, errorReason),
             (Duration, TActivationContext::Monotonic() - StartTime));
 
@@ -181,7 +181,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (AgentId, Agent.LogId),
             (QueryId, GetQueryId()), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(true);

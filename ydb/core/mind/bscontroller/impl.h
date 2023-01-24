@@ -528,7 +528,7 @@ public:
         const ui32 NumVDisksPerFailDomain = 0;
 
         // topology according to the geometry
-        const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
 
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)

@@ -72,7 +72,7 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA16, "HandleTabletResponse", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA16, "HandleTabletResponse", (AgentId, LogId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()), (Sender, ev->Sender), (PipeServerId, PipeServerId),
             (Match, ev->Sender == PipeServerId));
         if (ev->Sender == PipeServerId) {
@@ -91,7 +91,7 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "HandleOtherResponse", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "HandleOtherResponse", (AgentId, LogId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()));
         OnRequestComplete(ev->Cookie, ev->Get(), OtherRequestInFlight);
     }

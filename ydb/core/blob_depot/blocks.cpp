@@ -121,7 +121,7 @@ namespace NKikimr::NBlobDepot {
                     // skip the origin agent
                     continue;
                 }
-                if (info.ExpirationTimestamp <= now) { // includes case when agent is connected right now
+                if (now < info.ExpirationTimestamp) { // includes case when agent is connected right now
                     TAgent& agent = Self->GetAgent(agentId);
 
                     // enqueue push notification
@@ -134,7 +134,6 @@ namespace NKikimr::NBlobDepot {
 
                     // add node to wait list; also start timer to remove this node from the wait queue
                     NodesWaitingForPushResult.insert(agentId);
-                    Y_VERIFY(info.ExpirationTimestamp <= now);
                     TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandle(TEvPrivate::EvCheckWaitingNode,
                         0, SelfId(), {}, nullptr, agentId));
 
@@ -161,7 +160,7 @@ namespace NKikimr::NBlobDepot {
             if (NodesWaitingForPushResult.contains(agentId)) {
                 const TMonotonic now = TActivationContext::Monotonic();
                 const auto& info = Self->BlocksManager->Blocks[TabletId].PerAgentInfo[agentId];
-                if (info.ExpirationTimestamp <= now) { // node still can write data for this tablet, reschedule timer
+                if (now < info.ExpirationTimestamp) { // node still can write data for this tablet, reschedule timer
                     TActivationContext::Schedule(info.ExpirationTimestamp, new IEventHandle(TEvPrivate::EvCheckWaitingNode,
                         0, SelfId(), {}, nullptr, agentId));
                 } else {

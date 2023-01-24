@@ -528,6 +528,7 @@ namespace NKikimr::NBsController {
                     group->VDisksInGroup.clear();
                     group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::DONE;
                     group->ContentChanged = true;
+                    group->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(group->Topology->GType, 0, 0, 0);
                 }
 
                 STLOG(PRI_INFO, BS_CONTROLLER, BSCVGxx, "decommission update processed", (Status, Status),

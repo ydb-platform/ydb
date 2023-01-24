@@ -16,6 +16,9 @@ namespace NKikimr::NBlobDepot {
             TString Buffer;
             ui32 BlockedGeneration = 0;
 
+            std::unordered_set<TString> ValueChainsWithNodata;
+            TString ValueChain;
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -70,7 +73,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnUpdateBlock() override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()));
 
                 const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, Max<ui32>(), this, &BlockedGeneration);
@@ -85,7 +88,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Msg, msg.Record));
 
                 Agent.BlobMappingCache.HandleResolveResult(id, msg.Record, nullptr);
@@ -102,8 +105,12 @@ namespace NKikimr::NBlobDepot {
                             return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to resolve blob# " << Id
                                 << ": " << item.GetErrorReason());
                         }
-                        Y_VERIFY(item.ValueChainSize() == 1);
                         if (Request.ReadBody) {
+                            if (!item.ValueChainSize()) {
+                                // FIXME(alexvru): hypothetically this can be considered normal and we may continue scan
+                                return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "empty ValueChain");
+                            }
+                            ValueChain = GetValueChainId(item.GetValueChain());
                             TReadArg arg{
                                 item.GetValueChain(),
                                 NKikimrBlobStorage::Discover,
@@ -135,7 +142,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Status, status));
 
                 if (status == NKikimrProto::OK) {
@@ -143,9 +150,15 @@ namespace NKikimr::NBlobDepot {
                     DoneWithData = true;
                     CheckIfDone();
                 } else if (status == NKikimrProto::NODATA) {
-                    // this may indicate a data race between locator and key value, we have to restart our resolution query
-                    IssueResolve();
-                    // FIXME: infinite cycle?
+                    if (ValueChainsWithNodata.insert(std::exchange(ValueChain, {})).second) {
+                        // this may indicate a data race between locator and key value, we have to restart our resolution query
+                        IssueResolve();
+                    } else {
+                        Y_VERIFY_DEBUG_S(false, "data is lost AgentId# " << Agent.LogId << " BlobId# " << Id);
+                        STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA39, "failed to Discover blob -- data is lost",
+                            (AgentId, Agent.LogId), (BlobId, Id));
+                        status = NKikimrProto::ERROR;
+                    }
                 } else {
                     EndWithError(status, dataOrErrorReason);
                 }

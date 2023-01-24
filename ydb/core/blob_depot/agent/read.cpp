@@ -58,7 +58,7 @@ namespace NKikimr::NBlobDepot {
 
             if (end <= begin || blobId.BlobSize() < end) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
-                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
+                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (AgentId, LogId), (TabletId, TabletId),
                     (Values, FormatList(arg.Values)));
                 return false;
             }
@@ -90,7 +90,7 @@ namespace NKikimr::NBlobDepot {
 
         if (size) {
             error = "incorrect offset/size provided";
-            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
+            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (AgentId, LogId), (TabletId, TabletId),
                 (Offset, arg.Offset), (Size, arg.Size), (Values, FormatList(arg.Values)));
             return false;
         }
@@ -127,6 +127,19 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(context->NumPartsPending);
 
         return true;
+    }
+
+    TString TBlobDepotAgent::GetValueChainId(const TResolvedValueChain& valueChain) {
+        constexpr ui8 separator = 7;
+        TString s;
+        for (auto it = valueChain.begin(); it != valueChain.end(); ++it) {
+            if (it != valueChain.begin()) {
+                s += separator;
+            }
+            const bool success = it->AppendToString(&s);
+            Y_VERIFY_DEBUG(success);
+        }
+        return s;
     }
 
     void TBlobDepotAgent::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {

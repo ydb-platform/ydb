@@ -131,6 +131,9 @@ namespace NKikimr::NBlobDepot {
         };
 
     public:
+        TString LogId;
+
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BLOB_DEPOT_AGENT_ACTOR;
         }
@@ -185,6 +188,7 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
                     TabletId = *info->BlobDepotId;
+                    LogId = TStringBuilder() << '{' << TabletId << '@' << VirtualGroupId << '}';
                     if (TabletId && TabletId != Max<ui64>()) {
                         ConnectToBlobDepot();
                     }
@@ -394,7 +398,7 @@ namespace NKikimr::NBlobDepot {
 
         struct TReadContext;
         struct TReadArg {
-            const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TResolvedValueChain>& Values;
+            const TResolvedValueChain& Values;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass;
             bool MustRestoreFirst = false;
             TQuery *Query = nullptr;
@@ -405,6 +409,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         bool IssueRead(const TReadArg& arg, TString& error);
+        static TString GetValueChainId(const TResolvedValueChain& valueChain);
 
         void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
 

@@ -102,6 +102,7 @@
 #include "mkql_wide_condense.h"
 #include "mkql_wide_filter.h"
 #include "mkql_wide_map.h"
+#include "mkql_wide_top_sort.h"
 #include "mkql_withcontext.h"
 #include "mkql_zip.h"
 
@@ -316,6 +317,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideLastCombiner", &WrapWideLastCombiner},
         {"WideCondense1", &WrapWideCondense1},
         {"WideChopper", &WrapWideChopper},
+        {"WideTop", &WrapWideTop},
+        {"WideTopSort", &WrapWideTopSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},

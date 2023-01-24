@@ -46,8 +46,7 @@ using TUnboxedValueDeque = std::deque<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::
 using TKeyPayloadPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
 using TKeyPayloadPairVector = std::vector<TKeyPayloadPair, TMKQLAllocator<TKeyPayloadPair>>;
 
-inline int CompareValues(NUdf::EDataSlot type,
-    bool asc, bool isOptional, const NUdf::TUnboxedValuePod& lhs, const NUdf::TUnboxedValuePod& rhs) {
+inline int CompareValues(NUdf::EDataSlot type, bool asc, bool isOptional, const NUdf::TUnboxedValuePod& lhs, const NUdf::TUnboxedValuePod& rhs) {
     int cmp;
     if (isOptional) {
         if (!lhs && !rhs) {
@@ -72,6 +71,16 @@ inline int CompareValues(NUdf::EDataSlot type,
     }
 
     return cmp;
+}
+
+inline int CompareValues(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right, const TKeyTypes& types, const bool* directions) {
+    for (ui32 i = 0; i < types.size(); ++i) {
+        if (const auto cmp = CompareValues(types[i].first, directions[i], types[i].second, left[i], right[i])) {
+            return cmp;
+        }
+    }
+
+    return 0;
 }
 
 inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right, const TKeyTypes& types, bool isTuple) {

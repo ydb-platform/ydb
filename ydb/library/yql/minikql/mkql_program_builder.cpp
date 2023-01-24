@@ -1661,6 +1661,35 @@ TRuntimeNode TProgramBuilder::Sort(TRuntimeNode list, TRuntimeNode ascending, co
     return BuildSort(__func__, list, ascending, keyExtractor);
 }
 
+TRuntimeNode TProgramBuilder::WideTop(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys)
+{
+    return BuildWideTop(__func__, flow, count, keys);
+}
+
+TRuntimeNode TProgramBuilder::WideTopSort(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys)
+{
+    return BuildWideTop(__func__, flow, count, keys);
+}
+
+TRuntimeNode TProgramBuilder::BuildWideTop(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys) {
+    if constexpr (RuntimeVersion < 33U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << callableName;
+    }
+
+    const auto width = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType())->GetElementsCount();
+    MKQL_ENSURE(!keys.empty() && keys.size() <= width, "Unexpected keys count: " << keys.size());
+
+    TCallableBuilder callableBuilder(Env, callableName, flow.GetStaticType());
+    callableBuilder.Add(flow);
+    callableBuilder.Add(count);
+    std::for_each(keys.cbegin(), keys.cend(), [&](const std::pair<ui32, TRuntimeNode>& key) {
+        MKQL_ENSURE(key.first < width, "Key index too large: " << key.first);
+        callableBuilder.Add(NewDataLiteral(key.first));
+        callableBuilder.Add(key.second);
+    });
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
 

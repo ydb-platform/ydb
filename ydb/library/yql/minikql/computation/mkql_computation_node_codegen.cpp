@@ -235,6 +235,10 @@ Value* GetPointerFromUnboxed(Value* value, const TCodegenContext& ctx, BasicBloc
     }
 }
 
+ui32 MyCompareStrings(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) {
+    return NUdf::CompareStrings(lhs, rhs);
+}
+
 bool MyEquteStrings(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) {
     return NUdf::EquateStrings(lhs, rhs);
 }
@@ -320,6 +324,143 @@ Value* GenEqualsFunction<true>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCode
 
 Value* GenEqualsFunction(NUdf::EDataSlot slot, bool isOptional, Value* lv, Value* rv, TCodegenContext& ctx, BasicBlock*& block) {
     return isOptional ? GenEqualsFunction<true>(slot, lv, rv, ctx, block) : GenEqualsFunction<false>(slot, lv, rv, ctx, block);
+}
+
+template <bool IsOptional>
+Value* GenCompareFunction(NUdf::EDataSlot slot, Value* lv, Value* rv, TCodegenContext& ctx, BasicBlock*& block);
+
+template <>
+Value* GenCompareFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCodegenContext& ctx, BasicBlock*& block) {
+    auto& context = ctx.Codegen->GetContext();
+
+    const auto& info = NUdf::GetDataTypeInfo(slot);
+
+    if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
+        return CallBinaryUnboxedValueFunction(&MyCompareStrings, Type::getInt32Ty(context), lv, rv, ctx.Codegen, block);
+    }
+
+    const bool extra = info.Features & (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::TzDateType);
+    const auto resultType = Type::getInt32Ty(context);
+
+    const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
+    const auto test = BasicBlock::Create(context, "test", ctx.Func);
+
+    const auto res = PHINode::Create(resultType, extra ? 3U : 2U, "result", exit);
+
+    const auto lhs = GetterFor(slot, lv, context, block);
+    const auto rhs = GetterFor(slot, rv, context, block);
+
+    if (info.Features & NUdf::EDataTypeFeatures::FloatType) {
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto next = BasicBlock::Create(context, "next", ctx.Func);
+
+        const auto uno = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_UNO, lhs, rhs, "unorded", block);
+
+        BranchInst::Create(more, next, uno, block);
+        block = more;
+
+        const auto luno = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_UNO, ConstantFP::get(lhs->getType(), 0.0), lhs, "luno", block);
+        const auto runo = CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_UNO, ConstantFP::get(rhs->getType(), 0.0), rhs, "runo", block);
+        const auto once = BinaryOperator::CreateXor(luno, runo, "xor", block);
+
+        const auto left = SelectInst::Create(luno, ConstantInt::get(resultType, 1), ConstantInt::get(resultType, -1), "left", block);
+        const auto both = SelectInst::Create(once, left, ConstantInt::get(resultType, 0), "both", block);
+
+        res->addIncoming(both, block);
+        BranchInst::Create(exit, block);
+
+        block = next;
+    }
+
+    const auto equals = info.Features & NUdf::EDataTypeFeatures::FloatType ?
+        CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_OEQ, lhs, rhs, "equals", block):
+        CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lhs, rhs, "equals", block);
+
+    if (info.Features & NUdf::EDataTypeFeatures::TzDateType) {
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto next = BasicBlock::Create(context, "next", ctx.Func);
+
+        BranchInst::Create(more, test, equals, block);
+
+        block = more;
+
+        const auto ltz = GetterForTimezone(context, lv, block);
+        const auto rtz = GetterForTimezone(context, rv, block);
+        const auto tzeq = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, ltz, rtz, "tzeq", block);
+        res->addIncoming(ConstantInt::get(resultType, 0), block);
+        BranchInst::Create(exit, next, tzeq, block);
+
+        block = next;
+        const auto tzlt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, ltz, rtz, "tzlt", block);
+        const auto tzout = SelectInst::Create(tzlt, ConstantInt::get(resultType, -1), ConstantInt::get(resultType, 1), "tzout", block);
+        res->addIncoming(tzout, block);
+        BranchInst::Create(exit, block);
+    } else {
+        res->addIncoming(ConstantInt::get(resultType, 0), block);
+        BranchInst::Create(exit, test, equals, block);
+    }
+
+    block = test;
+
+    const auto less = info.Features & NUdf::EDataTypeFeatures::FloatType ?
+        CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_OLT, lhs, rhs, "less", block): // float
+        info.Features & (NUdf::EDataTypeFeatures::SignedIntegralType | NUdf::EDataTypeFeatures::TimeIntervalType | NUdf::EDataTypeFeatures::DecimalType) ?
+        CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, rhs, "less", block): // signed
+        info.Features & (NUdf::EDataTypeFeatures::UnsignedIntegralType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType) ?
+        CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, lhs, rhs, "less", block): // unsigned
+        rhs; // bool
+
+    const auto out = SelectInst::Create(less, ConstantInt::get(resultType, -1), ConstantInt::get(resultType, 1), "out", block);
+    res->addIncoming(out, block);
+    BranchInst::Create(exit, block);
+
+    block = exit;
+    return res;
+}
+
+template <>
+Value* GenCompareFunction<true>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCodegenContext& ctx, BasicBlock*& block) {
+    auto& context = ctx.Codegen->GetContext();
+
+    const auto tiny = BasicBlock::Create(context, "tiny", ctx.Func);
+    const auto side = BasicBlock::Create(context, "side", ctx.Func);
+    const auto test = BasicBlock::Create(context, "test", ctx.Func);
+    const auto done = BasicBlock::Create(context, "done", ctx.Func);
+
+    const auto resultType = Type::getInt32Ty(context);
+    const auto res = PHINode::Create(resultType, 2U, "result", done);
+
+    const auto le = IsEmpty(lv, block);
+    const auto re = IsEmpty(rv, block);
+
+    const auto any = BinaryOperator::CreateOr(le, re, "or", block);
+
+    BranchInst::Create(tiny, test, any, block);
+
+    block = tiny;
+
+    const auto both = BinaryOperator::CreateAnd(le, re, "and", block);
+    res->addIncoming(ConstantInt::get(resultType, 0), block);
+    BranchInst::Create(done, side, both, block);
+
+    block = side;
+
+    const auto out = SelectInst::Create(le, ConstantInt::get(resultType, -1), ConstantInt::get(resultType, 1), "out", block);
+    res->addIncoming(out, block);
+    BranchInst::Create(done, block);
+
+    block = test;
+
+    const auto comp = GenCompareFunction<false>(slot, lv, rv, ctx, block);
+    res->addIncoming(comp, block);
+    BranchInst::Create(done, block);
+
+    block = done;
+    return res;
+}
+
+Value* GenCompareFunction(NUdf::EDataSlot slot, bool isOptional, Value* lv, Value* rv, TCodegenContext& ctx, BasicBlock*& block) {
+    return isOptional ? GenCompareFunction<true>(slot, lv, rv, ctx, block) : GenCompareFunction<false>(slot, lv, rv, ctx, block);
 }
 
 Value* GenCombineHashes(Value* first, Value* second, BasicBlock* block) {
@@ -771,6 +912,70 @@ Function* GenerateHashFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, co
         ReturnInst::Create(context, result, block);
     }
 
+    return ctx.Func;
+}
+
+Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name, const TKeyTypes& types) {
+    auto& module = codegen->GetModule();
+    if (const auto f = module.getFunction(name.c_str()))
+        return f;
+
+    auto& context = codegen->GetContext();
+    const auto valueType = Type::getInt128Ty(context);
+    const auto elementsType = ArrayType::get(valueType, types.size());
+    const auto ptrType = PointerType::getUnqual(elementsType);
+    const auto ptrDirsType = PointerType::getUnqual(ArrayType::get(Type::getInt1Ty(context), types.size()));
+    const auto returnType = Type::getInt32Ty(context);
+
+    const auto funcType = FunctionType::get(returnType, {ptrDirsType, ptrType, ptrType}, false);
+
+    TCodegenContext ctx(codegen);
+    ctx.AlwaysInline = true;
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+
+    auto args = ctx.Func->arg_begin();
+
+    const auto main = BasicBlock::Create(context, "main", ctx.Func);
+    auto block = main;
+
+    const auto dp = &*args;
+    const auto lv = &*++args;
+    const auto rv = &*++args;
+
+    if (types.empty()) {
+        ReturnInst::Create(context, ConstantInt::get(returnType, 0), block);
+        return ctx.Func;
+    }
+
+    const auto directions = new LoadInst(dp, "directions", block);
+    const auto elementsOne = new LoadInst(lv, "elements_one", block);
+    const auto elementsTwo = new LoadInst(rv, "elements_two", block);
+    const auto zero = ConstantInt::get(returnType, 0);
+
+    for (auto i = 0U; i < types.size(); ++i) {
+        const auto nextOne = ExtractValueInst::Create(elementsOne, i, (TString("next_one_") += ToString(i)).c_str(), block);
+        const auto nextTwo = ExtractValueInst::Create(elementsTwo, i, (TString("next_two_") += ToString(i)).c_str(), block);
+
+        const auto exit = BasicBlock::Create(context, (TString("exit_") += ToString(i)).c_str(), ctx.Func);
+        const auto step = BasicBlock::Create(context, (TString("step_") += ToString(i)).c_str(), ctx.Func);
+
+        const auto test = GenCompareFunction(types[i].first, types[i].second, nextOne, nextTwo, ctx, block);
+        const auto skip = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, zero, test,  (TString("skip_") += ToString(i)).c_str(), block);
+
+        BranchInst::Create(step, exit, skip, block);
+
+        block = exit;
+
+        const auto dir = ExtractValueInst::Create(directions, i, (TString("dir_") += ToString(i)).c_str(), block);
+        const auto neg = BinaryOperator::CreateNeg(test, (TString("neg_") += ToString(i)).c_str(), block);
+        const auto out = SelectInst::Create(dir, test, neg, (TString("neg_") += ToString(i)).c_str(), block);
+
+        ReturnInst::Create(context, out, block);
+
+        block = step;
+    }
+
+    ReturnInst::Create(context, zero, block);
     return ctx.Func;
 }
 

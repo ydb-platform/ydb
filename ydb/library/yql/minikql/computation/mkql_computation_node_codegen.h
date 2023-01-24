@@ -401,6 +401,7 @@ Function* GenerateHashFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, co
 
 Function* GenerateEqualsFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name, const TKeyTypes& types);
 Function* GenerateHashFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name, const TKeyTypes& types);
+Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name, const TKeyTypes& types);
 
 template <typename TDerived>
 class TDecoratorCodegeneratorNode: public TDecoratorComputationNode<TDerived>, public ICodegeneratorInlineNode

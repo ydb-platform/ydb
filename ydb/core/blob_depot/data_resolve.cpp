@@ -201,19 +201,36 @@ namespace NKikimr::NBlobDepot {
             for (const auto& item : record.GetItems()) {
                 std::optional<ui64> cookie = item.HasCookie() ? std::make_optional(item.GetCookie()) : std::nullopt;
 
-                std::optional<TKey> begin;
-                std::optional<TKey> end;
-                TScanFlags flags;
-                ui64 maxKeys;
-                const bool success = GetScanParams(item, &begin, &end, &flags, &maxKeys);
-                Y_VERIFY_DEBUG(success);
+                switch (item.GetKeyDesignatorCase()) {
+                    case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange: {
+                        std::optional<TKey> begin;
+                        std::optional<TKey> end;
+                        TScanFlags flags;
+                        ui64 maxKeys;
+                        const bool success = GetScanParams(item, &begin, &end, &flags, &maxKeys);
+                        Y_VERIFY(success);
+                        Self->Data->ScanRange(begin, end, flags, [&](const TKey& key, const TValue& value) {
+                            IssueResponseItem(cookie, key, value);
+                            return --maxKeys != 0;
+                        });
+                        break;
+                    }
 
-                // we have everything we need contained in memory, generate response from memory
-                auto callback = [&](const TKey& key, const TValue& value) {
-                    IssueResponseItem(cookie, key, value);
-                    return --maxKeys != 0;
-                };
-                Self->Data->ScanRange(begin, end, flags, callback);
+                    case NKikimrBlobDepot::TEvResolve::TItem::kExactKey: {
+                        const auto key = TKey::FromBinaryKey(item.GetExactKey(), Self->Config);
+                        const TValue *value = Self->Data->FindKey(key);
+                        const auto& errors = ResolveDecommitContext.ResolutionErrors;
+                        if (value || std::binary_search(errors.begin(), errors.end(), key)) {
+                            static const TValue zeroValue;
+                            IssueResponseItem(cookie, key, value ? *value : zeroValue);
+                        }
+                        break;
+                    }
+
+                    case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
+                        Y_VERIFY_DEBUG(false, "incorrect query field");
+                        break;
+                }
             }
 
             return true;

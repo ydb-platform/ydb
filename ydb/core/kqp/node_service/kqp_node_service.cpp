@@ -138,6 +138,15 @@ private:
             return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
         }
 
+        NRm::EKqpMemoryPool memoryPool;
+        if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
+            memoryPool = NRm::EKqpMemoryPool::ScanQuery;
+        } else if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA) {
+            memoryPool = NRm::EKqpMemoryPool::DataQuery;
+        } else {
+            memoryPool = NRm::EKqpMemoryPool::Unspecified;
+        }
+
         ui32 requestChannels = 0;
         for (auto& dqTask : *msg.MutableTasks()) {
             auto estimation = EstimateTaskResources(dqTask, Config);
@@ -161,7 +170,7 @@ private:
         LOG_D("TxId: " << txId << ", channels: " << requestChannels
             << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.TotalMemory);
 
-        ui64 txMemory = State.GetTxMemory(txId, NRm::EKqpMemoryPool::ScanQuery) + request.TotalMemory;
+        ui64 txMemory = State.GetTxMemory(txId, memoryPool) + request.TotalMemory;
         if (txMemory > Config.GetQueryMemoryLimit()) {
             LOG_N("TxId: " << txId << ", requested too many memory: " << request.TotalMemory
                 << "(" << txMemory << " for this Tx), limit: " << Config.GetQueryMemoryLimit());
@@ -177,7 +186,7 @@ private:
         for (auto& task : request.InFlyTasks) {
             NRm::TKqpResourcesRequest resourcesRequest;
             resourcesRequest.ExecutionUnits = 1;
-            resourcesRequest.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
+            resourcesRequest.MemoryPool = memoryPool;
 
             // !!!!!!!!!!!!!!!!!!!!!
             // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
@@ -228,9 +237,9 @@ private:
         memoryLimits.MkqlLightProgramMemoryLimit = Config.GetMkqlLightProgramMemoryLimit();
         memoryLimits.MkqlHeavyProgramMemoryLimit = Config.GetMkqlHeavyProgramMemoryLimit();
         if (Config.GetEnableInstantMkqlMemoryAlloc()) {
-            memoryLimits.AllocateMemoryFn = [rm = ResourceManager()](const auto& txId, ui64 taskId, ui64 memory) {
+            memoryLimits.AllocateMemoryFn = [rm = ResourceManager(), memoryPool](const auto& txId, ui64 taskId, ui64 memory) {
                 NRm::TKqpResourcesRequest resources;
-                resources.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
+                resources.MemoryPool = memoryPool;
                 resources.Memory = memory;
 
                 if (rm->AllocateResources(std::get<ui64>(txId), taskId, resources)) {
@@ -249,16 +258,8 @@ private:
             request.Deadline = TAppData::TimeProvider->Now() + *runtimeSettingsBase.Timeout;
         }
 
-        if (msgRtSettings.GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
-            runtimeSettingsBase.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::ScanQuery;
-            runtimeSettingsBase.FailOnUndelivery = false;
-        } else if (msgRtSettings.GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA) {
-            runtimeSettingsBase.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
-            runtimeSettingsBase.FailOnUndelivery = true;
-        } else {
-            runtimeSettingsBase.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
-            runtimeSettingsBase.FailOnUndelivery = true;
-        }
+        runtimeSettingsBase.ExtraMemoryAllocationPool = memoryPool;
+        runtimeSettingsBase.FailOnUndelivery = msgRtSettings.GetExecType() != NYql::NDqProto::TComputeRuntimeSettings::SCAN;
 
         runtimeSettingsBase.StatsMode = msgRtSettings.GetStatsMode();
         runtimeSettingsBase.UseLLVM = msgRtSettings.GetUseLLVM();
@@ -333,7 +334,7 @@ private:
 
         Send(request.Executer, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
 
-        State.NewRequest(txId, requester, std::move(request), NRm::EKqpMemoryPool::ScanQuery);
+        State.NewRequest(txId, requester, std::move(request), memoryPool);
     }
 
     void HandleWork(TEvKqpNode::TEvFinishKqpTask::TPtr& ev) {

@@ -50,40 +50,28 @@ bool ValidateIfArgument(const TCoOptionalIf& optionalIf, const TExprNode* rawLam
         return true;
     }
 
-    // Ok, maybe it is SELECT `field` ?
+    // Ok, maybe it is SELECT `field1`, `field2` ?
     auto maybeAsStruct = optionalIf.Value().Maybe<TCoAsStruct>();
-
     if (!maybeAsStruct) {
         return false;
     }
 
-    auto asStruct = maybeAsStruct.Cast();
+    for (auto arg : maybeAsStruct.Cast()) {
+        // Check that second tuple element is Member(lambda arg)
+        auto tuple = arg.Maybe<TExprList>().Cast();
+        if (tuple.Size() != 2) {
+            return false;
+        }
 
-    // SELECT `field` has only one item
-    if (asStruct.ArgCount() > 1) {
-        return false;
-    } else if (asStruct.ArgCount() == 0) {
-        // In case of COUNT(*) we use empty AsStruct
-        return true;
-    }
+        auto maybeMember = tuple.Item(1).Maybe<TCoMember>();
+        if (!maybeMember) {
+            return false;
+        }
 
-    // Check that second tuple element is Member(lambda arg)
-    auto tuple = asStruct.Arg(0).Maybe<TExprList>().Cast();
-
-    if (tuple.Size() != 2) {
-        return false;
-    }
-
-    auto maybeMember = tuple.Item(1).Maybe<TCoMember>();
-
-    if (!maybeMember) {
-        return false;
-    }
-
-    auto member = maybeMember.Cast();
-
-    if (member.Struct().Raw() != rawLambdaArg) {
-        return false;
+        auto member = maybeMember.Cast();
+        if (member.Struct().Raw() != rawLambdaArg) {
+            return false;
+        }
     }
 
     return true;

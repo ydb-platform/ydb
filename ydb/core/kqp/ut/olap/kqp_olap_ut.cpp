@@ -1715,6 +1715,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(Filter_NotAllUsedFieldsInSelectClause) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, resource_id FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 5;
+            )")
+            .SetExpectedReply("[[[5];#]]")
+            .AddExpectedPlanOptions("KqpOlapFilter");
+
+        TestTableWithNulls({ testCase });
+    }
+
     Y_UNIT_TEST(Aggregation_ResultDistinctCountRI_GroupByL) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(

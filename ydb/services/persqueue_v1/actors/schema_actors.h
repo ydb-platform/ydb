@@ -102,7 +102,7 @@ private:
     std::map<ui64, TTabletInfo> Tablets;
     ui32 RequestsInfly = 0;
 
-    ui64 BalancerTabletId;
+    ui64 BalancerTabletId = 0;
 
 protected:
     TString Consumer;

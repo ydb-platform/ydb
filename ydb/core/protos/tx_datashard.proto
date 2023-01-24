@@ -1594,7 +1594,12 @@ message TEvRead {
     // must not be set
     optional TTableId TableId = 2;
 
-    // A list of column ids that are returned in the result set
+    // A list of column ids that are returned in the result set. Empty columns can be used to Count(*) rows.
+    // * In case of CellVec and empty columns: result will
+    // contain an empty CellVec for each read row.
+    // * In case of Arrow and empty Columns: ArrowBatch is a batch with single column of type NullType
+    // and with num_rows equal rowsCount. All values are null.
+    // In all cases RowCount can be checked with GetRowsCount() call (return RowCount field).
     repeated uint32 Columns = 3;
 
     // An optional snapshot for point in time queries
@@ -1694,6 +1699,8 @@ message TEvReadResult {
 
     repeated TLock TxLocks = 10;
     repeated TLock BrokenTxLocks = 11;
+
+    optional uint64 RowCount = 12;
 
     // Data for the possibly partial result
     oneof ReadResult {

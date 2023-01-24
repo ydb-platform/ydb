@@ -17,6 +17,32 @@ namespace {
 
 constexpr ui64 MinRowsPerCheck = 1000;
 
+class TRowCountBlockBuilder : public IBlockBuilder {
+public:
+    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
+    {
+        return true;
+    }
+
+    void AddRow(const TDbTupleRef&, const TDbTupleRef&) override {
+        ++RowCount;
+    }
+
+    TString Finish() override {
+        return TString();
+    }
+
+    size_t Bytes() const override { return 0; }
+
+private:
+    ui64 RowCount = 0;
+
+    std::unique_ptr<IBlockBuilder> Clone() const override {
+        return nullptr;
+    }
+};
+
+
 class TCellBlockBuilder : public IBlockBuilder {
 public:
     bool Start(
@@ -152,6 +178,11 @@ std::pair<std::unique_ptr<IBlockBuilder>, TString> CreateBlockBuilder(
     std::unique_ptr<IBlockBuilder> blockBuilder;
     TString error;
 
+    if (state.Columns.empty()) {
+        blockBuilder.reset(new TRowCountBlockBuilder());
+        return std::make_pair(std::move(blockBuilder), error);
+    }
+
     auto nameTypeCols = GetNameTypeColumns(state.Columns, tableInfo);
     if (nameTypeCols.empty()) {
         error = "Wrong columns requested";
@@ -159,10 +190,10 @@ std::pair<std::unique_ptr<IBlockBuilder>, TString> CreateBlockBuilder(
     }
 
     switch (state.Format) {
-    case NKikimrTxDataShard::EScanDataFormat::ARROW:
+    case NKikimrTxDataShard::ARROW:
         blockBuilder.reset(new NArrow::TArrowBatchBuilder());
         break;
-    case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
+    case NKikimrTxDataShard::CELLVEC:
         blockBuilder.reset(new TCellBlockBuilder());
         break;
     default:
@@ -493,27 +524,34 @@ public:
             }
         }
 
-        if (!isKeysRequest)
+        Self->IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
+        if (!isKeysRequest) {
             Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, InvisibleRowSkips);
+            Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS, RowsRead);
+            Self->IncCounter(COUNTER_RANGE_READ_ROWS_PER_REQUEST, RowsRead);
+        }
 
+        if (RowsRead) {
+            record.SetRowCount(RowsRead);
+        }
+
+        // not that in case of empty columns set, here we have 0 bytes
+        // and if is false
         BytesInResult = BlockBuilder.Bytes();
         if (BytesInResult) {
-            Self->IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
             Self->IncCounter(COUNTER_READ_ITERATOR_BYTES_READ, BytesInResult);
             if (isKeysRequest) {
                 // backward compatibility
                 Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW_BYTES, BytesInResult);
             } else {
                 // backward compatibility
-                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS, RowsRead);
-                Self->IncCounter(COUNTER_RANGE_READ_ROWS_PER_REQUEST, RowsRead);
                 Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES, BytesInResult);
             }
 
             switch (State.Format) {
             case NKikimrTxDataShard::ARROW: {
                 auto& arrowBuilder = static_cast<NArrow::TArrowBatchBuilder&>(BlockBuilder);
-                result.ArrowBatch = arrowBuilder.FlushBatch(false);
+                result.SetArrowBatch(arrowBuilder.FlushBatch(false));
                 break;
             }
             case NKikimrTxDataShard::CELLVEC: {
@@ -1927,11 +1965,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     if (record.HasProgram()) {
         replyWithError(Ydb::StatusIds::BAD_REQUEST, "PushDown is not supported");
-        return;
-    }
-
-    if (record.ColumnsSize() == 0) {
-        replyWithError(Ydb::StatusIds::BAD_REQUEST, "Missing Columns");
         return;
     }
 

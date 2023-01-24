@@ -692,7 +692,7 @@ public:
                 } else {
                     hasResultColumns = true;
                     stats.AddStatistics(
-                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->ArrowBatch, columnIndex, type)
+                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, type)
                     );
                 }
             }

@@ -79,14 +79,14 @@ std::vector<TOwnedCellVec> GetRows(
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& batchSchema,
     const TEvDataShard::TEvReadResult& result)
 {
-    UNIT_ASSERT(result.ArrowBatch);
+    UNIT_ASSERT(result.GetArrowBatch());
 
     // TODO: use schema from ArrowBatch
     TRowWriter writer;
     NArrow::TArrowToYdbConverter converter(batchSchema, writer);
 
     TString error;
-    UNIT_ASSERT(converter.Process(*result.ArrowBatch, error));
+    UNIT_ASSERT(converter.Process(*result.GetArrowBatch(), error));
 
     return std::move(writer.Rows);
 }
@@ -146,7 +146,7 @@ void CheckResultArrow(
     std::vector<NTable::TTag> columns = {})
 {
     UNIT_ASSERT(!gold.empty());
-    UNIT_ASSERT(result.ArrowBatch);
+    UNIT_ASSERT(result.GetArrowBatch());
 
     TVector<std::pair<TString, NScheme::TTypeInfo>> batchSchema;
     const auto& description = userTable.GetDescription();
@@ -201,7 +201,7 @@ void CheckResult(
             UNIT_ASSERT(false);
         }
     } else {
-        UNIT_ASSERT(!result.ArrowBatch && result.GetRowsCount() == 0);
+        UNIT_ASSERT(!result.GetArrowBatch() && result.GetRowsCount() == 0);
     }
 }
 
@@ -911,6 +911,54 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             auto readResult = helper.SendRead("table-1", request.release());
             CheckResult(helper.Tables["table-1"].UserTable, *readResult, {{k * 100, k}}, columns);
         }
+    }
+
+    Y_UNIT_TEST(ShouldReadNoColumnsCellVec) {
+        // KIKIMR-16897: no columns mean we want to calc row count
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        request->Record.ClearColumns();
+        AddRangeQuery<ui32>(
+            *request,
+            {1, 1, 1},
+            true,
+            {5, 5, 5},
+            true
+        );
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        UNIT_ASSERT(readResult);
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+            std::vector<ui32>(),
+            std::vector<ui32>(),
+            std::vector<ui32>(),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), 3UL);
+    }
+
+    Y_UNIT_TEST(ShouldReadNoColumnsArrow) {
+        // KIKIMR-16897: no columns mean we want to calc row count
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        request->Record.ClearColumns();
+        AddRangeQuery<ui32>(
+            *request,
+            {1, 1, 1},
+            true,
+            {5, 5, 5},
+            true
+        );
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        UNIT_ASSERT(readResult);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), 3UL);
+        UNIT_ASSERT(readResult->GetArrowBatch());
+
+        auto batch = readResult->GetArrowBatch();
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3UL);
     }
 
     Y_UNIT_TEST(ShouldReadNonExistingKey) {

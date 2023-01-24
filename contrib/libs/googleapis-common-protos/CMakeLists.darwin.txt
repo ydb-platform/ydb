@@ -63,7 +63,9 @@ target_proto_messages(contrib-libs-googleapis-common-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/longrunning/operations.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/code.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/context/attribute_context.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/context/audit_context.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/error_details.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/http.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/status.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/calendar_period.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/color.proto

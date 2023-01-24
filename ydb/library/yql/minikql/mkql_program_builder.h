@@ -258,6 +258,8 @@ public:
     TRuntimeNode BlockXor(TRuntimeNode first, TRuntimeNode second);
 
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
+    TRuntimeNode BlockJust(TRuntimeNode data);
+
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,

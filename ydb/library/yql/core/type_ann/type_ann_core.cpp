@@ -11857,6 +11857,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockXor"] = &BlockLogicalWrapper;
         Functions["BlockNot"] = &BlockLogicalWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
+        Functions["BlockJust"] = &BlockJustWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 

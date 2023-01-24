@@ -5358,6 +5358,14 @@ TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenB
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockJust(TRuntimeNode data) {
+    const auto initialType = AS_TYPE(TBlockType, data.GetStaticType());
+    auto returnType = NewBlockType(NewOptionalType(initialType->GetItemType()), initialType->GetShape());
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(data);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args) {
     for (const auto& arg : args) {
         MKQL_ENSURE(arg.GetStaticType()->IsBlock(), "Expected Block type");

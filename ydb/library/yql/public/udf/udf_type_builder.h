@@ -451,6 +451,7 @@ UDF_ASSERT_TYPE_SIZE(IListTypeBuilder, 8);
 namespace NImpl {
 
 template <typename T> struct TSimpleSignatureHelper;
+template <typename T> struct TSimpleSignatureTypeHelper;
 template <typename T> struct TTypeBuilderHelper;
 template <typename... TArgs> struct TArgsHelper;
 template <typename... TArgs> struct TTupleHelper;
@@ -714,6 +715,11 @@ public:
     IFunctionTypeInfoBuilder& SimpleSignature() {
         NImpl::TSimpleSignatureHelper<T>::Register(*this);
         return *this;
+    }
+
+    template <typename T>
+    TType* SimpleSignatureType() const {
+        return NImpl::TSimpleSignatureTypeHelper<T>::Build(*this);
     }
 
     IFunctionTypeInfoBuilder& RunConfig(TDataTypeId type) {
@@ -1008,6 +1014,16 @@ struct TSimpleSignatureHelper<TReturn(TArgs...)> {
     static void Register(IFunctionTypeInfoBuilder& builder) {
         builder.Returns(TTypeBuilderHelper<TReturn>::Build(builder));
         TArgsHelper<TArgs...>::Add(*builder.Args());
+    }
+};
+
+template <typename TReturn, typename... TArgs>
+struct TSimpleSignatureTypeHelper<TReturn(TArgs...)> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        auto callableBuilder = builder.Callable(sizeof...(TArgs));
+        callableBuilder->Returns(TTypeBuilderHelper<TReturn>::Build(builder));
+        TCallableArgsHelper<TArgs...>::Arg(*callableBuilder, builder);
+        return callableBuilder->Build();
     }
 };
 

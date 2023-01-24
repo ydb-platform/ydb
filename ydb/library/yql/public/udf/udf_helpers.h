@@ -309,6 +309,12 @@ public:
     }
 };
 
+template <typename TUdf>
+struct TUdfTraits {
+    static constexpr bool SupportsBlocks = false;
+    using TBlockUdf = void;
+};
+
 template<typename... TUdfs>
 class TSimpleUdfModuleHelper : public IUdfModule
 {
@@ -323,6 +329,11 @@ public:
         auto r = names.Add(TUdfType::Name());
         if (THasTTypeAwareMarker<TUdfType>::value) {
             r->SetTypeAwareness();
+        }
+
+        if constexpr (TUdfTraits<TUdfType>::SupportsBlocks) {
+            auto rBlocks = names.Add(TUdfTraits<TUdfType>::TBlockUdf::Name());
+            rBlocks->SetTypeAwareness();
         }
     }
 
@@ -342,7 +353,14 @@ public:
     {
         Y_UNUSED(typeConfig);
         bool typesOnly = (flags & TFlags::TypesOnly);
-        return TUdfType::DeclareSignature(name, userType, builder, typesOnly);
+        bool found = TUdfType::DeclareSignature(name, userType, builder, typesOnly);
+        if (!found) {
+           if constexpr (TUdfTraits<TUdfType>::SupportsBlocks) {
+               found = TUdfTraits<TUdfType>::TBlockUdf::DeclareSignature(name, userType, builder, typesOnly);
+           }
+        }
+
+        return found;
     }
 
     template<typename THead1, typename THead2, typename... TTail>

@@ -9,6 +9,7 @@
 #include "mkql_block_agg.h"
 #include "mkql_block_coalesce.h"
 #include "mkql_block_if.h"
+#include "mkql_block_just.h"
 #include "mkql_block_logical.h"
 #include "mkql_block_compress.h"
 #include "mkql_block_skiptake.h"
@@ -283,6 +284,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockOr", &WrapBlockOr},
         {"BlockXor", &WrapBlockXor},
         {"BlockNot", &WrapBlockNot},
+        {"BlockJust", &WrapBlockJust},
         {"BlockCompress", &WrapBlockCompress},
         {"BlockExpandChunked", &WrapBlockExpandChunked},
         {"BlockCombineAll", &WrapBlockCombineAll},

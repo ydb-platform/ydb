@@ -4861,7 +4861,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If"}))
+        if (node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just"}))
         {
             for (auto& child : node->ChildrenList()) {
                 if (child->IsComplete()) {
@@ -4919,19 +4919,25 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         YQL_ENSURE(!node->IsComplete() && hasBlockArg);
         const TTypeAnnotationNode* outType = ctx.MakeType<TBlockExprType>(node->GetTypeAnn());
         if (isUdf) {
+            TExprNode::TPtr extraTypes;
+            bool renameFunc = false;
+            if (node->Head().Child(2)->IsCallable("TupleType")) {
+                extraTypes = node->Head().Child(2)->ChildPtr(2);
+            } else {
+                renameFunc = true;
+                extraTypes = ctx.NewCallable(node->Head().Pos(), "TupleType", {});
+            }
+
             funcArgs.push_back(ctx.Builder(node->Head().Pos())
                 .Callable("Udf")
-                    .Add(0, node->Head().ChildPtr(0))
+                    .Atom(0, TString(node->Head().Child(0)->Content()) + (renameFunc ? "_BlocksImpl" : ""))
                     .Add(1, node->Head().ChildPtr(1))
                     .Callable(2, "TupleType")
                         .Callable(0, "TupleType")
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                     for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
-                                        auto child = node->Child(i);
-                                        auto originalTypeNode = node->Head().Child(2)->Head().Child(i - 1);
-                                        parent.Callable(i - 1, child->IsComplete() ? "ScalarType" : "BlockType")
-                                            .Add(0, originalTypeNode)
-                                            .Seal();
+                                        auto type = argTypes[i - 1];
+                                        parent.Add(i - 1, ExpandType(node->Head().Pos(), *type, ctx));
                                     }
 
                                     return parent;
@@ -4939,7 +4945,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                         .Seal()
                         .Callable(1, "StructType")
                         .Seal()
-                        .Add(2, node->Head().Child(2)->ChildPtr(2))
+                        .Add(2, extraTypes)
                     .Seal()
                     .Add(3, node->Head().ChildPtr(3))
                 .Seal()

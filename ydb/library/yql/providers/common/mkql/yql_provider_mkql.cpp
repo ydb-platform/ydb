@@ -394,6 +394,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Dec", &TProgramBuilder::Decrement},
         {"Not", &TProgramBuilder::Not},
         {"BlockNot", &TProgramBuilder::BlockNot},
+        {"BlockJust", &TProgramBuilder::BlockJust},
 
         {"BitNot", &TProgramBuilder::BitNot},
 

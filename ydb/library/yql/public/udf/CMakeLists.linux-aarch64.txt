@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(arrow)
 add_subdirectory(service)
 add_subdirectory(support)
 add_subdirectory(tz)

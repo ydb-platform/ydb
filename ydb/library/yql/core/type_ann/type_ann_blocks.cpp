@@ -232,6 +232,29 @@ IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockJustWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto child = input->Child(0);
+    if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TOptionalExprType>(blockItemType);
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 2U, ctx.Expr)) {

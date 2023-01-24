@@ -7,8 +7,7 @@
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 class TDataShard;
 
@@ -56,5 +55,4 @@ private:
     TBuildIndexIdToScanIdMap Records;
 };
 
-}   // namespace NDataShard
-}   // namespace NKikimr
+}

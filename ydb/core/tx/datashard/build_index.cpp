@@ -1,7 +1,7 @@
+#include "build_index.h"
 #include "datashard_impl.h"
 #include "upload_stats.h"
 #include "range_ops.h"
-#include "datashard_build_index.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -17,8 +17,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 using TColumnsTags = THashMap<TString, NTable::TTag>;
 using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
@@ -653,7 +652,7 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
         limits.MaxUploadRowsRetryCount = record.GetMaxRetries();
     }
 
-    ui32 scanId = QueueScan(userTable->LocalTid,
+    const auto scanId = QueueScan(userTable->LocalTid,
                             CreateBuildIndexScan(buildIndexId,
                                                  record.GetTargetName(),
                                                  seqNo,
@@ -675,5 +674,4 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
     ctx.Send(ev->Sender, std::move(response));
 }
 
-} // NDataShard
-} // NKikimr
+}

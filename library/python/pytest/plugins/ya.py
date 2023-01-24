@@ -646,7 +646,7 @@ class TestItem(object):
 
         if report_teststatus == 'xfailed':
             self._status = 'xfail'
-            self.set_error(report.wasxfail, 'imp')
+            self.set_error(report.wasxfail or 'test was marked as xfail', 'imp')
         elif report_teststatus == 'xpassed':
             self._status = 'xpass'
             self.set_error("Test unexpectedly passed")
@@ -678,6 +678,7 @@ class TestItem(object):
         return self._error
 
     def set_error(self, entry, marker='bad'):
+        assert entry != ""
         if isinstance(entry, _pytest.reports.BaseReport):
             self._error = get_formatted_error(entry)
         else:

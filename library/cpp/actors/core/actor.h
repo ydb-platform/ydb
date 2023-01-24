@@ -143,7 +143,7 @@ namespace NActors {
         bool Send(TAutoPtr<IEventHandle> ev) const;
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(std::unique_ptr<IEventHandle> &&ev) const {
-            Send<SendingType>(TAutoPtr<IEventHandle>(ev.release()));
+            return Send<SendingType>(TAutoPtr<IEventHandle>(ev.release()));
         }
 
         TInstant Now() const;

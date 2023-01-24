@@ -19,7 +19,6 @@ struct TBlobInfo {
         : Status(EStatus::NONEXISTENT) 
         , Id(tablet, gen, step, channel, data.size(), cookie)
         , Data(data)
-        , KeepFlag(false)
     {
     }
 
@@ -34,13 +33,15 @@ struct TBlobInfo {
         } else {
             status = "COLLECTED";
         }
-        return TStringBuilder() << "Status# " << status << " Id# {" << Id.ToString() << "} Data# " << Data << " KeepFlag# " << KeepFlag;
+        return TStringBuilder() << "Status# " << status << " Id# {" << Id.ToString() << "} Data# " << Data << 
+            " Keep# " << Keep << " DoNotKeep# " << DoNotKeep;
     }
 
     EStatus Status;
     const TLogoBlobID Id;
     TString Data;
-    bool KeepFlag;
+    bool Keep = false;
+    bool DoNotKeep = false;
 
     static const TBlobInfo& Nothing() {
         static const TBlobInfo nothing(TString(), 0, 0, 0, 0, 0);

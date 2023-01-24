@@ -11,12 +11,13 @@
 // #define LOG_BLOCK
 // #define LOG_COLLECT_GARBAGE
 
-bool IsCollected(const TLogoBlobID& id, ui32 collectGen, ui32 collectStep) {
+bool CheckBarrier(const TLogoBlobID& id, ui32 collectGen, ui32 collectStep) {
     return (id.Generation() < collectGen) || (id.Generation() == collectGen && id.Step() <= collectStep);
 }
 
 bool IsCollected(const TBlobInfo& blob, ui32 softCollectGen, ui32 softCollectStep, ui32 hardCollectGen, ui32 hardCollectStep) {
-    return IsCollected(blob.Id, hardCollectGen, hardCollectStep) || (!blob.KeepFlag && IsCollected(blob.Id, softCollectGen, softCollectStep));
+    bool keep = !blob.DoNotKeep && blob.Keep;
+    return CheckBarrier(blob.Id, hardCollectGen, hardCollectStep) || (!keep && CheckBarrier(blob.Id, softCollectGen, softCollectStep));
 }
 
 
@@ -566,15 +567,12 @@ void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvColl
             for (auto& blob : blobs) {
                 if (keep) {
                     if (setKeep.find(blob.Id) != setKeep.end()) {
-                        if (blob.Status != TBlobInfo::EStatus::WRITTEN) {
-                            UNIT_FAIL("Setting keep flag on nonexistent blob");
-                        }
-                        blob.KeepFlag = true;
+                        blob.Keep = true;
                     }
                 }
                 if (doNotKeep) {
                     if (setNotKeep.find(blob.Id) != setNotKeep.end()) {
-                        blob.KeepFlag = false;
+                        blob.DoNotKeep = true;
                     }
                 }
 

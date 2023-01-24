@@ -785,7 +785,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
     for (ui32 iteration = 0; iteration < readsNum; ++iteration) {
         ui32 action = act.GetInterval(tenv.Rand(act.UpperLimit()));
         if (iteration == readsNum - 1) { // Catch all results on the last iteration
-            action = 4;
+            action = EActions::CATCH_ALL;
         }
         if (tenv.IsFinished()) {
             break;

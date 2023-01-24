@@ -743,8 +743,34 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.WideChopper(flow, keyExtractor, groupSwitch, handler);
     });
 
+    AddCallable("WideTop", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto flow = MkqlBuildExpr(node.Head(), ctx);
+        const auto count = MkqlBuildExpr(*node.Child(1U), ctx);
+
+        std::vector<std::pair<ui32, TRuntimeNode>> directions;
+        directions.reserve(node.Tail().ChildrenSize());
+        node.Tail().ForEachChild([&](const TExprNode& dir) {
+            directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+        });
+
+        return ctx.ProgramBuilder.WideTop(flow, count, directions);
+    });
+
+    AddCallable("WideTopSort", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto flow = MkqlBuildExpr(node.Head(), ctx);
+        const auto count = MkqlBuildExpr(*node.Child(1U), ctx);
+
+        std::vector<std::pair<ui32, TRuntimeNode>> directions;
+        directions.reserve(node.Tail().ChildrenSize());
+        node.Tail().ForEachChild([&](const TExprNode& dir) {
+            directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+        });
+
+        return ctx.ProgramBuilder.WideTopSort(flow, count, directions);
+    });
+
     AddCallable("Iterable", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto lambda = [&]() { return MkqlBuildLambda(*node.Child(0), ctx, {}); };
+        const auto lambda = [&]() { return MkqlBuildLambda(node.Head(), ctx, {}); };
         return ctx.ProgramBuilder.Iterable(lambda);
     });
 

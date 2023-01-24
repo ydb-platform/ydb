@@ -7800,7 +7800,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
         }
-        
+
         TExprNode::TPtr runConfig;
         if (input->ChildrenSize() > 4) {
             runConfig = input->Child(4);
@@ -11837,6 +11837,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideCombiner"] = &WideCombinerWrapper;
         Functions["WideChopper"] = &WideChopperWrapper;
         Functions["WideChain1Map"] = &WideChain1MapWrapper;
+        Functions["WideTop"] = &WideTopWrapper;
+        Functions["WideTopSort"] = &WideTopWrapper;
         Functions["NarrowMap"] = &NarrowMapWrapper;
         Functions["NarrowFlatMap"] = &NarrowFlatMapWrapper;
         Functions["NarrowMultiMap"] = &NarrowMultiMapWrapper;

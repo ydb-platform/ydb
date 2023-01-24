@@ -221,6 +221,8 @@ public:
         Functions["Fold1"] = &TCallableConstraintTransformer::FoldWrap;
         Functions["WithContext"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WithWorld"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["WideTop"] = &TCallableConstraintTransformer::WideTopWrap<false>;
+        Functions["WideTopSort"] = &TCallableConstraintTransformer::WideTopWrap<true>;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -336,6 +338,27 @@ private:
             return status;
         }
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
+    }
+
+    template<bool Sort>
+    TStatus WideTopWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if constexpr (Sort) {
+            TSortedConstraintNode::TContainerType sorted;
+            sorted.reserve(input->Tail().ChildrenSize());
+
+            for (const auto& item : input->Tail().Children()) {
+                if (item->Tail().IsCallable("Bool"))
+                    sorted.emplace_back(std::make_pair(TSortedConstraintNode::TColumnsSet{TConstraintNode::TPathType(1U, item->Head().Content())}, FromString<bool>(item->Tail().Tail().Content())));
+                else
+                    break;
+            }
+
+            if (!sorted.empty()) {
+                input->AddConstraint(ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted)));
+            }
+        }
+
+        return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
     TStatus SortWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {

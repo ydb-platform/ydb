@@ -86,22 +86,17 @@ void VerifyTEvPutResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> res
         blob.Status = TBlobInfo::EStatus::WRITTEN;
     } else if (status == NKikimrProto::ERROR) {
         blob.Status = TBlobInfo::EStatus::UNKNOWN;
+        return;
     }
     
     if (blob.Id.Generation() <= blockedGen) {
-        if (status == NKikimrProto::ALREADY) {
-            Cerr << "TEvPut got ALREADY instead of BLOCKED" << Endl;
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::BLOCKED, 
-                TStringBuilder() << "Successful put over the barrier, blob id# " << blob.Id.ToString() << ", blocked generation# " << blockedGen);
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::BLOCKED, TStringBuilder() << 
+            "Unblocked put over the barrier, blob id# " << blob.Id.ToString() << ", blocked generation# " << blockedGen);
     } else if (IsCollected(blob, softCollectGen, softCollectStep, hardCollectGen, hardCollectStep) ) {
         if (status == NKikimrProto::OK) {
             Cerr << "Put over the barrier, blob id# " << blob.Id.ToString() << Endl;
-        } else if (status == NKikimrProto::ERROR) {
-            Cerr << "Unexpected Error" << Endl;
         } else if (status != NKikimrProto::NODATA) {
-            UNIT_FAIL("Unexpected status");
+            UNIT_FAIL("Unexpected status: " << NKikimrProto::EReplyStatus_Name(status));
         }
     } else if (status != NKikimrProto::OK && status != NKikimrProto::ERROR) {
         UNIT_FAIL(TStringBuilder() << "Unexpected status: " << NKikimrProto::EReplyStatus_Name(status));
@@ -132,7 +127,6 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlob
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, termOnCapture, deadline);
-    // if (res.Get() == nullptr) { Cerr << "TEvGet didn't return" << Endl; return nullptr; } // <- Temporary solution
     UNIT_ASSERT(res);
 
 #ifdef LOG_GET        
@@ -190,7 +184,6 @@ void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
     SendTEvGet(env, sender, groupId, blob.Id, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
     auto res = CaptureTEvGetResult(env, sender, true, withDeadline);
-    // if (!res) { return; } // <- Temporary solution
 
     VerifyTEvGetResult(res.Release(), blob, mustRestoreFirst, isIndexOnly, forceBlockTabletData, state);
 }
@@ -222,7 +215,6 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, std::vect
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, termOnCapture, deadline);
-    // if (!res) { Cerr << "TEvDiscover didn't return" << Endl; return nullptr; } // <- Temporary Solution
     UNIT_ASSERT(res);
 
 #ifdef LOG_MULTIGET        
@@ -279,7 +271,6 @@ void VerifiedGet(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, std::vector<
     SendTEvGet(env, sender, groupId, blobs, mustRestoreFirst, isIndexOnly, forceBlockTabletData);
 
     auto res = CaptureMultiTEvGetResult(env, sender, true, withDeadline);
-    // if (!res) { return; } // <- Temporary solution
 
     VerifyTEvGetResult(res.Release(), blobs, mustRestoreFirst, isIndexOnly, forceBlockTabletData, state);
 }
@@ -395,7 +386,6 @@ void SendTEvDiscover(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> CaptureTEvDiscoverResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
     const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(sender, termOnCapture, deadline);
-    // if (!res) { Cerr << "TEvDiscover didn't return" << Endl; return nullptr; } // <- Temporary Solution
     UNIT_ASSERT_C(res, "Timeout - no TEvDiscoverResult received");
 
 #ifdef LOG_DISCOVER
@@ -414,7 +404,6 @@ void VerifyTEvDiscoverResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverRe
     Y_UNUSED(forceBlockedGeneration);
     Y_UNUSED(fromLeader);
 
-    // if (!res) { return; } // <- Temporary solution 
     UNIT_ASSERT(res);
     auto status = res->Get()->Status;
 
@@ -535,10 +524,7 @@ void VerifyTEvCollectGarbageResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvColl
     NKikimrProto::EReplyStatus status = res->Get()->Status;
 
     if (blockedGen >= recordGeneration) {
-        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::BLOCKED); // <- known bug in blob depot
-        if (status == NKikimrProto::ALREADY) { 
-            Cerr << "Race detected, expected status BLOCKED" << Endl;
-        } else { 
+        if (status != NKikimrProto::ERROR) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::BLOCKED);
         }
     } else {
@@ -638,10 +624,10 @@ void VerifyTEvBlockResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>>
     NKikimrProto::EReplyStatus status = res->Get()->Status;
     if (generation < blockedGen) {
         UNIT_ASSERT_VALUES_UNEQUAL(status, NKikimrProto::OK);
-        if (status == NKikimrProto::ERROR) {
-            Cerr << "TEvBlock: Unexpected error" << Endl;
-        } else if (status == NKikimrProto::BLOCKED) {
+        if (status == NKikimrProto::BLOCKED) {
             Cerr << "TEvBlock: Detect race" << Endl;
+        } else if (status == NKikimrProto::ERROR) {
+            Cerr << "Unexpected ERROR" << Endl;
         } else {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::ALREADY);
         }

@@ -201,20 +201,17 @@ private:
         auto selfId = SelfId();
         auto hasData = ev->Get()->HasData;
         auto finish = ev->Get()->Finish;
-        auto askFreeSpace = ev->Get()->AskFreeSpace;
         auto channelId = ev->Get()->ChannelId;
         auto cookie = ev->Cookie;
         auto data = ev->Get()->Data;
-        Invoker->Invoke([hasData, selfId, cookie, askFreeSpace, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
+        Invoker->Invoke([hasData, selfId, cookie, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
             try {
                 // todo:(whcrc) finish output channel?
                 ui64 freeSpace = 0;
                 if (hasData) {
                     // auto guard = taskRunner->BindAllocator(); // only for local mode
                     taskRunner->GetInputChannel(channelId)->Push(std::move(data));
-                    if (askFreeSpace) {
-                        freeSpace = taskRunner->GetInputChannel(channelId)->GetFreeSpace();
-                    }
+                    freeSpace = taskRunner->GetInputChannel(channelId)->GetFreeSpace();
                 }
                 if (finish) {
                     taskRunner->GetInputChannel(channelId)->Finish();
@@ -225,7 +222,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvContinueRun(channelId, freeSpace),
+                        new TEvPushFinished(channelId, freeSpace),
                         /*flags=*/0,
                         cookie));
             } catch (...) {

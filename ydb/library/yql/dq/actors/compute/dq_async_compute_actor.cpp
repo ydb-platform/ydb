@@ -111,7 +111,7 @@ private:
             hFunc(NTaskRunnerActor::TEvAsyncInputPushFinished, OnAsyncInputPushFinished);
             hFunc(NTaskRunnerActor::TEvChannelPopFinished, OnPopFinished);
             hFunc(NTaskRunnerActor::TEvTaskRunnerCreateFinished, OnTaskRunnerCreated);
-            hFunc(NTaskRunnerActor::TEvContinueRun, OnContinueRun); // push finished
+            hFunc(NTaskRunnerActor::TEvPushFinished, OnPushFinished);
             hFunc(TEvDqCompute::TEvStateRequest, OnStateRequest);
             hFunc(NTaskRunnerActor::TEvStatistics, OnStatisticsResponse);
             hFunc(NTaskRunnerActor::TEvLoadTaskRunnerFromStateDone, OnTaskRunnerLoaded);
@@ -332,12 +332,10 @@ private:
                 channelData.GetChannelId(),
                 std::move(*channelData.MutableData()),
                 finished,
-                /* askFreeSpace = */ true,
                 /* pauseAfterPush = */ channelData.HasCheckpoint())
             : MakeHolder<NTaskRunnerActor::TEvPush>(
                 channelData.GetChannelId(),
                 finished,
-                /* askFreeSpace = */ true,
                 /* pauseAfterPush = */ channelData.HasCheckpoint());
 
         Send(TaskRunnerActorId, ev.Release(), 0, Cookie);
@@ -674,7 +672,7 @@ private:
         return result;
     }
 
-    void OnContinueRun(NTaskRunnerActor::TEvContinueRun::TPtr& ev) {
+    void OnPushFinished(NTaskRunnerActor::TEvPushFinished::TPtr& ev) {
         auto it = TakeInputChannelDataRequests.find(ev->Cookie);
         YQL_ENSURE(it != TakeInputChannelDataRequests.end());
 
@@ -693,9 +691,7 @@ private:
 
         TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(it->second.ChannelId);
         Y_VERIFY(inputChannel);
-        if (ev->Get()->FreeSpace) {
-            inputChannel->FreeSpace = *ev->Get()->FreeSpace;
-        }
+        inputChannel->FreeSpace = ev->Get()->FreeSpace;
 
         if (it->second.Ack) {
             Channels->SendChannelDataAck(it->second.ChannelId, inputChannel->FreeSpace);

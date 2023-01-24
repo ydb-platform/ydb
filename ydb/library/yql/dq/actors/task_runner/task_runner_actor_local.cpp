@@ -143,7 +143,7 @@ private:
         return true;
     }
 
-    void DoContinueRun(TEvContinueRun::TPtr& ev) {
+    void OnContinueRun(TEvContinueRun::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : ev->Get()->MemLimit);
         auto inputMap = ev->Get()->AskFreeSpace
             ? Inputs
@@ -253,15 +253,10 @@ private:
             ev->Cookie);
     }
 
-    void OnContinueRun(TEvContinueRun::TPtr& ev) {
-        DoContinueRun(ev);
-    }
-
     void OnChannelPush(TEvPush::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         auto hasData = ev->Get()->HasData;
         auto finish = ev->Get()->Finish;
-        auto askFreeSpace = ev->Get()->AskFreeSpace;
         auto channelId = ev->Get()->ChannelId;
         auto data = ev->Get()->Data;
         if (ev->Get()->IsOut) {
@@ -269,14 +264,11 @@ private:
             TaskRunner->GetOutputChannel(channelId)->Finish();
             return;
         }
-        TMaybe<ui64> freeSpace;
         auto inputChannel = TaskRunner->GetInputChannel(channelId);
         if (hasData) {
             inputChannel->Push(std::move(data));
         }
-        if (askFreeSpace) {
-            freeSpace = inputChannel->GetFreeSpace();
-        }
+        const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
             inputChannel->Finish();
         }
@@ -287,7 +279,7 @@ private:
         // run
         Send(
             ev->Sender,
-            new TEvContinueRun(channelId, freeSpace),
+            new TEvPushFinished(channelId, freeSpace),
             /*flags=*/0,
             ev->Cookie);
     }

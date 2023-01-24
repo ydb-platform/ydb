@@ -133,7 +133,7 @@ private:
         // between worker_actor <-> executer_actor, cause it transmits statistics in 'Metric' field
         HFunc(NDq::TEvDq::TEvAbortExecution, OnErrorFromPipe);  // received from task_runner_actor
         HFunc(TEvDqFailure, OnError); // received from this actor itself
-        HFunc(TEvContinueRun, OnContinueRun);
+        HFunc(TEvPushFinished, OnPushFinished);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
 
         hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
@@ -205,7 +205,7 @@ private:
         Send(Executer, std::move(ev));
     }
 
-    void OnContinueRun(TEvContinueRun::TPtr&, const TActorContext& ctx) {
+    void OnPushFinished(TEvPushFinished::TPtr&, const TActorContext& ctx) {
         Run(ctx);
     }
 

@@ -134,7 +134,7 @@ namespace NKikimr {
                 TBlobStorageGroupInfo::TServiceIds services;
                 groupInfo->PickSubgroup(id.Hash(), &varray, &services);
 
-                NRepl::TRecoveryMachine::TPartSet p(groupInfo->Type);
+                NRepl::TRecoveryMachine::TPartSet p(id, groupInfo->Type);
                 for (ui32 i = 1; i < v.size(); ++i) {
                     if (v[i].empty()) {
                         continue;
@@ -150,7 +150,7 @@ namespace NKikimr {
                 }
                 NRepl::TRecoveryMachine::TRecoveredBlobsQueue rbq;
                 NMatrix::TVectorType parts;
-                const bool success = m.Recover(id, p, rbq, parts);
+                const bool success = m.Recover(p, rbq, parts);
                 Y_VERIFY(success);
 
                 ui8 partIndex;

@@ -279,7 +279,7 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<THullReplJobActor>;
 
-        std::optional<std::pair<TLogoBlobID, TRecoveryMachine::TPartSet>> CurrentKeyAndParts;
+        std::optional<TRecoveryMachine::TPartSet> CurrentItem;
         TLogoBlobID LastProcessedKey;
 
         void Finish() {
@@ -529,16 +529,16 @@ namespace NKikimr {
                 TimeAccount.SetState(ETimeState::MERGE);
 
                 // acquire current key; front item contains the least key
-                if (!CurrentKeyAndParts) {
+                if (!CurrentItem) {
                     const TLogoBlobID id = MergeHeap.front()->GenLogoBlobId();
-                    CurrentKeyAndParts.emplace(id, ReplCtx->VCtx->Top->GType);
+                    CurrentItem.emplace(id, ReplCtx->VCtx->Top->GType);
                     Y_VERIFY(std::exchange(LastProcessedKey, id) < id);
                 }
-                auto& [currentKey, currentParts] = *CurrentKeyAndParts;
+                auto& item = *CurrentItem;
 
                 // find out which proxies carry items with the same key
                 TVector<TVDiskProxyPtr>::iterator lastIter = MergeHeap.end();
-                while (lastIter != MergeHeap.begin() && MergeHeap.front()->GenLogoBlobId() == currentKey) {
+                while (lastIter != MergeHeap.begin() && MergeHeap.front()->GenLogoBlobId() == item.Id) {
                     PopHeap(MergeHeap.begin(), lastIter, TVDiskProxy::TPtrGreater());
                     --lastIter;
                 }
@@ -549,17 +549,17 @@ namespace NKikimr {
                 while (lastIter != MergeHeap.end()) {
                     // process all items with specified current key
                     TVDiskProxyPtr proxy = *lastIter;
-                    while (proxy->Valid() && proxy->GenLogoBlobId() == currentKey) {
+                    while (proxy->Valid() && proxy->GenLogoBlobId() == item.Id) {
                         TLogoBlobID id;
                         NKikimrProto::EReplyStatus status;
                         TTrackableString data(TMemoryConsumer(ReplCtx->VCtx->Replication));
                         proxy->GetData(&id, &status, &data);
                         if (status != NKikimrProto::OK || data.size()) {
-                            currentParts.AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, data.GetBaseConstRef());
+                            item.AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, data.GetBaseConstRef());
                         }
                         proxy->Next();
                     }
-                    Y_VERIFY_DEBUG(!proxy->Valid() || currentKey < proxy->GenLogoBlobId());
+                    Y_VERIFY_DEBUG(!proxy->Valid() || item.Id < proxy->GenLogoBlobId());
 
                     // if proxy is not exhausted yet, then put it back into merge queue
                     if (proxy->Valid()) {
@@ -590,12 +590,12 @@ namespace NKikimr {
 
                 // recover data
                 NMatrix::TVectorType parts;
-                if (!RecoveryMachine->Recover(currentKey, currentParts, RecoveryQueue, parts)) {
+                if (!RecoveryMachine->Recover(item, RecoveryQueue, parts)) {
                     STLOG(PRI_INFO, BS_REPL, BSVR33, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Sending phantom validation query"),
-                        (GroupId, GInfo->GroupID), (CurKey, currentKey));
-                    PhantomChecksPending.emplace_back(currentKey, parts);
+                        (GroupId, GInfo->GroupID), (CurKey, item.Id));
+                    PhantomChecksPending.emplace_back(item.Id, parts);
                 }
-                CurrentKeyAndParts.reset();
+                CurrentItem.reset();
 
                 // process recovered items, if any; queueProcessed.first will be false when writer is not ready for new data
                 EProcessQueueAction action = ProcessQueue();

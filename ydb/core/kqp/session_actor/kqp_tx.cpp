@@ -135,5 +135,63 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     return txInfo;
 }
 
+bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
+    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
+{
+    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
+        return false;
+
+    if (!config.FeatureFlags.GetEnableMvccSnapshotReads())
+        return false;
+
+    if (txCtx.GetSnapshot().IsValid())
+        return false;
+
+    if (rollbackTx)
+        return false;
+    if (!commitTx)
+        return true;
+
+    size_t readPhases = 0;
+    bool hasEffects = false;
+
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        switch (tx.GetType()) {
+            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+                // ignore pure computations
+                break;
+
+            default:
+                ++readPhases;
+                break;
+        }
+
+        if (tx.GetHasEffects()) {
+            hasEffects = true;
+        }
+    }
+
+    if (config.FeatureFlags.GetEnableKqpImmediateEffects() && physicalQuery.GetHasUncommittedChangesRead()) {
+        return true;
+    }
+
+    // We don't want snapshot when there are effects at the moment,
+    // because it hurts performance when there are multiple single-shard
+    // reads and a single distributed commit. Taking snapshot costs
+    // similar to an additional distributed transaction, and it's very
+    // hard to predict when that happens, causing performance
+    // degradation.
+    if (hasEffects) {
+        return false;
+    }
+
+    // We need snapshot when there are multiple table read phases, most
+    // likely it involves multiple tables and we would have to use a
+    // distributed commit otherwise. Taking snapshot helps as avoid TLI
+    // for read-only transactions, and costs less than a final distributed
+    // commit.
+    return readPhases > 1;
+}
+
 } // namespace NKqp
 } // namespace NKikimr

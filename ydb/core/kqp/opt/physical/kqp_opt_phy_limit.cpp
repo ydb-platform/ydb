@@ -104,11 +104,18 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
             .Input(limitValue.Cast())
             .Done().Ptr());
     }
-    replaces[readRangesSource.Settings().Raw()] = settings.BuildNode(ctx, source.Pos()).Ptr();
-    
+    auto newSettings = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
+        .Table(readRangesSource.Table())
+        .Columns(readRangesSource.Columns())
+        .Settings(settings.BuildNode(ctx, source.Pos()))
+        .RangesExpr(readRangesSource.RangesExpr())
+        .ExplainPrompt(readRangesSource.ExplainPrompt())
+        .Done();
+    replaces[readRangesSource.Raw()] = newSettings.Ptr();
+                              
     return TExprBase(ctx.ReplaceNodes(node.Ptr(), replaces));
-}
-
+}                             
+                              
 
 TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoTake>()) {

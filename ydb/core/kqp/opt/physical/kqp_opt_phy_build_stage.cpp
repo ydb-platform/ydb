@@ -63,7 +63,9 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
 
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
     useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
-    useSource = useSource && tableDesc.Metadata->Kind != EKikimrTableKind::SysView;
+    useSource = useSource &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::Olap;
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -228,7 +230,9 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
 
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
     useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
-    useSource = useSource && tableDesc.Metadata->Kind != EKikimrTableKind::SysView;
+    useSource = useSource &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
+        tableDesc.Metadata->Kind != EKikimrTableKind::Olap;
 
     bool fullScan = TCoVoid::Match(ranges.Raw());
 

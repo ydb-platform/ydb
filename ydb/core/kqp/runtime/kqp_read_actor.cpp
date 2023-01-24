@@ -97,35 +97,37 @@ public:
 
             // Absent cells mean infinity. So in prefix notation `From` should be exclusive.
             // For example x >= (Key1, Key2, +infinity) is equivalent to x > (Key1, Key2) where x is arbitrary tuple
-            if (range.From.GetCells().size() < keyColumns) {
-                fromInclusive = false;
+            if (from.size() < keyColumns) {
                 noop = range.FromInclusive;
-            } else if (range.FromInclusive) {
+                fromInclusive = false;
+            } else if (fromInclusive) {
                 // Nulls are minimum values so we should remove null padding.
                 // x >= (Key1, Key2, null) is equivalent to x >= (Key1, Key2)
-                ssize_t i = range.From.GetCells().size();
-                while (i > 0 && range.From.GetCells()[i - 1].IsNull()) {
+                ssize_t i = from.size();
+                while (i > 0 && from[i - 1].IsNull()) {
                     --i;
                     noop = false;
                 }
-                from = range.From.GetCells().subspan(0, i);
+                from = from.subspan(0, i);
             }
 
             // Absent cells mean infinity. So in prefix notation `To` should be inclusive.
             // For example x < (Key1, Key2, +infinity) is equivalent to x <= (Key1, Key2) where x is arbitrary tuple
-            if (range.To.GetCells().size() < keyColumns) {
+            if (to.size() < keyColumns) {
                 toInclusive = true;
+                noop = noop && range.ToInclusive;
+            } else if (!range.ToInclusive) {
                 // Nulls are minimum values so we should remove null padding.
                 // For example x < (Key1, Key2, null) is equivalent to x < (Key1, Key2)
-                ssize_t i = range.To.GetCells().size();
-                while (i > 0 && range.To.GetCells()[i - 1].IsNull()) {
+                ssize_t i = to.size();
+                while (i > 0 && to[i - 1].IsNull()) {
                     --i;
                     noop = false;
                 }
-                to = range.To.GetCells().subspan(0, i);
+                to = to.subspan(0, i);
             }
 
-            if (!noop) {
+            if (noop) {
                 return;
             }
 

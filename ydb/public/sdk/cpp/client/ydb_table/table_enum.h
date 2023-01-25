@@ -45,5 +45,13 @@ enum class EChangefeedFormat {
     Unknown = std::numeric_limits<int>::max()
 };
 
+enum class EChangefeedState {
+    Enabled,
+    Disabled,
+    InitialScan,
+
+    Unknown = std::numeric_limits<int>::max()
+};
+
 } // namespace NTable
 } // namespace NYdb

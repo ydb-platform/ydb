@@ -152,6 +152,8 @@ message Changefeed {
     google.protobuf.Duration retention_period = 4;
     // Emit virtual timestamps of changes along with data or not
     bool virtual_timestamps = 5;
+    // Initial scan will output the current state of the table first
+    bool initial_scan = 6;
 }
 
 message ChangefeedDescription {
@@ -159,6 +161,7 @@ message ChangefeedDescription {
         STATE_UNSPECIFIED = 0;
         STATE_ENABLED = 1;
         STATE_DISABLED = 2;
+        STATE_INITIAL_SCAN = 3;
     }
 
     // Name of the feed

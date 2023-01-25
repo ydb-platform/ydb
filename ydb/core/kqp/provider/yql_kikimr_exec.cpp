@@ -975,16 +975,17 @@ public:
                                         return SyncError();
                                     }
                                 } else if (name == "initial_scan") {
-                                    // TODO: handle initial_scan setting
-                                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                        TStringBuilder() << name << " setting is not supported yet"));
-                                    return SyncError();
-                                } else if (name == "virtual_timestamps") {
-                                    auto vt = TString(
+                                    auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                                     );
 
-                                    add_changefeed->set_virtual_timestamps(FromString<bool>(to_lower(vt)));
+                                    add_changefeed->set_initial_scan(FromString<bool>(to_lower(value)));
+                                } else if (name == "virtual_timestamps") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_virtual_timestamps(FromString<bool>(to_lower(value)));
                                 } else if (name == "retention_period") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(

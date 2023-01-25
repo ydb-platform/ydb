@@ -22,7 +22,7 @@ public:
     }
 
     void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_S_DEBUG("TEvReadBlobRangeResult (waiting " << BlobsToRead.size() << ") at tablet " << TabletId << " (export)");
+        LOG_S_TRACE("TEvReadBlobRangeResult (waiting " << BlobsToRead.size() << ") at tablet " << TabletId << " (export)");
 
         auto& event = *ev->Get();
         const TUnifiedBlobId& blobId = event.BlobRange.BlobId;

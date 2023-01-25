@@ -43,6 +43,8 @@ namespace NJson2Udf {
             if (!typesOnly) {
                 builder.Implementation(new TAsJsonNode<TSource>(builder.GetSourcePosition()));
             }
+
+            builder.IsStrict();
             return true;
         }
 

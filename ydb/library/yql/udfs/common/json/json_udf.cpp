@@ -104,6 +104,8 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new TGetField);
                 }
+
+                builder.IsStrict();
                 return true;
             } else {
                 return false;

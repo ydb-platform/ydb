@@ -60,6 +60,8 @@ namespace NJson2Udf {
                 5. Bool. True - throw on error, false - otherwise
                 6. Resource<JsonNode>?. Default value to return on error. Ignored if 4th argument is true
             */
+            // we can't mark TSqlQuery as strict due to runtime throw policy setting
+            // TODO: optimizer can mark SqlQuery as strict if 3th/5th arguments are literal booleans
             builder.Args()
                 ->Add(inputOptionalType)
                 .Add(jsonPathType)

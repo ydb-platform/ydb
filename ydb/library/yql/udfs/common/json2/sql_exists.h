@@ -67,6 +67,9 @@ namespace NJson2Udf {
             if (!typesOnly) {
                 builder.Implementation(new TSqlExists(builder.GetSourcePosition()));
             }
+            if constexpr (!ThrowException) {
+                builder.IsStrict();
+            }
             return true;
         }
 

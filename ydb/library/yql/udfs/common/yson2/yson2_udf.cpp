@@ -88,6 +88,7 @@ public:
                 builder.Implementation(new TOptions);
             }
 
+            builder.IsStrict();
             return true;
         } else {
             return false;
@@ -526,7 +527,7 @@ SIMPLE_UDF_OPTIONS(TConvertToStringDict, TStringDictType(TOptional<TNodeResource
         return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToString<false, true, false>> : &ConvertToDictImpl<false, false, &ConvertToString<false, false, false>>)(args[0], valueBuilder, Pos_);
 }
 
-SIMPLE_UDF(TAttributes, TDictType(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TAttributes, TDictType(TAutoMap<TNodeResource>)) {
     const auto x = args[0];
     if (IsNodeType<ENodeType::Attr>(x)) {
         return x;
@@ -549,7 +550,7 @@ SIMPLE_UDF_OPTIONS(TGetLength, TOptional<ui64>(TAutoMap<TNodeResource>, TOptiona
         return (options.AutoConvert ? &GetLengthImpl<false, true> : &GetLengthImpl<false, false>)(args[0], valueBuilder, Pos_);
 }
 
-SIMPLE_UDF_OPTIONS(TLookup, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_STRICT_UDF_OPTIONS(TLookup, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     return LookupImpl(args[0], args[1], valueBuilder, Pos_);
 }
 
@@ -655,15 +656,15 @@ SIMPLE_UDF_OPTIONS(TYPathDict, TOptional<TDictType>(TAutoMap<TNodeResource>, cha
         return (options.AutoConvert ? &YPathImpl<&ConvertToDictImpl<false, true>> : &YPathImpl<&ConvertToDictImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
 }
 
-SIMPLE_UDF(TSerialize, TYson(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TSerialize, TYson(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewString(SerializeYsonDomToBinary(args[0]));
 }
 
-SIMPLE_UDF(TSerializeText, TYson(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TSerializeText, TYson(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewString(SerializeYsonDomToText(args[0]));
 }
 
-SIMPLE_UDF(TSerializePretty, TYson(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TSerializePretty, TYson(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewString(SerializeYsonDomToPrettyText(args[0]));
 }
 
@@ -679,7 +680,7 @@ SIMPLE_UDF_OPTIONS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeResource>, TOp
     return {};
 }
 
-SIMPLE_UDF(TWithAttributes, TOptional<TNodeResource>(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TWithAttributes, TOptional<TNodeResource>(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     auto x = args[0];
     auto y = args[1];
@@ -724,52 +725,52 @@ TUnboxedValuePod IsTypeImpl(TUnboxedValuePod y) {
     return TUnboxedValuePod(IsNodeType<Type>(y));
 }
 
-SIMPLE_UDF(TIsString, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsString, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::String>(*args);
 }
 
-SIMPLE_UDF(TIsInt64, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsInt64, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Int64>(*args);
 }
 
-SIMPLE_UDF(TIsUint64, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsUint64, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Uint64>(*args);
 }
 
-SIMPLE_UDF(TIsBool, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsBool, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Bool>(*args);
 }
 
-SIMPLE_UDF(TIsDouble, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsDouble, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Double>(*args);
 }
 
-SIMPLE_UDF(TIsList, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsList, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::List>(*args);
 }
 
-SIMPLE_UDF(TIsDict, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsDict, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Dict>(*args);
 }
 
-SIMPLE_UDF(TIsEntity, bool(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TIsEntity, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Entity>(*args);
 }
 
-SIMPLE_UDF(TEquals, bool(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TEquals, bool(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(EquateDoms(args[0], args[1]));
 }
 
-SIMPLE_UDF(TGetHash, ui64(TAutoMap<TNodeResource>)) {
+SIMPLE_STRICT_UDF(TGetHash, ui64(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(HashDom(args[0]));
 }
@@ -914,6 +915,7 @@ public:
             if (!typesOnly) {
                 builder.Implementation(new TFrom(builder.GetSourcePosition(), typeHelper, inputType));
             }
+            builder.IsStrict();
             return true;
         } else {
             return false;
@@ -1062,6 +1064,7 @@ public:
             switch (typeId) {
                 case TDataType<TYJson>::Id:
                     builder.Args()->Add<TAutoMap<TYJson>>().Add(optionsType).Done().Returns(builder.Resource(NodeResourceName));
+                    builder.IsStrict();
                     break;
                 case TDataType<TUtf8>::Id:
                     builder.Args()->Add<TAutoMap<TUtf8>>().Add(optionsType).Done().Returns(builder.Optional()->Item(builder.Resource(NodeResourceName)).Build());
@@ -1131,6 +1134,7 @@ const TStringRef& TParse<TJson, true>::Name() {
 
 }
 
+// TODO: optimizer that marks UDFs as strict if Yson::Options(false as Strict) is given
 SIMPLE_MODULE(TYson2Module,
     TOptions,
     TParse<TYson>,

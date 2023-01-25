@@ -202,11 +202,16 @@ namespace NKikimr::NBlobDepot {
         TString GetLogId() const {
             const auto *executor = Executor();
             const ui32 generation = executor ? executor->Generation() : 0;
+            TStringBuilder sb;
+            sb << '{' << TabletID();
             if (Config.HasVirtualGroupId()) {
-                return TStringBuilder() << "{" << TabletID() << ":" << generation << "@" << Config.GetVirtualGroupId() << "}";
-            } else {
-                return TStringBuilder() << "{" << TabletID() << ":" << generation << "}";
+                sb << '@' << Config.GetVirtualGroupId();
             }
+            sb << '}';
+            if (generation) {
+                sb << ':' << generation;
+            }
+            return sb;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

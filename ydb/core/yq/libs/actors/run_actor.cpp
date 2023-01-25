@@ -289,6 +289,8 @@ public:
     void Bootstrap() {
         LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
 
+        FillConnections();
+
         QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
         QueryCounters.Counters->GetCounter("RetryCount", false)->Set(Params.RestartCount);
         LogReceivedParams();
@@ -373,6 +375,18 @@ private:
         IgnoreFunc(TEvents::TEvRaiseTransientIssues);
         IgnoreFunc(TEvDqStats);
     )
+
+    void FillConnections() {
+        LOG_D("FillConnections");
+
+        for (const auto& connection : Params.Connections) {
+            if (!connection.content().name()) {
+                LOG_D("Connection with empty name " << connection.meta().id());
+                continue;
+            }
+            YqConnections.emplace(connection.meta().id(), connection);
+        }
+    }
 
     void KillExecuter() {
         if (ExecuterId) {
@@ -525,7 +539,6 @@ private:
             Finish(GetFinalStatusFromFinalizingStatus(Params.Status));
             break;
         case YandexQuery::QueryMeta::STARTING:
-            HandleConnections();
             QueryStateUpdateRequest.mutable_resources()->set_rate_limiter(
                 Params.RateLimiterConfig.GetEnabled() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             QueryStateUpdateRequest.mutable_resources()->set_compilation(Fq::Private::TaskResources::PREPARE);
@@ -540,18 +553,6 @@ private:
         default:
             Abort("Fail to start query from unexpected status " + YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status), YandexQuery::QueryMeta::FAILED);
             break;
-        }
-    }
-
-    void HandleConnections() {
-        LOG_D("HandleConnections");
-
-        for (const auto& connection : Params.Connections) {
-            if (!connection.content().name()) {
-                LOG_D("Connection with empty name " << connection.meta().id());
-                continue;
-            }
-            YqConnections.emplace(connection.meta().id(), connection);
         }
     }
 

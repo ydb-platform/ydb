@@ -197,9 +197,16 @@ public:
     }
 
     void SetTokenAndDie() {
-        GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
-        GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
-        ReplyBackAndDie();
+        if (GrpcRequestBaseCtx_->IsClientLost()) {
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Client was disconnected before processing request (check actor)");
+            const NYql::TIssues issues;
+            ReplyUnavailableAndDie(issues);
+        } else {
+            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
+            GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
+            ReplyBackAndDie();
+        }
     }
 
     STATEFN(DbAccessStateFunc) {

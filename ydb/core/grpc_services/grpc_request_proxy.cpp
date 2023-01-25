@@ -236,6 +236,14 @@ private:
                 return;
             }
 
+            if (requestBaseCtx->IsClientLost()) {
+                // Any status here
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                    "Client was disconnected before processing request (grpc request proxy)");
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                return;
+            }
+
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject, event.Release(), Counters, skipCheckConnectRigths));

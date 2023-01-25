@@ -148,6 +148,8 @@ public:
 
     void SetClientLostAction(std::function<void()>&&) override {}
 
+    bool IsClientLost() const override { return false; }
+
     void AddServerHint(const TString&) override {}
 
     void SetRuHeader(ui64) override {}

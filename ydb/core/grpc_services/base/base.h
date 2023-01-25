@@ -252,6 +252,7 @@ public:
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)
     virtual const TString& GetInternalToken() const = 0;
+    virtual bool IsClientLost() const = 0;
 };
 
 class IRequestCtxBase : public virtual IRequestCtxBaseMtSafe {
@@ -504,6 +505,10 @@ public:
     void SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {
     }
 
+    bool IsClientLost() const override {
+        return false;
+    }
+
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {
         return Nothing();
     }
@@ -655,6 +660,11 @@ public:
         : Ctx_(ctx)
         , RlAllowed_(rlAllowed)
     { }
+
+    bool IsClientLost() const override {
+        // TODO: Implement for BiDirectional streaming
+        return false;
+    }
 
     TRateLimiterMode GetRlMode() const override {
         return RlAllowed_ ? RateLimitMode : TRateLimiterMode::Off;
@@ -1117,6 +1127,10 @@ public:
             }
         };
         Ctx_->GetFinishFuture().Subscribe(std::move(shutdown));
+    }
+
+    bool IsClientLost() const override {
+        return Ctx_->IsClientLost();
     }
 
     void FinishStream() override {

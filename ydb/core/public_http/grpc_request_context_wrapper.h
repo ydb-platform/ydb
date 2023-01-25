@@ -46,6 +46,7 @@ public:
     virtual void SetNextReplyCallback(TOnNextReply&&) {}
     virtual void FinishStreamingOk() {}
     virtual TAsyncFinishResult GetFinishFuture() { return {}; }
+    virtual bool IsClientLost() const { return false; }
     virtual TString GetPeer() const { return {}; }
     virtual bool SslServer() const { return false; }
 };

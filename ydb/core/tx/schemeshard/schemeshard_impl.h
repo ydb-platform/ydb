@@ -341,9 +341,13 @@ public:
         return pId == RootPathId();
     }
 
-    bool IsServerlessDomain(const TPath& domain) const {
-        const auto& resourcesDomainId = domain.DomainInfo()->GetResourcesDomainId();
+    bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
+        const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
         return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
+    }
+
+    bool IsServerlessDomain(const TPath& domain) const {
+        return IsServerlessDomain(domain.DomainInfo());
     }
 
     TPathId MakeLocalId(const TLocalPathId& localPathId) const {

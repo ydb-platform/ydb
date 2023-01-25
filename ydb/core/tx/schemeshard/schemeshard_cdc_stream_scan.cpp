@@ -1,5 +1,7 @@
+#include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <util/generic/deque.h>
@@ -11,6 +13,7 @@
 #endif
 
 #define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
 #define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
 #define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[CdcStreamScan] " << stream)
 
@@ -71,6 +74,7 @@ struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchem
     // side effects
     TDeque<std::tuple<TPathId, TTabletId, THolder<IEventBase>>> ScanRequests;
     TPathId StreamToProgress;
+    THolder<NMetering::TEvMetering::TEvWriteMeteringJson> Metering;
     THolder<TEvSchemeShard::TEvModifySchemeTransaction> Finalize;
 
 public:
@@ -115,6 +119,10 @@ public:
 
         if (StreamToProgress) {
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvRunCdcStreamScan(StreamToProgress));
+        }
+
+        if (Metering) {
+            ctx.Send(NMetering::MakeMeteringServiceID(), Metering.Release());
         }
 
         if (Finalize) {
@@ -266,6 +274,7 @@ private:
             streamInfo->InProgressShards.erase(shardIdx);
             Self->CdcStreamScanPipes.Close(streamPathId, tabletId, ctx);
             StreamToProgress = streamPathId;
+            Bill(streamPathId, shardIdx, TRUCalculator::ReadTable(record.GetStats().GetBytesProcessed()), ctx);
             break;
 
         case NKikimrTxDataShard::TEvCdcStreamScanResponse::OVERLOADED:
@@ -344,6 +353,63 @@ private:
         StreamToProgress = streamPathId;
 
         return true;
+    }
+
+    void Bill(const TPathId& pathId, const TShardIdx& shardIdx, ui64 ru, const TActorContext& ctx) {
+        const auto domainPathId = Self->ResolvePathIdForDomain(pathId);
+
+        Y_VERIFY(Self->SubDomains.contains(domainPathId));
+        auto domainInfo = Self->SubDomains.at(domainPathId);
+
+        if (!Self->IsServerlessDomain(domainInfo)) {
+            LOG_D("Unable to make a bill"
+                << ": streamPathId# " << pathId
+                << ", reason# " << "domain is not a serverless db");
+            return;
+        }
+
+        Y_VERIFY(Self->PathsById.contains(domainPathId));
+        auto domainPath = Self->PathsById.at(domainPathId);
+
+        const auto& attrs = domainPath->UserAttrs->Attrs;
+        if (!attrs.contains("cloud_id")) {
+            LOG_D("Unable to make a bill"
+                << ": streamPathId# " << pathId
+                << ", reason# " << "'cloud_id' not found in user attributes");
+            return;
+        }
+
+        if (!attrs.contains("folder_id")) {
+            LOG_D("Unable to make a bill"
+                << ": streamPathId# " << pathId
+                << ", reason# " << "'folder_id' not found in user attributes");
+            return;
+        }
+
+        if (!attrs.contains("database_id")) {
+            LOG_D("Unable to make a bill"
+                << ": streamPathId# " << pathId
+                << ", reason# " << "'database_id' not found in user attributes");
+            return;
+        }
+
+        const auto now = ctx.Now();
+        const TString id = TStringBuilder() << "cdc_stream_scan"
+            << "-" << pathId.OwnerId << "-" << pathId.LocalPathId
+            << "-" << shardIdx.GetOwnerId() << "-" << shardIdx.GetLocalId();
+        const TString billRecord = TBillRecord()
+            .Id(id)
+            .CloudId(attrs.at("cloud_id"))
+            .FolderId(attrs.at("folder_id"))
+            .ResourceId(attrs.at("database_id"))
+            .SourceWt(now)
+            .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
+            .ToString();
+
+        LOG_N("Make a bill"
+            << ": streamPathId# " << pathId
+            << ", record# " << billRecord);
+        Metering = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
     }
 };
 

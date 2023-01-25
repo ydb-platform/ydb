@@ -12,12 +12,20 @@
 namespace NKikimr::NDataShard {
 
 class TCdcStreamScanManager {
+public:
+    struct TStats {
+        ui64 RowsProcessed = 0;
+        ui64 BytesProcessed = 0;
+    };
+
+private:
     struct TScanInfo {
         TRowVersion SnapshotVersion;
         ui64 TxId = 0;
         ui64 ScanId = 0;
         NActors::TActorId ActorId;
         TMaybe<TSerializedCellVec> LastKey;
+        TStats Stats;
     };
 
 public:
@@ -44,8 +52,8 @@ public:
         const TPathId& tablePathId, const TPathId& streamPathId, const TScanInfo& info);
     void PersistRemove(NIceDb::TNiceDb& db,
         const TPathId& tablePathId, const TPathId& streamPathId);
-    void PersistLastKey(NIceDb::TNiceDb& db,
-        const TPathId& tablePathId, const TPathId& streamPathId, const TSerializedCellVec& value);
+    void PersistProgress(NIceDb::TNiceDb& db,
+        const TPathId& tablePathId, const TPathId& streamPathId, const TScanInfo& info);
 
 private:
     THashMap<TPathId, TScanInfo> Scans;

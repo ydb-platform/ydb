@@ -1,5 +1,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -1047,6 +1048,158 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    void Metering(bool serverless) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        // create shared db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            StoragePools {
+              Name: "pool-2"
+              Kind: "pool-kind-2"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto attrs = AlterUserAttrs({
+            {"cloud_id", "CLOUD_ID_VAL"},
+            {"folder_id", "FOLDER_ID_VAL"},
+            {"database_id", "DATABASE_ID_VAL"}
+        });
+
+        // create serverless db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "Serverless"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: 2
+            }
+        )", TTestTxConfig::SchemeShard), attrs);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Serverless"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString dbName;
+        if (serverless) {
+            dbName = "/MyRoot/Serverless";
+        } else {
+            dbName = "/MyRoot/Shared";
+        }
+
+        ui64 schemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, dbName), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&schemeShard)
+        });
+
+        UNIT_ASSERT(schemeShard != 0 && schemeShard != TTestTxConfig::SchemeShard);
+
+        TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+
+        bool catchMeteringRecord = false;
+        TString meteringRecord;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCdcStreamScanResponse:
+                if (const auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()) {
+                    if (msg->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                        catchMeteringRecord = true;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            case NMetering::TEvMetering::EvWriteMeteringJson:
+                if (catchMeteringRecord) {
+                    meteringRecord = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        TestCreateCdcStream(runtime, schemeShard, ++txId, dbName, R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, schemeShard);
+
+        if (serverless) {
+            if (meteringRecord.empty()) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&meteringRecord](IEventHandle&) {
+                    return !meteringRecord.empty();
+                });
+                runtime.DispatchEvents(opts);
+            }
+
+            UNIT_ASSERT_STRINGS_EQUAL(meteringRecord, TBillRecord()
+                .Id("cdc_stream_scan-9437197-3-9437197-4")
+                .CloudId("CLOUD_ID_VAL")
+                .FolderId("FOLDER_ID_VAL")
+                .ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::FromValue(0))
+                .Usage(TBillRecord::RequestUnits(1, TInstant::FromValue(0)))
+                .ToString());
+        } else {
+            for (int i = 0; i < 10; ++i) {
+                env.SimulateSleep(runtime, TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT(meteringRecord.empty());
+        }
+    }
+
+    Y_UNIT_TEST(MeteringServerless) {
+        Metering(true);
+    }
+
+    Y_UNIT_TEST(MeteringDedicated) {
+        Metering(false);
     }
 
 } // TCdcStreamWithInitialScanTests

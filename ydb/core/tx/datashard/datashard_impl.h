@@ -492,12 +492,14 @@ class TDataShard
                     const TPathId& streamPathId,
                     const TRowVersion& readVersion,
                     const TVector<ui32>& valueTags,
-                    TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>&& rows)
+                    TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>&& rows,
+                    const TCdcStreamScanManager::TStats& stats)
                 : TablePathId(tablePathId)
                 , StreamPathId(streamPathId)
                 , ReadVersion(readVersion)
                 , ValueTags(valueTags)
                 , Rows(std::move(rows))
+                , Stats(stats)
             {
             }
 
@@ -506,6 +508,7 @@ class TDataShard
             const TRowVersion ReadVersion;
             const TVector<ui32> ValueTags;
             TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> Rows;
+            const TCdcStreamScanManager::TStats Stats;
         };
 
         struct TEvCdcStreamScanContinue : public TEventLocal<TEvCdcStreamScanContinue, EvCdcStreamScanContinue> {};
@@ -957,6 +960,8 @@ class TDataShard
             struct LastKey : Column<5, NScheme::NTypeIds::String> {};
             struct SnapshotStep : Column<6, NScheme::NTypeIds::Uint64> {};
             struct SnapshotTxId : Column<7, NScheme::NTypeIds::Uint64> {};
+            struct RowsProcessed : Column<8, NScheme::NTypeIds::Uint64> {};
+            struct BytesProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TableOwnerId, TablePathId, StreamOwnerId, StreamPathId>;
             using TColumns = TableColumns<
@@ -966,7 +971,9 @@ class TDataShard
                 StreamPathId,
                 LastKey,
                 SnapshotStep,
-                SnapshotTxId
+                SnapshotTxId,
+                RowsProcessed,
+                BytesProcessed
             >;
         };
 

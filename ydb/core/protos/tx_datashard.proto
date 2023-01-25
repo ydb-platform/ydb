@@ -1450,11 +1450,17 @@ message TEvCdcStreamScanResponse {
         ABORTED = 7;
     }
 
+    message TStats {
+        optional uint64 RowsProcessed = 1;
+        optional uint64 BytesProcessed = 2;
+    }
+
     optional uint64 TabletId = 1;
     optional NKikimrProto.TPathID TablePathId = 2;
     optional NKikimrProto.TPathID StreamPathId = 3;
     optional EStatus Status = 4;
     optional string ErrorDescription = 5;
+    optional TStats Stats = 6;
 }
 
 message TEvKqpScan {

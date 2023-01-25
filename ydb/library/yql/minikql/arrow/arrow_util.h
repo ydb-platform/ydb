@@ -9,14 +9,12 @@
 #include <arrow/util/bitmap.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/public/udf/arrow/util.h>
 
 namespace NKikimr::NMiniKQL {
 
-/// \brief Recursive version of ArrayData::Slice() method
-std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len);
-
-/// \brief Chops first len items of `data` as new ArrayData object
-std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, size_t len);
+using NYql::NUdf::DeepSlice;
+using NYql::NUdf::Chop;
 
 /// \brief Remove optional from `data` as new ArrayData object
 std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType);
@@ -28,8 +26,8 @@ inline arrow::internal::Bitmap GetBitmap(const arrow::ArrayData& arr, int index)
     return arrow::internal::Bitmap{ arr.buffers[index], arr.offset, arr.length };
 }
 
-void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func);
-arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks);
+using NYql::NUdf::ForEachArrayData;
+using NYql::NUdf::MakeArray;
 
 template <typename T>
 T GetPrimitiveScalarValue(const arrow::Scalar& scalar) {

@@ -1,14 +1,20 @@
+#pragma once
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 
+#include "defs.h"
+#include "util.h"
+#include "args_dechunker.h"
+
 #include <arrow/array/array_base.h>
 #include <arrow/array/util.h>
 #include <arrow/c/bridge.h>
 #include <arrow/chunked_array.h>
 #include <arrow/compute/kernel.h>
+#include <arrow/compute/exec_internal.h>
 
 namespace NYql {
 namespace NUdf {
@@ -26,11 +32,25 @@ public:
         , Pos_(GetSourcePosition(builder))
         , Name_(name)
         , KernelContext_(&ExecContext_)
-    {}
+    {
+        Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        Kernel_.exec = Exec_;
+        std::vector<arrow::compute::InputType> inTypes;
+        for (const auto& t : ArgTypes_) {
+            inTypes.emplace_back(t);
+            ArgsValuesDescr_.emplace_back(t);
+        }
+
+        ArrowSchema s;
+        ReturnType_->Export(&s);
+        arrow::compute::OutputType outType = ARROW_RESULT(arrow::ImportType(&s));
+
+        Kernel_.signature = arrow::compute::KernelSignature::Make(std::move(inTypes), std::move(outType));
+    }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         try {
-            TVector<arrow::Datum> datums(ArgTypes_.size());
+            TVector<arrow::Datum> argDatums(ArgTypes_.size());
             for (ui32 i = 0; i < ArgTypes_.size(); ++i) {
                 bool isScalar;
                 ui64 length;
@@ -38,75 +58,65 @@ public:
                 if (isScalar) {
                     ArrowArray a;
                     valueBuilder->ExportArrowBlock(args[i], 0, &a);
-                    auto res = arrow::ImportArray(&a, ArgTypes_[i]);
-                    if (!res.status().ok()) {
-                        throw yexception() << res.status().ToString();
-                    }
-
-                    auto arr = std::move(res).ValueOrDie();
-                    auto scalarRes = arr->GetScalar(0);
-                    if (!scalarRes.status().ok()) {
-                        throw yexception() << scalarRes.status().ToString();
-                    }
-
-                    auto scalar = std::move(scalarRes).ValueOrDie();
-                    datums[i] = scalar;
+                    auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgTypes_[i]));
+                    auto scalar = ARROW_RESULT(arr->GetScalar(0));
+                    argDatums[i] = scalar;
                 } else {
                     TVector<std::shared_ptr<arrow::Array>> imported(chunkCount);
                     for (ui32 i = 0; i < chunkCount; ++i) {
                         ArrowArray a;
                         valueBuilder->ExportArrowBlock(args[i], i, &a);
-                        auto arrRes = arrow::ImportArray(&a, ArgTypes_[i]);
-                        if (!arrRes.status().ok()) {
-                            UdfTerminate(arrRes.status().ToString().c_str());
-                        }
-
-                        imported[i] = std::move(arrRes).ValueOrDie();
+                        auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgTypes_[i]));
+                        imported[i] = arr;
                     }
 
                     if (chunkCount == 1) {
-                        datums[i] = imported.front();
+                        argDatums[i] = imported.front();
                     } else {
-                        datums[i] = arrow::ChunkedArray::Make(std::move(imported), ArgTypes_[i]).ValueOrDie();
+                        argDatums[i] = ARROW_RESULT(arrow::ChunkedArray::Make(std::move(imported), ArgTypes_[i]));
                     }
                 }
             }
 
-            // TODO dechunking, scalar executor
-            Y_ENSURE(false);
-            Y_UNUSED(Exec_);
-            Y_UNUSED(KernelContext_);
+            auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+            ARROW_OK(executor->Init(&KernelContext_, { &Kernel_, ArgsValuesDescr_, nullptr }));
+
             arrow::Datum res;
             if (OnlyScalars_) {
-                auto arrRes = arrow::MakeArrayFromScalar(*res.scalar(), 1);
-                if (!arrRes.status().ok()) {
-                    throw yexception() << arrRes.status().ToString();
+                auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
+                ARROW_OK(executor->Execute(argDatums, listener.get()));
+                res = executor->WrapResults(argDatums, listener->values());
+            } else {
+                TArgsDechunker dechunker(std::move(argDatums));
+                std::vector<arrow::Datum> chunk;
+                TVector<std::shared_ptr<arrow::ArrayData>> arrays;
+
+                while (dechunker.Next(chunk)) {
+                    arrow::compute::detail::DatumAccumulator listener;
+                    ARROW_OK(executor->Execute(chunk, &listener));
+                    auto output = executor->WrapResults(chunk, listener.values());
+
+                    ForEachArrayData(output, [&](const auto& arr) { arrays.push_back(arr); });
                 }
 
-                auto arr = std::move(arrRes).ValueOrDie();
+                res = MakeArray(arrays);
+            }
+
+            if (OnlyScalars_) {
+                auto arr = ARROW_RESULT(arrow::MakeArrayFromScalar(*res.scalar(), 1));
                 ArrowArray a;
-                auto status = arrow::ExportArray(*arr, &a);
-                if (!status.ok()) {
-                    throw yexception() << status.ToString();
-                }
-
+                ARROW_OK(arrow::ExportArray(*arr, &a));
                 return valueBuilder->ImportArrowBlock(&a, 1, true, *ReturnType_);
             } else {
                 TVector<ArrowArray> a;
                 if (res.is_array()) {
                     a.resize(1);
-                    auto status = arrow::ExportArray(*res.make_array(), &a[0]);
-                    if (!status.ok()) {
-                        throw yexception() << status.ToString();
-                    }
+                    ARROW_OK(arrow::ExportArray(*res.make_array(), &a[0]));
                 } else {
                     Y_ENSURE(res.is_arraylike());
                     a.resize(res.chunks().size());
                     for (ui32 i = 0; i < res.chunks().size(); ++i) {
-                        auto status = arrow::ExportArray(*res.chunks()[i], &a[i]);
-                        if (!status.ok()) {
-                            throw yexception() << status.ToString();
-                        }
+                        ARROW_OK(arrow::ExportArray(*res.chunks()[i], &a[i]));
                     }
                 }
 
@@ -131,6 +141,8 @@ private:
 
     arrow::compute::ExecContext ExecContext_;
     mutable arrow::compute::KernelContext KernelContext_;
+    arrow::compute::ScalarKernel Kernel_;
+    std::vector<arrow::ValueDescr> ArgsValuesDescr_;
 };
 
 inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,
@@ -179,7 +191,12 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
             argsBuilder->Flags(callableInspector.GetArgumentFlags(i));
         }
 
-        // TODO fill argTypes
+        auto arrowTypeHandle = typeInfoHelper->MakeArrowType(initalType);
+        Y_ENSURE(arrowTypeHandle);
+        ArrowSchema s;
+        arrowTypeHandle->Export(&s);
+        auto type = ARROW_RESULT(arrow::ImportType(&s));
+        argTypes.emplace_back(type);
     }
 
     builder.Returns(builder.Block(onlyScalars)->Item(callableInspector.GetReturnType()).Build());

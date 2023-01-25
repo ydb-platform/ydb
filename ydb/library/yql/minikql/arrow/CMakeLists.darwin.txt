@@ -16,6 +16,7 @@ target_link_libraries(yql-minikql-arrow PUBLIC
   yutil
   libs-apache-arrow
   library-yql-minikql
+  public-udf-arrow
 )
 target_sources(yql-minikql-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/arrow/arrow_util.cpp

@@ -5,71 +5,13 @@
 #include <ydb/library/yql/minikql/arrow/mkql_functions.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
+#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
 
 #include <arrow/compute/exec_internal.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
-
-class TArgsDechunker {
-public:
-    explicit TArgsDechunker(std::vector<arrow::Datum>&& args)
-        : Args(std::move(args))
-        , Arrays(Args.size())
-    {
-        for (size_t i = 0; i < Args.size(); ++i) {
-            if (Args[i].is_arraylike()) {
-                ForEachArrayData(Args[i], [&](const auto& data) {
-                    Arrays[i].push_back(data);
-                });
-            }
-        }
-    }
-
-    bool Next(std::vector<arrow::Datum>& chunk) {
-        if (Finish) {
-            return false;
-        }
-
-        size_t minSize = Max<size_t>();
-        bool haveData = false;
-        chunk.resize(Args.size());
-        for (size_t i = 0; i < Args.size(); ++i) {
-            if (Args[i].is_scalar()) {
-                chunk[i] = Args[i];
-                continue;
-            }
-            while (!Arrays[i].empty() && Arrays[i].front()->length == 0) {
-                Arrays[i].pop_front();
-            }
-            if (!Arrays[i].empty()) {
-                haveData = true;
-                minSize = std::min<size_t>(minSize, Arrays[i].front()->length);
-            } else {
-                minSize = 0;
-            }
-        }
-
-        MKQL_ENSURE(!haveData || minSize > 0, "Block length mismatch");
-        if (!haveData) {
-            Finish = true;
-            return false;
-        }
-
-        for (size_t i = 0; i < Args.size(); ++i) {
-            if (!Args[i].is_scalar()) {
-                MKQL_ENSURE(!Arrays[i].empty(), "Block length mismatch");
-                chunk[i] = arrow::Datum(Chop(Arrays[i].front(), minSize));
-            }
-        }
-        return true;
-    }
-private:
-    const std::vector<arrow::Datum> Args;
-    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays;
-    bool Finish = false;
-};
 
 std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
     std::vector<arrow::ValueDescr> res;
@@ -149,7 +91,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
         return ctx.HolderFactory.CreateArrowBlock(std::move(output));
     }
 
-    TArgsDechunker dechunker(std::move(argDatums));
+    NYql::NUdf::TArgsDechunker dechunker(std::move(argDatums));
     std::vector<arrow::Datum> chunk;
     TVector<std::shared_ptr<arrow::ArrayData>> arrays;
 

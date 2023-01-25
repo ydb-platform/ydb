@@ -21,6 +21,7 @@ target_link_libraries(yql-minikql-comp_nodes PUBLIC
   library-yql-minikql
   yql-minikql-arrow
   yql-minikql-invoke_builtins
+  public-udf-arrow
   parser-pg_wrapper-interface
   library-yql-utils
   cpp-actors-core

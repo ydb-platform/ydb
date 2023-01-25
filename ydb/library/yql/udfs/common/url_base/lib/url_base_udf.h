@@ -43,9 +43,8 @@ SIMPLE_UDF(TGetScheme, char*(TAutoMap<char*>)) {
 
 inline arrow::Status GetHostKernelExec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
     Y_UNUSED(ctx);
-    Y_UNUSED(batch);
-    Y_UNUSED(res);
-    Y_ENSURE(false);
+    *res = batch.values[0];
+    return arrow::Status::OK();
 }
 
 BEGIN_SIMPLE_ARROW_UDF(TGetHost, TOptional<char*>(TOptional<char*>)) {

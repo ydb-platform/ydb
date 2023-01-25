@@ -160,7 +160,7 @@ namespace NKikimr {
             if (Type == EFullRecover) {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSyncFull>(Current.SyncState, Ctx->SelfVDiskId, VDiskId,
                     FullRecoverInfo->VSyncFullMsgsReceived, FullRecoverInfo->Stage,
-                    FullRecoverInfo->LogoBlobFrom.LogoBlobID(), FullRecoverInfo->BlockTabletFrom.TabletId,
+                    FullRecoverInfo->LogoBlobFrom.LogoBlobID(), ReadUnaligned<ui64>(&FullRecoverInfo->BlockTabletFrom.TabletId),
                     FullRecoverInfo->BarrierFrom);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();

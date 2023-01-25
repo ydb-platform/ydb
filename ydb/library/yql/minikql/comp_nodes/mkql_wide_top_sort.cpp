@@ -69,23 +69,24 @@ public:
         return Fields.data();
     }
 
-    void Push() {
+    NUdf::TUnboxedValue* Push() {
         if (Full.size() < Count) {
             Full.emplace_back(Free.back());
             Free.pop_back();
             ResetFields();
-            return;
+            return static_cast<NUdf::TUnboxedValue*>(Full.back());
         } else if (!Throat) {
             Throat = *std::max_element(Full.cbegin(), Full.cend(), LessFunc);
         }
 
         if (!LessFunc(Tongue, Throat)) {
             std::fill_n(static_cast<NUdf::TUnboxedValue*>(Tongue), Indexes.size(), NUdf::TUnboxedValuePod());
-            return;
+            return nullptr;
         }
 
         Full.emplace_back(Free.back());
         Free.pop_back();
+        const auto out = Full.back();
 
         if (Full.size() == GetStorageSize()) {
             std::nth_element(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
@@ -98,6 +99,7 @@ public:
         }
 
         ResetFields();
+        return static_cast<NUdf::TUnboxedValue*>(out);
     }
 
     template<bool Sort>
@@ -325,17 +327,31 @@ public:
             const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
             const auto tongue = new LoadInst(tonguePtr, "tongue", block);
 
-            for (auto i = 0U; i < Representations.size(); ++i) {
+            for (auto i = 0U; i < KeyTypes.size(); ++i) {
                 const auto item = getres.second[Indexes[i]](ctx, block);
                 ValueAddRef(Representations[i], item, ctx, block);
-                const auto ptr = GetElementPtrInst::CreateInBounds(tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("ptr_") += ToString(i)).c_str(), block);
+                const auto ptr = GetElementPtrInst::CreateInBounds(tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_ptr_") += ToString(i)).c_str(), block);
                 new StoreInst(item, ptr, block);
             }
 
             const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Push));
-            const auto pushType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
+            const auto pushType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
             const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
-            CallInst::Create(pushPtr, {stateArg}, "", block);
+            const auto inputPtr = CallInst::Create(pushPtr, {stateArg}, "input", block);
+            const auto accepted = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, inputPtr, ConstantPointerNull::get(outputPtrType), "accepted", block);
+
+            const auto push = BasicBlock::Create(context, "push", ctx.Func);
+
+            BranchInst::Create(push, loop, accepted, block);
+
+            block = push;
+
+            for (auto i = KeyTypes.size(); i < Representations.size(); ++i) {
+                const auto item = getres.second[Indexes[i]](ctx, block);
+                ValueAddRef(Representations[i], item, ctx, block);
+                const auto ptr = GetElementPtrInst::CreateInBounds(inputPtr, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("pay_ptr_") += ToString(i)).c_str(), block);
+                new StoreInst(item, ptr, block);
+            }
 
             BranchInst::Create(loop, block);
         }

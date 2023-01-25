@@ -428,7 +428,7 @@ Value* GenCompareFunction<true>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCod
     const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
     const auto resultType = Type::getInt32Ty(context);
-    const auto res = PHINode::Create(resultType, 2U, "result", done);
+    const auto res = PHINode::Create(resultType, 3U, "result", done);
 
     const auto le = IsEmpty(lv, block);
     const auto re = IsEmpty(rv, block);

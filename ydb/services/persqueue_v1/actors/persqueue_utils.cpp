@@ -94,6 +94,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::SUCCESS;
         case INITIALIZING:
         case CLUSTER_DISABLED:
+        case TABLET_PIPE_DISCONNECTED:
             return Ydb::StatusIds::UNAVAILABLE;
         case PREFERRED_CLUSTER_MISMATCHED:
             return Ydb::StatusIds::ABORTED;

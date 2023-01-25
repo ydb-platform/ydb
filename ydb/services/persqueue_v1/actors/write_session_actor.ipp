@@ -1247,7 +1247,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr&, const TActorContext& ctx) {
-    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::ERROR, ctx);
+    CloseSession("pipe to partition's tablet is dead", PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
 template<bool UseMigrationProtocol>
@@ -1255,7 +1255,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCo
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     //TODO: add here retries for connecting to PQRB
     if (msg->Status != NKikimrProto::OK) {
-        CloseSession(TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, PersQueue::ErrorCode::ERROR, ctx);
+        CloseSession(TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
         return;
     }
 }
@@ -1263,7 +1263,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCo
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
     //TODO: add here retries for connecting to PQRB
-    CloseSession(TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, PersQueue::ErrorCode::ERROR, ctx);
+    CloseSession(TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
 
 template<bool UseMigrationProtocol>
@@ -1271,7 +1271,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     if (!PendingRequest) {
         PendingRequest = new TWriteRequestInfo(++NextRequestCookie);
     }
-   
+
     auto& request = PendingRequest->PartitionWriteRequest->Record;
     ui64 payloadSize = 0;
 

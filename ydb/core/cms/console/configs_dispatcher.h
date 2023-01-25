@@ -87,7 +87,7 @@ struct TEvConfigsDispatcher {
  * are compared to the current one and notifications are not sent to local
  * subscribers if there is no config modification detected.
  */
-IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config);
+IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels);
 
 inline TActorId MakeConfigsDispatcherID(ui32 node = 0) {
     char x[12] = { 'c', 'o', 'n', 'f', 'i', 'g', 's', 'd', 'i', 's', 'p' };

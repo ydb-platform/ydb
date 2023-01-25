@@ -683,7 +683,7 @@ namespace Tests {
                                         TMailboxType::Revolving, 0);
         Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
         if (Settings->EnableConfigsDispatcher) {
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig);
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig, {});
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
         }

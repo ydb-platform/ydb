@@ -444,6 +444,9 @@ public:
     TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+
+private:
+    TMap<TString, TString> Labels;
 };
 
 class TConfigsCacheInitializer : public IKikimrServicesInitializer {

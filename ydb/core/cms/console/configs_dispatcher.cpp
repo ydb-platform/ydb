@@ -81,7 +81,7 @@ public:
         return NKikimrServices::TActivity::CONFIGS_DISPATCHER_ACTOR;
     }
 
-    TConfigsDispatcher(const NKikimrConfig::TAppConfig &config);
+    TConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels);
 
     void Bootstrap();
 
@@ -222,6 +222,7 @@ public:
     }
 
 private:
+    TMap<TString, TString> Labels;
     TDeque<TAutoPtr<IEventHandle>> EventsQueue;
     NKikimrConfig::TAppConfig InitialConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
@@ -243,8 +244,9 @@ private:
     THashMap<TDynBitMap, std::shared_ptr<NKikimrConfig::TAppConfig>> ConfigsCache;
 };
 
-TConfigsDispatcher::TConfigsDispatcher(const NKikimrConfig::TAppConfig &config)
-    : InitialConfig(config)
+TConfigsDispatcher::TConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels)
+    : Labels(labels)
+    , InitialConfig(config)
     , CurrentConfig(config)
     , NextRequestCookie(Now().GetValue())
 {
@@ -623,6 +625,14 @@ void TConfigsDispatcher::Handle(NMon::TEvHttpInfo::TPtr &ev)
             str << "Maintained tenant: " << JoinSeq(", ", CurrentTenants);
         }
         DIV_CLASS("tab-left") {
+            COLLAPSED_REF_CONTENT("node-labels", "Node labels") {
+                PRE() {
+                    for (auto& [key, value] : Labels) {
+                        str << key << " = " << value << Endl;
+                    }
+                }
+            }
+            str << "<br />" << Endl;
             COLLAPSED_REF_CONTENT("current-config", "Current config") {
                 NHttp::OutputConfigHTML(str, CurrentConfig);
             }
@@ -936,9 +946,9 @@ void TConfigsDispatcher::Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev)
 
 } // anonymous namespace
 
-IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config)
+IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels)
 {
-    return new TConfigsDispatcher(config);
+    return new TConfigsDispatcher(config, labels);
 }
 
 } // namespace NKikimr::NConsole

@@ -41,12 +41,6 @@ SIMPLE_UDF(TGetScheme, char*(TAutoMap<char*>)) {
     return valueBuilder->SubString(args[0], std::distance(url.begin(), prefix.begin()), prefix.size());
 }
 
-inline arrow::Status GetHostKernelExec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-    Y_UNUSED(ctx);
-    *res = batch.values[0];
-    return arrow::Status::OK();
-}
-
 BEGIN_SIMPLE_ARROW_UDF(TGetHost, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     const std::string_view url(args[0].AsStringRef());
@@ -55,7 +49,24 @@ BEGIN_SIMPLE_ARROW_UDF(TGetHost, TOptional<char*>(TOptional<char*>)) {
         valueBuilder->SubString(args[0], std::distance(url.begin(), host.begin()), host.size());
 }
 
-END_SIMPLE_ARROW_UDF(TGetHost, GetHostKernelExec);
+struct TGetHostKernelExec : public TUnaryKernelExec<TGetHostKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        if (!arg) {
+            return sink(TBlockItem());
+        }
+
+        const std::string_view url(arg.AsStringRef());
+        const std::string_view host(GetOnlyHost(url));
+        if (host.empty()) {
+            return sink(TBlockItem());
+        }
+
+        sink(TBlockItem(TStringRef(host)));
+    }
+};
+
+END_SIMPLE_ARROW_UDF(TGetHost, TGetHostKernelExec::Do);
 
 SIMPLE_UDF(TGetHostPort, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);

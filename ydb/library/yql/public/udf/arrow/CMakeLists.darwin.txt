@@ -20,5 +20,8 @@ target_link_libraries(public-udf-arrow PUBLIC
 target_sources(public-udf-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/args_dechunker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/udf_arrow_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/bit_util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/util.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_reader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_item.cpp
 )

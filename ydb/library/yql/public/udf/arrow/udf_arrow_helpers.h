@@ -8,6 +8,8 @@
 #include "defs.h"
 #include "util.h"
 #include "args_dechunker.h"
+#include "block_reader.h"
+#include "block_builder.h"
 
 #include <arrow/array/array_base.h>
 #include <arrow/array/util.h>
@@ -21,44 +23,103 @@ namespace NUdf {
 
 using TExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
 
+class TUdfKernelState : public arrow::compute::KernelState {
+public:
+    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper::TPtr& typeInfoHelper)
+        : ArgTypes_(argTypes)
+        , OutputType_(outputType)
+        , OnlyScalars_(onlyScalars)
+        , TypeInfoHelper_(typeInfoHelper)
+    {
+        Readers_.resize(ArgTypes_.size());
+        Y_UNUSED(OutputType_);
+    }
+
+    IBlockReader& GetReader(ui32 index) {
+        if (!Readers_[index]) {
+            Readers_[index] = MakeBlockReader(*TypeInfoHelper_, ArgTypes_[index]);
+        }
+
+        return *Readers_[index];
+    }
+
+    IArrayBuilder& GetArrayBuilder() {
+        Y_ENSURE(!OnlyScalars_);
+        if (!ArrayBuilder_) {
+            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *arrow::default_memory_pool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_));
+        }
+
+        return *ArrayBuilder_;
+    }
+
+    IScalarBuilder& GetScalarBuilder() {
+        Y_ENSURE(OnlyScalars_);
+        if (!ScalarBuilder_) {
+            ScalarBuilder_ = MakeScalarBuilder(*TypeInfoHelper_, OutputType_);
+        }
+
+        return *ScalarBuilder_;
+    }
+
+private:
+    const TVector<const TType*> ArgTypes_;
+    const TType* OutputType_;
+    const bool OnlyScalars_;
+    const ITypeInfoHelper::TPtr TypeInfoHelper_;
+    TVector<std::unique_ptr<IBlockReader>> Readers_;
+    std::unique_ptr<IArrayBuilder> ArrayBuilder_;
+    std::unique_ptr<IScalarBuilder> ScalarBuilder_;
+};
+
 class TSimpleArrowUdfImpl : public TBoxedValue {
 public:
-    TSimpleArrowUdfImpl(const TVector<std::shared_ptr<arrow::DataType>>& argTypes, bool onlyScalars, IArrowType::TPtr&& returnType,
+    TSimpleArrowUdfImpl(const TVector<const TType*> argTypes, const TType* outputType, bool onlyScalars,
         TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name)
-        : ArgTypes_(argTypes)
-        , OnlyScalars_(onlyScalars)
-        , ReturnType_(std::move(returnType))
+        : OnlyScalars_(onlyScalars)
         , Exec_(exec)
         , Pos_(GetSourcePosition(builder))
         , Name_(name)
         , KernelContext_(&ExecContext_)
     {
+        auto typeInfoHelper = builder.TypeInfoHelper();
         Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         Kernel_.exec = Exec_;
         std::vector<arrow::compute::InputType> inTypes;
-        for (const auto& t : ArgTypes_) {
-            inTypes.emplace_back(t);
-            ArgsValuesDescr_.emplace_back(t);
+        for (const auto& t : argTypes) {
+            auto arrowTypeHandle = typeInfoHelper->MakeArrowType(t);
+            Y_ENSURE(arrowTypeHandle);
+            ArrowSchema s;
+            arrowTypeHandle->Export(&s);
+            auto type = ARROW_RESULT(arrow::ImportType(&s));
+            ArgArrowTypes_.emplace_back(type);
+
+            inTypes.emplace_back(type);
+            ArgsValuesDescr_.emplace_back(type);
         }
 
+        ReturnArrowTypeHandle_ = typeInfoHelper->MakeArrowType(outputType);
+        Y_ENSURE(ReturnArrowTypeHandle_);
+
         ArrowSchema s;
-        ReturnType_->Export(&s);
+        ReturnArrowTypeHandle_->Export(&s);
         arrow::compute::OutputType outType = ARROW_RESULT(arrow::ImportType(&s));
 
         Kernel_.signature = arrow::compute::KernelSignature::Make(std::move(inTypes), std::move(outType));
+        KernelState_ = std::make_unique<TUdfKernelState>(argTypes, outputType, onlyScalars, typeInfoHelper);
+        KernelContext_.SetState(KernelState_.get());
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         try {
-            TVector<arrow::Datum> argDatums(ArgTypes_.size());
-            for (ui32 i = 0; i < ArgTypes_.size(); ++i) {
+            TVector<arrow::Datum> argDatums(ArgArrowTypes_.size());
+            for (ui32 i = 0; i < ArgArrowTypes_.size(); ++i) {
                 bool isScalar;
                 ui64 length;
                 ui32 chunkCount = valueBuilder->GetArrowBlockChunks(args[i], isScalar, length);
                 if (isScalar) {
                     ArrowArray a;
                     valueBuilder->ExportArrowBlock(args[i], 0, &a);
-                    auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgTypes_[i]));
+                    auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgArrowTypes_[i]));
                     auto scalar = ARROW_RESULT(arr->GetScalar(0));
                     argDatums[i] = scalar;
                 } else {
@@ -66,14 +127,14 @@ public:
                     for (ui32 i = 0; i < chunkCount; ++i) {
                         ArrowArray a;
                         valueBuilder->ExportArrowBlock(args[i], i, &a);
-                        auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgTypes_[i]));
+                        auto arr = ARROW_RESULT(arrow::ImportArray(&a, ArgArrowTypes_[i]));
                         imported[i] = arr;
                     }
 
                     if (chunkCount == 1) {
                         argDatums[i] = imported.front();
                     } else {
-                        argDatums[i] = ARROW_RESULT(arrow::ChunkedArray::Make(std::move(imported), ArgTypes_[i]));
+                        argDatums[i] = ARROW_RESULT(arrow::ChunkedArray::Make(std::move(imported), ArgArrowTypes_[i]));
                     }
                 }
             }
@@ -106,7 +167,7 @@ public:
                 auto arr = ARROW_RESULT(arrow::MakeArrayFromScalar(*res.scalar(), 1));
                 ArrowArray a;
                 ARROW_OK(arrow::ExportArray(*arr, &a));
-                return valueBuilder->ImportArrowBlock(&a, 1, true, *ReturnType_);
+                return valueBuilder->ImportArrowBlock(&a, 1, true, *ReturnArrowTypeHandle_);
             } else {
                 TVector<ArrowArray> a;
                 if (res.is_array()) {
@@ -120,7 +181,7 @@ public:
                     }
                 }
 
-                return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnType_);
+                return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnArrowTypeHandle_);
             }
         } catch (const std::exception&) {
             TStringBuilder sb;
@@ -132,17 +193,19 @@ public:
     }
 
 private:
-    const TVector<std::shared_ptr<arrow::DataType>> ArgTypes_;
     const bool OnlyScalars_;
-    IArrowType::TPtr ReturnType_;
     const TExec Exec_;
     TSourcePosition Pos_;
     const TString Name_;
+
+    TVector<std::shared_ptr<arrow::DataType>> ArgArrowTypes_;
+    IArrowType::TPtr ReturnArrowTypeHandle_;
 
     arrow::compute::ExecContext ExecContext_;
     mutable arrow::compute::KernelContext KernelContext_;
     arrow::compute::ScalarKernel Kernel_;
     std::vector<arrow::ValueDescr> ArgsValuesDescr_;
+    std::unique_ptr<TUdfKernelState> KernelState_;
 };
 
 inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,
@@ -177,12 +240,12 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     builder.UserType(userType);
     Y_ENSURE(hasBlocks);
 
-    TVector<std::shared_ptr<arrow::DataType>> argTypes;
+    TVector<const TType*> argTypes;
     auto argsBuilder = builder.Args(callableInspector.GetArgsCount());
     for (ui32 i = 0; i < argsInspector.GetElementsCount(); ++i) {
         TBlockTypeInspector blockInspector(*typeInfoHelper, argsInspector.GetElementType(i));
-        auto initalType = callableInspector.GetArgType(i);
-        argsBuilder->Add(builder.Block(blockInspector.IsScalar())->Item(initalType).Build());
+        auto type = callableInspector.GetArgType(i);
+        argsBuilder->Add(builder.Block(blockInspector.IsScalar())->Item(type).Build());
         if (callableInspector.GetArgumentName(i).Size() > 0) {
             argsBuilder->Name(callableInspector.GetArgumentName(i));
         }
@@ -191,11 +254,6 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
             argsBuilder->Flags(callableInspector.GetArgumentFlags(i));
         }
 
-        auto arrowTypeHandle = typeInfoHelper->MakeArrowType(initalType);
-        Y_ENSURE(arrowTypeHandle);
-        ArrowSchema s;
-        arrowTypeHandle->Export(&s);
-        auto type = ARROW_RESULT(arrow::ImportType(&s));
         argTypes.emplace_back(type);
     }
 
@@ -209,11 +267,39 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     }
 
     if (!typesOnly) {
-        auto returnType = typeInfoHelper->MakeArrowType(callableInspector.GetReturnType());
-        Y_ENSURE(returnType);
-        builder.Implementation(new TSimpleArrowUdfImpl(argTypes, onlyScalars, std::move(returnType), exec, builder, name));
+        builder.Implementation(new TSimpleArrowUdfImpl(argTypes, callableInspector.GetReturnType(), onlyScalars, exec, builder, name));
     }
 }
+
+template <typename TDerived>
+struct TUnaryKernelExec {
+    static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
+        auto& reader = state.GetReader(0);
+        const auto& arg = batch.values[0];
+        if (arg.is_scalar()) {
+            auto& builder = state.GetScalarBuilder();
+            auto item = reader.GetScalarItem(*arg.scalar());
+            TDerived::Process(item, [&](TBlockItem out) {
+                *res = builder.Build(out);
+            });
+        }
+        else {
+            auto& array = *arg.array();
+            auto& builder = state.GetArrayBuilder();
+            for (int64_t i = 0; i < array.length; ++i) {
+                auto item = reader.GetItem(array, i);
+                TDerived::Process(item, [&](TBlockItem out) {
+                    builder.Add(out);
+                });
+            }
+
+            *res = builder.Build(false);
+        }
+
+        return arrow::Status::OK();
+    }
+};
 
 }
 }

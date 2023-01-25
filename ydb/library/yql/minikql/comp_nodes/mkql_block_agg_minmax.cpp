@@ -144,7 +144,7 @@ private:
 class TGenericColumnBuilder : public IAggColumnBuilder {
 public:
     TGenericColumnBuilder(ui64 size, TType* columnType, TComputationContext& ctx)
-        : Builder_(MakeBlockBuilder(columnType, ctx.ArrowMemoryPool, size))
+        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size))
         , Ctx_(ctx)
     {
     }
@@ -158,7 +158,7 @@ public:
     }
 
 private:
-    const std::unique_ptr<IBlockBuilder> Builder_;
+    const std::unique_ptr<IArrayBuilder> Builder_;
     TComputationContext& Ctx_;
 };
 

@@ -1860,6 +1860,14 @@ NUdf::IArrowType::TPtr TTypeInfoHelper::ImportArrowType(ArrowSchema* schema) con
     return new TArrowType(std::move(res).ValueOrDie());
 }
 
+ui64 TTypeInfoHelper::GetMaxBlockLength(const NUdf::TType* type) const {
+   return CalcBlockLen(CalcMaxBlockItemSize(static_cast<const TType*>(type)));
+}
+
+ui64 TTypeInfoHelper::GetMaxBlockBytes() const {
+   return MaxBlockSizeInBytes;
+}
+
 void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {
     const auto typeId = dt->GetSchemeType();
     v->OnDataType(typeId);
@@ -2095,6 +2103,57 @@ NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
         default:
             throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for equating";
     }
+}
+
+size_t CalcMaxBlockItemSize(const TType* type) {
+    // we do not count block bitmap size
+    if (type->IsOptional()) {
+        return CalcMaxBlockItemSize(AS_TYPE(TOptionalType, type)->GetItemType());
+    }
+
+    if (type->IsTuple()) {
+        auto tupleType = AS_TYPE(TTupleType, type);
+        size_t result = 0;
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            result = std::max(result, CalcMaxBlockItemSize(tupleType->GetElementType(i)));
+        }
+        return result;
+    }
+
+    if (type->IsData()) {
+        auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
+        switch (slot) {
+        case NUdf::EDataSlot::Int8:
+        case NUdf::EDataSlot::Uint8:
+        case NUdf::EDataSlot::Bool:
+        case NUdf::EDataSlot::Int16:
+        case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Date:
+        case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Datetime:
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Float:
+        case NUdf::EDataSlot::Double: {
+            size_t sz = GetDataTypeInfo(slot).FixedSize;
+            MKQL_ENSURE(sz > 0, "Unexpected fixed data size");
+            return sz;
+        }
+        case NUdf::EDataSlot::String:
+            // size of offset part
+            return sizeof(arrow::BinaryType::offset_type);
+        case NUdf::EDataSlot::Utf8:
+            // size of offset part
+            return sizeof(arrow::StringType::offset_type);
+        default:
+            MKQL_ENSURE(false, "Unsupported data slot");
+        }
+    }
+
+    MKQL_ENSURE(false, "Unsupported type");
 }
 
 } // namespace NMiniKQL

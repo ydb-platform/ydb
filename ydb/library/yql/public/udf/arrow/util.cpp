@@ -1,4 +1,5 @@
 #include "util.h"
+#include "bit_util.h"
 #include "defs.h"
 
 #include <arrow/array/array_base.h>
@@ -6,6 +7,20 @@
 
 namespace NYql {
 namespace NUdf {
+
+std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool) {
+    // align up to 64 bit
+    bitCount = (bitCount + 63u) & ~size_t(63u);
+    // this simplifies code compression code - we can write single 64 bit word after array boundaries
+    bitCount += 64;
+    return ARROW_RESULT(arrow::AllocateBitmap(bitCount, pool));
+}
+
+std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool) {
+    auto bitmap = AllocateBitmapWithReserve(len, pool);
+    CompressSparseBitmap(bitmap->mutable_data(), srcSparse, len);
+    return bitmap;
+}
 
 std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len) {
     Y_ENSURE(data->length >= 0);

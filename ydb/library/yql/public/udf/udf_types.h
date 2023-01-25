@@ -270,6 +270,7 @@ private:
     }
 };
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class ITypeInfoHelper2 : public ITypeInfoHelper1 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper2>;
@@ -277,6 +278,7 @@ public:
 public:
     virtual const TPgTypeDescription* FindPgTypeDescription(ui32 typeId) const = 0;
 };
+#endif
 
 //////////////////////////////////////////////////////////////////////////////
 // IArrowType
@@ -293,6 +295,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IArrowType, 8);
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 class ITypeInfoHelper3 : public ITypeInfoHelper2 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper3>;
@@ -303,8 +306,22 @@ public:
     // The given ArrowSchema struct is released, even if this function fails. 
     virtual IArrowType::TPtr ImportArrowType(ArrowSchema* schema) const = 0;
 };
+#endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 29)
+class ITypeInfoHelper4 : public ITypeInfoHelper3 {
+public:
+    using TPtr = TRefCountedPtr<ITypeInfoHelper4>;
+
+public:
+    virtual ui64 GetMaxBlockLength(const TType* type) const = 0;
+    virtual ui64 GetMaxBlockBytes() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 29)
+using ITypeInfoHelper = ITypeInfoHelper4;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 using ITypeInfoHelper = ITypeInfoHelper3;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 using ITypeInfoHelper = ITypeInfoHelper2;

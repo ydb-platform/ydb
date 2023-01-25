@@ -30,7 +30,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto maxLen = CalcBlockLen(CalcMaxBlockItemSize(ItemType_));
-        auto builder = MakeBlockBuilder(ItemType_, ctx.ArrowMemoryPool, maxLen);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), ItemType_, ctx.ArrowMemoryPool, maxLen);
 
         for (size_t i = 0; i < builder->MaxLength(); ++i) {
             auto result = Flow_->GetValue(ctx);
@@ -114,7 +114,7 @@ private:
     struct TState : public TComputationValue<TState> {
         std::vector<NUdf::TUnboxedValue> Values_;
         std::vector<NUdf::TUnboxedValue*> ValuePointers_;
-        std::vector<std::unique_ptr<IBlockBuilder>> Builders_;
+        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
         size_t MaxLength_;
         size_t Rows_ = 0;
         bool IsFinished_ = false;
@@ -132,7 +132,7 @@ private:
 
             for (size_t i = 0; i < types.size(); ++i) {
                 ValuePointers_[i] = &Values_[i];
-                Builders_.push_back(MakeBlockBuilder(types[i], ctx.ArrowMemoryPool, MaxLength_));
+                Builders_.push_back(MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, MaxLength_));
             }
         }
     };
@@ -192,7 +192,8 @@ private:
 
         TState(TMemoryUsageInfo* memInfo, TType* itemType)
             : TComputationValue(memInfo)
-            , Reader_(MakeBlockReader(itemType))
+            , Reader_(MakeBlockReader(TTypeInfoHelper(), itemType))
+            , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), itemType))
         {
         }
 
@@ -207,7 +208,7 @@ private:
                 Index_ = 0;
                 Arrays_.pop_front();
             }
-            return Reader_->MakeValue(Reader_->GetItem(*Arrays_.front(), Index_++), ctx.HolderFactory);
+            return Converter_->MakeValue(Reader_->GetItem(*Arrays_.front(), Index_++), ctx.HolderFactory);
         }
 
         void Reset(const arrow::Datum& datum) {
@@ -225,6 +226,7 @@ private:
 
     private:
         const std::unique_ptr<IBlockReader> Reader_;
+        const std::unique_ptr<IBlockItemConverter> Converter_;
         TDeque<std::shared_ptr<arrow::ArrayData>> Arrays_;
         size_t Index_ = 0;
     };
@@ -289,7 +291,7 @@ public:
                 item = s.Readers_[i]->GetItem(*datum.array(), s.Index_);
             }
 
-            *(output[i]) = s.Readers_[i]->MakeValue(item, ctx.HolderFactory);
+            *(output[i]) = s.Converters_[i]->MakeValue(item, ctx.HolderFactory);
         }
 
         ++s.Index_;
@@ -301,6 +303,7 @@ private:
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         TVector<std::unique_ptr<IBlockReader>> Readers_;
+        TVector<std::unique_ptr<IBlockItemConverter>> Converters_;
         size_t Count_ = 0;
         size_t Index_ = 0;
 
@@ -314,7 +317,8 @@ private:
             }
 
             for (size_t i = 0; i < types.size(); ++i) {
-                Readers_.push_back(MakeBlockReader(types[i]));
+                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), types[i]));
+                Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), types[i]));
             }
         }
     };

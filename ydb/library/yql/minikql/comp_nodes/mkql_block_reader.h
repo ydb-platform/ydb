@@ -5,20 +5,24 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
+#include <ydb/library/yql/public/udf/udf_types.h>
+#include <ydb/library/yql/public/udf/arrow/block_reader.h>
+
 #include <arrow/datum.h>
 
 namespace NKikimr::NMiniKQL {
 
-class IBlockReader : private TNonCopyable {
+using NYql::NUdf::IBlockReader;
+
+class IBlockItemConverter {
 public:
-    virtual ~IBlockReader() = default;
-    // result will reference to Array/Scalar internals and will be valid until next call to GetItem/GetScalarItem
-    virtual TBlockItem GetItem(const arrow::ArrayData& data, size_t index) = 0;
-    virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
+    virtual ~IBlockItemConverter() = default;
 
     virtual NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const = 0;
 };
 
-std::unique_ptr<IBlockReader> MakeBlockReader(TType* type);
+using NYql::NUdf::MakeBlockReader;
+
+std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type);
 
 }

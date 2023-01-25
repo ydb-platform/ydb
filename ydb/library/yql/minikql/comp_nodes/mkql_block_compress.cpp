@@ -254,7 +254,7 @@ private:
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         TVector<NUdf::TUnboxedValue> InputValues_;
         TVector<std::shared_ptr<arrow::ArrayData>> Arrays_;
-        TVector<std::unique_ptr<IBlockBuilder>> Builders_;
+        TVector<std::unique_ptr<IArrayBuilder>> Builders_;
         size_t InputSize_ = 0;
         size_t OutputPos_ = 0;
         size_t OutputSize_ = 0;
@@ -289,7 +289,7 @@ private:
             for (ui32 i = 0, outIndex = 0; i < width; ++i) {
                 if (i != bitmapIndex) {
                     if (types[i]->GetShape() != TBlockType::EShape::Scalar && output[outIndex] != nullptr) {
-                        Builders_[i] = MakeBlockBuilder(types[i]->GetItemType(), pool, maxBlockLen);
+                        Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), pool, maxBlockLen);
                     }
                     outIndex++;
                 }

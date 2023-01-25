@@ -73,8 +73,8 @@ class TIfBlockExec {
 public:
     explicit TIfBlockExec(TType* type)
         : Type(type)
-        , ThenReader(MakeBlockReader(type))
-        , ElseReader(MakeBlockReader(type))
+        , ThenReader(MakeBlockReader(TTypeInfoHelper(), type))
+        , ElseReader(MakeBlockReader(TTypeInfoHelper(), type))
     {
     }
 
@@ -105,7 +105,7 @@ public:
         const std::shared_ptr<arrow::ArrayData>& pred = predDatum.array();
 
         const size_t len = pred->length;
-        auto builder = MakeBlockBuilder(Type, *ctx->memory_pool(), len);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type, *ctx->memory_pool(), len);
         const ui8* predValues = pred->GetValues<uint8_t>(1);
         for (size_t i = 0; i < len; ++i) {
             if constexpr (!ThenIsScalar) {

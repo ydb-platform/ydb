@@ -713,8 +713,8 @@ IGraphTransformer::TStatus WideTopWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto width = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
-    if (!(EnsureTupleMinSize(input->Tail(), 1U, ctx.Expr) && EnsureTupleMaxSize(input->Tail(), width, ctx.Expr))) {
+    const auto& types = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    if (!(EnsureTupleMinSize(input->Tail(), 1U, ctx.Expr) && EnsureTupleMaxSize(input->Tail(), types.size(), ctx.Expr))) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -729,13 +729,22 @@ IGraphTransformer::TStatus WideTopWrapper(const TExprNode::TPtr& input, TExprNod
         }
 
         if (ui32 index; TryFromString(item->Head().Content(), index)) {
-            if (index >= width) {
+            if (index >= types.size()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Head().Pos()),
                     TStringBuilder() << "Index too large: " << index));
                 return IGraphTransformer::TStatus::Error;
             } else if (!indexes.emplace(index).second) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Head().Pos()),
                     TStringBuilder() << "Duplicate index: " << index));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const TDataExprType* type = nullptr;
+            if (bool opt; !EnsureDataOrOptionalOfData( item->Head().Pos(), types[index], opt, type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureComparableType(input->Pos(), *type, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
         } else {

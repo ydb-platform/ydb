@@ -25,6 +25,7 @@ target_link_libraries(yq-libs-common PUBLIC
 )
 target_sources(yq-libs-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/compression.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/debug_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/entity_id.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/rows_proto_splitter.cpp
 )

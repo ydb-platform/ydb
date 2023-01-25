@@ -7,6 +7,8 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/system/mutex.h>
@@ -82,6 +84,28 @@ public:
 public:
     NYdb::TDriver Driver;
     TDbPoolMap::TPtr Pools;
+};
+
+NYdb::TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler);
+
+class TDbRequest: public NActors::TActorBootstrapped<TDbRequest> {
+    using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
+    TDbPool::TPtr DbPool;
+    NThreading::TPromise<NYdb::TStatus> Promise;
+    TFunction Handler;
+public:
+    TDbRequest(const TDbPool::TPtr& dbPool, const NThreading::TPromise<NYdb::TStatus>& promise, const TFunction& handler);
+
+    static constexpr char ActorName[] = "YQ_DB_REQUEST";
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvents::TEvDbFunctionResponse, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+    )
+
+    void Bootstrap();
+    void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev);
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&);
 };
 
 } /* NYq */

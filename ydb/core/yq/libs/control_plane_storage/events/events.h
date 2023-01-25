@@ -14,6 +14,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
+#include <ydb/core/yq/libs/common/debug_info.h>
 #include <ydb/core/yq/libs/control_plane_config/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
@@ -42,42 +43,6 @@ struct TNodeInfo {
     TString InstanceId;
     TString HostName;
 };
-
-struct TDebugItem {
-    TString Query;
-    NYdb::TParams Params;
-    TString Plan;
-    TString Ast;
-    TString Error;
-
-    TString ToString() const {
-        TString result;
-        result += "Query: " + Query + "\n";
-        result += "Plan: " + Plan + "\n";
-        result += "Ast: " + Ast + "\n";
-        for (const auto& param: Params.GetValues()) {
-            result += "Params: " + param.first + ", " + param.second.GetType().ToString() + "\n";
-        }
-        result += "Error: " + Error + "\n";
-        return result;
-    }
-
-    size_t GetByteSize() const {
-        size_t paramsSize = 0;
-        for (const auto& [key, value]: Params.GetValues()) {
-            paramsSize += key.Size() + NYdb::TProtoAccessor::GetProto(value).ByteSizeLong();
-        }
-        return sizeof(*this)
-                + Query.Size()
-                + paramsSize
-                + Plan.Size()
-                + Ast.Size()
-                + Error.Size();
-    }
-};
-
-using TDebugInfo = TVector<TDebugItem>;
-using TDebugInfoPtr = std::shared_ptr<TDebugInfo>;
 
 struct TPermissions {
     enum TPermission {

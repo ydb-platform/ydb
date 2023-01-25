@@ -3,6 +3,7 @@
 #include "ydb_control_plane_storage_impl.h"
 
 #include <ydb/core/yq/libs/ydb/schema.h>
+#include <ydb/core/yq/libs/shared_resources/db_pool.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
@@ -337,50 +338,6 @@ void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, co
     }
 }
 
-class TDbRequest: public NActors::TActorBootstrapped<TDbRequest> {
-    using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
-    TDbPool::TPtr DbPool;
-    TPromise<NYdb::TStatus> Promise;
-    TFunction Handler;
-
-public:
-    TDbRequest(const TDbPool::TPtr& dbPool, const TPromise<NYdb::TStatus>& promise, const TFunction& handler)
-        : DbPool(dbPool)
-        , Promise(promise)
-        , Handler(handler)
-    {}
-
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_DB_REQUEST";
-
-    void Bootstrap() {
-        CPS_LOG_T("DbRequest actor request. Actor id: " << SelfId());
-        Become(&TDbRequest::StateFunc);
-        Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
-    }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvents::TEvDbFunctionResponse, Handle);
-        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-    )
-
-    void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
-        CPS_LOG_T("DbRequest actor response. Actor id: " << SelfId());
-        Promise.SetValue(ev->Get()->Status);
-        PassAway();
-    }
-
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        CPS_LOG_E("On delivered. Actor id: " << SelfId());
-        Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
-    }
-};
-
-TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler) {
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::Register(new TDbRequest(dbPool, promise, handler));
-    return promise.GetFuture();
-}
-
 std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TDbRequester::Read(
     const TString& query,
     const NYdb::TParams& params,
@@ -505,7 +462,7 @@ TAsyncStatus TDbRequester::Write(
                     return future;
                 }
                 return writeHandler(session);
-            } catch (const TControlPlaneStorageException& exception) {
+            } catch (const TCodeLineException& exception) {
                 CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
             } catch (const std::exception& exception) {
@@ -612,7 +569,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     }
                     return status;
                 });
-            } catch (const TControlPlaneStorageException& exception) {
+            } catch (const TCodeLineException& exception) {
                 CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
             } catch (const std::exception& exception) {
@@ -642,7 +599,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     return future;
                 }
                 return readModifyWriteHandler(session);
-            } catch (const TControlPlaneStorageException& exception) {
+            } catch (const TCodeLineException& exception) {
                 CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
             } catch (const std::exception& exception) {

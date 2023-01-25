@@ -25,7 +25,7 @@ TValidationQuery CreateEntityExtractor(const TString& scope,
     auto validator = [response, entityColumnName](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
         }
 
         NYdb::TResultSetParser parser(resultSets.back());
@@ -34,7 +34,7 @@ TValidationQuery CreateEntityExtractor(const TString& scope,
         }
 
         if (!response->second.Before.ConstructInPlace().ParseFromString(*parser.ColumnParser(entityColumnName).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message. Please contact internal support";
         }
         return false;
     };

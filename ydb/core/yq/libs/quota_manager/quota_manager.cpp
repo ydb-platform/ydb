@@ -4,11 +4,15 @@
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/core/yq/libs/control_plane_storage/schema.h>
 #include <ydb/core/yq/libs/control_plane_storage/util.h>
 #include <ydb/core/yq/libs/shared_resources/db_exec.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
+#include <ydb/core/yq/libs/ydb/ydb.h>
+
 
 #include <ydb/core/protos/services.pb.h>
 
@@ -180,12 +184,12 @@ public:
     void Bootstrap() {
         if (Monitoring) {
             Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
-                "quotas", "Quota Manager", false, TActivationContext::ActorSystem(), SelfId());
+                "quotas", "Quota Manager", false, NActors::TActivationContext::ActorSystem(), SelfId());
         }
 
         YdbConnection = NewYdbConnection(StorageConfig, CredProviderFactory, YqSharedResources->CoreYdbDriver);
         DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
-        Send(GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
+        Send(NActors::GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
         Become(&TQuotaManagementService::StateFunc);
         LOG_I("STARTED");
     }
@@ -203,7 +207,7 @@ private:
         hFunc(NActors::TEvInterconnect::TEvNodesInfo, Handle)
         hFunc(TEvQuotaService::TEvQuotaUpdateNotification, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
-        hFunc(NMon::TEvHttpInfo, Handle)
+        hFunc(NActors::NMon::TEvHttpInfo, Handle)
     );
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
@@ -223,7 +227,7 @@ private:
         if (oldPeerCount != NodeIds.size()) {
             LOG_D("IC Peers[" << NodeIds.size() << "]: " << ToString(NodeIds));
         }
-        TActivationContext::Schedule(TDuration::Seconds(NodeIds.empty() ? 1 : 5), new IEventHandle(GetNameserviceActorId(), SelfId(), new NActors::TEvInterconnect::TEvListNodes()));
+        NActors::TActivationContext::Schedule(TDuration::Seconds(NodeIds.empty() ? 1 : 5), new IEventHandle(NActors::GetNameserviceActorId(), SelfId(), new NActors::TEvInterconnect::TEvListNodes()));
     }
 
     void Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev) {
@@ -712,7 +716,7 @@ private:
         }
         html << "</tbody></table>";
 
-        Send(HttpMonId, new NMon::TEvHttpInfoRes(html.Str()));
+        Send(HttpMonId, new NActors::NMon::TEvHttpInfoRes(html.Str()));
         HttpMonId = NActors::TActorId();
     }
 
@@ -754,11 +758,11 @@ private:
         }
         html << "</tbody></table>";
 
-        Send(HttpMonId, new NMon::TEvHttpInfoRes(html.Str()));
+        Send(HttpMonId, new NActors::NMon::TEvHttpInfoRes(html.Str()));
         HttpMonId = NActors::TActorId();
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+    void Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
 
         const auto& params = ev->Get()->Request.GetParams();
 
@@ -824,7 +828,7 @@ private:
         }
         html << "</tbody></table>";
 
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
+        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(html.Str()));
     }
 
     NConfig::TQuotasManagerConfig Config;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "exceptions.h"
 #include "schema.h"
 
 #include <functional>
@@ -16,6 +15,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
+#include <ydb/core/yq/libs/exceptions/exceptions.h>
 
 namespace NYq {
 
@@ -128,7 +128,7 @@ TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
     auto validator = [response](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
         }
 
         NYdb::TResultSetParser parser(resultSets.back());
@@ -137,7 +137,7 @@ TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
         }
 
         if (!response->first.ParseFromString(*parser.ColumnParser(RESPONSE_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for response. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for response. Please contact internal support";
         }
 
         return true;
@@ -162,7 +162,7 @@ TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
     auto validator = [response](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
         }
 
         NYdb::TResultSetParser parser(resultSets.back());
@@ -171,7 +171,7 @@ TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
         }
 
         if (!response->first.ParseFromString(*parser.ColumnParser(RESPONSE_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for response. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for response. Please contact internal support";
         }
 
         response->second.IdempotencyResult = true;

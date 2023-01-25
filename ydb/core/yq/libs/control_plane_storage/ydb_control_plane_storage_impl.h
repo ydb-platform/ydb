@@ -3,7 +3,6 @@
 #include "config.h"
 #include "control_plane_storage.h"
 #include "control_plane_storage_counters.h"
-#include "exceptions.h"
 #include "extractors.h"
 #include "probes.h"
 #include "request_validators.h"
@@ -35,6 +34,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/exceptions/exceptions.h>
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 #include <ydb/core/yq/libs/ydb/ydb.h>
@@ -90,8 +90,6 @@ inline static bool HasViewAccess(TPermissions permissions, YandexQuery::Acl::Vis
 inline static bool HasManageAccess(TPermissions permissions, YandexQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
     return HasAccessImpl(permissions, entityVisibility, entityUser, user, TPermissions::MANAGE_PRIVATE, TPermissions::MANAGE_PUBLIC);
 }
-
-TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler);
 
 LWTRACE_USING(YQ_CONTROL_PLANE_STORAGE_PROVIDER);
 
@@ -722,7 +720,7 @@ private:
                     issues.AddIssues(status.GetIssues());
                     internalIssues.AddIssues(status.GetIssues());
                 }
-            } catch (const TControlPlaneStorageException& exception) {
+            } catch (const TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -798,7 +796,7 @@ private:
                 } else {
                     issues.AddIssues(status.GetIssues());
                 }
-            } catch (const TControlPlaneStorageException& exception) {
+            } catch (const TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());

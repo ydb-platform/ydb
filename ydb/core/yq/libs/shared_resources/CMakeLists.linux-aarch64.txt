@@ -19,8 +19,12 @@ target_link_libraries(yq-libs-shared_resources PUBLIC
   cpp-actors-core
   cpp-monlib-dynamic_counters
   ydb-core-protos
+  yq-libs-common
+  yq-libs-config
   libs-control_plane_storage-proto
+  yq-libs-db_schema
   yq-libs-events
+  yq-libs-exceptions
   libs-quota_manager-events
   libs-shared_resources-interface
   ydb-library-logger

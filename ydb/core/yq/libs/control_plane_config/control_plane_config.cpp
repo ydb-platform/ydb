@@ -252,7 +252,7 @@ TActorId ControlPlaneConfigActorId() {
     return NActors::TActorId(0, name);
 }
 
-IActor* CreateControlPlaneConfigActor(const ::NYq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) {
+NActors::IActor* CreateControlPlaneConfigActor(const ::NYq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new TControlPlaneConfigActor(yqSharedResources, credProviderFactory, config, counters);
 }
 

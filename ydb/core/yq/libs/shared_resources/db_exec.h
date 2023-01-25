@@ -2,10 +2,16 @@
 
 #include "db_pool.h"
 
-#include <ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
+#include <ydb/core/yq/libs/common/debug_info.h>
+#include <ydb/core/yq/libs/config/yq_issue.h>
+#include <ydb/core/yq/libs/exceptions/exceptions.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
 namespace NYq {
+
+using namespace NThreading;
+using namespace NYdb;
+using namespace NYdb::NTable;
 
 class TDbExecutable {
 public:
@@ -192,7 +198,7 @@ public:
                 if (this->Steps[CurrentStepIndex].ResultCallback) {
                     try {
                         this->Steps[CurrentStepIndex].ResultCallback(*this, result.GetResultSets());
-                    } catch (const TControlPlaneStorageException& exception) {
+                    } catch (const TCodeLineException& exception) {
                         NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                         Issues.AddIssue(issue);
                         NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -248,7 +254,7 @@ public:
         , TCallback handlerCallback
     ) {
         Y_VERIFY(HandlerActorId == NActors::TActorId{}, "Handler must be empty");
-        ActorSystem = TActivationContext::ActorSystem();
+        ActorSystem = NActors::TActivationContext::ActorSystem();
         HandlerActorId = actorId;
         HandlerCallback = handlerCallback;
     }

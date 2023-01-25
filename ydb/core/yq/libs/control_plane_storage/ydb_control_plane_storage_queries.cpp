@@ -181,14 +181,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) mutable {
         const size_t countSets = (idempotencyKey ? 1 : 0) + (request.execute_mode() != YandexQuery::SAVE ? 2 : 0);
         if (resultSets.size() != countSets) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         if (idempotencyKey) {
             TResultSetParser parser(resultSets.front());
             if (parser.TryNextRow()) {
                 if (!response->first.ParseFromString(*parser.ColumnParser(RESPONSE_COLUMN_NAME).GetOptionalString())) {
-                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for idempotency key request. Please contact internal support";
+                    ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for idempotency key request. Please contact internal support";
                 }
                 response->second.IdempotencyResult = true;
                 return make_pair(TString{}, TParamsBuilder{}.Build());
@@ -247,18 +247,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
                     *queryInternal.add_binding() = binding;
                     if (!connectionIds.contains(binding.content().connection_id())) {
-                        ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
+                        ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
                     }
                 }
             }
         }
 
         if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
         if (queryInternal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
@@ -461,7 +461,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         YandexQuery::ListQueriesResult result;
@@ -469,7 +469,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         while (parser.TryNextRow()) {
             YandexQuery::Query query;
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
             YandexQuery::BriefQuery briefQuery;
             const auto lastJobId = query.meta().last_job_id();
@@ -551,17 +551,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::DescribeQueryResult result;
         if (!result.mutable_query()->ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
 
         const auto lastJobId = result.query().meta().last_job_id();
@@ -571,12 +571,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         const auto queryUser = result.query().meta().common().created_by();
         const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
         if (!hasViewAccess) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::Internal::QueryInternal internal;
         if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
 
         // decompress plan
@@ -607,7 +607,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         }
 
         if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Resulting query of size " << result.query().ByteSizeLong() << " bytes is too big";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Resulting query of size " << result.query().ByteSizeLong() << " bytes is too big";
         }
         return result;
     };
@@ -675,12 +675,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::GetQueryStatusResult result;
@@ -691,7 +691,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
         const auto queryUser = *parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString();
         const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
         if (!hasViewAccess) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         return result;
@@ -798,23 +798,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         const size_t countSets = 1 + (request.execute_mode() != YandexQuery::SAVE ? 2 : 0);
 
         if (resultSets.size() != countSets) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.back());
 
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::Query query;
         if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
 
         YandexQuery::Internal::QueryInternal internal;
         if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
 
         const TString resultId = request.execute_mode() == YandexQuery::SAVE ? parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString().GetOrElse("") : "";
@@ -823,15 +823,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         const auto queryUser = query.meta().common().created_by();
         const bool hasManageAccess = HasManageAccess(permissions, queryVisibility, queryUser, user);
         if (!hasManageAccess) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         if (query.content().type() != request.content().type()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query type cannot be changed. Please specify " << YandexQuery::QueryContent_QueryType_Name(query.content().type()) << " instead of " << YandexQuery::QueryContent_QueryType_Name(request.content().type());
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query type cannot be changed. Please specify " << YandexQuery::QueryContent_QueryType_Name(query.content().type()) << " instead of " << YandexQuery::QueryContent_QueryType_Name(request.content().type());
         }
 
         if (query.content().acl().visibility() == YandexQuery::Acl::SCOPE && request.content().acl().visibility() == YandexQuery::Acl::PRIVATE) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new query with visibility PRIVATE";
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new query with visibility PRIVATE";
         }
 
         auto oldVisibility = query.content().acl().visibility();
@@ -855,7 +855,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             }, query.meta().status());
 
         if (!isValidMode) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(query.meta().status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::STARTING) << " is not possible. Please wait for the query to complete or stop it";
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(query.meta().status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::STARTING) << " is not possible. Please wait for the query to complete or stop it";
         }
 
         if (!Config->Proto.GetDisableCurrentIam()) {
@@ -910,18 +910,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
                     *internal.add_binding() = binding;
                     if (!connectionIds.contains(binding.content().connection_id())) {
-                        ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
+                        ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Unable to resolve connection for binding " << binding.meta().id() << ", name " << binding.content().name() << ", connection id " << binding.content().connection_id();
                     }
                 }
             }
         }
 
         if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
         if (internal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         YandexQuery::Job job;
@@ -1271,7 +1271,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 
     auto prepareParams = [=, config=Config](const TVector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         auto now = TInstant::Now();
@@ -1281,15 +1281,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
 
             if (!queryInternal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
             }
             tenantName = *parser.ColumnParser(TENANT_COLUMN_NAME).GetOptionalString();
         }
@@ -1299,18 +1299,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         {
             TResultSetParser parser(resultSets[1]);
             if (!parser.TryNextRow()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id query or your access rights";
+                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id query or your access rights";
             }
 
             if (!job.ParseFromString(parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString().GetOrElse(""))) {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
             }
 
             jobId = job.meta().id();
 
             const bool hasManageAccess = HasManageAccess(permissions, query.content().acl().visibility(), query.meta().common().created_by(), user);
             if (!hasManageAccess) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
         }
 
@@ -1339,7 +1339,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
                 metaQuery.set_status(YandexQuery::QueryMeta::ABORTING_BY_USER);
                 metaQuery.set_aborted_by(user);
             } else {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::ABORTING_BY_USER) << " is not possible. Please wait for the previous operation to be completed";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::ABORTING_BY_USER) << " is not possible. Please wait for the previous operation to be completed";
             }
         }
 
@@ -1353,7 +1353,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
                 metaQuery.set_status(YandexQuery::QueryMeta::PAUSING);
                 metaQuery.set_paused_by(user);
             } else {
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::PAUSING) << " is not possible. Please wait for the previous operation to be completed";
+                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::PAUSING) << " is not possible. Please wait for the previous operation to be completed";
             }
         }
 
@@ -1362,7 +1362,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
             if (isValidStatusForResume) {
                 metaQuery.set_status(YandexQuery::QueryMeta::RESUMING);
             } else {
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::RESUMING) << " is not possible. Please wait for the previous operation to be completed";
+                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << YandexQuery::QueryMeta::ComputeStatus_Name(metaQuery.status()) << " to " << YandexQuery::QueryMeta::ComputeStatus_Name(YandexQuery::QueryMeta::RESUMING) << " is not possible. Please wait for the previous operation to be completed";
             }
         }
 
@@ -1508,7 +1508,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions] {
         if (resultSets->size() != 2) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         YandexQuery::GetResultDataResult result;
@@ -1517,12 +1517,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
             const auto& resultSet = (*resultSets)[0];
             TResultSetParser parser(resultSet);
             if (!parser.TryNextRow()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             YandexQuery::Query query;
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
 
             YandexQuery::Acl::Visibility queryVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
@@ -1530,24 +1530,24 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
 
             bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
             if (!hasViewAccess) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+                ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             if (resultSetIndex >= query.result_set_meta_size()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result set index out of bound: " << resultSetIndex << " >= " << query.result_set_meta_size();
+                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result set index out of bound: " << resultSetIndex << " >= " << query.result_set_meta_size();
             }
 
             if (YandexQuery::QueryMeta::ComputeStatus(*parser.ColumnParser(STATUS_COLUMN_NAME).GetOptionalInt64()) != YandexQuery::QueryMeta::COMPLETED) {
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
+                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
             }
 
             auto resultSetsExpireAtParser = parser.ColumnParser(RESULT_SETS_EXPIRE_AT_COLUMN_NAME).GetOptionalTimestamp();
             if (!resultSetsExpireAtParser) {
-                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
+                ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Result doesn't exist";
             }
 
             if (*resultSetsExpireAtParser < TInstant::Now()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::EXPIRED) << "Result removed by TTL";
+                ythrow TCodeLineException(TIssuesIds::EXPIRED) << "Result removed by TTL";
             }
 
             resultSetProto.mutable_columns()->CopyFrom(query.result_set_meta(resultSetIndex).column());
@@ -1558,7 +1558,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
             TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {
                 if (!resultSetProto.add_rows()->ParseFromString(*parser.ColumnParser(RESULT_SET_COLUMN_NAME).GetOptionalString())) {
-                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for row. Please contact internal support";
+                    ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for row. Please contact internal support";
                 }
             }
         }
@@ -1666,7 +1666,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         YandexQuery::ListJobsResult result;
@@ -1674,7 +1674,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         while (parser.TryNextRow()) {
             YandexQuery::Job job;
             if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
-                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
             }
             const TString mergedId = job.meta().id() + "-" + job.query_meta().common().id();
             job.mutable_meta()->set_id(mergedId);
@@ -1767,23 +1767,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
 
     auto prepare = [=, id=request.job_id(), resultSets=resultSets] {
         if (resultSets->size() != 1) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         YandexQuery::DescribeJobResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         if (!result.mutable_job()->ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
         }
         auto visibility = static_cast<YandexQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64());
         result.mutable_job()->mutable_meta()->set_id(id);
 
         bool hasViewAccces = HasViewAccess(permissions, visibility, result.job().meta().created_by(), user);
         if (!hasViewAccces) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         return result;
     };

@@ -333,4 +333,33 @@ NYdb::TDriver& TDbPoolHolder::GetDriver() {
     return Driver;
 }
 
+TDbRequest::TDbRequest(const TDbPool::TPtr& dbPool, const NThreading::TPromise<NYdb::TStatus>& promise, const TFunction& handler)
+    : DbPool(dbPool)
+    , Promise(promise)
+    , Handler(handler)
+{}
+
+void TDbRequest::Bootstrap() {
+    LOG_T("DbRequest actor request. Actor id: " << SelfId());
+    Become(&TDbRequest::StateFunc);
+    Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
+}
+
+void TDbRequest::Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
+    LOG_T("DbRequest actor response. Actor id: " << SelfId());
+    Promise.SetValue(ev->Get()->Status);
+    PassAway();
+}
+
+void TDbRequest::OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
+    LOG_E("On delivered. Actor id: " << SelfId());
+    Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
+}
+
+NYdb::TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler) {
+    NThreading::TPromise<NYdb::TStatus> promise = NThreading::NewPromise<NYdb::TStatus>();
+    TActivationContext::Register(new TDbRequest(dbPool, promise, handler));
+    return promise.GetFuture();
+}
+
 } /* namespace NYq */

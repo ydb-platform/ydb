@@ -284,6 +284,8 @@ struct TEvChannelPopFinished
 };
 
 struct TWatermarkRequest {
+    TWatermarkRequest() = default;
+
     TWatermarkRequest(TVector<ui32>&& channelIds, TInstant watermark)
         : ChannelIds(std::move(channelIds))
         , Watermark(watermark) {

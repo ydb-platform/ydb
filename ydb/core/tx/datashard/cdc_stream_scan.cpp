@@ -311,7 +311,7 @@ public:
                 << ": streamPathId# " << Request->Get()->StreamPathId);
 
             // re-schedule tx
-            Self->Execute(new TDataShard::TTxCdcStreamScanProgress(Self, Request), ctx);
+            ctx.Schedule(TDuration::Seconds(1), Request->Release().Release());
         }
     }
 

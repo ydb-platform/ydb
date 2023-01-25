@@ -543,7 +543,9 @@ public:
 
         state->FillEvRead(*ev, KeyColumnTypes);
         for (const auto& column : Settings.GetColumns()) {
-            record.AddColumns(column.GetId());
+            if (!IsSystemColumn(column.GetId())) {
+                record.AddColumns(column.GetId());
+            }
         }
 
         if (record.HasSnapshot()) {

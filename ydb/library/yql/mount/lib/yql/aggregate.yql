@@ -44,10 +44,10 @@
 # list_type:type init:lambda
 # doesn't support optional values
 (let count_traits_factory (lambda '(list_type init) (block '(
-  (let update (lambda '(value state) (+ state (Apply init value))))
+  (let update (lambda '(value state) (AggrAdd state (Apply init value))))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) (+ state1 state2)))
+  (let merge (lambda '(state1 state2) (AggrAdd state1 state2)))
   (let finish (lambda '(state) state))
   (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0)))
 ))))
@@ -59,7 +59,7 @@
   (let update (lambda '(value state) (AggrCountUpdate value state)))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) (+ state1 state2)))
+  (let merge (lambda '(state1 state2) (AggrAdd state1 state2)))
   (let finish (lambda '(state) state))
   (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0)))
 ))))
@@ -79,14 +79,14 @@
                                           'Interval (lambda '() (Apply convert_interval_to_decimal value ))
                                           (lambda '() (Convert value 'Double))
                                ) (Uint64 '1))))
-  (let update (lambda '(value state) '((+ (Nth state '0) (MatchType (TypeOf value) 
+  (let update (lambda '(value state) '((AggrAdd (Nth state '0) (MatchType (TypeOf value) 
                                                                     'Decimal (lambda '() (WidenIntegral value))
                                                                     'Interval (lambda '() (Apply convert_interval_to_decimal value ))
                                                                     (lambda '() (Convert value 'Double)))
                                           ) (Inc (Nth state '1)))))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) '((+ (Nth state1 '0) (Nth state2 '0)) (+ (Nth state1 '1) (Nth state2 '1)))))
+  (let merge (lambda '(state1 state2) '((AggrAdd (Nth state1 '0) (Nth state2 '0)) (AggrAdd (Nth state1 '1) (Nth state2 '1)))))
   (let finish (lambda '(state)
                 (MatchType (ListItemType list_type)
                            'Decimal
@@ -147,21 +147,21 @@
         (Double '0))))
     (let update (lambda '(value state) (block '(
         (let delta (- (Convert value 'Double) (Nth state '0)))
-        (let next_n (+ (Nth state '1) (Double '1)))
+        (let next_n (AggrAdd (Nth state '1) (Double '1)))
         (return '(
-            (+ (Nth state '0) (/ delta next_n))
+            (AggrAdd (Nth state '0) (/ delta next_n))
             next_n
-            (+ (Nth state '2) (/ (* (* delta delta) (Nth state '1)) next_n))
+            (AggrAdd (Nth state '2) (/ (* (* delta delta) (Nth state '1)) next_n))
         ))))))
     (let save (lambda '(state) state))
     (let load (lambda '(state) state))
     (let merge (lambda '(one two) (block '(
         (let delta (- (Nth one '0) (Nth two '0)))
-        (let sum_n (+ (Nth one '1) (Nth two '1)))
+        (let sum_n (AggrAdd (Nth one '1) (Nth two '1)))
         (return '(
-            (/ (+ (* (Nth one '0) (Nth one '1)) (* (Nth two '0) (Nth two '1))) sum_n)
+            (/ (AggrAdd (* (Nth one '0) (Nth one '1)) (* (Nth two '0) (Nth two '1))) sum_n)
             sum_n
-            (+ (+ (Nth one '2) (Nth two '2)) (/ (* (* (* delta delta) (Nth one '1)) (Nth two '1)) sum_n))
+            (AggrAdd (AggrAdd (Nth one '2) (Nth two '2)) (/ (* (* (* delta delta) (Nth one '1)) (Nth two '1)) sum_n))
         )
     )))))
     (let finish (lambda '(state) (block '(
@@ -182,10 +182,10 @@
 # doesn't support optional values
 (let correlation_traits_factory_raw (lambda '(list_type) (block '(
     (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
-    (let update (lambda '(value state) '((+ (Nth state '0) (Uint64 '1)) (+ (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (+ (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (+ (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))) (+ (Nth state '4) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)))) (+ (Nth state '5) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
+    (let update (lambda '(value state) '((AggrAdd (Nth state '0) (Uint64 '1)) (AggrAdd (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (AggrAdd (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (AggrAdd (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))) (AggrAdd (Nth state '4) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)))) (AggrAdd (Nth state '5) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
     (let save (lambda '(state) state))
     (let load (lambda '(state) state))
-    (let merge (lambda '(one two) '((+ (Nth one '0) (Nth two '0)) (+ (Nth one '1) (Nth two '1)) (+ (Nth one '2) (Nth two '2)) (+ (Nth one '3) (Nth two '3)) (+ (Nth one '4) (Nth two '4)) (+ (Nth one '5) (Nth two '5)))))
+    (let merge (lambda '(one two) '((AggrAdd (Nth one '0) (Nth two '0)) (AggrAdd (Nth one '1) (Nth two '1)) (AggrAdd (Nth one '2) (Nth two '2)) (AggrAdd (Nth one '3) (Nth two '3)) (AggrAdd (Nth one '4) (Nth two '4)) (AggrAdd (Nth one '5) (Nth two '5)))))
     (let finish (lambda '(state) (block '(
         # Math comes from ISO9075-2:2011(E) and differs from what Excel uses
         (let dividend (* (Nth state '3) (Nth state '0)))
@@ -203,10 +203,10 @@
 # doesn't support optional values
 (let covariance_traits_factory_raw (lambda '(list_type sample) (block '(
     (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
-    (let update (lambda '(value state) '((+ (Nth state '0) (Uint64 '1)) (+ (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (+ (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (+ (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
+    (let update (lambda '(value state) '((AggrAdd (Nth state '0) (Uint64 '1)) (AggrAdd (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (AggrAdd (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (AggrAdd (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
     (let save (lambda '(state) state))
     (let load (lambda '(state) state))
-    (let merge (lambda '(one two) '((+ (Nth one '0) (Nth two '0)) (+ (Nth one '1) (Nth two '1)) (+ (Nth one '2) (Nth two '2)) (+ (Nth one '3) (Nth two '3)))))
+    (let merge (lambda '(one two) '((AggrAdd (Nth one '0) (Nth two '0)) (AggrAdd (Nth one '1) (Nth two '1)) (AggrAdd (Nth one '2) (Nth two '2)) (AggrAdd (Nth one '3) (Nth two '3)))))
     (let finish (lambda '(state) (block '(
         (let covariance_result (- (Nth state '3) (/ (* (Nth state '1) (Nth state '2)) (Nth state '0))))
         (let covariance_result (/ covariance_result (If sample (- (Nth state '0) (Uint64 '1)) (Nth state '0))))

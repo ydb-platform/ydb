@@ -41,10 +41,8 @@ private:
     }
 
     void ResetFields() {
-        const auto ptr = Free.back();
-        auto i = 0U;
-        std::generate(Fields.begin(), Fields.end(), [&]() { return &static_cast<NUdf::TUnboxedValue&>(ptr[Indexes[i++]]); });
-        Tongue = ptr;
+        auto ptr = Tongue = Free.back();
+        std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, const TCompareFunc& compare, const std::vector<ui32>& indexes)

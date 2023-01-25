@@ -535,10 +535,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideTopTest) {
             [&](TRuntimeNode item) -> TRuntimeNode::TList {
                 const auto utf = pb.ToString<true>(pb.Nth(item, 1U));
                 const auto day = pb.StrictFromString(pb.Substring(utf, pb.NewDataLiteral<ui32>(8U), pb.NewDataLiteral<ui32>(2U)), pb.NewDataType(NUdf::EDataSlot::Uint8));
-                return {utf, pb.Nth(item, 0U), day, pb.Nth(item, 1U)};
+                return {pb.Nth(item, 0U), utf, day, pb.Nth(item, 1U)};
             }),
-            pb.NewDataLiteral<ui64>(7ULL), {{2U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}}),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); }
+            pb.NewDataLiteral<ui64>(7ULL), {{2U, pb.NewDataLiteral<bool>(true)}, {0U, pb.NewDataLiteral<bool>(false)}}),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return items[1]; }
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);

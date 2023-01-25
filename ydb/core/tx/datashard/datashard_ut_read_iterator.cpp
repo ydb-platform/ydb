@@ -2509,6 +2509,61 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         helper.CheckLockBroken("table-1", 10, {11, 11, 11}, lockTxId, *readResult1);
     }
 
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips2) {
+        // Almost the same as ShouldReturnBrokenLockWhenReadRangeInvisibleRowSkips:
+        // 1. tx1: read some **non-existing** range1
+        // 2. tx2: upsert into range2 > range1 range and commit.
+        // 3. tx1: read range2 -> lock should be broken
+
+        TTestHelper helper;
+
+        auto readVersion = CreateVolatileSnapshot(
+            helper.Server,
+            {"/Root/movies", "/Root/table-1"},
+            TDuration::Hours(1));
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        request1->Record.SetLockTxId(lockTxId);
+        AddRangeQuery<ui32>(
+            *request1,
+            {100, 0, 0},
+            true,
+            {200, 0, 0},
+            true
+        );
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {});
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+
+        // write new data above snapshot
+        ExecSQL(helper.Server, helper.Sender, R"(
+            SELECT * FROM `/Root/table-1` WHERE key1 == 300;
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (300, 0, 0, 3000);
+        )");
+
+        auto request2 = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, readVersion);
+        request2->Record.SetLockTxId(lockTxId);
+        AddRangeQuery<ui32>(
+            *request2,
+            {300, 0, 0},
+            true,
+            {300, 0, 0},
+            true
+        );
+
+        auto readResult2 = helper.SendRead("table-1", request2.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.TxLocksSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1);
+        helper.CheckLockBroken("table-1", 10, {300, 0, 0}, lockTxId, *readResult2);
+    }
+
     Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeLeftBorder) {
         TTestHelper helper;
 

@@ -659,8 +659,8 @@ private:
         }
 
         // last iteration to Page or Gone also might have deleted or invisible rows
-        RowsSinceLastCheck += ResetRowStats(iter->Stats);
         InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
+        RowsSinceLastCheck += ResetRowStats(iter->Stats);
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)

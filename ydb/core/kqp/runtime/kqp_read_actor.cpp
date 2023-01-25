@@ -596,7 +596,6 @@ public:
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         auto id = record.GetReadId();
-        Y_VERIFY(id < ReadId);
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
@@ -618,8 +617,6 @@ public:
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         Reads[id].RegisterMessage(*ev->Get());
-
-        YQL_ENSURE(record.GetResultFormat() == NKikimrTxDataShard::EScanDataFormat::CELLVEC);
 
         RecievedRowCount += ev->Get()->GetRowsCount();
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
@@ -670,6 +667,9 @@ public:
     {
         NMiniKQL::TBytesStatistics stats;
         bool hasResultColumns = false;
+        if (result->Get()->GetRowsCount() == 0) {
+            return {};
+        }
         if (Settings.ColumnsSize() == 0) {
             batch.resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
         } else {

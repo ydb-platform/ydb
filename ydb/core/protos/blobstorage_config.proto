@@ -596,6 +596,7 @@ message TBaseConfig {
         uint64 DriveStatusChangeTimestamp = 15; // TInstant::GetValue()
         EDecommitStatus DecommitStatus = 16;
         string ExpectedSerial = 17;
+        string LastSeenSerial = 18;
     }
     message TVSlot {
         message TDonorDisk {

@@ -19,6 +19,7 @@ def do(args):
         'NodeId',
         'PDiskId',
         'ExpectedSerial',
+        'LastSeenSerial',
         'FQDN',
         'Path',
         'Type',
@@ -72,6 +73,7 @@ def do(args):
     for pdisk in base_config.PDisk:
         row = {}
         row['ExpectedSerial'] = pdisk.ExpectedSerial
+        row['LastSeenSerial'] = pdisk.LastSeenSerial
         row['NodeId:PDiskId'] = '[%u:%u]' % (pdisk.NodeId, pdisk.PDiskId)
         row['NodeId'] = pdisk.NodeId
         row['PDiskId'] = pdisk.PDiskId

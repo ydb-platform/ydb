@@ -153,13 +153,27 @@ private:
 private:
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
         for (const auto& stage : phyTx.GetStages()) {
-            for (const auto& tableOp : stage.GetTableOps()) {
-                TTableId tableId(tableOp.GetTable().GetOwnerId(), tableOp.GetTable().GetTableId());
+            auto addTable = [&](const NKqpProto::TKqpPhyTableId& table) {
+                TTableId tableId(table.GetOwnerId(), table.GetTableId());
                 auto it = TableVersions.find(tableId);
                 if (it != TableVersions.end()) {
-                    Y_ENSURE(it->second == tableOp.GetTable().GetVersion());
+                    Y_ENSURE(it->second == table.GetVersion());
                 } else {
-                    TableVersions.emplace(tableId, tableOp.GetTable().GetVersion());
+                    TableVersions.emplace(tableId, table.GetVersion());
+                }
+            };
+            for (const auto& tableOp : stage.GetTableOps()) {
+                addTable(tableOp.GetTable());
+            }
+            for (const auto& input : stage.GetInputs()) {
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                    addTable(input.GetStreamLookup().GetTable());
+                }
+            }
+
+            for (const auto& source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    addTable(source.GetReadRangesSource().GetTable());
                 }
             }
         }

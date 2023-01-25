@@ -18,24 +18,6 @@ namespace CH
 struct AggregateFunctionCountData
 {
     UInt64 count = 0;
-    bool has_value = false;
-
-    bool has() const
-    {
-        return has_value;
-    }
-
-    void inc()
-    {
-        has_value = true;
-        ++count;
-    }
-
-    void add(UInt64 value)
-    {
-        has_value = true;
-        count += value;
-    }
 };
 
 
@@ -56,7 +38,7 @@ public:
 
     void add(AggregateDataPtr __restrict place, const IColumn **, size_t, Arena *) const override
     {
-        data(place).inc();
+        ++data(place).count;
     }
 
     void addBatchSinglePlace(
@@ -71,25 +53,22 @@ public:
         {
             auto * condition_map = flags + column.offset();
             auto length = row_end - row_begin;
-            data(place).add(arrow::internal::CountSetBits(condition_map, row_begin, length));
+            data(place).count += arrow::internal::CountSetBits(condition_map, row_begin, length);
         }
         else
         {
-            data(place).add(row_end - row_begin);
+            data(place).count += row_end - row_begin;
         }
     }
 
     void merge(AggregateDataPtr __restrict place, ConstAggregateDataPtr rhs, Arena *) const override
     {
-        data(place).add(data(rhs).count);
+        data(place).count += data(rhs).count;
     }
 
     void insertResultInto(AggregateDataPtr __restrict place, MutableColumn & to, Arena *) const override
     {
-        if (data(place).has())
-            assert_cast<MutableColumnUInt64 &>(to).Append(data(place).count).ok();
-        else
-            assert_cast<MutableColumnUInt64 &>(to).AppendNull().ok();
+        assert_cast<MutableColumnUInt64 &>(to).Append(data(place).count).ok();
     }
 };
 

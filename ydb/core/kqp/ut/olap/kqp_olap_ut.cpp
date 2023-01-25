@@ -1957,8 +1957,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Count_NullGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -1979,8 +1977,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Count_NullMixGroupBy) {
-        // Wait for KIKIMR-16831 fix
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT
@@ -2001,7 +1997,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Count_GroupByNull) {
-        // Wait for KIKIMR-16831 fix
+        // Wait for KIKIMR-16940 fix
         return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
@@ -2023,7 +2019,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_Count_GroupByNullMix) {
-        // Wait for KIKIMR-16831 fix
+        // Wait for KIKIMR-16940 fix
         return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(

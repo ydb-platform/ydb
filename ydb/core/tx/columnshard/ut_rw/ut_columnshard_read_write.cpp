@@ -478,6 +478,75 @@ void TestWriteReadDup() {
     }
 }
 
+void TestWriteReadLongTxDup() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    //
+
+    ui64 tableId = 1;
+    auto ydbSchema = TTestSchema::YdbSchema();
+    SetupSchema(runtime, sender, tableId, ydbSchema);
+
+    constexpr ui32 numRows = 10;
+    std::pair<ui64, ui64> portion = {10, 10 + numRows};
+
+    NLongTxService::TLongTxId longTxId;
+    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+
+    ui64 txId = 0;
+    ui64 planStep = 100;
+    std::optional<ui64> writeId;
+
+    // Only the first blob with dedup pair {longTx, dedupId} should be inserted
+    // Others should return OK (write retries emulation)
+    for (ui32 i = 0; i < 4; ++i) {
+        auto data = MakeTestBlob({portion.first + i, portion.second + i}, ydbSchema);
+        UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+
+        auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, "0", data);
+        UNIT_ASSERT(writeIdOpt);
+        if (!i) {
+            writeId = *writeIdOpt;
+        }
+        UNIT_ASSERT_EQUAL(*writeIdOpt, *writeId);
+    }
+
+    ProposeCommit(runtime, sender, ++txId, {*writeId});
+    TSet<ui64> txIds = {txId};
+    PlanCommit(runtime, sender, planStep, txIds);
+
+    // read
+    TAutoPtr<IEventHandle> handle;
+    {
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+                    new TEvColumnShard::TEvRead(sender, 0, planStep, txId, tableId));
+        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event);
+
+        auto& resRead = Proto(event);
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), 0);
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+        UNIT_ASSERT(resRead.GetData().size() > 0);
+
+        auto data = resRead.GetData();
+        auto meta = resRead.GetMeta();
+        UNIT_ASSERT(CheckColumns(data, meta, TTestSchema::ExtractNames(ydbSchema), numRows));
+        UNIT_ASSERT(DataHas(TVector<TString>{data}, meta.GetSchema(), portion, true));
+        UNIT_ASSERT(DataHasOnly(TVector<TString>{data}, meta.GetSchema(), portion));
+    }
+}
+
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1597,6 +1666,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
+        TestWriteReadLongTxDup();
     }
 
     Y_UNIT_TEST(WriteRead) {

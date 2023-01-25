@@ -97,6 +97,8 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
             Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
         } else {
+            LOG_S_DEBUG("TTxWrite duplicate writeId " << writeId << " at tablet " << Self->TabletID());
+
             // Return EResultStatus::SUCCESS for dups
             Self->IncCounter(COUNTER_WRITE_DUPLICATE);
         }
@@ -193,6 +195,23 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
         ctx.Send(ev->Get()->GetSource(), result.release());
     } else {
+        if (record.HasLongTxId()) {
+            // TODO: multiple blobs in one longTx ({longTxId, dedupId} -> writeId)
+            auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
+            if (ui64 writeId = (ui64)HasLongTxWrite(longTxId)) {
+                LOG_S_DEBUG("Write (duplicate) into pathId " << tableId
+                    << " longTx " << longTxId.ToString()
+                    << " at tablet " << TabletID());
+
+                IncCounter(COUNTER_WRITE_DUPLICATE);
+
+                auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+                    TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
+                ctx.Send(ev->Get()->GetSource(), result.release());
+                return;
+            }
+        }
+
         LOG_S_DEBUG("Write (blob) " << data.size() << " bytes into pathId " << tableId
             << (writeId? (" writeId " + ToString(writeId)).c_str() : "")
             << " at tablet " << TabletID());

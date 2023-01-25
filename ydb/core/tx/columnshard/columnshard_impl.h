@@ -423,6 +423,7 @@ private:
         return PrimaryIndex && PrimaryIndex->HasOverloadedGranules();
     }
 
+    TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId);
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
     void LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId);

@@ -105,7 +105,7 @@ private:
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
-    TInstant Deadline;
+    TInstant StartTime;
     TActorId TimeoutTimerActorId;
     bool WaitingResolveReply;
     bool Finished;
@@ -174,7 +174,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        Deadline = AppData(ctx)->TimeProvider->Now() + Timeout;
+        StartTime = TAppData::TimeProvider->Now();
         ResolveTable(GetTable(), ctx);
     }
 
@@ -189,6 +189,10 @@ public:
     }
 
 protected:
+    TInstant Deadline() const {
+        return StartTime + Timeout;
+    }
+
     const NSchemeCache::TSchemeCacheNavigate* GetResolveNameResult() const {
         return ResolveNamesResult.get();
     }
@@ -471,7 +475,9 @@ private:
 
     void HandleTimeout(const TActorContext& ctx) {
         ShardRepliesLeft.clear();
-        return ReplyWithError(Ydb::StatusIds::TIMEOUT, "Request timed out", ctx);
+        return ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "Bulk upsert to table " << GetTable()
+            << " longTx " << LongTxId.ToString()
+            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec", ctx);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -599,7 +605,7 @@ private:
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
-                    << " startint LongTx");
+                    << " starting LongTx");
 
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
@@ -716,7 +722,8 @@ private:
         Y_VERIFY(Batch);
 
         TBase::Become(&TThis::StateWaitWriteBatchResult);
-        TString dedupId = LongTxId.ToString(); // TODO: is this a proper dedup_id?
+        ui32 batchNo = 0;
+        TString dedupId = ToString(batchNo);
         NGRpcService::DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
             GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
@@ -907,7 +914,7 @@ private:
             if (!ev) {
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
-                ev->Record.SetCancelDeadlineMs(Deadline.MilliSeconds());
+                ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 for (const auto& fd : KeyColumnPositions) {

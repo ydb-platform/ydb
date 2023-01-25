@@ -247,6 +247,14 @@ bool TColumnShard::HaveOutdatedTxs() const {
     return it->MaxStep <= step;
 }
 
+TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId) {
+    auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
+    if (it != LongTxWritesByUniqueId.end()) {
+        return (TWriteId)it->second->WriteId;
+    }
+    return (TWriteId)0;
+}
+
 TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId) {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {

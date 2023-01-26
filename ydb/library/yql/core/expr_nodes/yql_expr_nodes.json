@@ -1577,6 +1577,39 @@
             "Match": {"Type": "Callable", "Name": "Descending"}
         },
         {
+            "Name": "TCoSortKey",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Direction", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoSortKeys",
+            "ListBase": "TCoSortKey"
+        },
+        {
+            "Name": "TCoWideTopBase",
+            "Base": "TCoInputBase",
+            "Builder": {"Generate": "None"},
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Count", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Keys", "Type": "TCoSortKeys"}
+            ]
+        },
+        {
+            "Name": "TCoWideTop",
+            "Base": "TCoWideTopBase",
+            "Match": {"Type": "Callable", "Name": "WideTop"}
+        },
+        {
+            "Name": "TCoWideTopSort",
+            "Base": "TCoWideTopBase",
+            "Match": {"Type": "Callable", "Name": "WideTopSort"}
+        },
+        {
             "Name": "TCoAddMember",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "AddMember"},

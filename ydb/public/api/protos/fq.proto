@@ -706,6 +706,7 @@ message BriefBinding {
     string connection_id = 2 [(Ydb.length).range = {min: 1, max: 1024}];
     CommonMeta meta = 3;
     BindingSetting.BindingType type = 4;
+    Acl.Visibility visibility = 5;
 }
 
 message BindingContent {

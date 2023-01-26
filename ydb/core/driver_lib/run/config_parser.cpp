@@ -75,7 +75,6 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
     opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
-    opts.AddLongOption("yq-file", "Yandex Query config file (deprecated)").OptionalArgument("PATH");
     opts.AddLongOption("fq-file", "Federated Query config file").OptionalArgument("PATH");
     opts.AddLongOption("pdisk-key-file", "pdisk encryption key config file").OptionalArgument("PATH");
     opts.AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
@@ -213,8 +212,6 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 
     if (res.Has("fq-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("fq-file"), Config.AppConfig.MutableFederatedQueryConfig()));
-    } else if (res.Has("yq-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("yq-file"), Config.AppConfig.MutableFederatedQueryConfig()));
     }
 
     if (res.Has("public-http-file")) {

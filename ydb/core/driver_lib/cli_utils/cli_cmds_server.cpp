@@ -203,7 +203,6 @@ protected:
         config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("yq-file", "Yandex Query config file (deprecated)").OptionalArgument("PATH");
         config.Opts->AddLongOption("fq-file", "Federated Query config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
         config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
@@ -448,7 +447,6 @@ protected:
         OPTION("kqp-file", KQPConfig);
         OPTION("incrhuge-file", IncrHugeConfig);
         OPTION("alloc-file", AllocatorConfig);
-        OPTION("yq-file", FederatedQueryConfig); // TODO: remove after migration (YQ-1467)
         OPTION("fq-file", FederatedQueryConfig);
         OPTION(nullptr, TracingConfig);
         OPTION(nullptr, FailureInjectionConfig);

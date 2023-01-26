@@ -1705,6 +1705,10 @@ namespace NActors {
         common->ClusterUUID = ClusterUUID;
         common->AcceptUUID = {ClusterUUID};
 
+        if (ICCommonSetupper) {
+            ICCommonSetupper(nodeIndex, common);
+        }
+
         for (ui32 proxyNodeIndex = 0; proxyNodeIndex < NodeCount; ++proxyNodeIndex) {
             if (proxyNodeIndex == nodeIndex)
                 continue;

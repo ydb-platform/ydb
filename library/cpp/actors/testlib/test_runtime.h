@@ -476,6 +476,10 @@ namespace NActors {
             UseRealInterconnect = true;
         }
 
+        void SetICCommonSetupper(std::function<void(ui32, TIntrusivePtr<TInterconnectProxyCommon>)>&& icCommonSetupper) {
+            ICCommonSetupper = std::move(icCommonSetupper);
+        }
+
     protected:
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {
@@ -522,6 +526,7 @@ namespace NActors {
         const ui32 NodeCount;
         const ui32 DataCenterCount;
         const bool UseRealThreads;
+        std::function<void(ui32, TIntrusivePtr<TInterconnectProxyCommon>)> ICCommonSetupper;
 
         ui64 LocalId;
         TMutex Mutex;

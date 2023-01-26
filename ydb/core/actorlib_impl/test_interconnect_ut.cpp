@@ -3,6 +3,7 @@
 #include <library/cpp/actors/interconnect/events_local.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/driver_lib/version/version.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
@@ -698,6 +699,88 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                 UNIT_ASSERT_EQUAL(event->GetPayload(event->Record.GetPayloadId(1)), rope2);
             }
         }
+    }
+
+    void TestConnectionWithDifferentVersions(
+            std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node0,
+            std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node1) {
+        TTestBasicRuntime runtime(2);
+        runtime.SetUseRealInterconnect();
+        runtime.SetICCommonSetupper([&](ui32 nodeNum, TIntrusivePtr<TInterconnectProxyCommon> common) {
+            common->CompatibilityInfo = TString();
+            NKikimrConfig::TCurrentCompatibilityInfo* current = nullptr;
+            if (nodeNum == 0) {
+                current = node0.get();
+            } else if (nodeNum == 1) {
+                current = node1.get();
+            }
+            Y_VERIFY(current);
+            Y_VERIFY(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect, current)
+                    .SerializeToString(&*common->CompatibilityInfo));
+
+            common->ValidateCompatibilityInfo = 
+                [=](const TString& peer, TString& errorReason) {
+                    NKikimrConfig::TStoredCompatibilityInfo peerPB;
+                    if (!peerPB.ParseFromString(peer)) {
+                        errorReason = "Cannot parse given CompatibilityInfo";
+                        return false;
+                    }
+
+                    return TCompatibilityInfo::CheckCompatibility(current, &peerPB, 
+                        (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                };
+        });
+        runtime.Initialize(TAppPrepare().Unwrap());
+        
+        const auto edge = runtime.AllocateEdgeActor(0);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+
+        TAutoPtr<IEventHandle> handle;
+        {
+            const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
+            UNIT_ASSERT_EQUAL(event->NodeId, runtime.GetNodeId(1));
+        }
+    }
+
+    Y_UNIT_TEST(OldNbs) {
+        std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node0 = 
+            std::make_shared<NKikimrConfig::TCurrentCompatibilityInfo>();
+        {
+            node0->SetBuild("nbs");
+            auto* version = node0->MutableYdbVersion();
+            version->SetYear(22);
+            version->SetMajor(4);
+            version->SetMinor(1);
+            version->SetHotfix(0);
+        }
+
+        std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node1 = 
+            std::make_shared<NKikimrConfig::TCurrentCompatibilityInfo>();
+        {
+            node1->SetBuild("ydb");
+            auto* version = node1->MutableYdbVersion();
+            version->SetYear(23);
+            version->SetMajor(1);
+            version->SetMinor(1);
+            version->SetHotfix(0);
+
+            {
+                auto* nbsRule = node1->AddCanLoadFrom();
+                nbsRule->SetBuild("nbs");
+                nbsRule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
+
+                auto* bottomLimit = nbsRule->MutableBottomLimit();
+                bottomLimit->SetYear(22);
+                bottomLimit->SetMajor(4);
+
+                nbsRule->MutableUpperLimit()->CopyFrom(*version);
+
+                node1->AddStoresReadableBy()->CopyFrom(*nbsRule);
+            }
+        }
+
+        TestConnectionWithDifferentVersions(node0, node1);
+        TestConnectionWithDifferentVersions(node1, node0);
     }
 }
 

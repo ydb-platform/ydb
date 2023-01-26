@@ -65,6 +65,10 @@ namespace NActors {
             common->ClusterUUID = ClusterUUID;
             common->AcceptUUID = {ClusterUUID};
 
+            if (ICCommonSetupper) {
+                ICCommonSetupper(num, common);
+            }
+
             if (UseRealInterconnect) {
                 auto listener = new TInterconnectListenerTCP(nameNode.first, nameNode.second, common);
                 AddLocalService({}, TActorSetupCmd(listener, TMailboxType::Simple, InterconnectPoolId()), num);

@@ -3,6 +3,7 @@
 #include "kqp_planner_strategy.h"
 #include "kqp_shards_resolver.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
@@ -369,6 +370,24 @@ void TKqpPlanner::AddSnapshotInfoToTaskInputs(NYql::NDqProto::TDqTask& task) {
             settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
 
             transform->MutableSettings()->PackFrom(settings);
+        }
+        if (input.HasSource() && input.GetSource().GetType() == NYql::KqpReadRangesSourceName) {
+            auto source = input.MutableSource();
+            const google::protobuf::Any& settingsAny = source->GetSettings();
+
+            YQL_ENSURE(settingsAny.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(), "Expected settings type: "
+                << NKikimrTxDataShard::TKqpReadRangesSourceSettings::descriptor()->full_name()
+                << " , but got: " << settingsAny.type_url());
+
+            NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
+            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
+
+            if (Snapshot.IsValid()) {
+                settings.MutableSnapshot()->SetStep(Snapshot.Step);
+                settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
+            }
+
+            source->MutableSettings()->PackFrom(settings);
         }
     }
 }

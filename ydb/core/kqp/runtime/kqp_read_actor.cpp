@@ -548,7 +548,7 @@ public:
             }
         }
 
-        if (record.HasSnapshot()) {
+        if (Settings.HasSnapshot()) {
             record.MutableSnapshot()->SetTxId(Settings.GetSnapshot().GetTxId());
             record.MutableSnapshot()->SetStep(Settings.GetSnapshot().GetStep());
         }
@@ -586,7 +586,9 @@ public:
 
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings.GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
-            << ", readId = " << id);
+            << ", readId = " << id
+            << " snapshot = (txid=" << Settings.GetSnapshot().GetTxId() << ",step=" << Settings.GetSnapshot().GetStep() << ")"
+            << " lockTxId = " << Settings.GetLockTxId());
 
         ReadIdByTabletId[state->TabletId].push_back(id);
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
@@ -602,7 +604,8 @@ public:
         }
 
         if (record.BrokenTxLocksSize()) {
-            return RuntimeError("Transaction locks invalidated.", NYql::NDqProto::StatusIds::ABORTED);
+            return RuntimeError("Broken locks", NYql::NDqProto::StatusIds::ABORTED,
+                {YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks on " + Settings.GetTable().GetTablePath()  + " invalidated.")});
         }
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
@@ -614,6 +617,7 @@ public:
         for (auto& lock : record.GetTxLocks()) {
             Locks.push_back(lock);
         }
+        CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         Reads[id].RegisterMessage(*ev->Get());

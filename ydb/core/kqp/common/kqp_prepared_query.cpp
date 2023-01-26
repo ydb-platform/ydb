@@ -103,6 +103,11 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     tablesSet.insert(input.GetStreamLookup().GetTable().GetPath());
                 }
             }
+            for (const auto& source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());
+                }
+            }
         }
     }
 

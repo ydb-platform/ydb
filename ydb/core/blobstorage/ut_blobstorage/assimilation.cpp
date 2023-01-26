@@ -4,7 +4,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
     Y_UNIT_TEST(Test) {
         TEnvironmentSetup env{{
             .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
         }};
         auto& runtime = env.Runtime;
 

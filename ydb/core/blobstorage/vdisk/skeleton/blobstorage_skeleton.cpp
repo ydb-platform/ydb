@@ -2154,7 +2154,7 @@ namespace NKikimr {
                                 }
                                 TABLER() {
                                     TABLED() {str << "VDiskIncarnationGuid";}
-                                    TABLED() {str << Db->GetVDiskIncarnationGuid();}
+                                    TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
                                 }
                             }
                         }

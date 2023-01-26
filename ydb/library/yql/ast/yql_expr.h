@@ -2501,6 +2501,13 @@ struct TExprContext : private TNonCopyable {
         return node;
     }
 
+    TExprNode::TPtr NewAtom(TPositionHandle pos, ui32 index) {
+        ++NodeAllocationCounter;
+        const auto node = TExprNode::NewAtom(AllocateNextUniqueId(), pos, GetIndexAsString(index), TNodeFlags::Default);
+        ExprNodes.emplace_back(node.Get());
+        return node;
+    }
+
     TExprNode::TPtr NewArgument(TPositionHandle pos, const TStringBuf& name) {
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewArgument(AllocateNextUniqueId(), pos, AppendString(name));
@@ -2559,6 +2566,10 @@ struct TExprContext : private TNonCopyable {
 
     TExprNode::TPtr NewAtom(TPosition pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent) {
         return NewAtom(AppendPosition(pos), content, flags);
+    }
+
+    TExprNode::TPtr NewAtom(TPosition pos, ui32 index) {
+        return NewAtom(AppendPosition(pos), index);
     }
 
     TExprNode::TPtr NewArgument(TPosition pos, const TStringBuf& name) {

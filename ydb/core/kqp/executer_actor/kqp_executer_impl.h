@@ -411,19 +411,19 @@ protected:
             switch (reason) {
                 case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY: {
                     ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough memory to execute query"));
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, message));
                     break;
                 }
 
                 case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS: {
                     ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, message));
                     break;
                 }
 
                 case NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED: {
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, message));
                     break;
                 }
 

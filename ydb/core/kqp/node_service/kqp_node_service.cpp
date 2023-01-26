@@ -198,21 +198,21 @@ private:
                 TStringBuilder error;
 
                 if (resourcesResponse.ExecutionUnits()) {
-                    error << "TxId: " << txId << ", not enough compute actors, requested " << msg.GetTasks().size();
+                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
                     LOG_N(error);
 
                     failReason = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS;
                 }
 
                 if (resourcesResponse.ScanQueryMemory()) {
-                    error << "TxId: " << txId << ", not enough memory, requested " << task.second.Memory;
+                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough memory, requested " << task.second.Memory;
                     LOG_N(error);
 
                     failReason = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
                 }
 
                 if (resourcesResponse.QueryMemoryLimit()) {
-                    error << "TxId: " << txId << ", memory limit exceeded, requested " << task.second.Memory;
+                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", memory limit exceeded, requested " << task.second.Memory;
                     LOG_N(error);
 
                     failReason = NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED;

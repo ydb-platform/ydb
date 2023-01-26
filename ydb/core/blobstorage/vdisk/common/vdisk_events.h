@@ -1073,8 +1073,386 @@ namespace NKikimr {
     // VGet
     //////////////////////////////////////////////////////////////////////////////////////////////
 
+    namespace RawSerializer {
+        struct TExecTimeStats {
+            uint64_t SubmitTimestamp, InSenderQueue, ReceivedTimestamp, Total, InQueue, Execution, HugeWriteTime;
+        };
+
+        struct TMessageId {
+            uint64_t SequenceId, MsgId;
+        };
+
+        struct TLogoBlobID {
+            uint64_t RawX1, RawX2, RawX3;
+        };
+
+        struct TVDiskID {
+                uint32_t GroupID, GroupGeneration, Ring, Domain, VDisk;
+        };
+
+        enum EVDiskQueueId {
+//            option allow_alias = true;
+
+            Unknown = 0,
+            // EPutHandleClass
+            PutTabletLog = 1,
+            PutAsyncBlob = 2,
+            PutUserData = 3,
+            // EGetHandleClass
+            GetAsyncRead = 4,
+            GetFastRead = 5,
+            GetDiscover = 6,
+            GetLowRead = 7,
+
+            // Declare Begin and End last in order to get real names from EVDiskQueueId_Name()
+            Begin = 1,
+            End = 8,
+        };
+
+        enum EVDiskInternalQueueId {
+//            option allow_alias = true;
+
+            IntUnknown,
+            IntBegin,
+            IntGetAsync,
+            IntGetFast,
+            IntPutLog,
+            IntPutHugeForeground,
+            IntPutHugeBackground,
+            IntGetDiscover,
+            IntLowRead,
+            IntEnd,
+        };
+
+        struct TVDiskCostSettings {
+            uint64_t SeekTimeUs, ReadSpeedBps, WriteSpeedBps, ReadBlockSize, WriteBlockSize;
+            uint32_t MinREALHugeBlobInBytes;
+        };
+
+        struct TWindowFeedback {
+            enum EStatus {
+                Unknown = 0,
+                Success = 1,                // successful operation
+                WindowUpdate = 2,           // window boundaries update because global state has changed
+                Processed = 3,              // request was processed and this is status update after processed item
+                IncorrectMsgId = 4,         // client sent incorrect client id
+                HighWatermarkOverflow = 5,  // message is rejected because of queue overflow
+            };
+
+            EStatus Status;
+            uint64_t ActualWindowSize;
+            uint64_t MaxWindowSize;
+            TMessageId ExpectedMsgId;
+            TMessageId FailedMsgId;
+        };
+
+        struct ClientId {
+            enum IdType {
+                ProxyNodeId,
+                ReplVDiskId,
+                VDiskLoadId,
+                VPatchVDiskId,
+            } type;
+            union Payload {
+                uint32_t ProxyNodeId, ReplVDiskId, VPatchVDiskId;
+                uint64_t VDiskLoadId;
+            };
+        };
+
+        struct TMsgQoS {
+            uint32_t DeadlineSeconds;
+            TMessageId MsgId;
+            uint64_t Cost;
+            EVDiskQueueId ExtQueueId;
+            EVDiskInternalQueueId IntQueueId;
+            TVDiskCostSettings CostSettings;
+            bool SendMeCostSettings;
+            TWindowFeedback Window;
+            ClientId clientId; // TODO: https://clck.ru/33APJD
+            TExecTimeStats ExecTimeStats;
+            TActorId SenderActorId;
+        };
+
+        struct TTimestamps {
+            uint64_t SentByDSProxyUs = 0, ReceivedByVDiskUs = 0, SentByVDiskUs = 0, ReceivedByDSProxyUs = 0;
+        };
+
+        enum EGetHandleClass {
+            AsyncRead = 1,      // read of tablet's compacted data
+            FastRead = 2,       // reads initiated by the user (fast)
+            Discover = 3,       // reads from Discover query (OOB)
+            LowRead = 4,        // background reads initiabed by the user (should not affect TabletLog and FastRead)
+        };
+
+        struct TExtremeQuery {
+            TLogoBlobID Id;
+
+            uint64_t Shift;
+            uint64_t Size;
+
+            uint64_t Cookie;
+        };
+
+        struct TRangeQuery {
+            TLogoBlobID From;
+            TLogoBlobID To;
+
+            uint64_t Cookie;
+
+            uint32_t MaxResults;
+        };
+
+        struct TEvVGet {
+            bool hasRangeQuery = false;
+            bool hasExtremeQueries = false;
+            bool hasVDiskID = false;
+            bool hasNotifyIfNotReady = false;
+            bool hasShowInternals = false;
+            bool hasCookie = false;
+            bool hasMsgQoS = false;
+            bool hasIndexOnly = false;
+            bool hasHandleClass = false;
+            bool hasSuppressBarrierCheck = false;
+            bool hasTabletId = false;
+            bool hasAcquireBlockedGeneration = false;
+            bool hasTimestamps = false;
+            bool hasForceBlockedGeneration = false;
+            bool hasReaderTabletId = false;
+            bool hasReaderTabletGeneration = false;
+            bool hasSnapshotId = false;
+
+            TRangeQuery RangeQuery;
+            std::vector<TExtremeQuery> ExtremeQueries;
+            TVDiskID VDiskID;
+            bool NotifyIfNotReady;
+            bool ShowInternals;
+            uint64_t Cookie;
+            TMsgQoS MsgQoS;
+            bool IndexOnly = false;
+            EGetHandleClass HandleClass;
+            bool SuppressBarrierCheck = false; // set to true to prevent hull from validating barriers
+            uint64_t TabletId = 0; // tabletId to get the blocked generation for
+            bool AcquireBlockedGeneration = false; // set to true to get the blocked generation
+            TTimestamps Timestamps;
+            uint32_t ForceBlockedGeneration = 0; // non-zero means a successfull block must be done first
+            uint64_t ReaderTabletId;
+            uint32_t ReaderTabletGeneration;
+            std::string SnapshotId; // proto:bytes, read data from specific snapshot (if set)
+
+            /// has-methods
+            bool HasRangeQuery() const { return hasRangeQuery; }
+            bool HasExtremeQueries() const { return hasExtremeQueries; }
+            bool HasVDiskID() const { return hasVDiskID; }
+            bool HasNotifyIfNotReady() const { return hasNotifyIfNotReady; }
+            bool HasShowInternals() const { return hasShowInternals; }
+            bool HasCookie() const { return hasCookie; }
+            bool HasMsgQoS() const { return hasMsgQoS; }
+            bool HasIndexOnly() const { return hasIndexOnly; }
+            bool HasHandleClass() const { return hasHandleClass; }
+            bool HasSuppressBarrierCheck() const { return hasSuppressBarrierCheck; }
+            bool HasTabletId() const { return hasTabletId; }
+            bool HasAcquireBlockedGeneration() const { return hasAcquireBlockedGeneration; }
+            bool HasReaderTabletId() const { return hasReaderTabletId; }
+            bool HasReaderTabletGeneration() const { return hasReaderTabletGeneration; }
+            bool HasSnapshotId() const { return hasSnapshotId; }
+
+
+            /// getters
+            TRangeQuery GetRangeQuery() const { return RangeQuery; }
+            std::vector<TExtremeQuery> GetExtremeQueries() const { return ExtremeQueries; }
+            TVDiskID GetVDiskID() const { return VDiskID; }
+            bool GetNotifyIfNotReady() const { return NotifyIfNotReady; }
+            bool GetShowInternals() const { return ShowInternals; }
+            uint64_t GetCookie() const { return Cookie; }
+            TMsgQoS GetMsgQoS() const { return MsgQoS; }
+            bool GetIndexOnly() const { return IndexOnly; }
+            EGetHandleClass GetHandleClass() const { return HandleClass; }
+            bool GetSuppressBarrierCheck() const { return SuppressBarrierCheck; }
+            uint64_t GetTabletId() const { return TabletId; }
+            bool GetAcquireBlockedGeneration() const { return AcquireBlockedGeneration; }
+            TTimestamps GetTimestamps() const { return Timestamps; }
+            uint32_t GetForceBlockedGeneration() const { return ForceBlockedGeneration; }
+            uint64_t GetReaderTabletId() const { return ReaderTabletId; }
+            uint32_t GetReaderTabletGeneration() const { return ReaderTabletGeneration; }
+            std::string GetSnapshotId() const { return SnapshotId; }
+
+            /// setters
+            void SetRangeQuery(TRangeQuery s) {
+                RangeQuery = s;
+                hasRangeQuery = true;
+            }
+
+            void SetExtremeQueries(std::vector<TExtremeQuery> s) {
+                ExtremeQueries = s;
+                hasExtremeQueries = true;
+            }
+
+            void SetVDiskID(TVDiskID s) {
+                VDiskID = s;
+                hasVDiskID = true;
+            }
+
+            void SetNotifyIfNotReady(bool s) {
+                NotifyIfNotReady = s;
+                hasNotifyIfNotReady = true;
+            }
+
+            void SetShowInternals(bool s) {
+                ShowInternals = s;
+                hasShowInternals = true;
+            }
+
+            void SetCookie(uint64_t s) {
+                Cookie = s;
+                hasCookie = true;
+            }
+
+            void SetMsgQoS(TMsgQoS s) {
+                MsgQoS = s;
+                hasMsgQoS = true;
+            }
+
+            void SetIndexOnly(bool s) {
+                IndexOnly = s;
+                hasIndexOnly = true;
+            }
+
+            void SetHandleClass(EGetHandleClass s) {
+                HandleClass = s;
+                hasHandleClass = true;
+            }
+
+            void SetSuppressBarrierCheck(bool s) {
+                SuppressBarrierCheck = s;
+                hasSuppressBarrierCheck = true;
+            }
+
+            void SetTabletId(uint64_t s) {
+                TabletId = s;
+                hasTabletId = true;
+            }
+
+            bool SetAcquireBlockedGeneration(bool s) {
+                AcquireBlockedGeneration = s;
+                hasAcquireBlockedGeneration = true;
+            }
+
+            void SetTimestamps(TTimestamps s) {
+                Timestamps = s;
+                hasTimestamps = true;
+            }
+
+            void SetForceBlockedGeneration(uint32_t s) {
+                ForceBlockedGeneration = s;
+                hasForceBlockedGeneration = true;
+            }
+
+            void SetReaderTabletId(uint32_t s) {
+                ReaderTabletId = s;
+                hasReaderTabletId = true;
+            }
+
+            void SetReaderTabletGeneration(uint32_t s) {
+                ReaderTabletGeneration = s;
+                hasReaderTabletGeneration = true;
+            }
+
+            void SetSnapshotId(std::string s) {
+                SnapshotId = s;
+                hasSnapshotId = true;
+            }
+
+
+            /// clear-methods
+            void ClearRangeQuery() {
+                RangeQuery = {};
+                hasRangeQuery = false;
+            }
+
+            void ClearExtremeQueries() {
+                ExtremeQueries = {};
+                hasExtremeQueries = false;
+            }
+
+            void ClearVDiskID() {
+                VDiskID = {};
+                hasVDiskID = false;
+            }
+
+            void ClearNotifyIfNotReady() {
+                NotifyIfNotReady = {};
+                hasNotifyIfNotReady = false;
+            }
+
+            void ClearShowInternals() {
+                ShowInternals = {};
+                hasShowInternals = false;
+            }
+
+            void ClearCookie() {
+                Cookie = {};
+                hasCookie = false;
+            }
+
+            void ClearMsgQoS() {
+                MsgQoS = {};
+                hasMsgQoS = false;
+            }
+
+            void ClearIndexOnly() {
+                IndexOnly = {};
+                hasIndexOnly = false;
+            }
+
+            void ClearHandleClass() {
+                HandleClass = {};
+                hasHandleClass = false;
+            }
+
+            void ClearSuppressBarrierCheck() {
+                SuppressBarrierCheck = {};
+                hasSuppressBarrierCheck = false;
+            }
+
+            void ClearTabletId() {
+                TabletId = {};
+                hasTabletId = false;
+            }
+
+            bool ClearAcquireBlockedGeneration() {
+                AcquireBlockedGeneration = {};
+                hasAcquireBlockedGeneration = false;
+            }
+
+            void ClearTimestamps() {
+                Timestamps = {};
+                hasTimestamps = false;
+            }
+
+            void ClearForceBlockedGeneration() {
+                ForceBlockedGeneration = {};
+                hasForceBlockedGeneration = false;
+            }
+
+            void ClearReaderTabletId() {
+                ReaderTabletId = {};
+                hasReaderTabletId = false;
+            }
+
+            void ClearReaderTabletGeneration() {
+                ReaderTabletGeneration = {};
+                hasReaderTabletGeneration = false;
+            }
+
+            void ClearSnapshotId() {
+                SnapshotId = {};
+                hasSnapshotId = false;
+            }
+        };
+    }
+
     struct TEvBlobStorage::TEvVGet
-        : TEventPB<TEvBlobStorage::TEvVGet, NKikimrBlobStorage::TEvVGet, TEvBlobStorage::EvVGet>
+        : TEventPB<TEvBlobStorage::TEvVGet, RawSerializer::TEvVGet, TEvBlobStorage::EvVGet>
         , TEventWithRelevanceTracker
     {
         TEvVGet() = default;

@@ -141,6 +141,14 @@ public:
     const NKqpProto::TKqpPhyQuery& GetPhysicalQuery() const {
         return Proto->GetPhysicalQuery();
     }
+
+    std::optional<bool> GetEnableLlvm() const {
+        if (Proto->HasEnableLlvm()) {
+            return Proto->GetEnableLlvm();
+         } else {
+            return std::nullopt;
+         }
+    }
 };
 
 

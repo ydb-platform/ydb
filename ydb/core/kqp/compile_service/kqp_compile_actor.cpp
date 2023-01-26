@@ -270,6 +270,9 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
+            if (Config->EnableLlvm.Get()) {
+                kqpResult.PreparingQuery->SetEnableLlvm(*Config->EnableLlvm.Get());
+            }
             KqpCompileResult->PreparedQuery = std::make_shared<const TPreparedQueryHolder>(
                 kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
 

@@ -30,6 +30,8 @@ protected:
 public:
     using TPathType = std::deque<std::string_view>;
     using TListType = std::vector<const TConstraintNode*>;
+    using TPathFilter = std::function<bool(const TPathType&)>;
+    using TPathReduce = std::function<std::vector<TPathType>(const TPathType&)>;
 
     struct THash {
         size_t operator()(const TConstraintNode* node) const {
@@ -195,8 +197,8 @@ public:
     bool HasEqualColumns(const std::vector<std::string_view>& columns) const;
 
     static const TUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
-    const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType&)>& predicate) const;
-    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const std::function<std::vector<TPathType>(const TPathType&)>& reduce) const;
+    const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
+    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
@@ -205,8 +207,9 @@ private:
 
 class TSortedConstraintNode final: public TConstraintNode {
 public:
-    using TColumnsSet = NSorted::TSimpleSet<TPathType>;
-    using TContainerType = TSmallVec<std::pair<TColumnsSet, bool>>;
+    using TSetType = NSorted::TSimpleSet<TPathType>;
+    using TContainerType = TSmallVec<std::pair<TSetType, bool>>;
+    using TFullSetType = NSorted::TSimpleSet<TSetType>;
 private:
     friend struct TExprContext;
 
@@ -221,6 +224,8 @@ public:
         return Content_;
     }
 
+    const TFullSetType GetAllSets() const;
+
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
     void Out(IOutputStream& out) const override;
@@ -234,6 +239,8 @@ public:
     static const TSortedConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
     static const TSortedConstraintNode* FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx);
+
+    const TSortedConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 protected:
@@ -281,13 +288,13 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     const TPartOfConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
-    const TPartOfConstraintNode* FilterFields(TExprContext& ctx, const std::function<bool(const TPathType& front)>& predicate) const;
+    const TPartOfConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
+    const TPartOfConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
 
     static const TPartOfConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
     static TMapType GetCommonMapping(const TOriginalConstraintNode* complete, const TPartOfConstraintNode* incomplete = nullptr, const std::string_view& field = {});
     static void UniqueMerge(TMapType& output, TMapType&& input);
-    static void FilterFields(TMapType& mapping, const std::function<bool(const std::string_view& front)>& predicate);
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
     static const TOriginalConstraintNode* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TOriginalConstraintNode* original);

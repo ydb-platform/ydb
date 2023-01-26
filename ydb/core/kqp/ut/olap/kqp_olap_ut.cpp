@@ -3836,6 +3836,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         b << "------------------------------------------------" << Endl;
         UNIT_ASSERT_C(falsePositive.empty() && falseNegative.empty(), b);
     }
+
+    Y_UNIT_TEST(NoErrorOnLegacyPragma) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                PRAGMA Kikimr.KqpPushOlapProcess = "false";
+                SELECT id, resource_id FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 5;
+            )")
+            .SetExpectedReply("[[[5];#]]")
+            .AddExpectedPlanOptions("KqpOlapFilter");
+
+        TestTableWithNulls({ testCase });
+    }
 }
 
 } // namespace NKqp

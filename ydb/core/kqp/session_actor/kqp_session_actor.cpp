@@ -995,7 +995,7 @@ public:
 
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
-        request.LlvmEnabled = Config->GetEnableLlvm() != EOptionalFlag::Disabled;
+        request.LlvmEnabled = IsSqlQuery(queryState->GetType()) && Config->GetEnableLlvm() != EOptionalFlag::Disabled;
         YQL_ENSURE(queryState);
         request.Snapshot = queryState->TxCtx->GetSnapshot();
 

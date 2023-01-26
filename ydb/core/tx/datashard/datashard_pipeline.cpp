@@ -517,6 +517,15 @@ TOperation::TPtr TPipeline::GetActiveOp(ui64 txId)
     return nullptr;
 }
 
+TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
+{
+    TOperation::TPtr op = FindOp(txId);
+    if (op && op->HasVolatilePrepareFlag()) {
+        return op;
+    }
+    return nullptr;
+}
+
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
                               TActiveTransaction::TPtr tx)
@@ -644,6 +653,11 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     TOperation::TPtr op = GetActiveOp(txId);
+    bool active = true;
+    if (!op) {
+        op = GetVolatileOp(txId);
+        active = false;
+    }
     if (op) {
         // If input read sets are not loaded yet then
         // it will be added at load.
@@ -655,8 +669,10 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         }
         op->AddDelayedInReadSet(rs.Record);
 
-        AddCandidateOp(op);
-        Self->PlanQueue.Progress(ctx);
+        if (active) {
+            AddCandidateOp(op);
+            Self->PlanQueue.Progress(ctx);
+        }
 
         return false;
     }

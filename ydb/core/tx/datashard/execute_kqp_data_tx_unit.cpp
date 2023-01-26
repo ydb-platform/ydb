@@ -288,6 +288,12 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
             tx->ReleaseTxData(txc, ctx);
 
+            // Rollback database changes, if any
+            if (txc.DB.HasChanges()) {
+                txc.Reschedule();
+                return EExecutionStatus::Restart;
+            }
+
             return EExecutionStatus::Continue;
         }
 

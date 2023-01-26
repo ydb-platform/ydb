@@ -48,7 +48,7 @@ bool TReadTableScanUnit::IsReadyToExecute(TOperation::TPtr op) const
         return true;
 
     if (!op->IsWaitingForScan())
-        return true;
+        return !op->HasRuntimeConflicts();
 
     if (op->HasScanResult())
         return true;
@@ -97,6 +97,24 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
 
         if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
             Y_VERIFY(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
+
+            bool wait = false;
+            const auto& byVersion = DataShard.GetVolatileTxManager().GetVolatileTxByVersion();
+            auto end = byVersion.upper_bound(TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId()));
+            for (auto it = byVersion.begin(); it != end; ++it) {
+                auto* info = *it;
+                op->AddVolatileDependency(info->TxId);
+                bool ok = DataShard.GetVolatileTxManager().AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
+                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << info->TxId);
+                wait = true;
+            }
+
+            if (wait) {
+                // Wait until all volatile transactions below snapshot are removed
+                // This guarantees they are either committed or aborted and will
+                // be visible without any special tx map.
+                return EExecutionStatus::Continue;
+            }
         } else if (!DataShard.IsMvccEnabled()) {
             Y_VERIFY(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx");
         }

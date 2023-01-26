@@ -547,6 +547,12 @@ TRowVersion CommitWrites(
         const TVector<TString>& tables,
         ui64 writeTxId);
 
+ui64 AsyncDropTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& workingDir,
+        const TString& name);
+
 ui64 AsyncSplitTable(
         Tests::TServer::TPtr server,
         TActorId sender,

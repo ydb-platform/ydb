@@ -94,6 +94,9 @@ public:
         EngineHost.Reset();
     }
 
+    ui64 GetStep() const { return StepTxId.first; }
+    ui64 GetTxId() const { return StepTxId.second; }
+
     const TValidationInfo& TxInfo() const { return Info; }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 

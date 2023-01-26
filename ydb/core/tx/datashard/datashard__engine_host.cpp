@@ -774,7 +774,7 @@ public:
 
     class TLockedWriteTxObserver : public NTable::ITransactionObserver {
     public:
-        TLockedWriteTxObserver(const TDataShardEngineHost* host, ui64 txId, ui64& skipCount, ui32 localTid)
+        TLockedWriteTxObserver(TDataShardEngineHost* host, ui64 txId, ui64& skipCount, ui32 localTid)
             : Host(host)
             , SelfTxId(txId)
             , SkipCount(skipCount)
@@ -814,7 +814,7 @@ public:
         }
 
     private:
-        const TDataShardEngineHost* const Host;
+        TDataShardEngineHost* const Host;
         const ui64 SelfTxId;
         ui64& SkipCount;
         const ui32 LocalTid;
@@ -823,7 +823,7 @@ public:
 
     class TWriteTxObserver : public NTable::ITransactionObserver {
     public:
-        TWriteTxObserver(const TDataShardEngineHost* host)
+        TWriteTxObserver(TDataShardEngineHost* host)
             : Host(host)
         {
         }
@@ -851,7 +851,7 @@ public:
         }
 
     private:
-        const TDataShardEngineHost* const Host;
+        TDataShardEngineHost* const Host;
     };
 
     void AddWriteConflict(ui64 txId) const {
@@ -862,19 +862,26 @@ public:
         }
     }
 
-    void BreakWriteConflict(ui64 txId) const {
+    void BreakWriteConflict(ui64 txId) {
         if (VolatileCommitTxIds.contains(txId)) {
             // Skip our own commits
         } else if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
             // We must not overwrite uncommitted changes that may become committed
-            // later, so we need to switch transaction to volatile writes mid
-            // flight. This is only needed so we don't block writes and still
-            // commit changes in the correct order.
-            if (!VolatileTxId && info->State != EVolatileTxState::Aborting) {
-                Y_FAIL("TODO: implement switching to volatile writes mid-transaction");
-            }
-            // Add dependency on uncommitted transactions
-            if (VolatileTxId && info->State != EVolatileTxState::Committed) {
+            // later, so we need to add a dependency that will force us to wait
+            // until it is persistently committed. We may ignore aborting changes
+            // even though they may not be persistent yet, since this tx will
+            // also perform writes, and either it fails, or future generation
+            // could not have possibly committed it already.
+            if (info->State != EVolatileTxState::Aborting) {
+                if (!VolatileTxId) {
+                    // All further writes will use this VolatileTxId and will
+                    // add it to VolatileCommitTxIds, forcing it to be committed
+                    // like a volatile transaction. Note that this does not make
+                    // it into a real volatile transaction, it works as usual in
+                    // every sense, only persistent commit order is affected by
+                    // a dependency below.
+                    VolatileTxId = EngineBay.GetTxId();
+                }
                 VolatileDependencies.insert(info->TxId);
             }
         } else {

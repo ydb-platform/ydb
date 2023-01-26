@@ -50,6 +50,7 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> Participants;
         bool AddCommitted = false;
         absl::flat_hash_set<ui64> BlockedOperations;
+        absl::flat_hash_set<ui64> WaitingRemovalOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
     };
 
@@ -114,6 +115,26 @@ namespace NKikimr::NDataShard {
             const TIntrusivePtr<TTxMap>& TxMap;
         };
 
+        struct TCompareInfoByVersion {
+            using is_transparent = void;
+
+            bool operator()(const TVolatileTxInfo* a, const TVolatileTxInfo* b) const {
+                // Note: we may have multiple infos with the same version
+                return std::tie(a->Version, a) < std::tie(b->Version, b);
+            }
+
+            bool operator()(const TVolatileTxInfo* a, const TRowVersion& b) const {
+                return a->Version < b;
+            }
+
+            bool operator()(const TRowVersion& a, const TVolatileTxInfo* b) const {
+                return a < b->Version;
+            }
+        };
+
+    public:
+        using TVolatileTxByVersion = std::set<TVolatileTxInfo*, TCompareInfoByVersion>;
+
     public:
         TVolatileTxManager(TDataShard* self)
             : Self(self)
@@ -126,6 +147,8 @@ namespace NKikimr::NDataShard {
         TVolatileTxInfo* FindByTxId(ui64 txId) const;
         TVolatileTxInfo* FindByCommitTxId(ui64 txId) const;
 
+        const TVolatileTxByVersion& GetVolatileTxByVersion() const { return VolatileTxByVersion; }
+
         void PersistAddVolatileTx(
             ui64 txId, const TRowVersion& version,
             TConstArrayRef<ui64> commitTxIds,
@@ -137,6 +160,9 @@ namespace NKikimr::NDataShard {
             ui64 txId, IVolatileTxCallback::TPtr callback);
 
         bool AttachBlockedOperation(
+            ui64 txId, ui64 dependentTxId);
+
+        bool AttachWaitingRemovalOperation(
             ui64 txId, ui64 dependentTxId);
 
         void AbortWaitingTransaction(TVolatileTxInfo* info);
@@ -164,6 +190,7 @@ namespace NKikimr::NDataShard {
         void RemoveFromTxMap(TVolatileTxInfo* info);
         void UnblockDependents(TVolatileTxInfo* info);
         void UnblockOperations(TVolatileTxInfo* info, bool success);
+        void UnblockWaitingRemovalOperations(TVolatileTxInfo* info);
         void AddPendingCommit(ui64 txId);
         void AddPendingAbort(ui64 txId);
         void RunPendingCommitTx();
@@ -173,6 +200,7 @@ namespace NKikimr::NDataShard {
         TDataShard* const Self;
         absl::flat_hash_map<ui64, std::unique_ptr<TVolatileTxInfo>> VolatileTxs; // TxId -> Info
         absl::flat_hash_map<ui64, TVolatileTxInfo*> VolatileTxByCommitTxId; // CommitTxId -> Info
+        TVolatileTxByVersion VolatileTxByVersion;
         TIntrusivePtr<TTxMap> TxMap;
         std::deque<ui64> PendingCommits;
         std::deque<ui64> PendingAborts;

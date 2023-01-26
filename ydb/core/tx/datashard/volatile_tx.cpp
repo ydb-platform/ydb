@@ -131,6 +131,7 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::Clear() {
         VolatileTxs.clear();
+        VolatileTxByVersion.clear();
         VolatileTxByCommitTxId.clear();
         TxMap.Reset();
     }
@@ -138,7 +139,11 @@ namespace NKikimr::NDataShard {
     bool TVolatileTxManager::Load(NIceDb::TNiceDb& db) {
         using Schema = TDataShard::Schema;
 
-        Y_VERIFY(VolatileTxs.empty() && VolatileTxByCommitTxId.empty() && !TxMap,
+        Y_VERIFY(
+            VolatileTxs.empty() &&
+            VolatileTxByVersion.empty() &&
+            VolatileTxByCommitTxId.empty() &&
+            !TxMap,
             "Unexpected Load into non-empty volatile tx manager");
 
         // Tables may not exist in some inactive shards, which cannot have transactions
@@ -260,6 +265,7 @@ namespace NKikimr::NDataShard {
 
         for (auto& pr : VolatileTxs) {
             postProcessTxInfo(pr.second.get());
+            VolatileTxByVersion.insert(pr.second.get());
         }
 
         return true;
@@ -351,6 +357,8 @@ namespace NKikimr::NDataShard {
             info->State = EVolatileTxState::Committed;
         }
 
+        VolatileTxByVersion.insert(info);
+
         if (!TxMap) {
             TxMap = MakeIntrusive<TTxMap>();
         }
@@ -435,9 +443,12 @@ namespace NKikimr::NDataShard {
         Y_VERIFY_S(info->Dependencies.empty(), "Unexpected remove of volatile tx " << txId << " with dependencies");
         Y_VERIFY_S(info->Dependents.empty(), "Unexpected remove of volatile tx " << txId << " with dependents");
 
+        UnblockWaitingRemovalOperations(info);
+
         for (ui64 commitTxId : info->CommitTxIds) {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
+        VolatileTxByVersion.erase(info);
         VolatileTxs.erase(txId);
     }
 
@@ -489,6 +500,16 @@ namespace NKikimr::NDataShard {
         }
 
         return false;
+    }
+
+    bool TVolatileTxManager::AttachWaitingRemovalOperation(ui64 txId, ui64 dependentTxId) {
+        auto it = VolatileTxs.find(txId);
+        if (it == VolatileTxs.end()) {
+            return false;
+        }
+
+        it->second->WaitingRemovalOperations.insert(dependentTxId);
+        return true;
     }
 
     void TVolatileTxManager::AbortWaitingTransaction(TVolatileTxInfo* info) {
@@ -583,6 +604,7 @@ namespace NKikimr::NDataShard {
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::TxVolatileParticipants>().Key(txId, srcTabletId).Delete();
+        Self->RemoveExpectation(srcTabletId, txId);
 
         if (info->Participants.empty()) {
             // Move tx to committed.
@@ -662,6 +684,25 @@ namespace NKikimr::NDataShard {
             }
         }
         info->BlockedOperations.clear();
+
+        if (added && Self->Pipeline.CanRunAnotherOp()) {
+            auto ctx = TActivationContext::ActorContextFor(Self->SelfId());
+            Self->PlanQueue.Progress(ctx);
+        }
+    }
+
+    void TVolatileTxManager::UnblockWaitingRemovalOperations(TVolatileTxInfo* info) {
+        bool added = false;
+        for (ui64 dependentTxId : info->WaitingRemovalOperations) {
+            if (auto op = Self->Pipeline.FindOp(dependentTxId)) {
+                op->RemoveVolatileDependency(info->TxId, info->State == EVolatileTxState::Committed);
+                if (!op->HasVolatileDependencies() && !op->HasRuntimeConflicts()) {
+                    Self->Pipeline.AddCandidateOp(op);
+                    added = true;
+                }
+            }
+        }
+        info->WaitingRemovalOperations.clear();
 
         if (added && Self->Pipeline.CanRunAnotherOp()) {
             auto ctx = TActivationContext::ActorContextFor(Self->SelfId());

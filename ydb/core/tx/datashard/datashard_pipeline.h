@@ -230,6 +230,7 @@ public:
     TOperation::TPtr FindOp(ui64 txId);
 
     TOperation::TPtr GetActiveOp(ui64 txId);
+    TOperation::TPtr GetVolatileOp(ui64 txId);
     const TMap<TStepOrder, TOperation::TPtr> &GetActiveOps() const { return ActiveOps; }
 
     void AddActiveOp(TOperation::TPtr op);

@@ -38,7 +38,7 @@ description: 'Значение operation_timeout определяет время
 - Python
 
   ```python
-  from kikimr.public.sdk.python import client as ydb
+  import ydb
 
   def execute_in_tx(session, query):
     settings = ydb.BaseRequestSettings()

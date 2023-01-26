@@ -7,7 +7,7 @@
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/yq/libs/control_plane_proxy/utils.h>
-#include <ydb/public/api/protos/fq.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 

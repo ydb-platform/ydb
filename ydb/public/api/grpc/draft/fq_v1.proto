@@ -3,7 +3,7 @@ syntax = "proto3";
 package FederatedQuery.V1;
 option java_package = "com.federated.query.v1";
 
-import "ydb/public/api/protos/fq.proto";
+import "ydb/public/api/protos/draft/fq.proto";
 
 service FederatedQueryService {
     // Query

@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <ydb/public/api/grpc/fq_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/fq_v1.grpc.pb.h>
 
 namespace NYdb::NFq {
 

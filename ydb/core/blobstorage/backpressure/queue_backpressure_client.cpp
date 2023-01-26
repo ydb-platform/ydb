@@ -478,7 +478,7 @@ private:
             SessionId = ev->Sender;
 
             if (ConnectionFailureTime) {
-                QLOG_WARN_S("BSQ20", "TEvNodeConnected NodeId# " << ev->Get()->NodeId
+                QLOG_INFO_S("BSQ20", "TEvNodeConnected NodeId# " << ev->Get()->NodeId
                     << " ConnectionFailureTime# " << ConnectionFailureTime
                     << " connection was recovered");
                 ConnectionFailureTime = TInstant();
@@ -490,7 +490,7 @@ private:
         if (ev->Get()->NodeId == RemoteVDisk.NodeId()) {
             if (!ConnectionFailureTime) {
                 ConnectionFailureTime = ctx.Now();
-                QLOG_WARN_S("BSQ13", "TEvNodeDisconnected NodeId# " << ev->Get()->NodeId
+                QLOG_INFO_S("BSQ13", "TEvNodeDisconnected NodeId# " << ev->Get()->NodeId
                     << " ConnectionFailureTime# " << ConnectionFailureTime);
             }
 

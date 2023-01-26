@@ -8,6 +8,9 @@
 
 
 add_executable(ydb-library-yql-parser-pg_catalog-ut)
+target_compile_options(ydb-library-yql-parser-pg_catalog-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_include_directories(ydb-library-yql-parser-pg_catalog-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
@@ -21,6 +24,10 @@ target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-parser-pg_catalog
+  yql-minikql-computation
+  yql-public-udf
+  udf-service-exception_policy
+  yql-minikql-comp_nodes
   yql-parser-pg_wrapper
 )
 target_link_options(ydb-library-yql-parser-pg_catalog-ut PRIVATE

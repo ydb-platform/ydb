@@ -1171,6 +1171,42 @@ namespace NKikimr {
             ClientId clientId; // TODO: https://clck.ru/33APJD
             TExecTimeStats ExecTimeStats;
             TActorId SenderActorId;
+
+            bool hasDeadlineSeconds = false;
+            bool hasMsgId = false;
+            bool hasCost = false;
+            bool hasExtQueueId = false;
+            bool hasIntQueueId = false;
+            bool hasCostSettings = false;
+            bool hasSendMeCostSettings = false;
+            bool hasWindow = false;
+            bool hasclientId = false;
+            bool hasExecTimeStats = false;
+            bool hasSenderActorId = false;
+
+            void SetDeadlineSeconds(uint32_t o) { hasDeadlineSeconds = true; DeadlineSeconds = o; }
+            void SetMsgId(TMessageId o) { hasMsgId = true; MsgId = o; }
+            void SetCost(uint64_t o) { hasCost = true; Cost = o; }
+            void SetExtQueueId(EVDiskQueueId o) { hasExtQueueId = true; ExtQueueId = o; }
+            void SetIntQueueId(EVDiskInternalQueueId o) { hasIntQueueId = true; IntQueueId = o; }
+            void SetCostSettings(TVDiskCostSettings o) { hasCostSettings = true; CostSettings = o;}
+            void SetSendMeCostSettings(bool o) { hasSendMeCostSettings = true; SendMeCostSettings = o; }
+            void SetWindow(TWindowFeedback o) { hasWindow = true; Window = o; }
+            void SetclientId(ClientId o) { hasclientId = true; clientId = o; }
+            void SetExecTimeStats(TExecTimeStats o) { hasExecTimeStats = true; ExecTimeStats = o; }
+            void SetSenderActorId(TActorId o) { hasSenderActorId = true; SenderActorId = o; }
+
+            bool HasDeadlineSeconds() { return hasDeadlineSeconds; }
+            bool HasMsgId() { return hasMsgId; }
+            bool HasCost() { return hasCost; }
+            bool HasExtQueueId() { return hasExtQueueId; }
+            bool HasIntQueueId() { return hasIntQueueId; }
+            bool HasCostSettings() { return hasCostSettings; }
+            bool HasSendMeCostSettings() { return hasSendMeCostSettings; }
+            bool HasWindow() { return hasWindow; }
+            bool HasclientId() { return hasclientId; } // TODO: https://clck.ru/33APJD
+            bool HasExecTimeStats() { return hasExecTimeStats; }
+            bool HasSenderActorId() { return hasSenderActorId; }
         };
 
         struct TTimestamps {
@@ -1552,7 +1588,7 @@ namespace NKikimr {
         void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) {
             Y_VERIFY(Extreme);
 
-            NKikimrBlobStorage::TExtremeQuery *q = Record.AddExtremeQueries();
+            NKikimr::RawSerializer::TExtremeQuery *q = Record.AddExtremeQueries();
             LogoBlobIDFromLogoBlobID(logoBlobId, q->MutableId());
             if (sh != 0)
                 q->SetShift(sh);

@@ -272,8 +272,22 @@ private:
             break;
         }
         case NScheme::NTypeIds::Pg : {
-            TString v = val.Getbytes_value();
-            c = TCell(v.data(), v.size());
+            TString text = val.Gettext_value();
+            if (!text.empty()) {
+                auto desc = type.GetTypeDesc();
+                auto id = NPg::PgTypeIdFromTypeDesc(desc);
+                auto result = NPg::PgNativeBinaryFromNativeText(text, id);
+                if (!result.Error.empty()) {
+                    err = TStringBuilder() << "Invalid text value for "
+                        << NPg::PgTypeNameFromTypeDesc(desc) << ": " << result.Error;
+                    return false;
+                }
+                const auto valueInPool = valueDataPool.AppendString(TStringBuf(result.Str));
+                c = TCell(valueInPool.data(), valueInPool.size());
+            } else {
+                TString binary = val.Getbytes_value();
+                c = TCell(binary.data(), binary.size());
+            }
             break;
         }
         default:

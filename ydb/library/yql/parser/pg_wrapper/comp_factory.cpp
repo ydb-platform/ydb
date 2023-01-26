@@ -3042,7 +3042,7 @@ public:
         return 0;
     }
 
-    TString NativeBinaryFromNativeText(const TString& str) const {
+    TConvertResult NativeBinaryFromNativeText(const TString& str) const {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
         Datum datum = 0;
@@ -3085,18 +3085,21 @@ public:
 
             serialized = (text*)finfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            return TString(NMiniKQL::GetVarBuf(serialized));
+            return {TString(NMiniKQL::GetVarBuf(serialized)), ""};
         }
         PG_CATCH();
         {
-            // TODO
-            Y_FAIL("PG error in NativeBinaryFromNativeText");
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error while converting text to binary: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            return {"", errMsg};
         }
         PG_END_TRY();
-        return 0;
     }
 
-    TString NativeTextFromNativeBinary(const TString& binary) const {
+    TConvertResult NativeTextFromNativeBinary(const TString& binary) const {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
         Datum datum = 0;
@@ -3124,15 +3127,18 @@ public:
 
             str = (char*)finfo.fn_addr(callInfo);
             Y_ENSURE(!callInfo->isnull);
-            return TString(str);
+            return {TString(str), ""};
         }
         PG_CATCH();
         {
-            // TODO
-            Y_FAIL("PG error in NativeTextFromNativeBinary");
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error while converting binary to text: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            return {"", errMsg};
         }
         PG_END_TRY();
-        return 0;
     }
 
 private:
@@ -3257,13 +3263,13 @@ ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc) {
     return static_cast<TPgTypeDescriptor*>(typeDesc)->Hash(data, size);
 }
 
-TString PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
     Y_VERIFY(typeDesc);
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeBinaryFromNativeText(str);
 }
 
-TString PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
+TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
     auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
     Y_VERIFY(typeDesc);
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeTextFromNativeBinary(binary);

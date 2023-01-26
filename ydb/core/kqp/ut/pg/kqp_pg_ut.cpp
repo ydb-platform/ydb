@@ -298,11 +298,13 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
         }
     };
+
     auto createTable = [] (
         NYdb::NTable::TTableClient& db,
         NYdb::NTable::TSession& session,
         ui32 id,
         bool isKey,
+        bool isText,
         std::function<TString(size_t)> textIn,
         TString setTableName = "",
         ui16 rowCount = 10
@@ -316,27 +318,29 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         builder.AddNullableColumn("value", makePgType(id));
         builder.SetPrimaryKeyColumn("key");
 
-        auto tableName = (setTableName.empty()) ? Sprintf("/Root/Pg%u", id) : setTableName;
+        auto tableName = (setTableName.empty()) ?
+            Sprintf("/Root/Pg%u_%s", id, isText ? "t" : "b") : setTableName;
+
         auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         NYdb::TValueBuilder rows;
         rows.BeginList();
         for (size_t i = 0; i < rowCount; ++i) {
-            auto str = NPg::PgNativeBinaryFromNativeText(textIn(i), id);
+            auto str = isText ? textIn(i) : NPg::PgNativeBinaryFromNativeText(textIn(i), id).Str;
+            auto mode = isText ? TPgValue::VK_TEXT : TPgValue::VK_BINARY;
             if (isKey) {
                 rows.AddListItem()
                     .BeginStruct()
-                    .AddMember("key").Pg(TPgValue(TPgValue::VK_BINARY, str, makePgType(id)))
-                    .AddMember("value").Pg(TPgValue(TPgValue::VK_BINARY, str, makePgType(id)))
+                    .AddMember("key").Pg(TPgValue(mode, str, makePgType(id)))
+                    .AddMember("value").Pg(TPgValue(mode, str, makePgType(id)))
                     .EndStruct();
             } else {
-                auto int2Val = (i16)i;
-                TString int2Str((const char*)&int2Val, sizeof(int2Val));
+                auto int2Str = NPg::PgNativeBinaryFromNativeText(Sprintf("%u", i), INT2OID).Str;
                 rows.AddListItem()
                     .BeginStruct()
                     .AddMember("key").Pg(TPgValue(TPgValue::VK_BINARY, int2Str, makePgType(INT2OID)))
-                    .AddMember("value").Pg(TPgValue(TPgValue::VK_BINARY, str, makePgType(id)))
+                    .AddMember("value").Pg(TPgValue(mode, str, makePgType(id)))
                     .EndStruct();
             }
         }
@@ -357,13 +361,13 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     Y_UNIT_TEST(CreateTableBulkUpsertAndRead) {
         TKikimrRunner kikimr;
 
-        auto testSingleType = [&kikimr] (ui32 id, bool isKey,
+        auto testSingleType = [&kikimr] (ui32 id, bool isKey, bool isText,
             std::function<TString(size_t)> textIn,
             std::function<TString(size_t)> textOut)
         {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, isKey, textIn);
+            auto tableName = createTable(db, session, id, isKey, isText, textIn);
 
             auto readSettings = TReadTableSettings()
                 .AppendColumns("key")
@@ -385,7 +389,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 for (size_t i = 0; parser.TryNextRow(); ++i) {
                     auto check = [&parser, &id, &i] (const TString& column, const TString& expected) {
                         auto& c = parser.ColumnParser(column);
-                        UNIT_ASSERT_VALUES_EQUAL(expected, NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, id));
+                        auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, id);
+                        UNIT_ASSERT_C(result.Error.empty(), result.Error);
+                        UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
                         Cerr << expected << Endl;
                     };
                     auto expected = textOut(i);
@@ -401,7 +407,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         auto testType = [&] (ui32 id, const TPgTypeTestSpec& typeSpec)
         {
-            testSingleType(id, typeSpec.IsKey, typeSpec.TextIn, typeSpec.TextOut);
+            testSingleType(id, typeSpec.IsKey, false, typeSpec.TextIn, typeSpec.TextOut);
+            testSingleType(id, typeSpec.IsKey, true, typeSpec.TextIn, typeSpec.TextOut);
 
             auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
 
@@ -415,15 +422,24 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 return typeSpec.ArrayPrint(str);
             };
 
-            testSingleType(arrayId, false, textInArray, textOutArray);
+            testSingleType(arrayId, false, false, textInArray, textOutArray);
+            testSingleType(arrayId, false, true, textInArray, textOutArray);
         };
 
         auto testByteaType = [&] () {
-            testSingleType(BYTEAOID, true,
+            testSingleType(BYTEAOID, true, false,
                 [] (auto i) { return Sprintf("bytea %u", i); },
                 [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); });
 
-            testSingleType(BYTEAARRAYOID, false,
+            testSingleType(BYTEAOID, true, true,
+                [] (auto i) { return Sprintf("bytea %u", i); },
+                [] (auto i) { return Sprintf("\\x627974656120%x", i + 48); });
+
+            testSingleType(BYTEAARRAYOID, true, false,
+                [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
+                [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); });
+
+            testSingleType(BYTEAARRAYOID, true, true,
                 [] (auto i) { return Sprintf("{a%u, b%u}", i, i + 10); },
                 [] (auto i) { return Sprintf("{\"\\\\x61%x\",\"\\\\x6231%x\"}", i + 48, i + 48); });
         };
@@ -433,6 +449,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         for (const auto& [oid, spec] : typeSpecs) {
             testType(oid, spec);
         }
+
         // TODO: varchar as a key
         // TODO: native range/multirange types (use get_range_io_data())
     }
@@ -479,7 +496,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
-            auto tableName = createTable(db, session, id, isKey, textIn);
+            auto tableName = createTable(db, session, id, isKey, false, textIn);
             session.Close().GetValueSync();
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
             auto result = client.ExecuteYqlScript(
@@ -548,7 +565,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(ReadPgArray) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        auto binaryStr = NPg::PgNativeBinaryFromNativeText("{1,1}", INT2ARRAYOID);
+        auto binaryStr = NPg::PgNativeBinaryFromNativeText("{1,1}", INT2ARRAYOID).Str;
         Y_ENSURE(binaryStr.Size() == 32);
         auto value = NYql::NCommon::PgValueFromNativeBinary(binaryStr, INT2ARRAYOID);
     }

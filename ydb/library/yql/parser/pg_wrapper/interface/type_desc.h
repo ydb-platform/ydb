@@ -17,8 +17,12 @@ int PgNativeBinaryCompare(const char* dataL, size_t sizeL, const char* dataR, si
 
 ui64 PgNativeBinaryHash(const char* data, size_t size, void* typeDesc);
 
-// for tests
-TString PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId);
-TString PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId);
+struct TConvertResult {
+    TString Str;
+    TString Error;
+};
+
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId);
+TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId);
 
 } // namespace NKikimr::NPg

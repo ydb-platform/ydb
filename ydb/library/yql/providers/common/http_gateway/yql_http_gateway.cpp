@@ -136,7 +136,7 @@ public:
         if (DnsCache != nullptr) {
             curl_easy_setopt(Handle, CURLOPT_RESOLVE, DnsCache.get());
         }
-        
+
         if (!Headers.empty()) {
             CurlHeaders = std::accumulate(Headers.cbegin(), Headers.cend(), CurlHeaders,
                 std::bind(&curl_slist_append, std::placeholders::_1, std::bind(&TString::c_str, std::placeholders::_2)));
@@ -177,7 +177,7 @@ public:
         return Handle;
     }
 
-    EMethod GetMetthod() const {
+    EMethod GetMethod() const {
         return Method;
     }
 
@@ -669,7 +669,7 @@ private:
                 }
 
                 TIntrusivePtr<::NMonitoring::TDynamicCounters> group;
-                switch (easy->GetMetthod()) {
+                switch (easy->GetMethod()) {
                 case TEasyCurl::EMethod::GET:
                     group = GroupForGET->GetSubgroup(codeLabel, codeValue);
                     break;

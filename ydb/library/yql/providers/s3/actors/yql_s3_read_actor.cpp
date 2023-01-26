@@ -525,7 +525,7 @@ struct TRetryStuff {
       , SizeLimit(sizeLimit)
       , TxId(txId)
       , RequestId(requestId)
-      , RetryState(retryPolicy->CreateRetryState())
+      , RetryPolicy(retryPolicy)
       , Cancelled(false)
     {}
 
@@ -535,10 +535,18 @@ struct TRetryStuff {
     std::size_t Offset, SizeLimit;
     const TTxId TxId;
     const TString RequestId;
-    const IRetryPolicy<long>::IRetryState::TPtr RetryState;
+    const IRetryPolicy<long>::TPtr RetryPolicy;
+    IRetryPolicy<long>::IRetryState::TPtr RetryState;
     IHTTPGateway::TCancelHook CancelHook;
     TMaybe<TDuration> NextRetryDelay;
     std::atomic_bool Cancelled;
+
+    const IRetryPolicy<long>::IRetryState::TPtr& GetRetryState() {
+        if (!RetryState) {
+            RetryState = RetryPolicy->CreateRetryState();
+        }
+        return RetryState;
+    }
 
     void Cancel() {
         Cancelled.store(true);
@@ -703,15 +711,15 @@ private:
 
     static constexpr std::string_view TruncatedSuffix = "... [truncated]"sv;
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId, 
-        const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex, 
-        const TString& path, const TString& url, const std::size_t maxBlocksInFly, 
+    TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId,
+        const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex,
+        const TString& path, const TString& url, const std::size_t maxBlocksInFly,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps)
-        : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex), 
-        TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId), 
+        : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex),
+        TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId),
         PathIndex(pathIndex), Path(path), Url(url), MaxBlocksInFly(maxBlocksInFly),
         DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize), HttpDataRps(httpDataRps)
     {}
@@ -770,13 +778,17 @@ public:
                 ErrorText.clear();
                 Issues.Clear();
                 value.clear();
-                RetryStuff->NextRetryDelay = RetryStuff->RetryState->GetNextRetryDelay(HttpResponseCode = ev->Get<TEvPrivate::TEvReadStarted>()->HttpResponseCode);
+                RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(HttpResponseCode = ev->Get<TEvPrivate::TEvReadStarted>()->HttpResponseCode);
                 LOG_CORO_D("TS3ReadCoroImpl", "TEvReadStarted, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", Http code: " << HttpResponseCode << ", retry after: " << RetryStuff->NextRetryDelay << ", request id: [" << RetryStuff->RequestId << "]");
+                if (!RetryStuff->NextRetryDelay) { // Success or not retryable
+                    RetryStuff->RetryState = nullptr;
+                }
                 return true;
             case TEvPrivate::TEvReadFinished::EventType:
                 Issues = std::move(ev->Get<TEvPrivate::TEvReadFinished>()->Issues);
                 if (Issues) {
-                    if (RetryStuff->NextRetryDelay = RetryStuff->RetryState->GetNextRetryDelay(0L); !RetryStuff->NextRetryDelay) {
+                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished. Url: " << RetryStuff->Url << ". Issues: " << Issues.ToOneLineString());
+                    if (RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(0L); !RetryStuff->NextRetryDelay) {
                         InputFinished = true;
                         LOG_CORO_W("TS3ReadCoroImpl", "ReadError: " << Issues.ToOneLineString() << ", Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText() << ", request id: [" << RetryStuff->RequestId << "]");
                         throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
@@ -788,7 +800,7 @@ public:
                     GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvPrivate::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
                     value.clear();
                 } else {
-                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", Error: " << ServerReturnedError << ", LastData: " << GetLastDataAsText() << ", request id: [" << RetryStuff->RequestId << "]");
+                    LOG_CORO_D("TS3ReadCoroImpl", "TEvReadFinished, Url: " << RetryStuff->Url << ", Offset: " << RetryStuff->Offset << ", LastOffset: " << LastOffset << ", Error: " << ServerReturnedError << ", request id: [" << RetryStuff->RequestId << "]");
                     InputFinished = true;
                     if (ServerReturnedError) {
                         throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format

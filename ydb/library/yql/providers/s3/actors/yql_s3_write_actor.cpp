@@ -222,11 +222,10 @@ private:
     static void OnUploadsCreated(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& requestId, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U: try {
-            const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
-            if (const auto& root = xml.Root(); root.Name() == "Error") {
-                const auto& code = root.Node("Code", true).Value<TString>();
-                const auto& message = root.Node("Message", true).Value<TString>();
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(code, TStringBuilder{} << message << ", request id: [" << requestId << "]")));
+            TS3Result s3Result(std::get<IHTTPGateway::TContent>(std::move(result)).Extract());
+            const auto& root = s3Result.GetRootNode();
+            if (s3Result.IsError) {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
             } else if (root.Name() != "InitiateMultipartUploadResult")
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on create upload: " << root.Name() << ", request id: [" << requestId << "]")));
             else {
@@ -255,8 +254,20 @@ private:
             const auto& str = std::get<IHTTPGateway::TContent>(response).Headers;
             if (const NHttp::THeaders headers(str.substr(str.rfind("HTTP/"))); headers.Has("Etag"))
                 actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
-            else
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response: " << str << ", request id: [" << requestId << "]")));
+            else {
+                TS3Result s3Result(std::get<IHTTPGateway::TContent>(std::move(response)).Extract());
+                if (s3Result.IsError && s3Result.Parsed) {
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << "Upload failed: " << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
+                } else {
+                    constexpr size_t BODY_MAX_SIZE = 1_KB;
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                        TStringBuilder() << "Unexpected response"
+                            << ". Headers: " << str
+                            << ". Body: \"" << TStringBuf(s3Result.Body).Trunc(BODY_MAX_SIZE)
+                            << (s3Result.Body.size() > BODY_MAX_SIZE ? "\"..." : "\"")
+                            << ". Request id: [" << requestId << "]")));
+                }
+            }
             }
             break;
         case 1U: {
@@ -270,11 +281,10 @@ private:
     static void OnMultipartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U: try {
-            const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
-            if (const auto& root = xml.Root(); root.Name() == "Error") {
-                const auto& code = root.Node("Code", true).Value<TString>();
-                const auto& message = root.Node("Message", true).Value<TString>();
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(code, TStringBuilder{} << message << ", request id: [" << requestId << "]")));
+            TS3Result s3Result(std::get<IHTTPGateway::TContent>(std::move(result)).Extract());
+            const auto& root = s3Result.GetRootNode();
+            if (s3Result.IsError) {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
             } else if (root.Name() != "CompleteMultipartUploadResult")
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on finish upload: " << root.Name() << ", request id: [" << requestId << "]")));
             else
@@ -514,16 +524,9 @@ private:
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
         LOG_W("TS3WriteActor", "TEvUploadError " << result->Get()->Issues.ToOneLineString());
 
-        auto statusCode = result->Get()->StatusCode;
-        if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-
-            // add err code analysis here
-
-            if (result->Get()->S3ErrorCode == "BucketMaxSizeExceeded") {
-                statusCode = NYql::NDqProto::StatusIds::LIMIT_EXCEEDED;
-            } else {
-                statusCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
-            }
+        NDqProto::StatusIds::StatusCode statusCode = result->Get()->StatusCode;
+        if (statusCode == NDqProto::StatusIds::UNSPECIFIED) {
+            statusCode = StatusFromS3ErrorCode(result->Get()->S3ErrorCode);
         }
 
         Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Issues, statusCode);

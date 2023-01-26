@@ -1088,6 +1088,19 @@ namespace NKikimr {
 
         struct TVDiskID {
                 uint32_t GroupID, GroupGeneration, Ring, Domain, VDisk;
+                bool hasGroupID, hasGroupGeneration, hasRing, hasDomain, hasVDisk;
+
+                bool HasGroupID() { return hasGroupID; }
+                bool HasGroupGeneration() { return hasGroupID; }
+                bool HasRing() { return hasRing; }
+                bool HasDomain() { return hasDomain; }
+                bool HasVDisk() { return hasVDisk; }
+
+                uint32_t GetGroupID() { return GroupID; }
+                uint32_t GetGroupGeneration() { return GroupID; }
+                uint32_t GetRing() { return Ring; }
+                uint32_t GetDomain() { return Domain; }
+                uint32_t GetVDisk() { return VDisk; }
         };
 
         enum EVDiskQueueId {
@@ -1227,6 +1240,11 @@ namespace NKikimr {
             uint64_t Cookie;
 
             bool hasId = false, hasShift = false, hasSize = false, hasCookie = false;
+
+            bool HasId() { return hasId; }
+            bool HasShift() { return hasShift; }
+            bool HasSize() { return hasSize; }
+            bool HasCookie() { return hasCookie; }
 
             TLogoBlobID GetId() { return Id; }
             uint64_t GetShift() { return Shift; }
@@ -1583,7 +1601,7 @@ namespace NKikimr {
                 std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
             std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockTabletData));
-            NKikimrBlobStorage::TRangeQuery *q = res->Record.MutableRangeQuery();
+            NKikimr::RawSerializer::TRangeQuery *q = res->Record.MutableRangeQuery();
             LogoBlobIDFromLogoBlobID(fromId, q->MutableFrom());
             LogoBlobIDFromLogoBlobID(toId, q->MutableTo());
             if (maxResults) {

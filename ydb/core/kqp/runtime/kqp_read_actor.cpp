@@ -576,7 +576,7 @@ public:
 
         record.SetResultFormat(Settings.GetDataFormat());
 
-        if (Settings.HasLockTxId()) {
+        if (Settings.HasLockTxId() && BrokenLocks.empty()) {
             record.SetLockTxId(Settings.GetLockTxId());
         }
 
@@ -603,11 +603,6 @@ public:
             return;
         }
 
-        if (record.BrokenTxLocksSize()) {
-            return RuntimeError("Broken locks", NYql::NDqProto::StatusIds::ABORTED,
-                {YqlIssue({}, TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks on " + Settings.GetTable().GetTablePath()  + " invalidated.")});
-        }
-
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             for (auto& issue : record.GetStatus().GetIssues()) {
                 CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
@@ -617,6 +612,11 @@ public:
         for (auto& lock : record.GetTxLocks()) {
             Locks.push_back(lock);
         }
+
+        for (auto& lock : record.GetBrokenTxLocks()) {
+            BrokenLocks.push_back(lock);
+        }
+
         CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
@@ -856,6 +856,9 @@ public:
         for (auto& lock : Locks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        for (auto& lock : BrokenLocks) {
+            resultInfo.AddLocks()->CopyFrom(lock);
+        }
         result.PackFrom(resultInfo);
         return result;
     }
@@ -893,6 +896,7 @@ private:
     TQueue<TResult> Results;
 
     TVector<NKikimrTxDataShard::TLock> Locks;
+    TVector<NKikimrTxDataShard::TLock> BrokenLocks;
 
     ui32 MaxInFlight = 1024;
     const TString LogPrefix;

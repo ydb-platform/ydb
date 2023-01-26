@@ -586,7 +586,7 @@ protected:
                 entry->MutableData()->CopyFrom(*data);
             }
         }
-        for (auto& [index, input] : SourcesMap) {
+        for (auto& [index, input] : InputTransformsMap) {
             if (auto data = input.AsyncInput->ExtraData()) {
                 auto* entry = extraData->AddInputTransformsData();
                 entry->SetIndex(index);

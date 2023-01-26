@@ -1196,10 +1196,21 @@ namespace NKikimr {
         struct TRangeQuery {
             TLogoBlobID From;
             TLogoBlobID To;
-
             uint64_t Cookie;
-
             uint32_t MaxResults;
+
+            bool hasFrom = false;
+            bool hasTo = false;
+            bool hasCookie = false;
+            bool hasMaxResults = false;
+
+            TLogoBlobID* MutableFrom() {
+                return &From;
+            }
+
+            TLogoBlobID* MutableTo() {
+                return &To;
+            }
         };
 
         struct TEvVGet {
@@ -1276,6 +1287,29 @@ namespace NKikimr {
             uint32_t GetReaderTabletGeneration() const { return ReaderTabletGeneration; }
             std::string GetSnapshotId() const { return SnapshotId; }
 
+
+            /// mutable-methods
+            TRangeQuery* MutableRangeQuery() { return &RangeQuery; }
+            std::vector<TExtremeQuery>* MutableExtremeQueries() { return &ExtremeQueries; }
+            TVDiskID* MutableVDiskID() { return &VDiskID; }
+            bool* MutableNotifyIfNotReady() { return &NotifyIfNotReady; }
+            bool* MutableShowInternals() { return &ShowInternals; }
+            uint64_t* MutableCookie() { return &Cookie; }
+            TMsgQoS* MutableMsgQoS() { return &MsgQoS; }
+            bool* MutableIndexOnly() { return &IndexOnly; }
+            EGetHandleClass* MutableHandleClass() { return &HandleClass; }
+            bool* GMutableuppressBarrierCheck() { return &SuppressBarrierCheck; }
+            uint64_t* MutableTabletId() { return &TabletId; }
+            bool* MutableAcquireBlockedGeneration() { return &AcquireBlockedGeneration; }
+            TTimestamps* MutableTimestamps() { return &Timestamps; }
+            uint32_t* MutableForceBlockedGeneration() { return &ForceBlockedGeneration; }
+            uint64_t* MutableReaderTabletId() { return &ReaderTabletId; }
+            uint32_t* MutableReaderTabletGeneration() { return &ReaderTabletGeneration; }
+            std::string* MutableSnapshotId() { return &SnapshotId; }
+
+            /// custom
+            size_t ExtremeQueriesSize() const { return ExtremeQueries.size(); }
+
             /// setters
             void SetRangeQuery(TRangeQuery s) {
                 RangeQuery = s;
@@ -1332,7 +1366,7 @@ namespace NKikimr {
                 hasTabletId = true;
             }
 
-            bool SetAcquireBlockedGeneration(bool s) {
+            void SetAcquireBlockedGeneration(bool s) {
                 AcquireBlockedGeneration = s;
                 hasAcquireBlockedGeneration = true;
             }

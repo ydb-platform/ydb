@@ -1222,11 +1222,21 @@ namespace NKikimr {
 
         struct TExtremeQuery {
             TLogoBlobID Id;
-
             uint64_t Shift;
             uint64_t Size;
-
             uint64_t Cookie;
+
+            bool hasId = false, hasShift = false, hasSize = false, hasCookie = false;
+
+            TLogoBlobID GetId() { return Id; }
+            uint64_t GetShift() { return Shift; }
+            uint64_t GetSize() { return Size; }
+            uint64_t GetCookie() { return Cookie; }
+
+            void SetId(TLogoBlobID o) { hasId = true; Id = o; }
+            void SetShift(uint64_t o) { hasShift = true; Shift = o; }
+            void SetSize(uint64_t o) { hasSize = true; Size = o; }
+            void SetCookie(uint64_t o) { hasCookie = true; Cookie = o; }
         };
 
         struct TRangeQuery {

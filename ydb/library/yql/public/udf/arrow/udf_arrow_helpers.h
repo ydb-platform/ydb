@@ -32,7 +32,6 @@ public:
         , TypeInfoHelper_(typeInfoHelper)
     {
         Readers_.resize(ArgTypes_.size());
-        Y_UNUSED(OutputType_);
     }
 
     IBlockReader& GetReader(ui32 index) {

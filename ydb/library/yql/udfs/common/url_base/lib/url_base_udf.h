@@ -232,7 +232,7 @@ SIMPLE_UDF(TCutScheme, TOptional<char*>(TOptional<char*>)) {
         valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
 }
 
-SIMPLE_UDF(TCutWWW, TOptional<char*>(TOptional<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TCutWWW, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     const std::string_view url(args[0].AsStringRef());
     const std::string_view cut(CutWWWPrefix(url));
@@ -240,13 +240,51 @@ SIMPLE_UDF(TCutWWW, TOptional<char*>(TOptional<char*>)) {
         valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
 }
 
-SIMPLE_UDF(TCutWWW2, TOptional<char*>(TOptional<char*>)) {
+struct TCutWWWKernelExec : public TUnaryKernelExec<TCutWWWKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        if (!arg) {
+            return sink(TBlockItem());
+        }
+
+        const std::string_view url(arg.AsStringRef());
+        const std::string_view cut(CutWWWPrefix(url));
+        if (cut.empty()) {
+            return sink(TBlockItem());
+        }
+
+        sink(TBlockItem(TStringRef(cut)));
+    }
+};
+
+END_SIMPLE_ARROW_UDF(TCutWWW, TCutWWWKernelExec::Do);
+
+BEGIN_SIMPLE_ARROW_UDF(TCutWWW2, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     const std::string_view url(args[0].AsStringRef());
     const std::string_view cut(CutWWWNumberedPrefix(url));
     return cut.empty() ? TUnboxedValue() :
         valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
 }
+
+struct TCutWWW2KernelExec : public TUnaryKernelExec<TCutWWW2KernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        if (!arg) {
+            return sink(TBlockItem());
+        }
+
+        const std::string_view url(arg.AsStringRef());
+        const std::string_view cut(CutWWWNumberedPrefix(url));
+        if (cut.empty()) {
+            return sink(TBlockItem());
+        }
+
+        sink(TBlockItem(TStringRef(cut)));
+    }
+};
+
+END_SIMPLE_ARROW_UDF(TCutWWW2, TCutWWW2KernelExec::Do);
 
 SIMPLE_UDF(TCutQueryStringAndFragment, char*(TAutoMap<char*>)) {
     const std::string_view input(args[0].AsStringRef());

@@ -9,39 +9,29 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
-void CheckTTLSettings(TTestActorRuntime& runtime, const char* tableName = "TTLEnabledTable") {
-    TestDescribeResult(
-        DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)), {
-            NLs::PathExist,
-            NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                const auto& table = record.GetPathDescription().GetTable();
-                UNIT_ASSERT(table.HasTTLSettings());
-
-                const auto& ttl = table.GetTTLSettings();
-                UNIT_ASSERT(ttl.HasEnabled());
-                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), "modified_at");
-                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600);
-            }
-        }
-    );
+template <typename TTtlSettings>
+void CheckTtlSettings(const TTtlSettings& ttl, const char* ttlColumnName) {
+    UNIT_ASSERT(ttl.HasEnabled());
+    UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), ttlColumnName);
+    UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600);
 }
 
-void CheckColumnTableTTLSettings(TTestActorRuntime& runtime,
-                                 const char* tableName = "ColumnTableTTL",
-                                 const char* columnName = "modified_at")
-{
+void OltpTtlChecker(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckTtlSettings(record.GetPathDescription().GetTable().GetTTLSettings(), "modified_at");
+}
+
+NLs::TCheckFunc OlapTtlChecker(const char* ttlColumnName = "modified_at") {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        CheckTtlSettings(record.GetPathDescription().GetColumnTableDescription().GetTtlSettings(), ttlColumnName);
+    };
+}
+
+void CheckTtlSettings(TTestActorRuntime& runtime, NLs::TCheckFunc func, const char* tableName = "TTLEnabledTable") {
     TestDescribeResult(
         DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)), {
             NLs::PathExist,
-            NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                const auto& table = record.GetPathDescription().GetColumnTableDescription();
-                UNIT_ASSERT(table.HasTtlSettings());
-
-                const auto& ttl = table.GetTtlSettings();
-                UNIT_ASSERT(ttl.HasEnabled());
-                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
-                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600);
-            }
+            NLs::Finished,
+            func,
         }
     );
 }
@@ -68,7 +58,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )", name, ttlColumnType, unit));
         env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime, name);
+        CheckTtlSettings(runtime, OltpTtlChecker, name);
     }
 
     Y_UNIT_TEST(CreateTableShouldSucceed) {
@@ -191,7 +181,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
 
         env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime);
+        CheckTtlSettings(runtime, OltpTtlChecker);
     }
 
     Y_UNIT_TEST(CreateTableShouldSucceedOnIndexedTable) {
@@ -225,7 +215,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime);
+        CheckTtlSettings(runtime, OltpTtlChecker);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -275,7 +265,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime);
+        CheckTtlSettings(runtime, OltpTtlChecker);
     }
 
     Y_UNIT_TEST(AlterTableShouldFailOnSimultaneousDropColumnAndEnableTTL) {
@@ -333,7 +323,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )");
 
         env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime);
+        CheckTtlSettings(runtime, OltpTtlChecker);
     }
 
     Y_UNIT_TEST(AlterTableShouldSucceedOnIndexedTable) {
@@ -363,7 +353,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        CheckTTLSettings(runtime);
+        CheckTtlSettings(runtime, OltpTtlChecker);
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
             TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}});
@@ -1068,17 +1058,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             }
         )", name, ttlColumnType, unit));
         env.TestWaitNotification(runtime, txId);
-        CheckColumnTableTTLSettings(runtime, name);
+        CheckTtlSettings(runtime, OlapTtlChecker(), name);
     }
 
     Y_UNIT_TEST(CreateColumnTable) {
         for (auto ct : {/*"Date",*/ "Datetime", "Timestamp"}) {
-            CreateColumnTableShouldSucceed("ColumnTableTTL", ct);
+            CreateColumnTableShouldSucceed("TTLEnabledTable", ct);
         }
 
         for (auto ct : {"Uint32", "Uint64"/*, "DyNumber"*/}) {
             for (auto unit : {"UNIT_SECONDS"/*, "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"*/}) {
-                CreateColumnTableShouldSucceed("ColumnTableTTL", ct, unit);
+                CreateColumnTableShouldSucceed("TTLEnabledTable", ct, unit);
             }
         }
     }
@@ -1090,7 +1080,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
 
         for (auto ct : {"String", "DyNumber"}) {
             TestCreateColumnTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                Name: "ColumnTableTTL"
+                Name: "TTLEnabledTable"
                 Schema {
                     Columns { Name: "key" Type: "Uint64" NotNull: true }
                     Columns { Name: "modified_at" Type: "%s" }
@@ -1112,7 +1102,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         ui64 txId = 100;
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
                 Columns { Name: "modified_at" Type: "Timestamp" }
@@ -1132,7 +1122,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         ui64 txId = 100;
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
                 Columns { Name: "modified_at" Type: "Timestamp" }
@@ -1142,7 +1132,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/ColumnTableTTL"), {
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& table = record.GetPathDescription().GetColumnTableDescription();
@@ -1152,7 +1142,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         );
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             AlterTtlSettings {
               Enabled {
                 ColumnName: "modified_at"
@@ -1161,10 +1151,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        CheckColumnTableTTLSettings(runtime);
+        CheckTtlSettings(runtime, OlapTtlChecker());
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             AlterTtlSettings {
               Enabled {
                 ColumnName: "saved_at"
@@ -1173,10 +1163,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        CheckColumnTableTTLSettings(runtime, "ColumnTableTTL", "saved_at");
+        CheckTtlSettings(runtime, OlapTtlChecker("saved_at"));
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             AlterTtlSettings {
               Disabled {
               }
@@ -1184,7 +1174,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/ColumnTableTTL"), {
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& table = record.GetPathDescription().GetColumnTableDescription();
@@ -1201,7 +1191,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         ui64 txId = 100;
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
                 Columns { Name: "modified_at" Type: "Timestamp" }
@@ -1211,7 +1201,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/ColumnTableTTL"), {
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& table = record.GetPathDescription().GetColumnTableDescription();
@@ -1221,7 +1211,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         );
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableTTL"
+            Name: "TTLEnabledTable"
             AlterTtlSettings {
               Enabled {
                 ColumnName: "str"
@@ -1252,7 +1242,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                CheckTTLSettings(runtime);
+                CheckTtlSettings(runtime, OltpTtlChecker);
             }
         });
     }
@@ -1284,7 +1274,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                CheckTTLSettings(runtime);
+                CheckTtlSettings(runtime, OltpTtlChecker);
             }
         });
     }
@@ -1314,7 +1304,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                CheckTTLSettings(runtime, "TTLEnabledTableCopy");
+                CheckTtlSettings(runtime, OltpTtlChecker, "TTLEnabledTableCopy");
             }
         });
     }
@@ -1344,7 +1334,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                CheckTTLSettings(runtime, "TTLEnabledTableMoved");
+                CheckTtlSettings(runtime, OltpTtlChecker, "TTLEnabledTableMoved");
             }
         });
     }

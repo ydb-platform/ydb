@@ -904,7 +904,7 @@ public:
             if (!snapshotFound) {
                 SetStatusError(
                     Result->Record,
-                    Ydb::StatusIds::NOT_FOUND,
+                    Ydb::StatusIds::PRECONDITION_FAILED,
                     TStringBuilder() << "Table id " << tableId << " lost snapshot at "
                          << state.ReadVersion << " shard " << Self->TabletID()
                          << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
@@ -1116,7 +1116,7 @@ public:
             if (!snapshotFound) {
                 SetStatusError(
                     Result->Record,
-                    Ydb::StatusIds::NOT_FOUND,
+                    Ydb::StatusIds::PRECONDITION_FAILED,
                     TStringBuilder() << "Table id " << tableId << " has no snapshot at "
                          << state.ReadVersion << " shard " << Self->TabletID()
                          << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
@@ -1354,7 +1354,7 @@ private:
         if (!Self->GetSnapshotManager().FindAvailable(snapshotKey) && !allowMvcc) {
             SetStatusError(
                 Result->Record,
-                Ydb::StatusIds::ABORTED,
+                Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Table id " << tableId << " lost snapshot at "
                      << state.ReadVersion << " shard " << Self->TabletID()
                      << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
@@ -1746,7 +1746,7 @@ public:
         if (!Self->GetSnapshotManager().FindAvailable(snapshotKey) && !allowMvcc) {
             SetStatusError(
                 Result->Record,
-                Ydb::StatusIds::ABORTED,
+                Ydb::StatusIds::PRECONDITION_FAILED,
                 TStringBuilder() << "Table id " << tableId << " lost snapshot at "
                      << state.ReadVersion << " shard " << Self->TabletID()
                      << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
@@ -2007,7 +2007,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
                 // check if there is MVCC version and maybe wait
                 if (readVersion < GetSnapshotManager().GetLowWatermark()) {
                     replyWithError(
-                        Ydb::StatusIds::NOT_FOUND,
+                        Ydb::StatusIds::PRECONDITION_FAILED,
                         TStringBuilder() << "MVCC read " << readVersion
                             << " bellow low watermark " << GetSnapshotManager().GetLowWatermark());
                     return;

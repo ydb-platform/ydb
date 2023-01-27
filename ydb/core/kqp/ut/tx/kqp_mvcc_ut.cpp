@@ -55,6 +55,8 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
                     return issue.GetMessage().Contains("stale snapshot");
                 }), result.GetIssues().ToString());
 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
             caught = true;
             break;
         } while (TInstant::Now() < deadline);

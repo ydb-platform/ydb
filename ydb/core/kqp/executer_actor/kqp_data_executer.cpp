@@ -593,6 +593,11 @@ private:
             }
             case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST: {
                 Counters->TxProxyMon->TxResultCancelled->Inc();
+                if (HasMissingSnapshotError(result)) {
+                    auto issue = YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED);
+                    AddDataShardErrors(result, issue);
+                    return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
+                }
                 auto issue = YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST);
                 AddDataShardErrors(result, issue);
                 return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
@@ -2282,6 +2287,15 @@ private:
                 source->MutableSettings()->PackFrom(settings);
             }
         }
+    }
+
+    static bool HasMissingSnapshotError(const NKikimrTxDataShard::TEvProposeTransactionResult& result) {
+        for (const auto& err : result.GetError()) {
+            if (err.GetKind() == NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static void AddDataShardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& result, TIssue& issue) {

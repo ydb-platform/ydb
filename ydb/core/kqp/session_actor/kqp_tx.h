@@ -243,8 +243,37 @@ public:
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
 };
 
+struct TTxId {
+    TULID Id;
+    TString HumanStr;
+
+    TTxId()
+        : Id(TULID::Min())
+    {}
+
+    TTxId(const TULID& other)
+        : Id(other)
+        , HumanStr(Id.ToString())
+    {}
+
+    static TTxId FromString(const TString& str) {
+        TTxId res;
+        res.Id.ParseString(str);
+        res.HumanStr = str;
+        return res;
+    }
+
+    friend bool operator==(const TTxId& lhs, const TTxId& rhs) {
+        return lhs.Id == rhs.Id;
+    }
+
+    TString GetHumanStr() {
+        return HumanStr;
+    }
+};
+
 class TTransactionsCache {
-    TLRUCache<TULID, TIntrusivePtr<TKqpTransactionContext>> Active;
+    TLRUCache<TTxId, TIntrusivePtr<TKqpTransactionContext>> Active;
     std::deque<TIntrusivePtr<TKqpTransactionContext>> ToBeAborted;
 public:
     ui64 EvictedTx = 0;
@@ -263,7 +292,7 @@ public:
         return Active.GetMaxSize();
     }
 
-    TIntrusivePtr<TKqpTransactionContext> Find(const TULID& id) {
+    TIntrusivePtr<TKqpTransactionContext> Find(const TTxId& id) {
         if (auto it = Active.Find(id); it != Active.End()) {
             it.Value()->Touch();
             return *it;
@@ -272,7 +301,7 @@ public:
         }
     }
 
-    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TULID& txId) {
+    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TTxId& txId) {
         if (auto it = Active.FindWithoutPromote(txId); it != Active.End()) {
             auto ret = std::move(it.Value());
             Active.Erase(it);
@@ -303,7 +332,7 @@ public:
         }
     }
 
-    bool CreateNew(const TULID& txId, TIntrusivePtr<TKqpTransactionContext> txCtx) {
+    bool CreateNew(const TTxId& txId, TIntrusivePtr<TKqpTransactionContext> txCtx) {
         if (!RemoveOldTransactions()) {
             return false;
         }
@@ -327,12 +356,6 @@ public:
     }
 };
 
-inline TULID CreateEmptyULID() {
-    TULID next;
-    memset(next.Data, 0, sizeof(next.Data));
-    return next;
-}
-
 bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
     NYql::TExprContext& ctx);
 
@@ -343,3 +366,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
+
+template<>
+struct THash<NKikimr::NKqp::TTxId> {
+    inline size_t operator()(const NKikimr::NKqp::TTxId& id) const noexcept {
+        return THash<NKikimr::TULID>()(id.Id);
+    }
+};

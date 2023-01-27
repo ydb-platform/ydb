@@ -95,8 +95,7 @@ struct TKqpQueryState {
     NWilson::TSpan KqpSessionSpan;
     ETableReadType MaxReadType = ETableReadType::Other;
 
-    TULID TxId; // User tx
-    TString TxId_Human = "";
+    TTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
 
@@ -369,8 +368,7 @@ public:
         YQL_ENSURE(QueryState->HasTxControl(), "Can't perform ROLLBACK_TX: TxControl isn't set in TQueryRequest");
         const auto& txControl = QueryState->GetTxControl();
         QueryState->Commit = txControl.commit_tx();
-        TULID txId;
-        txId.ParseString(txControl.tx_id());
+        auto txId = TTxId::FromString(txControl.tx_id());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
             Transactions.AddToBeAborted(std::move(ctx));
@@ -388,8 +386,7 @@ public:
 
         QueryState->Commit = txControl.commit_tx();
 
-        TULID txId;
-        txId.ParseString(txControl.tx_id());
+        auto txId = TTxId::FromString(txControl.tx_id());
         auto txCtx = Transactions.Find(txId);
         LOG_D("queryRequest TxControl: " << txControl.DebugString() << " txCtx: " << (void*)txCtx.Get());
         if (!txCtx) {
@@ -399,7 +396,6 @@ public:
         QueryState->TxCtx = std::move(txCtx);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxId = txId;
-        QueryState->TxId_Human = txControl.tx_id();
         if (!CheckTransacionLocks()) {
             return;
         }
@@ -794,7 +790,6 @@ public:
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId = UlidGen.Next();
-        QueryState->TxId_Human = QueryState->TxId.ToString();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
@@ -829,8 +824,7 @@ public:
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
                 case Ydb::Table::TransactionControl::kTxId: {
-                    TULID txId;
-                    txId.ParseString(txControl.tx_id());
+                    auto txId = TTxId::FromString(txControl.tx_id());
                     auto txCtx = Transactions.Find(txId);
                     if (!txCtx) {
                         ReplyTransactionNotFound(txControl.tx_id());
@@ -839,7 +833,6 @@ public:
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
                     QueryState->TxId = txId;
-                    QueryState->TxId_Human = txControl.tx_id();
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
@@ -1527,10 +1520,9 @@ public:
                 ctx->Invalidate();
                 Transactions.AddToBeAborted(std::move(ctx));
             }
-            QueryState->TxId = CreateEmptyULID();
-            QueryState->TxId_Human = "";
+            QueryState->TxId = TTxId();
         }
-        response->MutableTxMeta()->set_id(QueryState->TxId_Human);
+        response->MutableTxMeta()->set_id(QueryState->TxId.GetHumanStr());
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
@@ -1681,23 +1673,19 @@ public:
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         FillCompileStatus(compileResult, QueryResponse->Record);
 
-        TULID txId = CreateEmptyULID();
-        TString txId_Human = "";
+        auto txId = TTxId();
         if (QueryState->HasTxControl()) {
             const auto& txControl = QueryState->GetTxControl();
             if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
-                txId.ParseString(txControl.tx_id());
-                txId_Human = txControl.tx_id();
+                txId = TTxId::FromString(txControl.tx_id());
             }
         }
 
-        LOG_W("ReplyQueryCompileError, status " << compileResult->Status << " remove tx with tx_id: " << txId_Human);
+        LOG_W("ReplyQueryCompileError, status " << compileResult->Status << " remove tx with tx_id: " << txId.GetHumanStr());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
             Transactions.AddToBeAborted(std::move(ctx));
         }
-        txId = CreateEmptyULID();
-        txId_Human = "";
 
         auto* record = &QueryResponse->Record.GetRef();
         FillTxInfo(record->MutableResponse());

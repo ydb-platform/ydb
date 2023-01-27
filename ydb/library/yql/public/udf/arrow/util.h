@@ -4,8 +4,8 @@
 
 #include <util/generic/vector.h>
 
-#include <arrow/buffer_builder.h>
 #include <arrow/datum.h>
+#include <arrow/memory_pool.h>
 #include <arrow/util/bit_util.h>
 
 #include <functional>
@@ -29,28 +29,43 @@ inline bool IsNull(const arrow::ArrayData& data, size_t index) {
     return data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
 }
 
-// similar to arrow::TypedBufferBuilder, but with UnsafeAdvance() method
-// and shrinkToFit = false
+/// \brief same as arrow::AllocateResizableBuffer, but allows to control zero padding
+std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t size, arrow::MemoryPool* pool, bool zeroPad = false);
+
+// similar to arrow::TypedBufferBuilder, but:
+// 1) with UnsafeAdvance() method
+// 2) shrinkToFit = false
+// 3) doesn't zero pad buffer
 template<typename T>
 class TTypedBufferBuilder {
     static_assert(std::is_pod_v<T>);
     static_assert(!std::is_same_v<T, bool>);
 public:
     explicit TTypedBufferBuilder(arrow::MemoryPool* pool)
-        : Builder(pool)
+        : Pool(pool)
     {
     }
 
     inline void Reserve(size_t size) {
-        ARROW_OK(Builder.Reserve(size * sizeof(T)));
+        if (!Buffer) {
+            bool zeroPad = false;
+            Buffer = AllocateResizableBuffer(size * sizeof(T), Pool, zeroPad);
+        } else {
+            size_t requiredBytes = (size + Length()) * sizeof(T);
+            size_t currentCapacity = Buffer->capacity();
+            if (requiredBytes > currentCapacity) {
+                size_t newCapacity = std::max(requiredBytes, currentCapacity * 2);
+                ARROW_OK(Buffer->Reserve(newCapacity));
+            }
+        }
     }
 
     inline size_t Length() const {
-        return Builder.length() / sizeof(T);
+        return Len;
     }
 
     inline T* MutableData() {
-        return reinterpret_cast<T*>(Builder.mutable_data());
+        return reinterpret_cast<T*>(Buffer->mutable_data());
     }
 
     inline T* End() {
@@ -58,35 +73,44 @@ public:
     }
 
     inline const T* Data() const {
-        return reinterpret_cast<const T*>(Builder.data());
+        return reinterpret_cast<const T*>(Buffer->data());
     }
 
     inline void UnsafeAppend(const T* values, size_t count) {
+        Y_VERIFY_DEBUG(count + Length() <= Buffer->capacity() / sizeof(T));
         std::memcpy(End(), values, count * sizeof(T));
         UnsafeAdvance(count);
     }
 
     inline void UnsafeAppend(size_t count, const T& value) {
+        Y_VERIFY_DEBUG(count + Length() <= Buffer->capacity() / sizeof(T));
         T* target = End();
         std::fill(target, target + count, value);
         UnsafeAdvance(count);
     }
 
     inline void UnsafeAppend(T&& value) {
+        Y_VERIFY_DEBUG(1 + Length() <= Buffer->capacity() / sizeof(T));
         *End() = std::move(value);
         UnsafeAdvance(1);
     }
 
     inline void UnsafeAdvance(size_t count) {
-        Builder.UnsafeAdvance(count * sizeof(T));
+        Len += count;
     }
 
     inline std::shared_ptr<arrow::Buffer> Finish() {
         bool shrinkToFit = false;
-        return ARROW_RESULT(Builder.Finish(shrinkToFit));
+        ARROW_OK(Buffer->Resize(Len * sizeof(T), shrinkToFit));
+        std::shared_ptr<arrow::ResizableBuffer> result;
+        std::swap(result, Buffer);
+        Len = 0;
+        return result;
     }
 private:
-    arrow::BufferBuilder Builder;
+    arrow::MemoryPool* const Pool;
+    std::shared_ptr<arrow::ResizableBuffer> Buffer;
+    size_t Len = 0;
 };
 
 }

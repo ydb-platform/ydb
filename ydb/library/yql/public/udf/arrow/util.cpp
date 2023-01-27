@@ -8,6 +8,67 @@
 namespace NYql {
 namespace NUdf {
 
+namespace {
+
+class TResizeableBuffer final : public arrow::ResizableBuffer {
+public:
+    explicit TResizeableBuffer(arrow::MemoryPool* pool)
+        : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
+        , Pool(pool)
+    {
+    }
+
+    ~TResizeableBuffer() override {
+        uint8_t* ptr = mutable_data();
+        if (ptr) {
+            Pool->Free(ptr, capacity_);
+        }
+    }
+
+    arrow::Status Reserve(const int64_t capacity) override {
+        if (capacity < 0) {
+            return arrow::Status::Invalid("Negative buffer capacity: ", capacity);
+        }
+        uint8_t* ptr = mutable_data();
+        if (!ptr || capacity > capacity_) {
+            int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(capacity);
+            if (ptr) {
+                ARROW_RETURN_NOT_OK(Pool->Reallocate(capacity_, newCapacity, &ptr));
+            } else {
+                ARROW_RETURN_NOT_OK(Pool->Allocate(newCapacity, &ptr));
+            }
+            data_ = ptr;
+            capacity_ = newCapacity;
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Resize(const int64_t newSize, bool shrink_to_fit = true) override {
+        if (ARROW_PREDICT_FALSE(newSize < 0)) {
+            return arrow::Status::Invalid("Negative buffer resize: ", newSize);
+        }
+        uint8_t* ptr = mutable_data();
+        if (ptr && shrink_to_fit && newSize <= size_) {
+            int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(newSize);
+            if (capacity_ != newCapacity) {
+                ARROW_RETURN_NOT_OK(Pool->Reallocate(capacity_, newCapacity, &ptr));
+                data_ = ptr;
+                capacity_ = newCapacity;
+            }
+        } else {
+            RETURN_NOT_OK(Reserve(newSize));
+        }
+        size_ = newSize;
+
+        return arrow::Status::OK();
+    }
+
+private:
+    arrow::MemoryPool* Pool;
+};
+
+} // namespace
+
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool) {
     // align up to 64 bit
     bitCount = (bitCount + 63u) & ~size_t(63u);
@@ -78,6 +139,15 @@ arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks)
         return arrow::Datum(chunked);
     }
     return arrow::Datum(resultChunks.front());
+}
+
+std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t size, arrow::MemoryPool* pool, bool zeroPad) {
+    std::unique_ptr<TResizeableBuffer> result = std::make_unique<TResizeableBuffer>(pool);
+    ARROW_OK(result->Reserve(size));
+    if (zeroPad) {
+        result->ZeroPadding();
+    }
+    return result;
 }
 
 }

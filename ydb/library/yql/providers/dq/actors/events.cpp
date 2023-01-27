@@ -34,14 +34,11 @@ namespace NYql::NDqs {
         Record = std::move(queryResult);
     }
 
-    TEvGraphRequest::TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId)
+    TEvGraphRequest::TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId)
     {
         *Record.MutableRequest() = request;
         NActors::ActorIdToProto(controlId, Record.MutableControlId());
         NActors::ActorIdToProto(resultId, Record.MutableResultId());
-        if (checkPointCoordinatorId) {
-            NActors::ActorIdToProto(checkPointCoordinatorId, Record.MutableCheckPointCoordinatorId());
-        }
     }
 
     TEvReadyState::TEvReadyState(NActors::TActorId sourceId, TString type) {

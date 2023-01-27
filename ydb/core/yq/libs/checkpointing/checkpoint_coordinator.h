@@ -13,6 +13,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/actors/task_controller_impl.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -21,19 +22,29 @@ namespace NYq {
 using namespace NActors;
 using namespace NYq::NConfig;
 
-class TCheckpointCoordinator : public TActorBootstrapped<TCheckpointCoordinator> {
+class TCheckpointCoordinator : public NYql::TTaskControllerImpl<TCheckpointCoordinator> {
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
-                           const TActorId& taskControllerId,
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
                            const TCheckpointCoordinatorConfig& settings,
                            const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const YandexQuery::StateLoadMode& stateLoadMode,
-                           const YandexQuery::StreamingDisposition& streamingDisposition);
+                           const YandexQuery::StreamingDisposition& streamingDisposition,
+                           // vvv TaskController temporary params vvv
+                           const TString& traceId,
+                           const NActors::TActorId& executerId,
+                           const NActors::TActorId& resultId,
+                           const NYql::TDqConfiguration::TPtr& tcSettings,
+                           const NYql::NCommon::TServiceCounters& serviceCounters,
+                           const TDuration& pingPeriod,
+                           const TDuration& aggrPeriod
+                           );
 
-    void Handle(const NYql::NDqs::TEvReadyState::TPtr&);
+    using NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnInternalError;
+
+    void Handle(NYql::NDqs::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse::TPtr&);
@@ -47,7 +58,6 @@ public:
     void Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
     void Handle(NActors::TEvents::TEvPoison::TPtr&);
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr&);
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&);
@@ -56,27 +66,37 @@ public:
 
     STRICT_STFUNC_EXC(DispatchEvent,
         hFunc(NYql::NDqs::TEvReadyState, Handle)
-        hFunc(TEvCheckpointStorage::TEvRegisterCoordinatorResponse, Handle)
-        hFunc(NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck, Handle)
-        hFunc(TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse, Handle)
-        hFunc(NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult, Handle)
+        hFunc(NYql::NDqs::TEvQueryResponse, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnQueryResult)
+        hFunc(NYql::NDqs::TEvDqFailure, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnResultFailure)
+
         hFunc(TEvCheckpointCoordinator::TEvScheduleCheckpointing, Handle)
+        hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle)
+
+        hFunc(TEvCheckpointStorage::TEvRegisterCoordinatorResponse, Handle)
+        hFunc(TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse, Handle)
         hFunc(TEvCheckpointStorage::TEvCreateCheckpointResponse, Handle)
-        hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult, Handle)
         hFunc(TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse, Handle)
-        hFunc(NYql::NDq::TEvDqCompute::TEvStateCommitted, Handle)
         hFunc(TEvCheckpointStorage::TEvCompleteCheckpointResponse, Handle)
         hFunc(TEvCheckpointStorage::TEvAbortCheckpointResponse, Handle)
+    
+        hFunc(NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck, Handle)
+        hFunc(NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult, Handle)
+        hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult, Handle)
+        hFunc(NYql::NDq::TEvDqCompute::TEvStateCommitted, Handle)
+        hFunc(NYql::NDq::TEvDqCompute::TEvState, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnComputeActorState)
+        hFunc(NYql::NDq::TEvDq::TEvAbortExecution, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnAbortExecution)
+
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle)
+
         hFunc(NActors::TEvents::TEvPoison, Handle)
-        hFunc(NActors::TEvents::TEvUndelivered, Handle)
+        hFunc(NActors::TEvents::TEvUndelivered, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnUndelivered)
+        hFunc(NActors::TEvents::TEvWakeup, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnWakeup)
+
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
-        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)
-        hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle),
+        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle),
+
         ExceptionFunc(std::exception, HandleException)
     )
-
-    void Bootstrap();
 
     static constexpr char ActorName[] = "YQ_CHECKPOINT_COORDINATOR";
 
@@ -146,7 +166,6 @@ private:
     };
 
     const TCoordinatorId CoordinatorId;
-    const TActorId TaskControllerId;
     const TActorId StorageProxy;
     const TActorId RunActorId;
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
@@ -177,6 +196,23 @@ private:
     YandexQuery::StreamingDisposition StreamingDisposition;
 };
 
-THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& executerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const ::NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT, const YandexQuery::StreamingDisposition& streamingDisposition = {});
+THolder<NActors::IActor> MakeCheckpointCoordinator(
+    TCoordinatorId coordinatorId,
+    const TActorId& storageProxy,
+    const TActorId& runActorId,
+    const TCheckpointCoordinatorConfig& settings,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NProto::TGraphParams& graphParams,
+    const YandexQuery::StateLoadMode& stateLoadMode /* = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT */,
+    const YandexQuery::StreamingDisposition& streamingDisposition /* = {} */,
+    // vvv TaskController temporary params vvv
+    const TString& traceId,
+    const NActors::TActorId& executerId,
+    const NActors::TActorId& resultId,
+    const NYql::TDqConfiguration::TPtr& tcSettings,
+    const NYql::NCommon::TServiceCounters& serviceCounters,
+    const TDuration& pingPeriod,
+    const TDuration& aggrPeriod
+    );
 
 } // namespace NYq

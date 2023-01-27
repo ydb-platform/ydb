@@ -28,16 +28,31 @@
 namespace NYq {
 
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
-                                               const TActorId& taskControllerId,
                                                const TActorId& storageProxy,
                                                const TActorId& runActorId,
                                                const TCheckpointCoordinatorConfig& settings,
                                                const ::NMonitoring::TDynamicCounterPtr& counters,
                                                const NProto::TGraphParams& graphParams,
                                                const YandexQuery::StateLoadMode& stateLoadMode,
-                                               const YandexQuery::StreamingDisposition& streamingDisposition)
-    : CoordinatorId(std::move(coordinatorId))
-    , TaskControllerId(taskControllerId)
+                                               const YandexQuery::StreamingDisposition& streamingDisposition,
+                                               // vvv TaskController temporary params vvv
+                                               const TString& traceId,
+                                               const NActors::TActorId& executerId,
+                                               const NActors::TActorId& resultId,
+                                               const NYql::TDqConfiguration::TPtr& tcSettings,
+                                               const NYql::NCommon::TServiceCounters& serviceCounters,
+                                               const TDuration& pingPeriod,
+                                               const TDuration& aggrPeriod)
+    : NYql::TTaskControllerImpl<TCheckpointCoordinator>(
+            traceId,
+            executerId,
+            resultId,
+            tcSettings,
+            serviceCounters,
+            pingPeriod,
+            aggrPeriod,
+            &TCheckpointCoordinator::DispatchEvent)
+    , CoordinatorId(std::move(coordinatorId))
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
     , Settings(settings)
@@ -49,12 +64,11 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 {
 }
 
-void TCheckpointCoordinator::Bootstrap() {
-    Become(&TThis::DispatchEvent);
-    CC_LOG_D("Bootstrapped with streaming disposition " << StreamingDisposition << " and state load mode " << YandexQuery::StateLoadMode_Name(StateLoadMode));
-}
+void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
+    NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnReadyState(ev);
 
-void TCheckpointCoordinator::Handle(const NYql::NDqs::TEvReadyState::TPtr& ev) {
+    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << YandexQuery::StateLoadMode_Name(StateLoadMode));
+
     const auto& tasks = ev->Get()->Record.GetTask();
     const auto& actorIds = ev->Get()->Record.GetActorId();
     Y_VERIFY(tasks.size() == actorIds.size());
@@ -63,7 +77,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDqs::TEvReadyState::TPtr& ev) {
         auto& task = tasks[i];
         auto& actorId = TaskIdToActor[task.GetId()];
         if (actorId) {
-            Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(TStringBuilder() << "Duplicate task id: " << task.GetId()));
+            OnInternalError(TStringBuilder() << "Duplicate task id: " << task.GetId());
             return;
         }
         actorId = ActorIdFromProto(actorIds[i]);
@@ -113,7 +127,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     if (issues) {
         CC_LOG_E("Can't register in storage: " + issues.ToOneLineString());
         ++*Metrics.StorageError;
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Can't register in storage", issues));
+        OnInternalError("Can't register in storage", issues);
         return;
     }
 
@@ -141,7 +155,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
         InitCheckpoint();
         ScheduleNextCheckpoint();
     } else {
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(TStringBuilder() << "Unexpected state load mode (" << YandexQuery::StateLoadMode_Name(StateLoadMode) << ") and streaming disposition " << StreamingDisposition));
+        OnInternalError(TStringBuilder() << "Unexpected state load mode (" << YandexQuery::StateLoadMode_Name(StateLoadMode) << ") and streaming disposition " << StreamingDisposition);
     }
 }
 
@@ -169,7 +183,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     if (event->Issues) {
         ++*Metrics.StorageError;
         CC_LOG_E("Can't get checkpoints to restore: " + event->Issues.ToOneLineString());
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Can't get checkpoints to restore", event->Issues));
+        OnInternalError("Can't get checkpoints to restore", event->Issues);
         return;
     }
 
@@ -212,7 +226,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         ++*Metrics.StorageError;
         const TString message = TStringBuilder() << "Can't get graph params from checkpoint " << checkpoint.CheckpointId;
         CC_LOG_I(message);
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message));
+        OnInternalError(message);
         return;
     }
 
@@ -230,7 +244,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     if (!result) {
-        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::BAD_REQUEST, issues));
+        NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, "Can't restore from plan given", issues);
         return;
     } else { // Report as transient issues
         Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));
@@ -243,7 +257,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         if (actorIdIt == TaskIdToActor.end()) {
             const TString msg = TStringBuilder() << "ActorId for task id " << taskId << " was not found";
             CC_LOG_E(msg);
-            Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(msg));
+            OnInternalError(msg);
             return;
         }
         const auto transportIt = ActorsToWaitFor.find(actorIdIt->second);
@@ -274,19 +288,19 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 
     if (!PendingRestoreCheckpoint) {
         CC_LOG_E("[" << checkpoint << "] Got TEvRestoreFromCheckpointResult but has no PendingRestoreCheckpoint");
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Got TEvRestoreFromCheckpointResult but has no PendingRestoreCheckpoint"));
+        OnInternalError("Got TEvRestoreFromCheckpointResult but has no PendingRestoreCheckpoint");
         return;
     }
 
     if (PendingRestoreCheckpoint->CheckpointId != checkpoint) {
         CC_LOG_E("[" << checkpoint << "] Got TEvRestoreFromCheckpointResult event with unexpected checkpoint: " << checkpoint << ", expected: " << PendingRestoreCheckpoint->CheckpointId);
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Got unexpected checkpoint"));
+        OnInternalError("Got unexpected checkpoint");
         return;
     }
 
     if (status != NYql::NDqProto::TEvRestoreFromCheckpointResult_ERestoreStatus_OK) {
         CC_LOG_E("[" << checkpoint << "] Can't restore: " << statusName);
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::Aborted("Can't restore: " + statusName));
+        NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnError(NYql::NDqProto::StatusIds::ABORTED, "Can't restore: " + statusName, {});
         return;
     }
 
@@ -563,14 +577,6 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
     PassAway();
 }
 
-void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    TStringStream message;
-    message << "Got TEvUndelivered; reason: " << ev->Get()->Reason << ", sourceType: " << ev->Get()->SourceType;
-    CC_LOG_D(message.Str());
-    Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::Unavailable(message.Str()));
-    PassAway();
-}
-
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&) {
     InitingZeroCheckpoint = false;
     // TODO: run graph only now, not before zero checkpoint inited
@@ -580,17 +586,52 @@ void TCheckpointCoordinator::PassAway() {
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
-    TActorBootstrapped<TCheckpointCoordinator>::PassAway();
+    NYql::TTaskControllerImpl<TCheckpointCoordinator>::PassAway();
 }
 
 void TCheckpointCoordinator::HandleException(const std::exception& err) {
     NYql::TIssues issues;
     issues.AddIssue(err.what());
-    Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Internal error in checkpoint coordinator", issues));
+    OnInternalError("Internal error in checkpoint coordinator", issues);
 }
 
-THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& taskControllerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const ::NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode, const YandexQuery::StreamingDisposition& streamingDisposition) {
-    return MakeHolder<TCheckpointCoordinator>(coordinatorId, taskControllerId, storageProxy, runActorId, settings, counters, graphParams, stateLoadMode, streamingDisposition);
+THolder<NActors::IActor> MakeCheckpointCoordinator(
+    TCoordinatorId coordinatorId,
+    const TActorId& storageProxy,
+    const TActorId& runActorId,
+    const TCheckpointCoordinatorConfig& settings,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NProto::TGraphParams& graphParams,
+    const YandexQuery::StateLoadMode& stateLoadMode /* = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT */,
+    const YandexQuery::StreamingDisposition& streamingDisposition /* = {} */,
+    // vvv TaskController temporary params vvv
+    const TString& traceId,
+    const NActors::TActorId& executerId,
+    const NActors::TActorId& resultId,
+    const NYql::TDqConfiguration::TPtr& tcSettings,
+    const NYql::NCommon::TServiceCounters& serviceCounters,
+    const TDuration& pingPeriod,
+    const TDuration& aggrPeriod
+    ) 
+{
+    return MakeHolder<TCheckpointCoordinator>(
+        coordinatorId,
+        storageProxy,
+        runActorId,
+        settings,
+        counters,
+        graphParams,
+        stateLoadMode,
+        streamingDisposition,
+        // vvv TaskController temporary params vvv
+        traceId,
+        executerId,
+        resultId,
+        tcSettings,
+        serviceCounters,
+        pingPeriod,
+        aggrPeriod
+        );
 }
 
 } // namespace NYq

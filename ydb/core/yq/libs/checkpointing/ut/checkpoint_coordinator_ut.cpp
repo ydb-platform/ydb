@@ -89,21 +89,34 @@ struct TTestBootstrap : public TTestActorRuntime {
         Settings.SetCheckpointingPeriodMillis(TDuration::Hours(1).MilliSeconds());
         Settings.SetMaxInflight(1);
 
+        NYql::TDqConfiguration::TPtr DqSettings = MakeIntrusive<NYql::TDqConfiguration>();
+
         SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
 
-        CheckpointCoordinator = Register(MakeCheckpointCoordinator(TCoordinatorId("my-graph-id", 42), {}, StorageProxy, RunActor, Settings, Counters, NProto::TGraphParams()).Release());
-        WaitForBootstrap();
+        CheckpointCoordinator = Register(MakeCheckpointCoordinator(
+            TCoordinatorId("my-graph-id", 42),
+            StorageProxy,
+            RunActor,
+            Settings,
+            Counters,
+            NProto::TGraphParams(),
+            YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            {},
+            //
+            "my-graph-id",
+            {} /* ExecuterId */,
+            RunActor,
+            DqSettings,
+            ::NYql::NCommon::TServiceCounters(Counters, nullptr, ""),
+            TDuration::Seconds(3),
+            TDuration::Seconds(1)
+        ).Release());
         Send(new IEventHandle(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState))));
 
         EnableScheduleForActor(CheckpointCoordinator);
     }
-
-    void WaitForBootstrap() {
-        NActors::TDispatchOptions options;
-        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1);
-        DispatchEvents(options);
-    }
 };
+
 } // namespace
 
 namespace NYq {

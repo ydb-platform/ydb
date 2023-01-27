@@ -140,11 +140,9 @@ private:
         });
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
         ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
-        CheckPointCoordinatorId = NActors::ActorIdFromProto(ev->Get()->Record.GetCheckPointCoordinatorId());
         // These actors will be killed at exit.
         AddChild(ControlId);
         AddChild(ResultId);
-        AddChild(CheckPointCoordinatorId);
 
         int workerCount = ev->Get()->Record.GetRequest().GetTask().size();
         const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
@@ -404,13 +402,9 @@ private:
         AllocationHistogram->Collect((ExecutionStart-StartTime).Seconds());
 
         auto readyState1 = res->Record;
-        auto readyState2 = res->Record;
         Send(ControlId, res.Release());
         if (ResultId != SelfId() && ResultId != ControlId) {
             Send(ResultId, new TEvReadyState(std::move(readyState1)));
-        }
-        if (CheckPointCoordinatorId) {
-            Send(CheckPointCoordinatorId, new TEvReadyState(std::move(readyState2)));
         }
 
         if (Timeout) {
@@ -466,7 +460,6 @@ private:
 
     NActors::TActorId ControlId;
     NActors::TActorId ResultId;
-    NActors::TActorId CheckPointCoordinatorId;
     TExprNode::TPtr ExprRoot;
     THolder<IDqsExecutionPlanner> ExecutionPlanner;
     ui64 ResourceId = 0;

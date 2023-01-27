@@ -269,6 +269,9 @@ struct TEvaluationGraphInfo {
 
 class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
 public:
+    using NActors::TActorBootstrapped<TRunActor>::Register;
+    using NActors::TActorBootstrapped<TRunActor>::Send;
+
     explicit TRunActor(
         const TActorId& fetcherId
         , const ::NYql::NCommon::TServiceCounters& queryCounters
@@ -394,7 +397,6 @@ private:
 
             // Clear finished actors ids
             ExecuterId = {};
-            CheckpointCoordinatorId = {};
             ControlId = {};
         }
     }
@@ -726,7 +728,7 @@ private:
                 TopicsForConsumersCreation.size() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             ProcessQuery();
         } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
-            Send(CheckpointCoordinatorId, new TEvCheckpointCoordinator::TEvRunGraph());
+            Send(ControlId, new TEvCheckpointCoordinator::TEvRunGraph());
         }
     }
 
@@ -801,7 +803,7 @@ private:
 
     void Handle(TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
         LOG_D("Coordinator saved zero checkpoint");
-        Y_VERIFY(CheckpointCoordinatorId);
+        Y_VERIFY(ControlId);
         SetLoadFromCheckpointMode();
     }
 
@@ -1250,7 +1252,7 @@ private:
 
         TEvaluationGraphInfo info;
 
-        info.ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), false));
+        info.ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), false));
 
         if (dqGraphParams.GetResultType()) {
             TVector<TString> columns;
@@ -1260,7 +1262,7 @@ private:
 
             NActors::TActorId empty = {};
             THashMap<TString, TString> emptySecureParams; // NOT USED in RR
-            info.ResultId = NActors::TActivationContext::Register(
+            info.ResultId = Register(
                     MakeResultReceiver(
                         columns, info.ExecuterId, dqGraphParams.GetSession(), dqConfiguration, emptySecureParams,
                         dqGraphParams.GetResultType(), empty, false).Release());
@@ -1270,7 +1272,7 @@ private:
             info.ResultId = info.ExecuterId;
         }
 
-        info.ControlId = NActors::TActivationContext::Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
+        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -1280,7 +1282,7 @@ private:
         *request.MutableSecureParams() = dqGraphParams.GetSecureParams();
         *request.MutableColumns() = dqGraphParams.GetColumns();
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
-        NActors::TActivationContext::Send(new IEventHandle(info.ExecuterId, SelfId(), new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId, TActorId{})));
+        Send(info.ExecuterId, new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId));
         LOG_D("Evaluation Executer: " << info.ExecuterId << ", Controller: " << info.ControlId << ", ResultActor: " << info.ResultId);
         return info;
     }
@@ -1292,7 +1294,7 @@ private:
         dqConfiguration->FreezeDefaults();
         dqConfiguration->FallbackPolicy = "never";
 
-        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
+        ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
 
         NActors::TActorId resultId;
         if (dqGraphParams.GetResultType()) {
@@ -1307,7 +1309,7 @@ private:
             for (const auto& column : dqGraphParams.GetColumns()) {
                 columns.emplace_back(column);
             }
-            resultId = NActors::TActivationContext::Register(
+            resultId = Register(
                     CreateResultWriter(
                         ExecuterId, dqGraphParams.GetResultType(),
                         writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ResultBytesLimit));
@@ -1316,18 +1318,34 @@ private:
             resultId = ExecuterId;
         }
 
-        ControlId = NActors::TActivationContext::Register(NYql::MakeTaskController(SessionId, ExecuterId, resultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
         if (EnableCheckpointCoordinator) {
-            CheckpointCoordinatorId = NActors::TActivationContext::Register(MakeCheckpointCoordinator(
+            ControlId = Register(MakeCheckpointCoordinator(
                 ::NYq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
-                ControlId,
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
                 Params.CheckpointCoordinatorConfig,
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
-                Params.StreamingDisposition).Release());
+                Params.StreamingDisposition,
+                // vvv TaskController temporary params vvv
+                SessionId,
+                ExecuterId,
+                resultId,
+                dqConfiguration,
+                QueryCounters,
+                TDuration::Seconds(3),
+                TDuration::Seconds(1)
+                ).Release());
+        } else {
+            ControlId = Register(NYql::MakeTaskController(
+                SessionId,
+                ExecuterId,
+                resultId,
+                dqConfiguration,
+                QueryCounters,
+                TDuration::Seconds(3)
+            ).Release());
         }
 
         Yql::DqsProto::ExecuteGraphRequest request;
@@ -1341,8 +1359,8 @@ private:
         commonTaskParams["fq.job_id"] = Params.JobId;
         commonTaskParams["fq.restart_count"] = ToString(Params.RestartCount);
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
-        NActors::TActivationContext::Send(new IEventHandle(ExecuterId, SelfId(), new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId, CheckpointCoordinatorId)));
-        LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId << ", CheckPointCoordinatior " << CheckpointCoordinatorId);
+        Send(ExecuterId, new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId));
+        LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
     }
 
     void SetupDqSettings(NYql::TDqGatewayConfig& dqGatewaysConfig) const {
@@ -1746,7 +1764,6 @@ private:
                     html << "<td>" << DqGraphIndex << " of " << DqGraphParams.size() << "</td>";
                     html << "<td> Executer" << ExecuterId << "</td>";
                     html << "<td> Control" << ControlId << "</td>";
-                    html << "<td> Coordinator" << CheckpointCoordinatorId << "</td>";
                 }
             html << "</tr>";
             html << "</tbody></table>";
@@ -1908,7 +1925,6 @@ private:
     ui32 DqEvalIndex = 0;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
-    NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;

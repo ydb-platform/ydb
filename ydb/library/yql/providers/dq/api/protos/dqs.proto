@@ -74,7 +74,7 @@ message TFreeWorkersNotify {
     bool IsForwarded = 2;
 
     string TraceId = 6;
-    // repeated TWorker.TGuid FailedWorker = 7; // reserved
+    reserved 7;
     repeated string FailedWorkerGuid = 8;
 }
 
@@ -196,7 +196,7 @@ message TGraphRequest {
     Yql.DqsProto.ExecuteGraphRequest Request = 1;
     NActorsProto.TActorId ControlId = 2;
     NActorsProto.TActorId ResultId = 3;
-    NActorsProto.TActorId CheckPointCoordinatorId = 4; // may be empty
+    reserved 4;
 }
 
 message TDqTaskRequest {

@@ -80,7 +80,7 @@ public:
         limit->SetMaxStorageMegabytes(1_MB);
 
 
-        MeteringFile = MakeHolder<TTempFileHandle>("meteringData.txt");
+        MeteringFile = MakeHolder<TTempFileHandle>();
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
 
         if (secure) {

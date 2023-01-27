@@ -22,7 +22,6 @@
 
   {% include notitle [Windows](_includes/ydb-cli/windows.md) %}
 
-
 {% endlist %}
 
 ## {{ ydb-short-name }} Server
@@ -42,6 +41,5 @@
 - Исходный код
 
   {% include notitle [docker](_includes/server/source_code.md) %}
-
 
 {% endlist %}

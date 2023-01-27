@@ -1353,7 +1353,7 @@ public:
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "ticket_parser", "Ticket Parser", false, TActivationContext::ActorSystem(), TActorId());
+            mon->RegisterActorPage(actorsMonPage, "ticket_parser", "Ticket Parser", false, TActivationContext::ActorSystem(), this->SelfId());
         }
 
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());

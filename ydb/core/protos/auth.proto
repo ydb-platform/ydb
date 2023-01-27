@@ -42,6 +42,7 @@ message TAuthConfig {
     optional string PathToRootCA = 60 [default = "/etc/ssl/certs/YandexInternalRootCA.pem"]; // root CA certificate PEM/x509
     optional uint32 AccessServiceGrpcKeepAliveTimeMs = 70 [default = 10000]; // CLOUD-27573
     optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573
+    optional TStaffApiTvmSettings StaffApiTvmSettings = 72;
 }
 
 message TUserRegistryConfig {
@@ -55,4 +56,16 @@ message TTVMConfig {
     optional bool UpdatePublicKeys = 4 [default = true];
     optional uint64 UpdatePublicKeysSuccessTimeout = 5 [default = 82800];
     optional uint64 UpdatePublicKeysFailureTimeout = 6 [default = 10];
+}
+
+message TStaffApiTvmSettings {
+    optional string Host = 1 [default = "https://tvm-api.yandex.net"];
+    optional uint32 Port = 2 [default = 443];
+    optional uint32 SelfTvmId = 3 [default = 2002716];
+    optional string DiskCacheDir = 4 [default = "./tvm_api_client_cache"];
+    optional uint32 StaffAppId = 5 [default = 2001974];
+    oneof Secret {
+        string SecretEnvironmentVariable = 6 [default = "TVM_SECRET"];
+        string PlainTextSecret = 7;
+    }
 }

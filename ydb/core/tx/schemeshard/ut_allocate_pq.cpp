@@ -101,6 +101,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardAllocatePQTest) {
 
         TestDeallocatePQ(runtime, ++txId, "/MyRoot/DirA", "Name: \"PQGroup\"");
         env.TestWaitNotification(runtime, txId);
+        // there are nothing to wait: operation DeallocatePersQueueGroup does not delete any tablets/shards
         //env.TestWaitShardDeletion(runtime, {1, 2, 3, 4});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),

@@ -72,8 +72,9 @@ private:
 
 class TSimpleArrowUdfImpl : public TBoxedValue {
 public:
-    TSimpleArrowUdfImpl(const TVector<const TType*> argTypes, const TType* outputType, bool onlyScalars,
-        TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name)
+    TSimpleArrowUdfImpl(const TVector<const TType*> argBlockTypes, const TType* outputType, bool onlyScalars,
+        TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name,
+        arrow::compute::NullHandling::type nullHandling)
         : OnlyScalars_(onlyScalars)
         , Exec_(exec)
         , Pos_(GetSourcePosition(builder))
@@ -81,19 +82,26 @@ public:
         , KernelContext_(&ExecContext_)
     {
         auto typeInfoHelper = builder.TypeInfoHelper();
-        Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        Kernel_.null_handling = nullHandling;
         Kernel_.exec = Exec_;
         std::vector<arrow::compute::InputType> inTypes;
-        for (const auto& t : argTypes) {
-            auto arrowTypeHandle = typeInfoHelper->MakeArrowType(t);
+        TVector<const TType*> argTypes;
+        for (const auto& blockType : argBlockTypes) {
+            TBlockTypeInspector blockInspector(*typeInfoHelper, blockType);
+            Y_ENSURE(blockInspector);
+            argTypes.push_back(blockInspector.GetItemType());
+
+            auto arrowTypeHandle = typeInfoHelper->MakeArrowType(blockInspector.GetItemType());
             Y_ENSURE(arrowTypeHandle);
             ArrowSchema s;
             arrowTypeHandle->Export(&s);
             auto type = ARROW_RESULT(arrow::ImportType(&s));
             ArgArrowTypes_.emplace_back(type);
 
-            inTypes.emplace_back(type);
-            ArgsValuesDescr_.emplace_back(type);
+            auto shape = blockInspector.IsScalar() ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
+
+            inTypes.emplace_back(arrow::compute::InputType(type, shape));
+            ArgsValuesDescr_.emplace_back(arrow::ValueDescr(type, shape));
         }
 
         ReturnArrowTypeHandle_ = typeInfoHelper->MakeArrowType(outputType);
@@ -101,7 +109,8 @@ public:
 
         ArrowSchema s;
         ReturnArrowTypeHandle_->Export(&s);
-        arrow::compute::OutputType outType = ARROW_RESULT(arrow::ImportType(&s));
+        auto outputShape = onlyScalars ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
+        arrow::compute::OutputType outType(arrow::ValueDescr(ARROW_RESULT(arrow::ImportType(&s)), outputShape));
 
         Kernel_.signature = arrow::compute::KernelSignature::Make(std::move(inTypes), std::move(outType));
         KernelState_ = std::make_unique<TUdfKernelState>(argTypes, outputType, onlyScalars, typeInfoHelper);
@@ -239,12 +248,13 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     builder.UserType(userType);
     Y_ENSURE(hasBlocks);
 
-    TVector<const TType*> argTypes;
+    TVector<const TType*> argBlockTypes;
     auto argsBuilder = builder.Args(callableInspector.GetArgsCount());
     for (ui32 i = 0; i < argsInspector.GetElementsCount(); ++i) {
         TBlockTypeInspector blockInspector(*typeInfoHelper, argsInspector.GetElementType(i));
         auto type = callableInspector.GetArgType(i);
-        argsBuilder->Add(builder.Block(blockInspector.IsScalar())->Item(type).Build());
+        auto argBlockType = builder.Block(blockInspector.IsScalar())->Item(type).Build();
+        argsBuilder->Add(argBlockType);
         if (callableInspector.GetArgumentName(i).Size() > 0) {
             argsBuilder->Name(callableInspector.GetArgumentName(i));
         }
@@ -253,7 +263,7 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
             argsBuilder->Flags(callableInspector.GetArgumentFlags(i));
         }
 
-        argTypes.emplace_back(type);
+        argBlockTypes.emplace_back(argBlockType);
     }
 
     builder.Returns(builder.Block(onlyScalars)->Item(callableInspector.GetReturnType()).Build());
@@ -266,7 +276,8 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     }
 
     if (!typesOnly) {
-        builder.Implementation(new TSimpleArrowUdfImpl(argTypes, callableInspector.GetReturnType(), onlyScalars, exec, builder, name));
+        builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, callableInspector.GetReturnType(),
+            onlyScalars, exec, builder, name, arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE));
     }
 }
 
@@ -297,6 +308,34 @@ struct TUnaryKernelExec {
         }
 
         return arrow::Status::OK();
+    }
+};
+
+template <typename TInput, typename TOutput, TOutput(*Core)(TInput)>
+arrow::Status UnaryPreallocatedExecImpl(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    Y_UNUSED(ctx);
+    auto& inArray = batch.values[0].array();
+    auto& outArray = res->array();
+    const TInput* inValues = inArray->GetValues<TInput>(1);
+    TOutput* outValues = outArray->GetMutableValues<TOutput>(1);
+    auto length = inArray->length;
+    for (int64_t i = 0; i < length; ++i) {
+        outValues[i] = Core(inValues[i]);
+    }
+
+    return arrow::Status::OK();
+}
+
+template <typename TInput, typename TOutput, TOutput(*Core)(TInput)>
+class TUnaryOverOptionalImpl : public TBoxedValue {
+public:
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(valueBuilder);
+        if (!args[0]) {
+            return {};
+        }
+
+        return TUnboxedValuePod(Core(args[0].Get<TInput>()));
     }
 };
 

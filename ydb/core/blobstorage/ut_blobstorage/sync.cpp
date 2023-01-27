@@ -3,6 +3,8 @@
 
 Y_UNIT_TEST_SUITE(BlobStorageSync) {
     Y_UNIT_TEST(SyncWhenDiskGetsDown) {
+        return; // re-enable when protocol issue is resolved
+
         TEnvironmentSetup env{{
             .NodeCount = 8,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,

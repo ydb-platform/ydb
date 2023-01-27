@@ -930,6 +930,15 @@ private:
             LOG_CORO_D("TS3ReadCoroImpl", "S3 read error. Path: " << Path);
         } catch (const TDtorException&) {
             throw;
+        } catch (const NDB::Exception& err) {
+            TStringBuilder msgBuilder;
+            msgBuilder << err.message();
+            if (err.code()) {
+                msgBuilder << " (code: " << err.code() << ")";
+            }
+            exceptIssue.SetMessage(msgBuilder);
+            fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+            RetryStuff->Cancel();
         } catch (const std::exception& err) {
             exceptIssue.SetMessage(err.what());
             fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;

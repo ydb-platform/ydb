@@ -149,7 +149,14 @@ TPingTaskParams ConstructHardPingTask(
                     builder << " (failure rate " << retryLimiter.RetryRate << " exceeds limit of "  << policy.RetryCount << ")";
                 }
                 builder << " at " << Now();
-                issues->AddIssue(NYql::TIssue(builder));
+                auto issue = NYql::TIssue(builder);
+                if (transientIssues) {
+                    for (auto& subIssue : *transientIssues) {
+                        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+                    }
+                    transientIssues.Clear();
+                }
+                issues->AddIssue(issue);
             }
             CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
         }

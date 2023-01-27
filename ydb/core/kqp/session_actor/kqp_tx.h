@@ -258,8 +258,9 @@ struct TTxId {
 
     static TTxId FromString(const TString& str) {
         TTxId res;
-        res.Id.ParseString(str);
-        res.HumanStr = str;
+        if (res.Id.ParseString(str)) {
+            res.HumanStr = str;
+        }
         return res;
     }
 

@@ -277,7 +277,7 @@ public:
     void SetNetDataViaFile(const TString& netDataTsv) {
         UNIT_ASSERT(!Server_);
 
-        NetDataFile = MakeHolder<TTempFileHandle>("netData.tsv");
+        NetDataFile = MakeHolder<TTempFileHandle>();
         NetDataFile->Write(netDataTsv.Data(), netDataTsv.Size());
         NetDataFile->FlushData();
 

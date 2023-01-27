@@ -27,7 +27,6 @@ target_link_libraries(ydb-public-lib-ydb_cli-topic-ut PUBLIC
   public-lib-experimental
   clicommands
   common
-  public-lib-yq
   public-lib-yson_value
   cpp-client-ydb_proto
   ydb_persqueue_core-ut-ut_utils

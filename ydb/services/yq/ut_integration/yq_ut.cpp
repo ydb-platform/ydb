@@ -3,6 +3,7 @@
 
 #include <ydb/public/lib/fq/fq.h>
 #include <ydb/public/lib/fq/helpers.h>
+#include <ydb/public/lib/fq/scope.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
@@ -18,7 +19,6 @@
 #include "ut_utils.h"
 #include <google/protobuf/util/time_util.h>
 
-#include <ydb/public/lib/yq/scope.h>
 #include <util/system/hostname.h>
 
 #include <util/string/split.h>

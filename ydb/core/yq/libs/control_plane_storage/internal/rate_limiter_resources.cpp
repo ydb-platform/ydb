@@ -1,6 +1,6 @@
 #include "utils.h"
 
-#include <ydb/public/lib/yq/scope.h>
+#include <ydb/public/lib/fq/scope.h>
 #include <ydb/core/yq/libs/control_plane_storage/request_actor.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
@@ -141,10 +141,7 @@ public:
     }
 
     void ParseScope(const TString& scope) {
-        const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
-        if (path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)) {
-            FolderId = path.back();
-        }
+        FolderId = NYdb::NFq::TScope(scope).ParseFolder();
     }
 
 protected:

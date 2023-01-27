@@ -1,11 +1,12 @@
-#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include "proxy.h"
-#include <util/datetime/base.h>
 
+#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/private_client/internal_service.h>
+
+#include <ydb/public/lib/fq/scope.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -13,6 +14,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/utility.h>
 
 #include <deque>
@@ -138,7 +140,7 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
 public:
     TPingerActor(
         const TString& tenantName,
-        const TScope& scope,
+        const NYdb::NFq::TScope& scope,
         const TString& userId,
         const TString& id,
         const TString& ownerId,
@@ -415,7 +417,7 @@ private:
     TConfig Config;
 
     const TString TenantName;
-    const TScope Scope;
+    const NYdb::NFq::TScope Scope;
     const TString UserId;
     const TString Id;
     const TString OwnerId;
@@ -439,7 +441,7 @@ private:
 
 IActor* CreatePingerActor(
     const TString& tenantName,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& userId,
     const TString& id,
     const TString& ownerId,

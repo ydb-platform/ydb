@@ -9,15 +9,12 @@
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/core/yq/libs/protos/fq_private.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/yq/scope.h>
 
 #include <library/cpp/actors/core/events.h>
 
 #include <util/digest/multi.h>
 
 namespace NYq {
-
-using NYdb::NYq::TScope;
 
 struct TQueryResult {
     TVector<Ydb::ResultSet> Sets;

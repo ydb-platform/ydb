@@ -1,5 +1,3 @@
-#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
-#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 #include "proxy.h"
 #include "nodes_manager.h"
 
@@ -43,11 +41,13 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/core/yq/libs/common/compression.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
 #include <ydb/core/yq/libs/events/events.h>
-
+#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/private_client/internal_service.h>
@@ -316,9 +316,7 @@ private:
 
         NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
 
-        const TVector<TString> path = StringSplitter(task.scope()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
-        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
-                            ? path.back() : TString{};
+        const TString folderId = NYdb::NFq::TScope(task.scope()).ParseFolder();
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
 

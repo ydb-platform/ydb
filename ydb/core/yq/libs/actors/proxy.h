@@ -1,10 +1,9 @@
 #pragma once
-#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include "run_actor_params.h"
-#include <util/datetime/base.h>
 
 #include <ydb/core/mon/mon.h>
 
+#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 #include <ydb/core/yq/libs/shared_resources/db_pool.h>
@@ -16,13 +15,16 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/metrics/service_counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/random_provider/random_provider.h>
+#include <ydb/public/lib/fq/scope.h>
 
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
+#include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
+
+#include <util/datetime/base.h>
 
 namespace NKikimr  {
     namespace NMiniKQL {
@@ -81,7 +83,7 @@ NActors::IActor* CreateResultWriter(
 
 NActors::IActor* CreatePingerActor(
     const TString& tenantName,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& userId,
     const TString& id,
     const TString& owner,
@@ -95,14 +97,14 @@ NActors::IActor* CreateRateLimiterResourceCreator(
     const NActors::TActorId& parent,
     const TString& ownerId,
     const TString& queryId,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& tenant);
 
 NActors::IActor* CreateRateLimiterResourceDeleter(
     const NActors::TActorId& parent,
     const TString& ownerId,
     const TString& queryId,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& tenant);
 
 TString MakeInternalError(const TString& text);

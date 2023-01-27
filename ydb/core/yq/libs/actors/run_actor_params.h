@@ -12,6 +12,8 @@
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
+#include <ydb/public/lib/fq/scope.h>
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -36,7 +38,7 @@ struct TRunActorParams { // TODO2 : Change name
         const ::NYq::NConfig::TPingerConfig& pingerConfig,
         const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
         const TString& sql,
-        const TScope& scope,
+        const NYdb::NFq::TScope& scope,
         const TString& authToken,
         const NActors::TActorId& databaseResolver,
         const TString& queryId,
@@ -93,7 +95,7 @@ struct TRunActorParams { // TODO2 : Change name
     const ::NYq::NConfig::TPingerConfig PingerConfig;
     const ::NYq::NConfig::TRateLimiterConfig RateLimiterConfig;
     const TString Sql;
-    const TScope Scope;
+    const NYdb::NFq::TScope Scope;
     const TString AuthToken;
     const NActors::TActorId DatabaseResolver;
     const TString QueryId;

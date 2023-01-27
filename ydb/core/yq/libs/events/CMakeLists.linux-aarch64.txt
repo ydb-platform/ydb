@@ -20,12 +20,11 @@ target_link_libraries(yq-libs-events PUBLIC
   libs-graph_params-proto
   yq-libs-protos
   yql-core-facade
-  yql-public-issue
-  api-protos
-  public-lib-yq
-  cpp-client-ydb_table
   providers-common-db_id_async_resolver
   providers-dq-provider
+  yql-public-issue
+  api-protos
+  cpp-client-ydb_table
 )
 generate_enum_serilization(yq-libs-events
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/events/events.h

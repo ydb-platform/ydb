@@ -4,8 +4,11 @@
 
 #include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/public/lib/fq/scope.h>
 
 namespace NYq {
+
+using NYdb::NFq::TScope;
 
 NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl)
 {

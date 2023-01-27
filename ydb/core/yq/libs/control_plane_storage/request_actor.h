@@ -7,7 +7,6 @@
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/shared_resources/db_exec.h>
 #include <ydb/public/api/protos/yq.pb.h>
-#include <ydb/public/lib/yq/scope.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <util/datetime/base.h>

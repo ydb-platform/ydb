@@ -55,7 +55,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   yql-sql-settings
   yql-utils-actor_log
   api-protos
-  public-lib-yq
+  public-lib-fq
   cpp-client-ydb_table
   providers-clickhouse-provider
   providers-common-codec

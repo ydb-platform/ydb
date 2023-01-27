@@ -21,7 +21,7 @@ TRunActorParams::TRunActorParams(
     const ::NYq::NConfig::TPingerConfig& pingerConfig,
     const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
     const TString& sql,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& authToken,
     const TActorId& databaseResolver,
     const TString& queryId,

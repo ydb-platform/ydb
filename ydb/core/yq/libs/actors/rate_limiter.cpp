@@ -1,6 +1,7 @@
 #include "proxy.h"
 
 #include <ydb/core/yq/libs/private_client/events.h>
+#include <ydb/public/lib/fq/scope.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -108,7 +109,7 @@ NActors::IActor* CreateRateLimiterResourceCreator(
     const NActors::TActorId& parent,
     const TString& ownerId,
     const TString& queryId,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& tenant)
 {
     Fq::Private::CreateRateLimiterResourceRequest req;
@@ -123,7 +124,7 @@ NActors::IActor* CreateRateLimiterResourceDeleter(
     const NActors::TActorId& parent,
     const TString& ownerId,
     const TString& queryId,
-    const TScope& scope,
+    const NYdb::NFq::TScope& scope,
     const TString& tenant)
 {
     Fq::Private::DeleteRateLimiterResourceRequest req;

@@ -156,7 +156,7 @@
         (Double '0))))
     (let update (lambda '(value state) (block '(
         (let delta (- (Convert value 'Double) (Nth state '0)))
-        (let next_n (AggrAdd (Nth state '1) (Double '1)))
+        (let next_n (Inc (Nth state '1)))
         (return '(
             (AggrAdd (Nth state '0) (/ delta next_n))
             next_n
@@ -165,7 +165,7 @@
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (block '(
                  (let count (Nth state '1))
-                 (let result (/ (Nth state '2) (If sample (- count (Double '1)) count)))
+                 (let result (/ (Nth state '2) (If sample (Dec count) count)))
                  (return (If stddev (Apply (Udf 'Math.Sqrt) result) result))))))
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
@@ -182,7 +182,7 @@
 # doesn't support optional values
 (let correlation_traits_factory_raw (lambda '(list_type) (block '(
     (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
-    (let update (lambda '(value state) '((AggrAdd (Nth state '0) (Uint64 '1)) (AggrAdd (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (AggrAdd (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (AggrAdd (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))) (AggrAdd (Nth state '4) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)))) (AggrAdd (Nth state '5) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
+    (let update (lambda '(value state) '((Inc (Nth state '0)) (AggrAdd (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (AggrAdd (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (AggrAdd (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))) (AggrAdd (Nth state '4) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)))) (AggrAdd (Nth state '5) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (block '(
         # Math comes from ISO9075-2:2011(E) and differs from what Excel uses
@@ -201,11 +201,11 @@
 # doesn't support optional values
 (let covariance_traits_factory_raw (lambda '(list_type sample) (block '(
     (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
-    (let update (lambda '(value state) '((AggrAdd (Nth state '0) (Uint64 '1)) (AggrAdd (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (AggrAdd (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (AggrAdd (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
+    (let update (lambda '(value state) '((Inc (Nth state '0)) (AggrAdd (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (AggrAdd (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (AggrAdd (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (block '(
         (let covariance_result (- (Nth state '3) (/ (* (Nth state '1) (Nth state '2)) (Nth state '0))))
-        (let covariance_result (/ covariance_result (If sample (- (Nth state '0) (Uint64 '1)) (Nth state '0))))
+        (let covariance_result (/ covariance_result (If sample (Dec (Nth state '0)) (Nth state '0))))
         (return covariance_result)
     ))))
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))

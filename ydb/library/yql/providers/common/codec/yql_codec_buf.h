@@ -56,11 +56,11 @@ friend void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t count)
 friend void InputBufSkipManySlowThunk(TInputBuf& in, size_t count);
 
 public:
-    TInputBuf(NKikimr::NMiniKQL::TStatTimer* readTimer)
+    TInputBuf(NKikimr::NMiniKQL::TSamplingStatTimer* readTimer)
         : ReadTimer_(readTimer)
     {}
 
-    TInputBuf(IBlockReader& source, NKikimr::NMiniKQL::TStatTimer* readTimer)
+    TInputBuf(IBlockReader& source, NKikimr::NMiniKQL::TSamplingStatTimer* readTimer)
         : TInputBuf(readTimer)
     {
         SetSource(source);
@@ -181,7 +181,7 @@ private:
 
 private:
     IBlockReader* Source_ = nullptr;
-    NKikimr::NMiniKQL::TStatTimer* ReadTimer_;
+    NKikimr::NMiniKQL::TSamplingStatTimer* ReadTimer_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_ = nullptr;
     const char* Current_ = nullptr;
     const char* End_ = nullptr;

@@ -4,6 +4,7 @@
 #include <util/generic/intrlist.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -103,21 +104,13 @@ IStatsRegistryPtr CreateDefaultStatsRegistry();
 #define MKQL_INC_STAT(statRegistry, key) MKQL_ADD_STAT(statRegistry, key, 1)
 #define MKQL_DEC_STAT(statRegistry, key) MKQL_ADD_STAT(statRegistry, key, -1)
 
-class TStatTimer {
+class TStatTimerBase {
 public:
-    TStatTimer(const TStatKey& key)
+    TStatTimerBase(const TStatKey& key)
         : Key_(key)
         , Total_(0)
         , Start_(0)
     {}
-
-    void Acquire() {
-        Start_ = GetCycleCount();
-    }
-
-    void Release() {
-        Total_ += GetCycleCount() - Start_;
-    }
 
     void Reset() {
         Total_ = 0;
@@ -128,10 +121,53 @@ public:
         MKQL_ADD_STAT(statRegistry, Key_, value);
     }
 
-private:
+protected:
     const TStatKey& Key_;
     i64 Total_;
     i64 Start_;
+};
+
+class TStatTimer: public TStatTimerBase {
+public:
+    TStatTimer(const TStatKey& key)
+        : TStatTimerBase(key)
+    {}
+
+    void Acquire() {
+        Start_ = GetCycleCount();
+    }
+
+    void Release() {
+        Total_ += GetCycleCount() - Start_;
+    }
+};
+
+class TSamplingStatTimer: public TStatTimerBase {
+public:
+    TSamplingStatTimer(const TStatKey& key, ui64 frequency = 100)
+        : TStatTimerBase(key)
+        , Frequency_(frequency)
+    {
+        Y_ASSERT(Frequency_ > 0);
+    }
+
+    void Acquire() {
+        if (Counter_ == 0) {
+            Start_ = GetCycleCount();
+        }
+    }
+
+    void Release() {
+        if (Counter_ == 0) {
+            Total_ += (GetCycleCount() - Start_) * Frequency_;
+        }
+        if (++Counter_ == Frequency_) {
+            Counter_ = 0;
+        }
+    }
+private:
+    const ui64 Frequency_;
+    ui64 Counter_ = 0;
 };
 
 } // namespace NMiniKQL

@@ -118,6 +118,7 @@ public:
 
             builder.Returns(retType);
             builder.SupportsBlocks();
+            builder.IsStrict();
 
             builder.UserType(userType);
             if (!typesOnly) {

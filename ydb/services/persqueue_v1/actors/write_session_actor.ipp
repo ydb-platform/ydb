@@ -531,12 +531,11 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
 
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
-    auto aggr = NPersQueue::GetLabelsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
 
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"api.grpc.topic.stream_write.errors"}, true, "name");
-
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.errors"}, true, "name");
 
     SessionsCreated.Inc();
     SessionsActive.Inc();

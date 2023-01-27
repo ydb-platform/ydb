@@ -37,14 +37,14 @@ TVector<TPQLabelsInfo> GetLabels(const TTopicConverterPtr& topic)
     return GetLabelsForCustomCluster(topic, topic->GetCluster());
 }
 
-TVector<TPQLabelsInfo> GetLabelsForTopic(const TTopicConverterPtr& topic, const TString& cloudId,
+TVector<std::pair<TString, TString>> GetSubgroupsForTopic(const TTopicConverterPtr& topic, const TString& cloudId,
                                         const TString& dbId, const TString& dbPath, const TString& folderId) {
-    TVector<TPQLabelsInfo> res = {
-            {{{"database", dbPath}}, {dbPath}},
-            {{{"cloud_id", cloudId}}, {cloudId}},
-            {{{"folder_id", folderId}}, {folderId}},
-            {{{"database_id", dbId}}, {dbId}},
-            {{{"topic", topic->GetClientsideName()}}, {topic->GetClientsideName()}}};
+    TVector<std::pair<TString, TString>> res = {
+            {"database", dbPath},
+            {"cloud_id", cloudId},
+            {"folder_id", folderId},
+            {"database_id", dbId},
+            {"topic", topic->GetClientsideName()}};
     return res;
 }
 

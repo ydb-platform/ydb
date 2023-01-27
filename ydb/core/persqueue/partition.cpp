@@ -878,7 +878,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     const auto topicName = TopicConverter->GetModernName();
     auto counters = AppData(ctx)->Counters;
-    auto labels = NPersQueue::GetLabelsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
 /*
     WriteBufferIsFullCounter.SetCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless),
@@ -892,18 +892,22 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
          {"partition", ToString<ui32>(Partition)}},
         {"name", "api.grpc.topic.stream_write.buffer_brimmed_milliseconds", true});
 */
+
+    subgroups.push_back({"name", "topic.write.lag_milliseconds"});
+
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                    {{"name", "topic.write.lag_milliseconds"}}, "bin",
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                    subgroups, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {100, "100"}, {200, "200"}, {500, "500"},
                         {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
                         {10'000, "10000"}, {30'000, "30000"}, {60'000, "60000"},
                         {180'000,"180000"}, {9'999'999, "999999"}}, true));
 
+    subgroups.back().second = "topic.write.message_size_bytes";
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                    {{"name", "topic.write.message_size_bytes"}}, "bin",
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                    subgroups, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
                         {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
@@ -911,24 +915,25 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
                         {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
 
+    subgroups.pop_back();
     BytesWrittenGrpc = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"api.grpc.topic.stream_write.bytes"} , true, "name");
     BytesWrittenTotal = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"topic.write.bytes"} , true, "name");
 
     MsgsWrittenGrpc = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"api.grpc.topic.stream_write.messages"}, true, "name");
     MsgsWrittenTotal = NKikimr::NPQ::TMultiCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"topic.write.messages"}, true, "name");
 
 
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
 
-        NPersQueue::GetCountersForTopic(counters, IsServerless), labels, {},
+        NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"topic.write.uncompressed_bytes"}, true, "name");
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
@@ -940,21 +945,23 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WriteBigLatency"}, true, "name", false);
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "name", false);
     if (IsQuotingEnabled() && !TopicWriteQuotaResourcePath.empty()) {
+        subgroups.push_back({"name", "api.grpc.topic.stream_write.topic_throttled_milliseconds"});
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
-                NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                            {{"name", "api.grpc.topic.stream_write.topic_throttled_milliseconds"}}, "bin",
+                NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                            subgroups, "bin",
                             TVector<std::pair<ui64, TString>>{
                                 {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                                 {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},
                                 {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
                                 {10'000, "10000"}, {9'999'999, "999999"}}, true));
+        subgroups.pop_back();
     }
 
+    subgroups.push_back({"name", "api.grpc.topic.stream_write.partition_throttled_milliseconds"});
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
-            NPersQueue::GetCountersForTopic(counters, IsServerless), labels,
-                        {{"name", "api.grpc.topic.stream_write.partition_throttled_milliseconds"}}, "bin",
+            NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
                             {20, "20"}, {50, "50"}, {100, "100"}, {500, "500"},

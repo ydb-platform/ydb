@@ -1,10 +1,10 @@
 <pre>
 topic=topic:
-    name=api.grpc.topic.stream_write.bytes: 3240
-    name=api.grpc.topic.stream_write.messages: 180
-    name=topic.write.bytes: 3240
-    name=topic.write.messages: 180
-    name=topic.write.uncompressed_bytes: 1620
+    name=api.grpc.topic.stream_write.bytes: 540
+    name=api.grpc.topic.stream_write.messages: 30
+    name=topic.write.bytes: 540
+    name=topic.write.messages: 30
+    name=topic.write.uncompressed_bytes: 270
 
     consumer=user:
         name=api.grpc.topic.stream_read.bytes: 0
@@ -26,7 +26,7 @@ topic=topic:
             bin=999999: 0
 
     name=api.grpc.topic.stream_write.partition_throttled_milliseconds:
-        bin=0: 180
+        bin=0: 30
         bin=1: 0
         bin=10: 0
         bin=100: 0
@@ -41,7 +41,7 @@ topic=topic:
         bin=999999: 0
 
     name=topic.write.lag_milliseconds:
-        bin=100: 180
+        bin=100: 30
         bin=1000: 0
         bin=10000: 0
         bin=180000: 0
@@ -54,7 +54,7 @@ topic=topic:
         bin=999999: 0
 
     name=topic.write.message_size_bytes:
-        bin=1024: 180
+        bin=1024: 30
         bin=10240: 0
         bin=102400: 0
         bin=1048576: 0

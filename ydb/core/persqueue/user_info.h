@@ -305,9 +305,7 @@ struct TUserInfo {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     user + "||" + topicConverter->GetClientsideName(), partition, dbPath));
 
-                if (DoInternalRead) {
-                    SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, dbPath, isServerless, folderId);
-                }
+                SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, dbPath, isServerless, folderId);
             } else {
                 LabeledCounters.Reset(new TUserLabeledCounters(
                     user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
@@ -323,30 +321,36 @@ struct TUserInfo {
         const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId
     ) {
         auto subgroup = NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless);
-        auto aggregates =
-            NPersQueue::GetLabelsForTopic(TopicConverter, cloudId, dbId, dbPath, folderId);
+        auto subgroups =
+            NPersQueue::GetSubgroupsForTopic(TopicConverter, cloudId, dbId, dbPath, folderId);
+        if (DoInternalRead) {
+            subgroups.push_back({"consumer", User});
 
-        BytesRead = TMultiCounter(subgroup,
-                                  aggregates, {{"consumer", User}},
-                                  {"api.grpc.topic.stream_read.bytes",
-                                   "topic.read.bytes"}, true, "name");
-        MsgsRead = TMultiCounter(subgroup,
-                                 aggregates, {{"consumer", User}},
-                                 {"api.grpc.topic.stream_read.messages",
-                                  "topic.read.messages"}, true, "name");
-        Y_UNUSED(dcId);
-        Y_UNUSED(partition);
+            BytesRead = TMultiCounter(subgroup, {}, subgroups,
+                                      {"api.grpc.topic.stream_read.bytes",
+                                       "topic.read.bytes"}, true, "name");
+            MsgsRead = TMultiCounter(subgroup, {}, subgroups,
+                                     {"api.grpc.topic.stream_read.messages",
+                                      "topic.read.messages"}, true, "name");
+        } else {
+            BytesRead = TMultiCounter(subgroup, {}, subgroups,
+                                      {"topic.read.bytes"}, true, "name");
+            MsgsRead = TMultiCounter(subgroup, {}, subgroups,
+                                      {"topic.read.messages"}, true, "name");
+        }
+            Y_UNUSED(dcId);
+            Y_UNUSED(partition);
         /*
-        Counter.SetCounter(subgroup,
-                           {{"database", dbPath}, {"cloud_id", cloudId}, {"folder_id", folderId}, {"database_id", dbId},
-                            {"topic", TopicConverter->GetFederationPath()},
-                            {"consumer", User}, {"host", dcId}, {"partition", partition}},
-                           {"name", "topic.read.awaiting_consume_milliseconds", true});
+            Counter.SetCounter(subgroup,
+                               {{"database", dbPath}, {"cloud_id", cloudId}, {"folder_id", folderId}, {"database_id", dbId},
+                                {"topic", TopicConverter->GetFederationPath()},
+                                {"consumer", User}, {"host", dcId}, {"partition", partition}},
+                               {"name", "topic.read.awaiting_consume_milliseconds", true});
         */
 
+        subgroups.push_back({"name", "topic.read.lag_milliseconds"});
         ReadTimeLag.reset(new TPercentileCounter(
-                     NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless), aggregates,
-                     {{"consumer", User}, {"name", "topic.read.lag_milliseconds"}}, "bin",
+                     NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, isServerless), {}, subgroups, "bin",
                      TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
                                                         {1000, "1000"}, {2000, "2000"},
                                                         {5000, "5000"}, {10'000, "10000"},

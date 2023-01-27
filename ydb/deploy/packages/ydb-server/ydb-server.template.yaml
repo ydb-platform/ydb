@@ -24,10 +24,10 @@ contents:
     dst: /opt/ydb/bin/ydbd
   - src: "${RELEASE_DIR}/lib/*"
     dst: /opt/ydb/lib
-  - src: ydb/deploy/yaml_config_examples/single-node-in-memory.yaml
-    dst: /opt/ydb/cfg/config.yaml
   - src: ydb/deploy/packages/ydb-server/ydb-server-storage.service
-    dst: /lib/systemd/system/ydb-server/ydb-server-storage.service
+    dst: /etc/systemd/system/ydb-server-storage.service
+  - src: ydb/deploy/packages/ydb-server/ydb-server-storage-start.sh
+    dst: /opt/ydb/bin/ydb-server-storage-start.sh
   - src: "${RELEASE_DIR}/AUTHORS"
     dst: /usr/share/doc/ydb-server/AUTHORS
   - src: "${RELEASE_DIR}/LICENSE"
@@ -37,7 +37,3 @@ contents:
 
 scripts:
   postinstall: ydb/deploy/packages/ydb-server/ydb-server.postinstall
-
-deb:
-  fields:
-    Source: "YDB Platform"

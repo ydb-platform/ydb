@@ -1,11 +1,49 @@
 #!/bin/sh
 
-# create ydb user & group
-groupadd ydb
-useradd ydb -g ydb
+set -e
 
-# to make sure that YDB has access to block disks to run
-usermod -aG disk ydb
+# summary of how this script can be called:
+#        * <postinst> `configure' <most-recently-configured-version>
+#        * <old-postinst> `abort-upgrade' <new version>
+#        * <conflictor's-postinst> `abort-remove' `in-favour' <package>
+#          <new-version>
+#        * <postinst> `abort-remove'
+#        * <deconfigured's-postinst> `abort-deconfigure' `in-favour'
+#          <failed-install-package> <version> `removing'
+#          <conflicting-package> <version>
+# for details, see http://www.debian.org/doc/debian-policy/ or
+# the debian-policy package
 
-# fix ownership of ydb stuff
-chown -R ydb:ydb /opt/ydb
+case "$1" in
+configure)
+
+  # create ydb user & group
+  groupadd ydb
+  useradd ydb -g ydb
+
+  # to make sure that YDB has access to block disks to run
+  usermod -aG disk ydb
+
+  # fix ownership of ydb stuff
+  chown -R ydb:ydb /opt/ydb
+
+  mkdir /opt/ydb/cache
+
+  if [ -x /bin/systemctl -a -f /etc/systemd/system/ydb-server-storage.service ]; then
+    /bin/systemctl daemon-reload || true
+    if ! /bin/systemctl enable ydb-server-storage; then
+      echo "Cannot enable ydb service!"
+    fi
+  fi
+
+  ;;
+
+abort-upgrade | abort-remove | abort-deconfigure) ;;
+
+*)
+  echo "postinst called with unknown argument \`$1'" >&2
+  exit 1
+  ;;
+esac
+
+exit 0

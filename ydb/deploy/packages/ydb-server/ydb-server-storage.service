@@ -1,25 +1,36 @@
 [Unit]
 Description=YDB storage node
-After=network-online.target rc-local.service
-Wants=network-online.target
 StartLimitInterval=10
 StartLimitBurst=15
+AssertFileNotEmpty=/opt/ydb/cfg/config.yaml
+After=network-online.target rc-local.service
+Wants=network-online.target
 
 [Service]
-Restart=always
-RestartSec=1
+Type=simple
 User=ydb
+LimitNOFILE=65536
+LimitCORE=0
+LimitMEMLOCK=3221225472
+
 PermissionsStartOnly=true
+CapabilityBoundingSet=CAP_SETFCAP CAP_SYS_RAWIO CAP_SYS_NICE
+
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=ydbd
 SyslogFacility=daemon
 SyslogLevel=err
+
+ExecStartPre=/usr/bin/install -o ydb -d /opt/ydb/cache
 Environment=LD_LIBRARY_PATH=/opt/ydb/lib
-ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
-LimitNOFILE=65536
-LimitCORE=0
-LimitMEMLOCK=3221225472
+ExecStart=/opt/ydb/bin/ydb-server-storage-start.sh
+
+KillMode=mixed
+TimeoutStopSec=300
+
+Restart=always
+RestartSec=1
 
 [Install]
 WantedBy=multi-user.target

@@ -22,6 +22,6 @@ namespace NYq {
 
 NActors::TActorId ControlPlaneProxyActorId();
 
-NActors::IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters, bool getQuotas);
+NActors::IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters, bool quotaManagerEnabled);
 
 } // namespace NYq

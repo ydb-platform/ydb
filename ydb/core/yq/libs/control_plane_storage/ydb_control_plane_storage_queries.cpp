@@ -52,20 +52,25 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const YandexQuery::CreateQueryRequest& request = event.Request;
-    auto it = event.Quotas.find(QUOTA_QUERY_RESULT_LIMIT);
-    ui64 resultLimit = (it != event.Quotas.end()) ? it->second.Limit.Value : 0;
-    auto queryType = request.content().type();
-    ui64 executionLimitMills = 0;
-    if (queryType == YandexQuery::QueryContent::ANALYTICS) {
-        auto exec_ttl_it = event.Quotas.find(QUOTA_ANALYTICS_DURATION_LIMIT);
-        if (exec_ttl_it != event.Quotas.end()) {
-            executionLimitMills = exec_ttl_it->second.Limit.Value * 60 * 1000;
+    ui64 resultLimit = 0;
+    if (event.Quotas) {
+        if (auto it = event.Quotas->find(QUOTA_QUERY_RESULT_LIMIT); it != event.Quotas->end()) {
+            resultLimit = it->second.Limit.Value;
         }
     }
-    if (queryType == YandexQuery::QueryContent::STREAMING) {
-        auto exec_ttl_it = event.Quotas.find(QUOTA_STREAMING_DURATION_LIMIT);
-        if (exec_ttl_it != event.Quotas.end()) {
-            executionLimitMills = exec_ttl_it->second.Limit.Value * 60 * 1000;
+    auto queryType = request.content().type();
+    ui64 executionLimitMills = 0;
+    if (event.Quotas) {
+        if (queryType == YandexQuery::QueryContent::ANALYTICS) {
+            auto execTtlIt = event.Quotas->find(QUOTA_ANALYTICS_DURATION_LIMIT);
+            if (execTtlIt != event.Quotas->end()) {
+                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
+            }
+        } else if (queryType == YandexQuery::QueryContent::STREAMING) {
+            auto execTtlIt = event.Quotas->find(QUOTA_STREAMING_DURATION_LIMIT);
+            if (execTtlIt != event.Quotas->end()) {
+                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
+            }
         }
     }
     const TString scope = event.Scope;
@@ -98,15 +103,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
     auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, TenantName);
 
-    {
-        TQuotaMap::const_iterator it = event.Quotas.end();
+    if (event.Quotas) {
+        TQuotaMap::const_iterator it = event.Quotas->end();
         if (queryType == YandexQuery::QueryContent::ANALYTICS) {
-            it = event.Quotas.find(QUOTA_ANALYTICS_COUNT_LIMIT);
+            it = event.Quotas->find(QUOTA_ANALYTICS_COUNT_LIMIT);
+        } else if (queryType == YandexQuery::QueryContent::STREAMING) {
+            it = event.Quotas->find(QUOTA_STREAMING_COUNT_LIMIT);
         }
-        if (queryType == YandexQuery::QueryContent::STREAMING) {
-            it = event.Quotas.find(QUOTA_STREAMING_COUNT_LIMIT);
-        }
-        if (it != event.Quotas.end()) {
+        if (it != event.Quotas->end()) {
             auto& quota = it->second;
             if (!quota.Usage) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));

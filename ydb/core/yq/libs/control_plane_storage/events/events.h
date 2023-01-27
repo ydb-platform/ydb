@@ -175,20 +175,20 @@ struct TEvControlPlaneStorage {
         using TProto = ProtoMessage;
 
         explicit TControlPlaneRequest(const TString& scope,
-                                             const ProtoMessage& request,
-                                             const TString& user,
-                                             const TString& token,
-                                             const TString& cloudId,
-                                             TPermissions permissions,
-                                             const TQuotaMap& quotas,
-                                             TTenantInfo::TPtr tenantInfo)
+                                      const ProtoMessage& request,
+                                      const TString& user,
+                                      const TString& token,
+                                      const TString& cloudId,
+                                      TPermissions permissions,
+                                      TMaybe<TQuotaMap> quotas,
+                                      TTenantInfo::TPtr tenantInfo)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
             , CloudId(cloudId)
             , Permissions(permissions)
-            , Quotas(quotas)
+            , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
         {
         }
@@ -208,7 +208,7 @@ struct TEvControlPlaneStorage {
         TString Token;
         TString CloudId;
         TPermissions Permissions;
-        TQuotaMap Quotas;
+        TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
     };
 

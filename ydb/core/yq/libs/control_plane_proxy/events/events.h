@@ -70,14 +70,14 @@ struct TEvControlPlaneProxy {
                                       const TString& user,
                                       const TString& token,
                                       const TVector<TString>& permissions,
-                                      const TQuotaMap& quotas = {},
+                                      TMaybe<TQuotaMap> quotas = Nothing(),
                                       TTenantInfo::TPtr tenantInfo = nullptr)
             : FolderId(folderId)
             , Request(request)
             , User(user)
             , Token(token)
             , Permissions(permissions)
-            , Quotas(quotas)
+            , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
         {
         }
@@ -88,7 +88,7 @@ struct TEvControlPlaneProxy {
         TString User;
         TString Token;
         TVector<TString> Permissions;
-        TQuotaMap Quotas;
+        TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
     };
 

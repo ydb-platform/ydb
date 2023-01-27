@@ -31,7 +31,7 @@ struct TEvTestConnection {
                                           const TString& token,
                                           const TString& cloudId,
                                           const TPermissions& permissions,
-                                          const TQuotaMap& quotas,
+                                          TMaybe<TQuotaMap> quotas,
                                           TTenantInfo::TPtr tenantInfo)
             : CloudId(cloudId)
             , Scope(scope)
@@ -39,7 +39,7 @@ struct TEvTestConnection {
             , User(user)
             , Token(token)
             , Permissions(permissions)
-            , Quotas(quotas)
+            , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
         {
         }
@@ -50,7 +50,7 @@ struct TEvTestConnection {
         TString User;
         TString Token;
         TPermissions Permissions;
-        const TQuotaMap Quotas;
+        const TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
     };
 

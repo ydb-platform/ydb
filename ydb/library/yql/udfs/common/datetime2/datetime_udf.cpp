@@ -15,6 +15,11 @@ extern const char SplitName[] = "Split";
 extern const char ToSecondsName[] = "ToSeconds";
 extern const char ToMillisecondsName[] = "ToMilliseconds";
 extern const char ToMicrosecondsName[] = "ToMicroseconds";
+extern const char GetHourName[] = "GetHour";
+extern const char GetMinuteName[] = "GetMinute";
+extern const char GetSecondName[] = "GetSecond";
+extern const char GetMillisecondOfSecondName[] = "GetMillisecondOfSecond";
+extern const char GetMicrosecondOfSecondName[] = "GetMicrosecondOfSecond";
 
 extern const char TMResourceName[] = "DateTime2.TM";
 
@@ -157,6 +162,172 @@ public:
                         builder.Implementation(new TUnaryOverOptionalImpl<i64, TSignedResult, IntervalCore>());
                     }
                 }
+            }
+        } catch (const std::exception& e) {
+            builder.SetError(TStringBuf(e.what()));
+        }
+
+        return true;
+    }
+};
+
+template <const char* TFuncName, typename TFieldStorage, TFieldStorage (*FieldFunc)(const TUnboxedValuePod&), ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional> 
+struct TGetTimeComponent {
+    typedef bool TTypeAwareMarker;
+
+    template <typename TInput, bool AlwaysZero, bool InputFractional>
+    static TFieldStorage Core(TInput val) {
+        if constexpr (AlwaysZero) {
+            return 0;
+        }
+
+        if constexpr (InputFractional) {
+            if constexpr (Fractional) {
+                return (val / Scale) % Limit;
+            } else {
+                return (val / 1000000u / Scale) % Limit;
+            }
+        } else {
+            if constexpr (Fractional) {
+                return 0;
+            } else {
+                return (val / Scale) % Limit;
+            }
+        }
+    }
+
+    class TImpl : public TBoxedValue {
+    public:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+            Y_UNUSED(valueBuilder);
+            if (!args[0]) {
+                return {};
+            }
+
+            return TUnboxedValuePod(TFieldStorage((FieldFunc(args[0])) / Divisor));
+        }
+    };
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef(TFuncName, std::strlen(TFuncName));
+        return name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        try {
+            auto typeInfoHelper = builder.TypeInfoHelper();
+            TTupleTypeInspector tuple(*typeInfoHelper, userType);
+            if (tuple) {
+                Y_ENSURE(tuple.GetElementsCount() > 0);
+                TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+                Y_ENSURE(argsTuple);
+                if (argsTuple.GetElementsCount() != 1) {
+                    builder.SetError("Expected one argument");
+                    return true;
+                }
+
+
+                auto argType = argsTuple.GetElementType(0);
+                TVector<const TType*> argBlockTypes;
+                argBlockTypes.push_back(argType);
+
+                TBlockTypeInspector block(*typeInfoHelper, argType);
+                if (block) {
+                    Y_ENSURE(!block.IsScalar());
+                    argType = block.GetItemType();
+                }
+
+                TResourceTypeInspector res(*typeInfoHelper, argType);
+                if (!res) {
+                    bool isOptional = false;
+                    if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+                        argType = opt.GetItemType();
+                        isOptional = true;
+                    }
+
+                    TDataTypeInspector data(*typeInfoHelper, argType);
+                    if (!data) {
+                        builder.SetError("Expected data type");
+                        return true;
+                    }
+
+                    auto typeId = data.GetTypeId();
+                    if (typeId == TDataType<TDate>::Id || 
+                        typeId == TDataType<TDatetime>::Id || 
+                        typeId == TDataType<TTimestamp>::Id) {
+
+                        builder.Args()->Add(argsTuple.GetElementType(0)).Done();
+                        const TType* retType = builder.SimpleType<TFieldStorage>();
+
+                        if (isOptional) {
+                            retType = builder.Optional()->Item(retType).Build();
+                        }
+
+                        auto outputType = retType;
+                        if (block) {
+                            retType = builder.Block(block.IsScalar())->Item(retType).Build();
+                        }
+
+                        builder.Returns(retType);
+                        builder.SupportsBlocks();
+                        builder.IsStrict();
+
+                        builder.UserType(userType);
+                        if (!typesOnly) {
+                            if (typeId == TDataType<TDate>::Id) {
+                                if (block) {
+                                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                                        UnaryPreallocatedExecImpl<ui16, TFieldStorage, Core<ui16, true, false>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                                } else {
+                                    builder.Implementation(new TUnaryOverOptionalImpl<ui16, TFieldStorage, Core<ui16, true, false>>());
+                                }
+                            }
+
+                            if (typeId == TDataType<TDatetime>::Id) {
+                                if (block) {
+                                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                                        UnaryPreallocatedExecImpl<ui32, TFieldStorage, Core<ui32, false, false>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                                } else {
+                                    builder.Implementation(new TUnaryOverOptionalImpl<ui32, TFieldStorage, Core<ui32, false, false>>());
+                                }
+                            }
+
+                            if (typeId == TDataType<TTimestamp>::Id) {
+                                if (block) {
+                                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                                        UnaryPreallocatedExecImpl<ui64, TFieldStorage, Core<ui64, false, true>>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                                } else {
+                                    builder.Implementation(new TUnaryOverOptionalImpl<ui64, TFieldStorage, Core<ui64, false, true>>());
+                                }
+                            }
+                        }
+
+                        return true;
+                    }
+                } else {
+                    Y_ENSURE(!block);
+                    if (res.GetTag() != TStringRef::Of(TMResourceName)) {
+                        builder.SetError("Unexpected resource tag");
+                        return true;
+                    }
+                }
+            }
+
+            // default implementation
+            builder.Args()->Add<TResource<TMResourceName>>().Flags(ICallablePayload::TArgumentFlags::AutoMap).Done();
+            builder.Returns<TFieldStorage>();
+            builder.IsStrict();
+            if (!typesOnly) {
+                builder.Implementation(new TImpl());
             }
         } catch (const std::exception& e) {
             builder.SetError(TStringBuf(e.what()));
@@ -554,20 +725,6 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
             TUnboxedValuePod::Embedded(TStringRef::Of("Sunday"))
         }};
         return dayNames.at(GetDayOfWeek(*args) - 1U);
-    }
-
-    GET_METHOD(Hour, ui8)
-    GET_METHOD(Minute, ui8)
-    GET_METHOD(Second, ui8)
-
-    SIMPLE_STRICT_UDF(TGetMillisecondOfSecond, ui32(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(GetMicrosecond(args[0]) / 1000u);
-    }
-
-    SIMPLE_STRICT_UDF(TGetMicrosecondOfSecond, ui32(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(GetMicrosecond(args[0]));
     }
 
     GET_METHOD(TimezoneId, ui16)
@@ -1593,11 +1750,11 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         TGetDayOfMonth,
         TGetDayOfWeek,
         TGetDayOfWeekName,
-        TGetHour,
-        TGetMinute,
-        TGetSecond,
-        TGetMillisecondOfSecond,
-        TGetMicrosecondOfSecond,
+        TGetTimeComponent<GetHourName, ui8, GetHour, 1u, 3600u, 24u, false>,
+        TGetTimeComponent<GetMinuteName, ui8, GetMinute, 1u, 60u, 60u, false>,
+        TGetTimeComponent<GetSecondName, ui8, GetSecond, 1u, 1u, 60u, false>,
+        TGetTimeComponent<GetMillisecondOfSecondName, ui32, GetMicrosecond, 1000u, 1000u, 1000u, true>,
+        TGetTimeComponent<GetMicrosecondOfSecondName, ui32, GetMicrosecond, 1u, 1u, 1000000u, true>,
         TGetTimezoneId,
         TGetTimezoneName,
 

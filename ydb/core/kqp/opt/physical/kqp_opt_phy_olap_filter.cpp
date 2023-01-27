@@ -643,15 +643,18 @@ TMaybeNode<TExprBase> PredicatePushdown(const TExprBase& predicate, TExprContext
     const TExprNode* lambdaArg, const TExprBase& input)
 {
     auto maybeCoalesce = predicate.Maybe<TCoCoalesce>();
-
     if (maybeCoalesce.IsValid()) {
         return CoalescePushdown(maybeCoalesce.Cast(), ctx, pos, lambdaArg, input);
     }
 
     auto maybeExists = predicate.Maybe<TCoExists>();
-
     if (maybeExists.IsValid()) {
         return ExistsPushdown(maybeExists.Cast(), ctx, pos, lambdaArg);
+    }
+
+    auto maybePredicate = predicate.Maybe<TCoCompare>();
+    if (maybePredicate.IsValid()) {
+        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos, lambdaArg, input);
     }
 
     if (predicate.Maybe<TCoNot>()) {

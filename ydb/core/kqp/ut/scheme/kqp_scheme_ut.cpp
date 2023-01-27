@@ -3576,19 +3576,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 {
                     auto& c = parser.ColumnParser("CUint8");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint8().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetUint8());
                 }
                 {
                     auto& c = parser.ColumnParser("CInt8");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt8().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetInt8());
                 }
                 {
                     auto& c = parser.ColumnParser("CUint16");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint16().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetUint16());
                 }
                 {
                     auto& c = parser.ColumnParser("CInt16");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt16().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetInt16());
                 }
             }
         }

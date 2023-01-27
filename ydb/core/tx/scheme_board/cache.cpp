@@ -270,7 +270,7 @@ namespace {
                         SetErrorAndClear(Context.Get(), entry);
                     }
                 }
-           
+
                 if (Context->Request->UserToken) {
                     auto securityObject = GetSecurityObject(entry);
                     if (securityObject == nullptr) {
@@ -809,6 +809,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = NScheme::TypeInfoFromProtoColumnType(columnDesc.GetTypeId(),
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 nameToId[column.Name] = column.Id;
+                if (columnDesc.GetNotNull()) {
+                    NotNullColumns.insert(columnDesc.GetName());
+                }
             }
 
             KeyColumnTypes.resize(schemaDesc.KeyColumnNamesSize());

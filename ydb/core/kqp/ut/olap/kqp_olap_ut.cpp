@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
+            CompareYson(result, R"([[["0"];1000000u];[["1"];1000001u]])");
         }
     }
 
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["0"];[1000000u]]])");
+            CompareYson(result, R"([[["0"];1000000u]])");
         }
     }
 
@@ -578,7 +578,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
+            CompareYson(result, R"([[["0"];1000000u];[["1"];1000001u]])");
         }
     }
 
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["0"];[1000000u]]])");
+            CompareYson(result, R"([[["0"];1000000u]])");
         }
 
         {
@@ -626,7 +626,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
+            CompareYson(result, R"([[["0"];1000000u];[["1"];1000001u]])");
         }
 
         {
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["1"];[1000001u]]])");
+            CompareYson(result, R"([[["1"];1000001u]])");
         }
 
         {
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["0"];[1000000u]]])");
+            CompareYson(result, R"([[["0"];1000000u]])");
         }
 
         {
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["1"];[1000001u]]])");
+            CompareYson(result, R"([[["1"];1000001u]])");
         }
 
         {
@@ -694,7 +694,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["1"];[1000001u]]])");
+            CompareYson(result, R"([[["1"];1000001u]])");
         }
 
         {
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
 
-            CompareYson(result, R"([[["0"];[1000000u]]])");
+            CompareYson(result, R"([[["0"];1000000u]])");
         }
     }
 
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[[1u];["Value-001"];["1"];["1"];[1000001u]];[[2u];["Value-002"];["2"];["2"];[1000002u]]])");
+            CompareYson(result, R"([[[1u];["Value-001"];["1"];["1"];1000001u];[[2u];["Value-002"];["2"];["2"];1000002u]])");
         }
     }
 
@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     [0];
                     ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"];
                     ["5"];
-                    [1000005u];
+                    1000005u;
                     ["uid_1000005"]
                     ]])");
             }
@@ -1000,10 +1000,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto ysonResult = CollectStreamResult(it).ResultSetYson;
 
         auto expectedYson = TString(R"([
-            [[1000127u]];
-            [[1000126u]];
-            [[1000125u]];
-            [[1000124u]]
+            [1000127u];
+            [1000126u];
+            [1000125u];
+            [1000124u]
         ])");
 
         CompareYson(expectedYson, ysonResult);
@@ -1715,14 +1715,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(Filter_NotAllUsedFieldsInSelectClause) {
+    Y_UNIT_TEST(Filter_NotAllUsedFieldsInResultSet) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, resource_id FROM `/Root/tableWithNulls`
                 WHERE
                     level = 5;
             )")
-            .SetExpectedReply("[[[5];#]]")
+            .SetExpectedReply("[[5;#]]")
             .AddExpectedPlanOptions("KqpOlapFilter");
 
         TestTableWithNulls({ testCase });
@@ -1946,7 +1946,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[4];1u];[[5];1u]]")
+            .SetExpectedReply("[[4;1u];[5;1u]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -1966,7 +1966,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[6];0u];[[7];0u]]")
+            .SetExpectedReply("[[6;0u];[7;0u]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -1986,7 +1986,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[5];1u];[[6];0u]]")
+            .SetExpectedReply("[[5;1u];[6;0u]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2135,7 +2135,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[4];[4.]];[[5];[5.]]]")
+            .SetExpectedReply("[[4;[4.]];[5;[5.]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2155,7 +2155,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[6];#];[[7];#]]")
+            .SetExpectedReply("[[6;#];[7;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2175,7 +2175,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[5];[5.]];[[6];#]]")
+            .SetExpectedReply("[[5;[5.]];[6;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2195,7 +2195,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;[8.];#]]")
+            .SetExpectedReply("[[#;8.;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2215,7 +2215,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;[8.];#];[[5];[5.];[5.]]]")
+            .SetExpectedReply("[[#;8.;#];[[5];5.;[5.]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2287,7 +2287,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[4];[4]];[[5];[5]]]")
+            .SetExpectedReply("[[4;[4]];[5;[5]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2307,7 +2307,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[6];#];[[7];#]]")
+            .SetExpectedReply("[[6;#];[7;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2327,7 +2327,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[5];[5]];[[6];#]]")
+            .SetExpectedReply("[[5;[5]];[6;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2347,7 +2347,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;[40];#]]")
+            .SetExpectedReply("[[#;40;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2367,7 +2367,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;[40];#];[[5];[5];[5]]]")
+            .SetExpectedReply("[[#;40;#];[[5];5;[5]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2526,7 +2526,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[4];[4]];[[5];[5]]]")
+            .SetExpectedReply("[[4;[4]];[5;[5]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2546,7 +2546,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[6];#];[[7];#]]")
+            .SetExpectedReply("[[6;#];[7;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2566,7 +2566,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[[5];[5]];[[6];#]]")
+            .SetExpectedReply("[[5;[5]];[6;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2586,7 +2586,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;[6];#];[[5];[5];[5]]]")
+            .SetExpectedReply("[[#;6;#];[[5];5;[5]]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else
@@ -2606,7 +2606,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;[6];#]]")
+            .SetExpectedReply("[[#;6;#]]")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg");
 #else

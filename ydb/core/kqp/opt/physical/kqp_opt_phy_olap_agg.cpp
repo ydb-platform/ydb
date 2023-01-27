@@ -27,15 +27,17 @@ static const std::unordered_set<std::string> SupportedAggFuncs = {
 };
 
 struct TAggInfo {
-    TAggInfo(const std::string& aggName, const std::string& colName, const std::string& opType)
+    TAggInfo(const std::string& aggName, const std::string& colName, const std::string& opType, bool isOptional)
         : AggName(aggName)
         , ColName(colName)
         , OpType(opType)
+        , IsOptional(isOptional)
     {}
 
     std::string AggName;
     std::string ColName;
     std::string OpType;
+    bool IsOptional;
 };
 
 std::string GetColumnNameUnderAggregation(const TCoAggApply& aggApply, TExprContext& ctx) {
@@ -84,12 +86,13 @@ std::vector<TAggInfo> CollectAggInfos(const TCoAggregateTupleList& handlers, TEx
         auto aggApply = trait.Cast<TCoAggApply>();
         auto aggName = GetAggregationName(handler.ColumnName(), ctx);
         auto colName = GetColumnNameUnderAggregation(aggApply, ctx);
+        bool isOptional = aggApply.Ptr()->GetTypeAnn()->IsOptionalOrNull();
         if (aggName.empty() || colName.empty()) {
             res.clear();
             return res;
         }
         auto aggOp = aggApply.Name().StringValue();
-        res.emplace_back(aggName, colName, aggOp);
+        res.emplace_back(aggName, colName, aggOp, isOptional);
     }
     return res;
 }
@@ -97,13 +100,19 @@ std::vector<TAggInfo> CollectAggInfos(const TCoAggregateTupleList& handlers, TEx
 TExprBase GenerateResultTupleForAvg(const TAggInfo& aggInfo, const TExprBase& itemArg, const TPositionHandle& nodePos, TExprContext& ctx) {
     // If SUM is not null, generate Just(convert(sum as double), count)
     // If SUM is null, return null
-    return Build<TCoNameValueTuple>(ctx, nodePos)
-        .Name<TCoAtom>().Build(aggInfo.AggName)
-        .Value<TCoIfPresent>()
-            .Optional<TCoMember>()
-                .Struct(itemArg)
-                .Name<TCoAtom>().Build(aggInfo.AggName + "_sum")
-                .Build()
+    auto sumMember = Build<TCoMember>(ctx, nodePos)
+        .Struct(itemArg)
+        .Name<TCoAtom>().Build(aggInfo.AggName + "_sum")
+        .Done();
+    auto cntMember = Build<TCoMember>(ctx, nodePos)
+        .Struct(itemArg)
+        .Name<TCoAtom>().Build(aggInfo.AggName + "_cnt")
+        .Done();
+
+    TMaybeNode<TExprBase> value;
+    if (aggInfo.IsOptional) {
+        value = Build<TCoIfPresent>(ctx, nodePos)
+            .Optional(sumMember)
             .PresentHandler<TCoLambda>()
                 .Args({"sumAgg"})
                 .Body<TCoJust>()
@@ -114,16 +123,27 @@ TExprBase GenerateResultTupleForAvg(const TAggInfo& aggInfo, const TExprBase& it
                             // need to change target type accoringly to aggregate.yql
                             .Type().Build("Double")
                             .Build()
-                        .Add<TCoMember>()
-                            .Struct(itemArg)
-                            .Name<TCoAtom>().Build(aggInfo.AggName + "_cnt")
-                            .Build()
+                        .Add(cntMember)
                         .Build()
                     .Build()
                 .Build()
             .MissingValue<TCoNull>()
                 .Build()
-            .Build()
+            .Done();
+    } else {
+        value = Build<TExprList>(ctx, nodePos)
+            .Add<TCoConvert>()
+                .Input(sumMember)
+                // For Decimal and Interval (currently unsupported in CS)
+                // need to change target type accoringly to aggregate.yql
+                .Type().Build("Double")
+                .Build()
+            .Add(cntMember)
+        .Done();
+    }
+    return Build<TCoNameValueTuple>(ctx, nodePos)
+        .Name<TCoAtom>().Build(aggInfo.AggName)
+        .Value(value.Cast())
         .Done();
 }
 

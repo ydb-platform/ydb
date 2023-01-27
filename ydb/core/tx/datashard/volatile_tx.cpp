@@ -13,7 +13,7 @@ namespace NKikimr::NDataShard {
 
         TTxType GetTxType() const override { return TXTYPE_VOLATILE_TX_COMMIT; }
 
-        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
             Y_VERIFY(Self->VolatileTxManager.PendingCommitTxScheduled);
             Self->VolatileTxManager.PendingCommitTxScheduled = false;
 
@@ -45,6 +45,8 @@ namespace NKikimr::NDataShard {
             Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(TxId);
+
+            Self->CheckSplitCanStart(ctx);
             return true;
         }
 
@@ -95,7 +97,7 @@ namespace NKikimr::NDataShard {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext& ctx) override {
             auto* info = Self->VolatileTxManager.FindByTxId(TxId);
             Y_VERIFY(info && info->State == EVolatileTxState::Aborting);
 
@@ -107,6 +109,8 @@ namespace NKikimr::NDataShard {
             Self->VolatileTxManager.RemoveFromTxMap(info);
 
             Self->VolatileTxManager.RemoveVolatileTx(TxId);
+
+            Self->CheckSplitCanStart(ctx);
         }
 
     private:

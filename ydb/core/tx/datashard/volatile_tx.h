@@ -147,6 +147,8 @@ namespace NKikimr::NDataShard {
         TVolatileTxInfo* FindByTxId(ui64 txId) const;
         TVolatileTxInfo* FindByCommitTxId(ui64 txId) const;
 
+        size_t GetTxInFlight() const { return VolatileTxs.size(); }
+
         const TVolatileTxByVersion& GetVolatileTxByVersion() const { return VolatileTxByVersion; }
 
         void PersistAddVolatileTx(

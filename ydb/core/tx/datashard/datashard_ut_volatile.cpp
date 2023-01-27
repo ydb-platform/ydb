@@ -787,6 +787,167 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
     }
 
+    Y_UNIT_TEST(DistributedWriteThenCopyTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        size_t observedPropose = 0;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvProposeTransaction::EventType: {
+                    ++observedPropose;
+                    Cerr << "... observed TEvProposeTransaction" << Endl;
+                    break;
+                }
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                    capturedReadSets.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        observedPropose = 0;
+        ui64 txId = AsyncCreateCopyTable(server, sender, "/Root", "table-1-copy", "/Root/table-1");
+        WaitFor(runtime, [&]{ return observedPropose > 0; }, "observed propose");
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        runtime.SetObserverFunc(prevObserverFunc);
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        // Wait for copy table to finish
+        WaitTxNotification(server, sender, txId);
+
+        // Verify table copy has above changes committed
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table-1-copy`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+    }
+
+    Y_UNIT_TEST(DistributedWriteThenSplit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        size_t observedSplit = 0;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvSplit::EventType: {
+                    ++observedSplit;
+                    Cerr << "... observed TEvSplit" << Endl;
+                    break;
+                }
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                    capturedReadSets.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        auto shards1before = GetTableShards(server, sender, "/Root/table-1");
+        ui64 txId = AsyncSplitTable(server, sender, "/Root/table-1", shards1before.at(0), 2);
+        WaitFor(runtime, [&]{ return observedSplit > 0; }, "observed split");
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        runtime.SetObserverFunc(prevObserverFunc);
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        // Wait for split to finish
+        WaitTxNotification(server, sender, txId);
+
+        // Verify table has changes committed
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table-1`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

@@ -280,6 +280,21 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
         UNIT_ASSERT(result.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(result.Get<ui32>(), 15340);
     }
+
+    Y_UNIT_TEST(InvalidDateFrom) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.dt.type" : "date",
+                "projection.dt.min" : "1980-1-1",
+                "projection.dt.max" : "NOW",
+                "projection.dt.interval" : "1",
+                "projection.dt.format" : "%Y-%m-%d",
+                "projection.dt.unit" : "YEARS",
+                "storage.location.template" : "yellow_tripdata_${dt}-01/"
+            }
+        )", {"dt"}), yexception, "error in datetime parsing. Input data: 1980-1-1");;
+    }
 }
 
 }

@@ -591,8 +591,9 @@ private:
                     size_t p = 0) {
         const auto& rule = rules[p];
         const TInstant to = ParseDate(rule.To, now);
+        TInstant current = ParseDate(rule.From, now);
         try {
-            for (TInstant current = ParseDate(rule.From, now); current <= to; current = AddUnit(current, rule.Interval, rule.IntervalUnit)) {
+            for (; current <= to; current = AddUnit(current, rule.Interval, rule.IntervalUnit)) {
                 TString copyLocationTemplate = locationTemplate;
                 const TString time = Strftime(rule.Format.c_str(), current);
                 ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);

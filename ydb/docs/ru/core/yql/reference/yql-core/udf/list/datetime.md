@@ -165,6 +165,13 @@ SELECT
 * ```DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval```
 * ```DateTime::IntervalFromMicroseconds(Int64{Flags:AutoMap}) -> Interval```
 
+{% note warning %}
+
+Функция ```DateTime::ToSeconds``` не поддерживает работу с интервалами с длительностью большей чем 68 лет, в этом случае можно использовать выражение ```DateTime::ToMilliseconds(x) / 1000```
+
+{% endnote %}
+
+
 AddTimezone никак не влияет на вывод ToSeconds(), поскольку ToSeconds() всегда возвращают время в таймзоне GMT.
 
 Interval также можно создавать из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601%23Durations).

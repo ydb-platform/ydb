@@ -31,6 +31,7 @@ target_link_libraries(ydb-services-yq-ut_integration PUBLIC
   yq-libs-control_plane_storage
   yq-libs-db_schema
   yq-libs-private_client
+  public-lib-fq
   ydb-services-ydb
   providers-common-db_id_async_resolver
   clickhouse_client_udf

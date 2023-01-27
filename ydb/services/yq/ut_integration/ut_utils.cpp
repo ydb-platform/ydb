@@ -1,7 +1,7 @@
 #include "ut_utils.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/lib/yq/scope.h>
+#include <ydb/public/lib/fq/scope.h>
 #include <ydb/core/yq/libs/actors/proxy.h>
 #include <ydb/core/yq/libs/events/events.h>
 
@@ -20,7 +20,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 using namespace NYdb;
-using namespace NYdb::NYq;
+using namespace NYdb::NFq;
 using namespace NActors;
 
 void UpsertToExistingTable(TDriver& driver, const TString& location){

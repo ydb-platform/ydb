@@ -20,6 +20,7 @@
 #include "browse_pq.h"
 #include "browse_db.h"
 #include "counters_hosts.h"
+#include "healthcheck.h"
 
 #include "json_handlers.h"
 
@@ -109,6 +110,12 @@ public:
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "healthcheck",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
@@ -343,6 +350,10 @@ private:
         }
         if (filename.StartsWith("counters/hosts")) {
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
+            return;
+        }
+        if (filename.StartsWith("healthcheck")) {
+            ctx.ExecutorThread.RegisterActor(new THealthCheck(this, ev));
             return;
         }
         // TODO: check path validity

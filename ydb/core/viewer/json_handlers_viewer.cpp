@@ -30,11 +30,9 @@
 #include "json_query.h"
 #include "json_netinfo.h"
 #include "json_compute.h"
-#include "counters_hosts.h"
 #include "json_healthcheck.h"
 #include "json_nodes.h"
 #include "json_acl.h"
-
 
 namespace NKikimr::NViewer {
 

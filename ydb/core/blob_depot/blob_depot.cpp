@@ -48,7 +48,9 @@ namespace NKikimr::NBlobDepot {
         try {
             auto handleFromAgentPipe = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
-                Y_VERIFY(it != PipeServers.end());
+                if (it == PipeServers.end()) {
+                    return; // this may be a race with TEvServerDisconnected and postpone queue; it's okay to have this
+                }
                 auto& info = it->second;
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT69, "HandleFromAgentPipe", (Id, GetLogId()), (RequestId, ev->Cookie),
@@ -87,8 +89,7 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvProcessRegisterAgentQ, ProcessRegisterAgentQ);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
-                hFunc(TEvBlobStorage::TEvRangeResult, Data->Handle);
-                hFunc(TEvBlobStorage::TEvGetResult, Data->Handle);
+                hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
 
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);

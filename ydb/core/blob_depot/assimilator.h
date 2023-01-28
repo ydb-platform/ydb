@@ -42,8 +42,6 @@ namespace NKikimr::NBlobDepot {
         bool ActionInProgress = false;
         bool ResumeScanDataForCopyingInFlight = false;
 
-        class TTxCommitAssimilatedBlob;
-
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BLOB_DEPOT_ASSIMILATOR_ACTOR;

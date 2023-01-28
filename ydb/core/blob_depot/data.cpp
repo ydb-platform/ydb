@@ -195,6 +195,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     const TData::TValue *TData::FindKey(const TKey& key) const {
+        Y_VERIFY(IsKeyLoaded(key));
         const auto it = Data.find(key);
         return it != Data.end() ? &it->second : nullptr;
     }
@@ -223,11 +224,20 @@ namespace NKikimr::NBlobDepot {
         }, item);
     }
 
-    void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId));
+    void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId),
+            (Keep, keep), (DoNotKeep, doNotKeep));
         Y_VERIFY(IsKeyLoaded(key));
-        UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool inserted) {
-            if (inserted || value.GoingToAssimilate) {
+        UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool /*inserted*/) {
+            EUpdateOutcome outcome = EUpdateOutcome::NO_CHANGE;
+            if (doNotKeep && value.KeepState < EKeepState::DoNotKeep) {
+                value.KeepState = EKeepState::DoNotKeep;
+                outcome = EUpdateOutcome::CHANGE;
+            } else if (keep && value.KeepState < EKeepState::Keep) {
+                value.KeepState = EKeepState::Keep;
+                outcome = EUpdateOutcome::CHANGE;
+            }
+            if (value.ValueChain.empty()) {
                 auto *chain = value.ValueChain.Add();
                 auto *locator = chain->MutableLocator();
                 locator->SetGroupId(Self->Info()->GroupFor(blobSeqId.Channel, blobSeqId.Generation));
@@ -235,9 +245,9 @@ namespace NKikimr::NBlobDepot {
                 locator->SetTotalDataLen(key.GetBlobId().BlobSize());
                 locator->SetFooterLen(0);
                 value.GoingToAssimilate = false;
-                return inserted ? EUpdateOutcome::DROP : EUpdateOutcome::CHANGE;
+                outcome = EUpdateOutcome::CHANGE;
             }
-            return EUpdateOutcome::NO_CHANGE;
+            return outcome;
         });
     }
 

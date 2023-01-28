@@ -398,13 +398,10 @@ namespace NKikimr::NBlobDepot {
 
         struct TResolveDecommitContext {
             TEvBlobDepot::TEvResolve::TPtr Ev; // original resolve request
-            ui32 NumRangesInFlight;
+            TActorId ReturnAfterLoadingKeys;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs = {};
             std::vector<TKey> ResolutionErrors = {};
-            std::deque<TKey> DropNodataBlobs = {};
         };
-        ui64 LastResolveQueryId = 0;
-        THashMap<ui64, TResolveDecommitContext> ResolveDecommitContexts;
 
         class TTxIssueGC;
         class TTxConfirmGC;
@@ -412,7 +409,6 @@ namespace NKikimr::NBlobDepot {
         class TTxDataLoad;
 
         class TTxLoadSpecificKeys;
-        class TTxResolve;
         class TResolveResultAccumulator;
 
         class TUncertaintyResolver;
@@ -483,7 +479,8 @@ namespace NKikimr::NBlobDepot {
         void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
-        void BindToBlob(const TKey& key, TBlobSeqId blobSeqId, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
         void MakeKeyCertain(const TKey& key);
         void HandleCommitCertainKeys();
@@ -536,12 +533,21 @@ namespace NKikimr::NBlobDepot {
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
 
-        void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
-        void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);
-        void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        template<typename TCallback>
-        void HandleResolutionResult(ui64 id, TCallback&& callback);
+        class TResolveDecommitActor;
+        IActor *CreateResolveDecommitActor(TEvBlobDepot::TEvResolve::TPtr ev);
+
+        class TTxCommitAssimilatedBlob;
+        void ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key,
+            ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep = false, bool doNotKeep = false);
+
+        class TTxResolve;
+        void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, TResolveDecommitContext&& context);
+
+        void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         ui64 GetTotalStoredDataSize() const {
             return TotalStoredDataSize;

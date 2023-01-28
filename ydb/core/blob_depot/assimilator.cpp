@@ -16,30 +16,36 @@ namespace NKikimr::NBlobDepot {
         };
     };
 
-    class TAssimilator::TTxCommitAssimilatedBlob : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        const TActorId AssimilatorId;
+    class TBlobDepot::TData::TTxCommitAssimilatedBlob : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         const NKikimrProto::EReplyStatus Status;
         const TBlobSeqId BlobSeqId;
         const TData::TKey Key;
-        const ui64 GetId;
+        const ui32 NotifyEventType;
+        const TActorId ParentId;
+        const ui64 Cookie;
+        const bool Keep;
+        const bool DoNotKeep;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_ASSIMILATED_BLOB; }
 
-        TTxCommitAssimilatedBlob(TAssimilator *self, NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key,
-                ui64 getId)
-            : TTransactionBase(self->Self)
-            , AssimilatorId(self->SelfId())
+        TTxCommitAssimilatedBlob(TBlobDepot *self, NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId,
+                TData::TKey key, ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep, bool doNotKeep)
+            : TTransactionBase(self)
             , Status(status)
             , BlobSeqId(blobSeqId)
             , Key(std::move(key))
-            , GetId(getId)
+            , NotifyEventType(notifyEventType)
+            , ParentId(parentId)
+            , Cookie(cookie)
+            , Keep(keep)
+            , DoNotKeep(doNotKeep)
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             if (Status == NKikimrProto::OK) {
                 Y_VERIFY(!Self->Data->CanBeCollected(BlobSeqId));
-                Self->Data->BindToBlob(Key, BlobSeqId, txc, this);
+                Self->Data->BindToBlob(Key, BlobSeqId, Keep, DoNotKeep, txc, this);
             } else if (Status == NKikimrProto::NODATA) {
                 if (const TData::TValue *value = Self->Data->FindKey(Key); value && value->GoingToAssimilate) {
                     Self->Data->DeleteKey(Key, txc, this);
@@ -60,7 +66,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
             Self->Data->CommitTrash(this);
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, AssimilatorId, {}, nullptr, GetId));
+            TActivationContext::Send(new IEventHandle(NotifyEventType, 0, ParentId, {}, nullptr, Cookie));
         }
     };
 
@@ -380,8 +386,8 @@ namespace NKikimr::NBlobDepot {
                 ++it->second;
                 getBytes += id.BlobSize();
             } else if (resp.Status == NKikimrProto::NODATA) {
-                Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(this, NKikimrProto::NODATA, TBlobSeqId(),
-                    TData::TKey(resp.Id), it->first));
+                Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(resp.Id),
+                    TEvPrivate::EvTxComplete, SelfId(), it->first);
                 ++it->second;
             }
         }
@@ -417,8 +423,8 @@ namespace NKikimr::NBlobDepot {
         const auto& [key, getId] = it->second;
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg),
             (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()), (Key, key));
-        Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(this, msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id),
-            std::move(key), getId));
+        Self->Data->ExecuteTxCommitAssimilatedBlob(msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id), std::move(key),
+            TEvPrivate::EvTxComplete, SelfId(), getId);
         PutIdToKey.erase(it);
     }
 
@@ -531,6 +537,12 @@ namespace NKikimr::NBlobDepot {
         }
 
         return stream.Str();
+    }
+
+    void TBlobDepot::TData::ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId,
+            TData::TKey key, ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep, bool doNotKeep) {
+        Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(Self, status, blobSeqId, std::move(key),
+            notifyEventType, parentId, cookie, keep, doNotKeep));
     }
 
     void TBlobDepot::StartGroupAssimilator() {

@@ -1,0 +1,22 @@
+enum Title {
+    Road = 0,
+    Street = 1,
+    Avenue = 2,
+    Close = 3,
+    Place = 4,
+};
+
+struct Address {
+    string postcode;
+    string street;
+    int house_num = 18;
+    Title title;
+};
+
+enum Title {
+    Road = 0,
+    Street = 1,
+    Avenue = 2,
+    Close = 3,
+    Place = 4,
+};

@@ -1129,8 +1129,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TMessageId";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TTimestamps {
@@ -1242,8 +1248,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TTimestamps";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         enum class EGetHandleClass {
@@ -1308,8 +1320,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TActorId";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TExecTimeStats {
@@ -1502,8 +1520,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TExecTimeStats";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         enum class EStatus {
@@ -1651,8 +1675,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TWindowFeedback";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         enum class EVDiskQueueId {
@@ -1844,8 +1874,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TVDiskCostSettings";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TMsgQoS {
@@ -2227,8 +2263,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TMsgQoS";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TVDiskID {
@@ -2367,8 +2409,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TVDiskID";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TLogoBlobID {
@@ -2453,8 +2501,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TLogoBlobID";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TRangeQuery {
@@ -2566,8 +2620,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TRangeQuery";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TExtremeQuery {
@@ -2679,8 +2739,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TExtremeQuery";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TTabletData {
@@ -2738,8 +2804,14 @@ namespace NKikimr {
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TTabletData";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
 
         struct TEvVGet {
@@ -3148,7 +3220,7 @@ namespace NKikimr {
             }
 
 
-            /// string SnapshotId
+            /// TString SnapshotId
             TString SnapshotId;
             bool hasSnapshotId;
 
@@ -3175,37 +3247,32 @@ namespace NKikimr {
             }
 
 
-            /// TExtremeQuery ExtremeQueries
-            TExtremeQuery ExtremeQueries;
-            bool hasExtremeQueries;
+            /// TExtremeQuery ExtremeQueries <repeated>
+            std::vector<TExtremeQuery> ExtremeQueries;
 
-            void SetExtremeQueries(const TExtremeQuery& value) {
-                ExtremeQueries = value;
-                hasExtremeQueries = true;
-            }
-
-            bool HasExtremeQueries() const {
-                return hasExtremeQueries;
-            }
-
-            const TExtremeQuery& GetExtremeQueries() const {
+            const std::vector<TExtremeQuery>& GetExtremeQueries() const {
                 return ExtremeQueries;
             }
 
-            void ClearExtremeQueries() {
-                ExtremeQueries = {};
-                hasExtremeQueries = false;
+            TExtremeQuery* AddExtremeQueries() {
+                ExtremeQueries.push_back({});
+                return &ExtremeQueries.back();
             }
 
-            TExtremeQuery* MutableExtremeQueries() {
-                return &ExtremeQueries;
+            size_t ExtremeQueriesSize() {
+                return ExtremeQueries.size();
             }
 
 
-            /// struct-wide methods (empty so far)
+            /// struct-wide methods
+            TString GetTypeName() const {
+                return "TEvVGet";
+            }
 
+            size_t ByteSize() const {
+                return 42;
+            }
         };
-
     }
 
     struct TEvBlobStorage::TEvVGet

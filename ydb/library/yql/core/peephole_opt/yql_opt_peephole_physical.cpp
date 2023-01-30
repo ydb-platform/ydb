@@ -1086,7 +1086,7 @@ TExprNode::TPtr ExpandCastOverOptionalList(const TExprNode::TPtr& input, TExprCo
     auto stub = ExpandType(input->Tail().Pos(), *input->GetTypeAnn(), ctx);
     return ctx.Builder(input->Pos())
         .Callable("If")
-            .Callable(0, "==")
+            .Callable(0, "AggrEquals")
                 .Callable(0, "Length")
                     .Add(0, input->HeadPtr())
                 .Seal()
@@ -3005,9 +3005,6 @@ TExprNode::TPtr ExpandFinalizeByKey(const TExprNode::TPtr& node, TExprContext& c
     TCoFinalizeByKey combine(node);
 
     const auto inputStructType = GetSeqItemType(combine.PreMapLambda().Body().Ref().GetTypeAnn())->Cast<TStructExprType>();
-    if (!inputStructType) {
-        return node;
-    }
     const auto inputWidth = inputStructType->GetSize();
 
     TExprNode::TListType inputFields;
@@ -4063,6 +4060,71 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
     return node;
 }
 
+template<bool Sort>
+TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
+    return node; // TODO
+
+    if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
+        TNodeMap<size_t> indexes(input.Tail().Tail().ChildrenSize());
+        input.Tail().Tail().ForEachChild([&](const TExprNode& field) {
+            if (field.Tail().IsArgument()) {
+                const auto& arguments = input.Tail().Head().Children();
+                if (const auto find = std::find(arguments.cbegin(), arguments.cend(), field.TailPtr()); arguments.cend() != find)
+                    indexes.emplace(&field.Head(), std::distance(arguments.cbegin(), find));
+            }
+        });
+
+        const auto itemType = node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+        std::vector<size_t> sorted;
+        if (node->Tail().Tail().IsCallable("Member") && &node->Tail().Tail().Head() == &node->Tail().Head().Head()) {
+            if (const auto it = indexes.find(&node->Tail().Tail().Tail()); indexes.cend() == it)
+                return node;
+            else if (IsDataOrOptionalOfData(itemType->FindItemType(node->Tail().Tail().Tail().Content())))
+                sorted.emplace_back(it->second);
+            else
+                return node;
+        } else if (node->Tail().Tail().IsList()) {
+            for (const auto& field : node->Tail().Tail().Children()) {
+                if (field->IsCallable("Member") && &field->Head() == &node->Tail().Head().Head())
+                    if (const auto it = indexes.find(&field->Tail()); indexes.cend() == it)
+                        return node;
+                    else if (IsDataOrOptionalOfData(itemType->FindItemType(field->Tail().Content())))
+                        sorted.emplace_back(it->second);
+                    else
+                        return node;
+                else
+                    return node;
+            }
+        }
+
+        if (sorted.empty())
+            return node;
+
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+
+        TExprNode::TListType directions(sorted.size());
+        for (auto i = 0U; i < sorted.size(); ++i) {
+            auto dir = node->Child(2U)->IsList() ? node->Child(2U)->ChildPtr(i) : node->ChildPtr(2U);
+            directions[i] = ctx.Builder(dir->Pos())
+                .List()
+                    .Atom(0, ctx.GetIndexAsString(sorted[i]), TNodeFlags::Default)
+                    .Add(1, std::move(dir))
+                .Seal().Build();
+        }
+
+        auto top = ctx.Builder(node->Pos())
+            .Callable(Sort ? "WideTopSort" : "WideTop")
+                .Add(0, input.HeadPtr() )
+                .Add(1, node->ChildPtr(1))
+                .List(2).Add(std::move(directions)).Seal()
+            .Seal().Build();
+
+        return ctx.ChangeChild(input, 0U, std::move(top));
+    }
+
+    return node;
+}
+
 TExprNode::TPtr OptimizeChopper(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("NarrowMap") &&
         node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow &&
@@ -4482,9 +4544,9 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
     TListExpandMap listExpandMap;
     const auto needKeyFlatten = GetExpandMapsForLambda<false>(*node->Child(2U), tupleExpandMap, structExpandMap, &listExpandMap);
 
-    if (listExpandMap.size()) {
+    if (!listExpandMap.empty()) {
         auto children = node->ChildrenList();
-        YQL_CLOG(DEBUG, CorePeepHole) << "Pickle keys for " << node->Content();
+        YQL_CLOG(DEBUG, CorePeepHole) << "Pickle " << listExpandMap.size() << " keys for " << node->Content();
         TExprNode::TListType extractorKeys = NYql::GetLambdaBody(*node->Child(2U));
         for (auto&& i : listExpandMap) {
             extractorKeys[i.first] = ctx.NewCallable(node->Pos(), "StablePickle", { extractorKeys[i.first] });
@@ -7079,6 +7141,8 @@ struct TPeepHoleRules {
         {"WideMap", &OptimizeWideMaps},
         {"NarrowMap", &OptimizeWideMaps},
         {"Unordered", &DropUnordered},
+        {"Top", &OptimizeTop<false>},
+        {"TopSort", &OptimizeTop<true>},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {

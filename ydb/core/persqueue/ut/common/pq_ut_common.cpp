@@ -802,7 +802,7 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             sourceIds.clear();
             auto read = request->Record.AddCmdReadRange();
             auto range = read->MutableRange();
-            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkSourceId);
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkProtoSourceId);
             range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
             range->SetIncludeFrom(true);
             NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUserDeprecated);
@@ -812,6 +812,7 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
             result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
             UNIT_ASSERT(result);
+            Cout << result->ToString() << Endl;
             UNIT_ASSERT(result->Record.HasStatus());
             UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
             for (ui64 idx = 0; idx < result->Record.ReadRangeResultSize(); ++idx) {

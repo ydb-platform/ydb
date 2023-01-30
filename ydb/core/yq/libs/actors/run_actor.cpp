@@ -265,6 +265,7 @@ struct TEvaluationGraphInfo {
     NActors::TActorId ControlId;
     NActors::TActorId ResultId;
     NThreading::TPromise<NYql::IDqGateway::TResult> Result;
+    ui64 Index;
 };
 
 class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
@@ -812,9 +813,32 @@ private:
     }
 
     void Handle(TEvDqStats::TPtr& ev) {
-        if (ev->Get()->Record.issues_size()) {
+        auto& proto = ev->Get()->Record;
+
+        TString GraphKey;
+        auto it = EvalInfos.find(ev->Sender);
+        if (it != EvalInfos.end()) {
+            GraphKey = "Precompute=" + ToString(it->second.Index);
+        } else {
+            if (ev->Sender != ExecuterId) {
+                LOG_E("TEvDqStats received from UNKNOWN Actor (TDqExecuter?) " << ev->Sender);
+                return;
+            }
+            GraphKey = "Graph=" + ToString(DqGraphIndex);
+        }
+
+        if (proto.issues_size() || proto.metric_size()) {
             Fq::Private::PingTaskRequest request;
-            *request.mutable_transient_issues() = ev->Get()->Record.issues();
+            if (proto.issues_size()) {
+                *request.mutable_transient_issues() = proto.issues();
+            }
+            if (proto.metric_size()) {
+                TString statistics;
+                if (SaveAndPackStatistics(GraphKey, proto.metric(), statistics)) {
+                    QueryStateUpdateRequest.set_statistics(statistics);
+                    request.set_statistics(statistics);
+                }
+            }
             Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
         }
     }
@@ -913,7 +937,7 @@ private:
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SetLoadFromCheckpointModeCookie);
     }
 
-    TString BuildNormalizedStatistics(const NDqProto::TQueryResponse& response) {
+    TString BuildNormalizedStatistics(const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TMetric> metrics) {
 
         struct TStatisticsNode {
             std::map<TString, TStatisticsNode> Children;
@@ -948,7 +972,7 @@ private:
         TStringStream out;
 
         TStatisticsNode statistics;
-        for (const auto& metric : response.GetMetric()) {
+        for (const auto& metric : metrics) {
             auto longName = metric.GetName();
             TString prefix;
             TString name;
@@ -984,10 +1008,10 @@ private:
         return out.Str();
     }
 
-    void SaveStatistics(const TString& graphKey, const NYql::NDqProto::TQueryResponse& result) {
+    bool SaveAndPackStatistics(const TString& graphKey, const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TMetric> metrics, TString& statistics) {
         // Yson routines are very strict, so it's better to try-catch them
         try {
-            Statistics.emplace_back(graphKey, BuildNormalizedStatistics(result));
+            Statistics[graphKey] = BuildNormalizedStatistics(metrics);
             TStringStream out;
             NYson::TYsonWriter writer(&out);
             writer.OnBeginMap();
@@ -996,9 +1020,11 @@ private:
                 writer.OnRaw(p.second);
             }
             writer.OnEndMap();
-            QueryStateUpdateRequest.set_statistics(NJson2Yson::ConvertYson2Json(out.Str()));
+            statistics = NJson2Yson::ConvertYson2Json(out.Str());
+            return true;
         } catch (NYson::TYsonException& ex) {
             LOG_E(ex.what());
+            return false;
         }
     }
 
@@ -1030,8 +1056,10 @@ private:
 
         QueryStateUpdateRequest.mutable_result_id()->set_value(Params.ResultId);
 
-        SaveStatistics("Graph=" + ToString(DqGraphIndex), result);
-
+        TString statistics;
+        if (SaveAndPackStatistics("Graph=" + ToString(DqGraphIndex), result.metric(), statistics)) {
+            QueryStateUpdateRequest.set_statistics(statistics);
+        }
         KillExecuter();
     }
 
@@ -1043,7 +1071,7 @@ private:
 
             auto& result = ev->Get()->Record;
 
-            LOG_D("Query evaluation " << DqEvalIndex << " response. Issues count: " << result.IssuesSize()
+            LOG_D("Query evaluation " << it->second.Index << " response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount());
 
             queryResult.Data = result.yson();
@@ -1061,7 +1089,10 @@ private:
                 queryResult.SetSuccess();
             }
 
-            SaveStatistics("Precompute=" + ToString(DqEvalIndex++), result);
+            TString statistics;
+            if (SaveAndPackStatistics("Precompute=" + ToString(DqGraphIndex), result.metric(), statistics)) {
+                QueryStateUpdateRequest.set_statistics(statistics);
+            }
 
             queryResult.AddIssues(issues);
             queryResult.Truncated = result.GetTruncated();
@@ -1252,6 +1283,7 @@ private:
 
         TEvaluationGraphInfo info;
 
+        info.Index = DqEvalIndex++;
         info.ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), false));
 
         if (dqGraphParams.GetResultType()) {
@@ -1937,7 +1969,7 @@ private:
     // Consumers creation
     TVector<NYql::NPq::NProto::TDqPqTopicSource> TopicsForConsumersCreation;
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> CredentialsForConsumersCreation;
-    TVector<std::pair<TString, TString>> Statistics;
+    TMap<TString, TString> Statistics;
     NActors::TActorId ReadRulesCreatorId;
 
     // Rate limiter resource creation

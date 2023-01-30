@@ -190,6 +190,7 @@ message TDqFailure {
 
 message TDqStats {
     repeated Ydb.Issue.IssueMessage Issues = 1;
+    repeated TMetric Metric = 2;
 };
 
 message TGraphRequest {

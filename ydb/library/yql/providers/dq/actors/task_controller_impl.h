@@ -127,6 +127,20 @@ private:
         Send(ExecuterId, req.Release());
     }
 
+    void SendNonFinalStat() {
+        auto ev = MakeHolder<TEvDqStats>();
+        FinalStat().CopyCounters(ev->Record);
+        Send(ExecuterId, ev.Release());
+    }
+
+    void TrySendNonFinalStat() {
+        auto now = Now();
+        if (now - LastStatReport > PingPeriod) {
+            SendNonFinalStat();
+            LastStatReport = now;
+        }
+    }
+
 public:
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {
         TActorId computeActor = ev->Sender;
@@ -143,12 +157,14 @@ public:
         if (state.HasStats() && TryAddStatsFromExtra(state.GetStats())) {
             if (ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
+                TrySendNonFinalStat();
             }
         } else if (state.HasStats() && state.GetStats().GetTasks().size()) {
             YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
             AddStats(state.GetStats());
             if (ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
+                TrySendNonFinalStat();
             }
         }
 
@@ -212,6 +228,7 @@ public:
                 if (ServiceCounters.Counters) {
                     ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0);
                 }
+                SendNonFinalStat();
                 Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
             }
             break;
@@ -633,6 +650,7 @@ private:
     TDuration AggrPeriod = TDuration::Zero();
     NYql::NDq::GroupedIssues Issues;
     ui64 PingCookie = 0;
+    TInstant LastStatReport;
 };
 
 } /* namespace NYql */

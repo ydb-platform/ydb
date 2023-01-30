@@ -52,6 +52,7 @@ using AggregatedDataWithShortStringKey = StringHashMap<AggregateDataPtr>;
 
 using AggregatedDataWithStringKey = HashMapWithSavedHash<StringRef, AggregateDataPtr>;
 
+using AggregatedDataWithKeys64 = HashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>>;
 using AggregatedDataWithKeys128 = HashMap<UInt128, AggregateDataPtr, UInt128HashCRC32>;
 using AggregatedDataWithKeys256 = HashMap<UInt256, AggregateDataPtr, UInt256HashCRC32>;
 
@@ -406,6 +407,7 @@ struct AggregatedDataVariants //: private boost::noncopyable
     std::unique_ptr<AggregationMethodSerialized<AggregatedDataWithStringKeyHash64>>          serialized_hash64;
 
     /// Support for nullable keys.
+    std::unique_ptr<AggregationMethodKeysFixed<AggregatedDataWithKeys64, true>>              nullable_keys64;
     std::unique_ptr<AggregationMethodKeysFixed<AggregatedDataWithKeys128, true>>             nullable_keys128;
     std::unique_ptr<AggregationMethodKeysFixed<AggregatedDataWithKeys256, true>>             nullable_keys256;
 
@@ -429,6 +431,7 @@ struct AggregatedDataVariants //: private boost::noncopyable
         M(keys128_hash64) \
         M(keys256_hash64) \
         M(serialized_hash64) \
+        M(nullable_keys64) \
         M(nullable_keys128) \
         M(nullable_keys256) \
 

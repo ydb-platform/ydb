@@ -50,9 +50,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
 
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 
-    result.push_back(CreateMoveTable(TOperationId(nextId.GetTxId(),
-                                               nextId.GetSubTxId() + result.size()),
-                                     MoveTableTask(srcPath, dstPath)));
+    result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
 
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
@@ -72,9 +70,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
         Y_VERIFY_S(srcChildPath.Base()->GetChildren().size() == 1,
                    srcChildPath.PathString() << " has children " << srcChildPath.Base()->GetChildren().size());
 
-        result.push_back(CreateMoveTableIndex(TOperationId(nextId.GetTxId(),
-                                                              nextId.GetSubTxId() + result.size()),
-                                                 MoveTableIndexTask(srcChildPath, dstIndexPath)));
+        result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
 
         TString srcImplTableName = srcChildPath.Base()->GetChildren().begin()->first;
         TPath srcImplTable = srcChildPath.Child(srcImplTableName);
@@ -85,9 +81,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
 
         TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-        result.push_back(CreateMoveTable(TOperationId(nextId.GetTxId(),
-                                                      nextId.GetSubTxId() + result.size()),
-                                         MoveTableTask(srcImplTable, dstImplTable)));
+        result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
     }
 
     return result;

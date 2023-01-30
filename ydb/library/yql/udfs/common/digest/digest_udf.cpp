@@ -25,49 +25,49 @@ using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
-    SIMPLE_UDF(TCrc32c, ui32(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TCrc32c, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui32 hash = Crc32c(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TCrc64, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TCrc64, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui64 hash = crc64(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TFnv32, ui32(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TFnv32, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui32 hash = FnvHash<ui32>(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TFnv64, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TFnv64, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui64 hash = FnvHash<ui64>(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TMurMurHash, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TMurMurHash, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui64 hash = MurmurHash<ui64>(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TMurMurHash32, ui32(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TMurMurHash32, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui32 hash = MurmurHash<ui32>(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TCityHash, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TCityHash, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui64 hash = CityHash64(inputRef.Data(), inputRef.Size());
@@ -96,6 +96,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new TCityHash128);
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;
@@ -116,33 +117,33 @@ namespace {
         }
     };
 
-    SIMPLE_UDF(TNumericHash, ui64(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TNumericHash, ui64(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         ui64 input = args[0].Get<ui64>();
         ui64 hash = (ui64)NumericHash(input);
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TMd5Hex, char*(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TMd5Hex, char*(TAutoMap<char*>)) {
         const auto& inputRef = args[0].AsStringRef();
         MD5 md5;
         const TString& hash = md5.Calc(inputRef);
         return valueBuilder->NewString(hash);
     }
 
-    SIMPLE_UDF(TMd5Raw, char*(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TMd5Raw, char*(TAutoMap<char*>)) {
         const auto& inputRef = args[0].AsStringRef();
         MD5 md5;
         const TString& hash = md5.CalcRaw(inputRef);
         return valueBuilder->NewString(hash);
     }
 
-    SIMPLE_UDF(TMd5HalfMix, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TMd5HalfMix, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(MD5::CalcHalfMix(args[0].AsStringRef()));
     }
 
-    SIMPLE_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
         const static ui32 outSize = 32;
         const static NArgonish::TArgon2Factory afactory;
         const static THolder<NArgonish::IArgon2Base> argon2 = afactory.Create(
@@ -157,7 +158,7 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), outSize));
     }
 
-    SIMPLE_UDF_OPTIONS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_OPTIONS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), builder.OptionalArgs(1)) {
         const static ui32 outSize = 32;
         const static NArgonish::TBlake2BFactory bfactory;
         const TStringRef inputRef = args[0].AsStringRef();
@@ -180,7 +181,7 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), outSize));
     }
 
-    SIMPLE_UDF(TSipHash, ui64(ui64, ui64, TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TSipHash, ui64(ui64, ui64, TAutoMap<char*>)) {
         using namespace highwayhash;
         Y_UNUSED(valueBuilder);
         const TStringRef inputRef = args[2].AsStringRef();
@@ -189,7 +190,7 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(THighwayHash, ui64(ui64, ui64, ui64, ui64, TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(THighwayHash, ui64(ui64, ui64, ui64, ui64, TAutoMap<char*>)) {
         using namespace highwayhash;
         Y_UNUSED(valueBuilder);
         const TStringRef inputRef = args[4].AsStringRef();
@@ -202,14 +203,14 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TFarmHashFingerprint, ui64(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TFarmHashFingerprint, ui64(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         ui64 input = args[0].Get<ui64>();
         ui64 hash = util::Fingerprint(input);
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TFarmHashFingerprint2, ui64(TAutoMap<ui64>, TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TFarmHashFingerprint2, ui64(TAutoMap<ui64>, TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         ui64 low  = args[0].Get<ui64>();
         ui64 high = args[1].Get<ui64>();
@@ -217,14 +218,14 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TFarmHashFingerprint32, ui32(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TFarmHashFingerprint32, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         auto hash = util::Fingerprint32(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(ui32(hash));
     }
 
-    SIMPLE_UDF(TFarmHashFingerprint64, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TFarmHashFingerprint64, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         auto hash = util::Fingerprint64(inputRef.Data(), inputRef.Size());
@@ -251,6 +252,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new TFarmHashFingerprint128);
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;
@@ -271,14 +273,14 @@ namespace {
         }
     };
 
-    SIMPLE_UDF(TSuperFastHash, ui32(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TSuperFastHash, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui32 hash = SuperFastHash(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TSha1, char*(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TSha1, char*(TAutoMap<char*>)) {
         const auto& inputRef = args[0].AsStringRef();
         SHA_CTX sha;
         SHA1_Init(&sha);
@@ -288,7 +290,7 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
     }
 
-    SIMPLE_UDF(TSha256, char*(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
         const auto& inputRef = args[0].AsStringRef();
         SHA256_CTX sha;
         SHA256_Init(&sha);
@@ -298,7 +300,7 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
     }
 
-    SIMPLE_UDF(TIntHash64, ui64(TAutoMap<ui64>)) {
+    SIMPLE_STRICT_UDF(TIntHash64, ui64(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);
         ui64 x = args[0].Get<ui64>();
         x ^= 0x4CF2D2BAAE6DA887ULL;
@@ -310,7 +312,7 @@ namespace {
         return TUnboxedValuePod(x);
     }
 
-    SIMPLE_UDF(TXXH3, ui64(TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TXXH3, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         const ui64 hash = XXH3_64bits(inputRef.Data(), inputRef.Size());
@@ -332,6 +334,7 @@ namespace {
                 if (!typesOnly) {
                     builder.Implementation(new TXXH3_128);
                 }
+                builder.IsStrict();
                 return true;
             } else {
                 return false;

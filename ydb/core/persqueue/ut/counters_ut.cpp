@@ -158,12 +158,23 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
         if (getByPath(sensor, "kind") == "GAUGE" &&
             (getByPath(sensor, "labels.sensor") == "PQ/TimeSinceLastReadMs" ||
             getByPath(sensor, "labels.sensor") == "PQ/PartitionLifeTimeMs" ||
+            getByPath(sensor, "labels.sensor") == "PQ/TotalTimeLagMsByLastRead" ||
             getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastReadOld")) {
             auto value = sensor["value"].GetIntegerSafe();
             UNIT_ASSERT_GT(value, 4500);
             UNIT_ASSERT_LT(value, 5500);
             sensor.SetValueByPath("value", 5000);
         }
+
+        if (getByPath(sensor, "kind") == "GAUGE" &&
+            (getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastRead" ||
+            getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastWrite")) {
+            auto value = sensor["value"].GetIntegerSafe();
+            UNIT_ASSERT_GT(value, 25);
+            UNIT_ASSERT_LT(value, 35);
+            sensor.SetValueByPath("value", 30);
+        }
+
     }
     UNIT_ASSERT_VALUES_EQUAL(referenceJson, inputJson);
 }

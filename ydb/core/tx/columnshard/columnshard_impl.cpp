@@ -902,7 +902,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     actualIndexInfo.SetPathTiering(std::move(eviction));
 
     if (!indexChanges) {
-        LOG_S_NOTICE("Cannot prepare TTL at tablet " << TabletID());
+        LOG_S_DEBUG("Cannot prepare TTL at tablet " << TabletID());
         return {};
     }
     if (indexChanges->NeedRepeat) {

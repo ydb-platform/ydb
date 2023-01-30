@@ -3845,7 +3845,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE
                     level = 5;
             )")
-            .SetExpectedReply("[[[5];#]]")
+            .SetExpectedReply("[[5;#]]")
             .AddExpectedPlanOptions("KqpOlapFilter");
 
         TestTableWithNulls({ testCase });

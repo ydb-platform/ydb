@@ -613,17 +613,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2, txId-3});
 
-        TestUserAttrs(runtime, ++txId, "/", "MyRoot", AlterUserAttrs({{"__extra_path_symbols_allowed", "_.-"}}));
-        env.TestWaitNotification(runtime, txId);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TSchemeLimits lowLimits;
+        lowLimits.ExtraPathSymbolsAllowed = "_.-";
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
 
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1!", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1?", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1@", {NKikimrScheme::StatusSchemeError});
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir1:", {NKikimrScheme::StatusSchemeError});
-
-
-        TSchemeLimits lowLimits;
 
         lowLimits.ExtraPathSymbolsAllowed = "!?@:";
         SetSchemeshardSchemaLimits(runtime, lowLimits);
@@ -638,9 +635,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         lowLimits.ExtraPathSymbolsAllowed = "!";
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::UserAttrsEqual({{"__extra_path_symbols_allowed", "_.-"}})});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1!"),
                            {NLs::Finished,
@@ -1419,9 +1413,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
          )", {NKikimrScheme::StatusPathDoesNotExist});
 
         {
-            TestUserAttrs(runtime, ++txId, "/", "MyRoot", AlterUserAttrs({{"__extra_path_symbols_allowed", "-_."}}));
-            env.TestWaitNotification(runtime, txId);
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            TSchemeLimits lowLimits;
+            lowLimits.ExtraPathSymbolsAllowed = "-_.";
+            SetSchemeshardSchemaLimits(runtime, lowLimits);
 
             TestConsistentCopyTables(runtime, ++txId, "/", R"(
                            CopyTableDescriptions {
@@ -3721,6 +3715,54 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Columns { Name: "key" Type: "Uint32"}
             Columns { Name: "value" Type: "Utf8"}
             KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTablesForBackup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TSchemeLimits limits;
+        limits.MaxConsistentCopyTargets = 1; // should not affect
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        // create two tables
+        for (int i = 1; i <= 2; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table%i"
+                Columns { Name: "key" Type: "Uint32"}
+                Columns { Name: "value" Type: "Utf8"}
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // negative
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table1"
+                DstPath: "/MyRoot/CopyTable1"
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table2"
+                DstPath: "/MyRoot/CopyTable2"
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // positive
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table1"
+                DstPath: "/MyRoot/CopyTable1"
+                IsBackup: true
+            }
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table2"
+                DstPath: "/MyRoot/CopyTable2"
+                IsBackup: true
+            }
         )");
         env.TestWaitNotification(runtime, txId);
     }

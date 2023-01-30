@@ -351,10 +351,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TSchemeLimits lowLimits;
         lowLimits.MaxPathElementLength = 10;
         lowLimits.ExtraPathSymbolsAllowed = ".-";
-
-        TestUserAttrs(runtime, ++txId, "/", "MyRoot", AlterUserAttrs({{"__extra_path_symbols_allowed", lowLimits.ExtraPathSymbolsAllowed}}));
-        env.TestWaitNotification(runtime, txId);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(Name: "USER+0")",

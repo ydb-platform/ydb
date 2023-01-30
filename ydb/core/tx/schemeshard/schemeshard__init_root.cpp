@@ -132,6 +132,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
         Self->PersistStoragePools(db, Self->RootPathId(), *newDomain);
+        Self->PersistSchemeLimit(db, Self->RootPathId(), *newDomain);
         Self->PersistACL(db, newPath);
 
         Self->InitState = TTenantInitState::Done;

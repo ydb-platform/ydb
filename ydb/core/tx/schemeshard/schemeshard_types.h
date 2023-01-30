@@ -10,9 +10,13 @@
 namespace NKikimr::NSchemeShard {
 
 struct TSchemeLimits {
+    // Used for backward compatability in case of old databases without explicit limits
+    static constexpr ui64 MaxPathsCompat = 200*1000;
+    static constexpr ui64 MaxObjectsInBackup = 10*1000;
+
     // path
     ui64 MaxDepth = 32;
-    ui64 MaxPaths = 10*1000;
+    ui64 MaxPaths = MaxObjectsInBackup;
     ui64 MaxChildrenInDir = 100*1000;
     ui64 MaxAclBytesSize = 10 << 10;
     ui64 MaxPathElementLength = 255;
@@ -26,7 +30,7 @@ struct TSchemeLimits {
     ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
     ui64 MaxShardsInPath = 35*1000; // In each path in database
-    ui64 MaxConsistentCopyTargets = 10*1000; // by default same as MaxPaths
+    ui64 MaxConsistentCopyTargets = MaxObjectsInBackup;
 
     // pq group
     ui64 MaxPQPartitions = 1000000;

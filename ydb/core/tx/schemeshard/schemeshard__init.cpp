@@ -1535,7 +1535,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (row.IsValid()) {
                     version = row.GetValue<Schema::SubDomains::AlterVersion>();
                     rootLimits.MaxDepth = row.GetValueOrDefault<Schema::SubDomains::DepthLimit>(rootLimits.MaxDepth);
-                    rootLimits.MaxPaths = row.GetValueOrDefault<Schema::SubDomains::PathsLimit>(rootLimits.MaxPaths);
+                    rootLimits.MaxPaths = row.GetValueOrDefault<Schema::SubDomains::PathsLimit>(rootLimits.MaxPathsCompat);
                     rootLimits.MaxChildrenInDir = row.GetValueOrDefault<Schema::SubDomains::ChildrenLimit>(rootLimits.MaxChildrenInDir);
                     rootLimits.MaxAclBytesSize = row.GetValueOrDefault<Schema::SubDomains::AclByteSizeLimit>(rootLimits.MaxAclBytesSize);
                     rootLimits.MaxTableColumns = row.GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(rootLimits.MaxTableColumns);

@@ -1,12 +1,13 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
-
 #include "schemeshard_impl.h"
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <util/generic/algorithm.h>
 
 NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, bool omitFollowers, bool isBackup) {
     using namespace NKikimr::NSchemeShard;
@@ -22,7 +23,6 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, 
 
     return scheme;
 }
-
 
 NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
@@ -45,21 +45,19 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
     return scheme;
 }
 
-
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
-    auto consistentCopying = tx.GetCreateConsistentCopyTables();
+    const auto& op = tx.GetCreateConsistentCopyTables();
 
-    if (0 == consistentCopying.CopyTableDescriptionsSize()) {
+    if (0 == op.CopyTableDescriptionsSize()) {
         TString msg = TStringBuilder() << "no task to do, empty list CopyTableDescriptions";
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
     }
 
-    TPath firstPath = TPath::Resolve(consistentCopying.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
+    TPath firstPath = TPath::Resolve(op.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
     {
         auto checks = TPath::TChecker(firstPath);
         checks
@@ -72,26 +70,33 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
         }
     }
 
-    TSubDomainInfo::TPtr domainInfo = firstPath.DomainInfo();
-    if (consistentCopying.CopyTableDescriptionsSize() > domainInfo->GetSchemeLimits().MaxConsistentCopyTargets) {
-        auto msg = TStringBuilder() << "Targets count has reached maximum value"
-                                    << ", limit for consistent copying in domain: " << domainInfo->GetSchemeLimits().MaxConsistentCopyTargets
-                                    << ", intention to consistent copy: " << consistentCopying.CopyTableDescriptionsSize();
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+    const auto allForBackup = AllOf(op.GetCopyTableDescriptions(), [](const auto& item) {
+        return item.GetIsBackup();
+    });
+
+    const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
+    const auto limit = allForBackup
+        ? Max(limits.MaxObjectsInBackup, limits.MaxConsistentCopyTargets)
+        : limits.MaxConsistentCopyTargets;
+
+    if (op.CopyTableDescriptionsSize() > limit) {
+        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
+            << "Consistent copy object count limit exceeded"
+                << ", limit: " << limit
+                << ", objects: " << op.CopyTableDescriptionsSize()
+        )};
     }
 
-    {
-        TString errStr;
-        if (!context.SS->CheckApplyIf(tx, errStr)) {
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
-        }
+    TString errStr;
+    if (!context.SS->CheckApplyIf(tx, errStr)) {
+        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
     }
 
     TVector<ISubOperationBase::TPtr> result;
 
-    for (auto& descr: consistentCopying.GetCopyTableDescriptions()) {
-        auto& srcStr = descr.GetSrcPath();
-        auto& dstStr = descr.GetDstPath();
+    for (const auto& descr: op.GetCopyTableDescriptions()) {
+        const auto& srcStr = descr.GetSrcPath();
+        const auto& dstStr = descr.GetDstPath();
 
         TPath srcPath = TPath::Resolve(srcStr, context.SS);
         {
@@ -110,9 +115,8 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
         TPath dstPath = TPath::Resolve(dstStr, context.SS);
         TPath dstParentPath = dstPath.Parent();
 
-        result.push_back(CreateCopyTable(TOperationId(nextId.GetTxId(),
-                                                      nextId.GetSubTxId() + result.size()),
-                                         CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup())));
+        result.push_back(CreateCopyTable(NextPartId(nextId, result),
+            CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup())));
 
         if (descr.GetOmitIndexes()) {
             continue;
@@ -152,5 +156,4 @@ TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId,
     return result;
 }
 
-}
 }

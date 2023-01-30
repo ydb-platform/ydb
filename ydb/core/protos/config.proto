@@ -1186,6 +1186,14 @@ message TTableServiceConfig {
         optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60];
     }
 
+    message TAggregationConfig {
+        optional uint32 CSScanMinimalThreads = 29 [default = 16];
+        optional uint32 DSScanMinimalThreads = 30 [default = 4];
+        optional uint32 AggregationComputeThreads = 31 [default = 32];
+        optional uint32 SortScanThreads = 32 [default = 16];
+        optional uint32 JoinScanThreads = 33 [default = 16];
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1215,6 +1223,7 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
     optional bool EnableKqpDataQuerySourceRead = 27 [default = false];
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
+    optional TAggregationConfig AggregationConfig = 29;
 };
 
 // Config describes immediate controls and allows
@@ -1748,7 +1757,7 @@ message TCompatibilityRule {
     optional TYdbVersion BottomLimit = 2;
     optional TYdbVersion UpperLimit = 3;
 
-    // don't use enum, because stored data can have values from newer YDB versions, 
+    // don't use enum, because stored data can have values from newer YDB versions,
     // which are not included in current version
     optional uint32 ComponentId = 4;
 

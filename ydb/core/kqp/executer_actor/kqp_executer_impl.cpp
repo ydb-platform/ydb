@@ -145,7 +145,7 @@ TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters)
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -185,7 +185,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
 
     return data
         ? CreateKqpDataExecuter(std::move(request), database, userToken, counters)
-        : CreateKqpScanExecuter(std::move(request), database, userToken, counters);
+        : CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation);
 }
 
 } // namespace NKqp

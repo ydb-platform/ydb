@@ -1287,7 +1287,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
                 (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
-                RequestCounters);
+                RequestCounters, Settings.Service.GetAggregationConfig());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId);

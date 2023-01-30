@@ -45,8 +45,9 @@ public:
     }
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters)
+        const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation)
         : TBase(std::move(request), database, userToken, counters, TWilsonKqp::ScanExecuter, "ScanExecuter")
+        , AggregationSettings(aggregation)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.DataShardLocks.empty());
@@ -181,17 +182,21 @@ private:
         }
     };
 
-    static ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo) {
-        // TODO: take into account number of active scans on node
-        const auto& stage = GetStage(stageInfo);
-        const bool heavyProgram = stage.GetProgram().GetSettings().GetHasSort() ||
-                            stage.GetProgram().GetSettings().GetHasMapJoin();
-
-        if (heavyProgram) {
-            return 4;
+    ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo, const bool isOlapScan) const {
+        ui32 result = 0;
+        if (isOlapScan) {
+            result = AggregationSettings.GetCSScanMinimalThreads();
         } else {
-            return 16;
+            result = AggregationSettings.GetDSScanMinimalThreads();
         }
+        const auto& stage = GetStage(stageInfo);
+        if (stage.GetProgram().GetSettings().GetHasSort()) {
+            result = std::max(result, AggregationSettings.GetSortScanThreads());
+        }
+        if (stage.GetProgram().GetSettings().GetHasMapJoin()) {
+            result = std::max(result, AggregationSettings.GetJoinScanThreads());
+        }
+        return result;
     }
 
     TTask& AssignTaskToShard(
@@ -210,7 +215,7 @@ private:
         auto& tasks = nodeTasks[nodeId];
         auto& cnt = assignedShardsCount[nodeId];
 
-        const ui32 maxScansPerNode = isOlapScan ? 16 : GetMaxTasksPerNodeEstimate(stageInfo);
+        const ui32 maxScansPerNode = GetMaxTasksPerNodeEstimate(stageInfo, isOlapScan);
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
@@ -356,9 +361,9 @@ private:
                     ui32 nodes = ShardsOnNode.size();
                     if (nodes) {
                         // <= 2 tasks on node
-                        partitionsCount = std::min(partitionsCount, std::min(24u, nodes * 2));
+                        partitionsCount = std::min(partitionsCount, std::min(AggregationSettings.GetAggregationComputeThreads(), nodes * 2));
                     } else {
-                        partitionsCount = std::min(partitionsCount, 24u);
+                        partitionsCount = std::min(partitionsCount, AggregationSettings.GetAggregationComputeThreads());
                     }
                     break;
                 }
@@ -774,14 +779,15 @@ public:
 
 private:
     std::unordered_map<ui64, IActor*> ResultChannelProxies;
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
 };
 
 } // namespace
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters)
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters);
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation);
 }
 
 } // namespace NKqp

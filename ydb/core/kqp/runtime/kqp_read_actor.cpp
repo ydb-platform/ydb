@@ -647,11 +647,14 @@ public:
 
     NMiniKQL::TBytesStatistics GetRowSize(const NUdf::TUnboxedValue* row) {
         NMiniKQL::TBytesStatistics rowStats{0, 0};
-        for (size_t i = 0; i < Settings.ColumnsSize(); ++i) {
-            if (IsSystemColumn(Settings.GetColumns(i).GetId())) {
+        size_t columnIndex = 0;
+        for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
+            if (IsSystemColumn(Settings.GetColumns(resultColumnIndex).GetId())) {
                 rowStats.AllocatedBytes += sizeof(NUdf::TUnboxedValue);
             } else {
-                rowStats.AddStatistics(NMiniKQL::GetUnboxedValueSize(row[i], NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(i).GetType())));
+                rowStats.AddStatistics(NMiniKQL::GetUnboxedValueSize(
+                        row[columnIndex], NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(resultColumnIndex).GetType())));
+                columnIndex += 1;
             }
         }
         if (Settings.ColumnsSize() == 0) {
@@ -687,19 +690,21 @@ public:
                 );
             }
 
-            for (size_t columnIndex = 0; columnIndex < Settings.ColumnsSize(); ++columnIndex) {
-                auto tag = Settings.GetColumns(columnIndex).GetId();
-                auto type = NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(columnIndex).GetType());
+            size_t columnIndex = 0;
+            for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
+                auto tag = Settings.GetColumns(resultColumnIndex).GetId();
+                auto type = NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(resultColumnIndex).GetType());
                 if (IsSystemColumn(tag)) {
                     for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
-                        NMiniKQL::FillSystemColumn(editAccessors[rowIndex][columnIndex], shardId, tag, type);
+                        NMiniKQL::FillSystemColumn(editAccessors[rowIndex][resultColumnIndex], shardId, tag, type);
                         stats.AllocatedBytes += sizeof(NUdf::TUnboxedValue);
                     }
                 } else {
                     hasResultColumns = true;
                     stats.AddStatistics(
-                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, type)
+                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, resultColumnIndex, type)
                     );
+                    columnIndex += 1;
                 }
             }
         }
@@ -722,13 +727,15 @@ public:
             const auto& row = result->Get()->GetCells(rowIndex);
             NUdf::TUnboxedValue* rowItems = nullptr;
             batch.emplace_back(HolderFactory.CreateDirectArrayHolder(Settings.ColumnsSize(), rowItems));
-            for (size_t i = 0; i < Settings.ColumnsSize(); ++i) {
-                auto tag = Settings.GetColumns(i).GetId();
-                auto type = NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(i).GetType());
+            size_t columnIndex = 0;
+            for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
+                auto tag = Settings.GetColumns(resultColumnIndex).GetId();
+                auto type = NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(resultColumnIndex).GetType());
                 if (IsSystemColumn(tag)) {
-                    NMiniKQL::FillSystemColumn(rowItems[i], shardId, tag, type);
+                    NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, tag, type);
                 } else {
-                    rowItems[i] = NMiniKQL::GetCellValue(row[i], type);
+                    rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], type);
+                    columnIndex += 1;
                 }
             }
             stats.AddStatistics(GetRowSize(rowItems));

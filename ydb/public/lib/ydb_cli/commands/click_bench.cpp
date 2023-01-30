@@ -199,27 +199,30 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Cerr << "Query text:\n" << Endl;
         Cerr << query << Endl << Endl;
 
-        for (ui32 i = 0; i < IterationsCount; ++i) {
+        ui32 successIteration = 0;
+        for (ui32 i = 0; i < IterationsCount * 10 && successIteration < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
             auto res = Execute(query, client);
             auto duration = TInstant::Now() - t1;
-            timings.emplace_back(duration);
 
             Cout << "\titeration " << i << ":\t";
             if (res.second == "") {
                 Cout << "ok\t" << duration << " seconds" << Endl;
+                timings.emplace_back(duration);
+                ++successIteration;
+                if (successIteration == 1) {
+                    outFStream << queryN << ": " << Endl
+                        << res.first << res.second << Endl << Endl;
+                }
             } else {
                 allOkay = false;
                 Cout << "failed\t" << duration << " seconds" << Endl;
                 Cerr << queryN << ": " << query << Endl
                      << res.first << res.second << Endl;
-            }
-
-            if (i == 0) {
-                outFStream << queryN << ": " << Endl
-                           << res.first << res.second << Endl << Endl;
+                Sleep(TDuration::Seconds(1));
             }
         }
+        Y_VERIFY(successIteration == IterationsCount);
 
         auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(timings)));
         Y_VERIFY(success);

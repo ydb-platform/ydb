@@ -318,7 +318,11 @@ public:
             if (!IsLocalDc.Defined()) {
                 localDc = LocalDc;
             } else if (IsLocalDc.GetRef()) {
-                localDc = dc;
+                if (!dc.empty()) {
+                    localDc = dc;
+                } else {
+                    localDc = ".local";
+                }
             } else {
                 localDc = dc + ".non-local"; // Just always mismatch with any DC;
             }

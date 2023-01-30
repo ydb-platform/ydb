@@ -305,6 +305,7 @@ bool TDiscoveryConverter::TryParseModernMirroredPath(TStringBuf path) {
         CHECK_SET_VALID(!path.Contains("mirrored-from"), "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic", return false); 
         return false;
     }
+    CHECK_SET_VALID(Dc.empty() || LocalDc != Dc, "Local topic cannot contain '-mirrored-from' part", return false);
     TStringBuf fst, snd;
     auto res = path.TryRSplit("-mirrored-from-", fst, snd);
     CHECK_SET_VALID(res, "Malformed mirrored topic path - expected to end with '-mirrored-from-<cluster>'", return false);

@@ -162,22 +162,10 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvControlPlaneStorageInternal::TEvDbRequestResult, Handle);
         hFunc(TEvRateLimiter::TEvCreateResourceResponse, Handle);
-        hFunc(TEvQuotaService::TQuotaGetResponse, Handle);
     )
 
     void OnDbRequestSuccess() {
-        CPS_LOG_D("Get quota value from quota service");
-        Send(MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, CloudId, true));
-    }
-
-    void Handle(TEvQuotaService::TQuotaGetResponse::TPtr& ev) {
-        CPS_LOG_D("Got response from quota service");
-        if (auto quotaIt = ev->Get()->Quotas.find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != ev->Get()->Quotas.end()) {
-            CloudLimit = static_cast<double>(quotaIt->second.Limit.Value * 10); // percent -> milliseconds
-            Send(RateLimiterControlPlaneServiceId(), new TEvRateLimiter::TEvCreateResource(CloudId, FolderId, QueryId, CloudLimit, QueryLimit));
-        } else {
-            ReplyWithError("CPU quota for cloud was not found");
-        }
+        Send(RateLimiterControlPlaneServiceId(), new TEvRateLimiter::TEvCreateResource(CloudId, FolderId, QueryId, QueryLimit));
     }
 
     using TCreateRequestActorBase::Handle;
@@ -199,9 +187,6 @@ public:
 
     static const TString RequestTypeName;
     static constexpr bool IsCreateRequest = true;
-
-private:
-    double CloudLimit = 0.0;
 };
 
 const TString TRateLimiterCreateRequest::RequestTypeName = "CreateRateLimiterResource";

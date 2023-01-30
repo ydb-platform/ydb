@@ -118,13 +118,17 @@ public:
         );
     }
 
-    template <class TEventPtr>
-    void ReplyAndDie(TEventPtr& ev) {
-        SCHEMA_LOG_DEBUG("Reply for " << GetActionName() << " " << GetEntityName() << ": " << ev->Get()->Result.GetIssues().ToOneLineString());
+    void ReplyStatusAndDie(const NYdb::TStatus& status) {
+        SCHEMA_LOG_DEBUG("Reply for " << GetActionName() << " " << GetEntityName() << ": " << status.GetIssues().ToOneLineString());
         if (Parent) {
-            this->Send(Parent, new TResponseEvent(ev->Get()->Result), 0, Cookie);
+            this->Send(Parent, new TResponseEvent(status), 0, Cookie);
         }
         this->PassAway();
+    }
+
+    template <class TEventPtr>
+    void ReplyAndDie(TEventPtr& ev) {
+        return ReplyStatusAndDie(ev->Get()->Result);
     }
 
     virtual TString GetEntityName() const = 0;
@@ -231,10 +235,17 @@ protected:
         return CallYdbSdk(RequestsPath[CurrentRequest]);
     }
 
+    virtual bool OnCurrentRequestChanged() { // extra validation
+        return true;
+    }
+
     void Handle(TEvents::TEvSchemaCreated::TPtr& ev) override {
         if (CurrentRequest < RequestsPath.size() - 1 && IsTableCreated(ev->Get()->Result)) {
             SCHEMA_LOG_DEBUG("Successfully created " << GetEntityName(RequestsPath[CurrentRequest]));
             ++CurrentRequest;
+            if (!OnCurrentRequestChanged()) {
+                return;
+            }
             this->RetryState = nullptr;
             this->CallAndSubscribe();
             return;
@@ -242,6 +253,9 @@ protected:
         if (CurrentRequest > 0 && IsPathDoesNotExistError(ev->Get()->Result)) {
             if (!TriedPaths[CurrentRequest - 1]) { // Defence from cycles.
                 --CurrentRequest;
+                if (!OnCurrentRequestChanged()) {
+                    return;
+                }
                 TriedPaths[CurrentRequest] = true;
                 this->RetryState = nullptr;
                 SCHEMA_LOG_DEBUG("Trying to recursively create " << GetEntityName(RequestsPath[CurrentRequest]));
@@ -433,6 +447,18 @@ public:
 private:
     TString GetEntityName(const TCreateRateLimiterResourceRequestDesc& req) const override {
         return TStringBuilder() << "rate limiter resource \"" << req.Path << "\"";
+    }
+
+    bool OnCurrentRequestChanged() override {
+        if (CurrentRequest == 0 && !Limits[0]) {
+            SCHEMA_LOG_WARN("Create " << TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName() << ". Attempt to create rate limiter resource root without limit");
+            NYql::TIssues issues;
+            issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path << "\" without limit");
+            NYdb::TStatus status(NYdb::EStatus::INTERNAL_ERROR, std::move(issues));
+            ReplyStatusAndDie(status);
+            return false;
+        }
+        return true;
     }
 
     void FillRequestsPath(std::vector<TCreateRateLimiterResourceRequestDesc>& desc) override {

@@ -130,9 +130,9 @@ private:
         if (!ev->Get()->Scope && !ev->Get()->QueryId && !ev->Get()->QueryLimit) { // cloud
             path = GetRateLimiterResourcePath(ev->Get()->CloudId);
             limits = {ev->Get()->CloudLimit};
-        } else {
+        } else { // query
             path = GetRateLimiterResourcePath(ev->Get()->CloudId, ev->Get()->Scope, ev->Get()->QueryId);
-            limits = {ev->Get()->CloudLimit, Nothing(), ev->Get()->QueryLimit};
+            limits = {Nothing(), Nothing(), ev->Get()->QueryLimit}; // imply that cloud resource must already have been created
         }
         NActors::TActivationContext::AsActorContext().Register(
             MakeCreateRateLimiterResourceActor(

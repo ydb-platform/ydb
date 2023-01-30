@@ -22,16 +22,16 @@ struct TEvRateLimiter {
     static_assert(EvEnd <= YqEventSubspaceEnd(TYqEventSubspace::RateLimiter), "All events must be in their subspace");
 
     struct TEvCreateResource : NActors::TEventLocal<TEvCreateResource, EEv::EvCreateResource> {
-        explicit TEvCreateResource(const TString& cloudId, const TString& scope, const TString& queryId, double cloudLimit, TMaybe<double> queryLimit)
+        TEvCreateResource(const TString& cloudId, const TString& scope, const TString& queryId, TMaybe<double> queryLimit)
             : CloudId(cloudId)
             , Scope(scope)
             , QueryId(queryId)
-            , CloudLimit(cloudLimit)
+            , CloudLimit(Nothing())
             , QueryLimit(queryLimit)
         {
         }
 
-        explicit TEvCreateResource(const TString& cloudId, double cloudLimit)
+        TEvCreateResource(const TString& cloudId, double cloudLimit)
             : CloudId(cloudId)
             , CloudLimit(cloudLimit)
         {
@@ -40,7 +40,7 @@ struct TEvRateLimiter {
         const TString CloudId;
         const TString Scope;
         const TString QueryId;
-        const double CloudLimit;
+        const TMaybe<double> CloudLimit;
         const TMaybe<double> QueryLimit;
     };
 

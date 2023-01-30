@@ -301,6 +301,7 @@ class TDataShard
 
     class TTxApplyReplicationChanges;
 
+    class TWaitVolatileDependencies;
     class TSendVolatileResult;
 
     struct TEvPrivate {
@@ -1342,6 +1343,12 @@ public:
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+
+    void WaitVolatileDependenciesThenSend(
+            const absl::flat_hash_set<ui64>& dependencies,
+            const TActorId& target, std::unique_ptr<IEventBase> event,
+            ui64 cookie = 0);
+
     void SendResult(const TActorContext &ctx,
                     TOutputOpData::TResultPtr &result,
                     const TActorId &target,

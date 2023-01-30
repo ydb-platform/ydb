@@ -36,8 +36,8 @@ namespace NKikimr::NDataShard {
         using TPtr = TIntrusivePtr<IVolatileTxCallback>;
 
     public:
-        virtual void OnCommit() = 0;
-        virtual void OnAbort() = 0;
+        virtual void OnCommit(ui64 txId) = 0;
+        virtual void OnAbort(ui64 txId) = 0;
     };
 
     struct TVolatileTxInfo {

@@ -40,6 +40,26 @@ namespace NKikimr::NDataShard {
 
             Self->VolatileTxManager.PersistRemoveVolatileTx(TxId, txc);
 
+            if (info->AddCommitted) {
+                OnCommitted(ctx);
+            } else {
+                Delayed = true;
+            }
+
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            if (Delayed) {
+                OnCommitted(ctx);
+            }
+        }
+
+        void OnCommitted(const TActorContext& ctx) {
+            auto* info = Self->VolatileTxManager.FindByTxId(TxId);
+            Y_VERIFY(info && info->State == EVolatileTxState::Committed);
+            Y_VERIFY(info->AddCommitted);
+
             Self->VolatileTxManager.UnblockDependents(info);
 
             Self->VolatileTxManager.RemoveFromTxMap(info);
@@ -47,15 +67,11 @@ namespace NKikimr::NDataShard {
             Self->VolatileTxManager.RemoveVolatileTx(TxId);
 
             Self->CheckSplitCanStart(ctx);
-            return true;
-        }
-
-        void Complete(const TActorContext&) override {
-            // nothing
         }
 
     private:
         ui64 TxId;
+        bool Delayed = false;
     };
 
     class TDataShard::TTxVolatileTxAbort
@@ -100,6 +116,7 @@ namespace NKikimr::NDataShard {
         void Complete(const TActorContext& ctx) override {
             auto* info = Self->VolatileTxManager.FindByTxId(TxId);
             Y_VERIFY(info && info->State == EVolatileTxState::Aborting);
+            Y_VERIFY(info->AddCommitted);
 
             // Run callbacks only after we successfully persist aborted tx
             Self->VolatileTxManager.RunAbortCallbacks(info);
@@ -407,7 +424,7 @@ namespace NKikimr::NDataShard {
             db.Table<Schema::TxVolatileParticipants>().Key(info->TxId, shardId).Update();
         }
 
-        txc.OnCommit([this, txId]() {
+        txc.OnCommitted([this, txId]() {
             auto* info = FindByTxId(txId);
             Y_VERIFY_S(info, "Unexpected failure to find volatile txId# " << txId);
             Y_VERIFY_S(!info->AddCommitted, "Unexpected commit of a committed volatile txId# " << txId);
@@ -472,7 +489,7 @@ namespace NKikimr::NDataShard {
             case EVolatileTxState::Committed:
                 // We call commit callbacks only when effects are committed
                 if (it->second->AddCommitted) {
-                    callback->OnCommit();
+                    callback->OnCommit(txId);
                 } else {
                     it->second->Callbacks.push_back(std::move(callback));
                 }
@@ -631,7 +648,7 @@ namespace NKikimr::NDataShard {
         auto callbacks = std::move(info->Callbacks);
         info->Callbacks.clear();
         for (auto& callback : callbacks) {
-            callback->OnCommit();
+            callback->OnCommit(info->TxId);
         }
         UnblockOperations(info, true);
     }
@@ -640,7 +657,7 @@ namespace NKikimr::NDataShard {
         auto callbacks = std::move(info->Callbacks);
         info->Callbacks.clear();
         for (auto& callback : callbacks) {
-            callback->OnAbort();
+            callback->OnAbort(info->TxId);
         }
         UnblockOperations(info, false);
     }

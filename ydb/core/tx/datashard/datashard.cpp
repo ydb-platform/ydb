@@ -489,6 +489,59 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
+class TDataShard::TWaitVolatileDependencies final : public IVolatileTxCallback {
+public:
+    TWaitVolatileDependencies(
+            TDataShard* self, const absl::flat_hash_set<ui64>& dependencies,
+            const TActorId& target,
+            std::unique_ptr<IEventBase> event,
+            ui64 cookie)
+        : Self(self)
+        , Dependencies(dependencies)
+        , Target(target)
+        , Event(std::move(event))
+        , Cookie(cookie)
+    { }
+
+    void OnCommit(ui64 txId) override {
+        Dependencies.erase(txId);
+        if (Dependencies.empty()) {
+            Finish();
+        }
+    }
+
+    void OnAbort(ui64 txId) override {
+        Dependencies.erase(txId);
+        if (Dependencies.empty()) {
+            Finish();
+        }
+    }
+
+    void Finish() {
+        Self->Send(Target, Event.release(), 0, Cookie);
+    }
+
+private:
+    TDataShard* Self;
+    absl::flat_hash_set<ui64> Dependencies;
+    TActorId Target;
+    std::unique_ptr<IEventBase> Event;
+    ui64 Cookie;
+};
+
+void TDataShard::WaitVolatileDependenciesThenSend(
+        const absl::flat_hash_set<ui64>& dependencies,
+        const TActorId& target, std::unique_ptr<IEventBase> event,
+        ui64 cookie)
+{
+    Y_VERIFY(!dependencies.empty(), "Unexpected empty dependencies");
+    auto callback = MakeIntrusive<TWaitVolatileDependencies>(this, dependencies, target, std::move(event), cookie);
+    for (ui64 txId : dependencies) {
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, callback);
+        Y_VERIFY_S(ok, "Unexpected failure to attach callback to volatile tx " << txId);
+    }
+}
+
 class TDataShard::TSendVolatileResult final : public IVolatileTxCallback {
 public:
     TSendVolatileResult(
@@ -502,7 +555,7 @@ public:
         , TxId(txId)
     { }
 
-    void OnCommit() override {
+    void OnCommit(ui64) override {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
                     << " at tablet " << Self->TabletID() << " send result to client "
@@ -514,11 +567,11 @@ public:
         Self->Send(Target, Result.Release(), flags);
     }
 
-    void OnAbort() override {
+    void OnAbort(ui64 txId) override {
         Result->Record.ClearTxResult();
         Result->Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED);
         Result->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Distributed transaction aborted due to commit failure");
-        OnCommit();
+        OnCommit(txId);
     }
 
 private:

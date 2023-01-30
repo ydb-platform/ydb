@@ -364,6 +364,26 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
 void InitRoot(Tests::TServer::TPtr server,
               TActorId sender);
 
+class TLambdaActor : public IActorCallback {
+public:
+    using TCallback = std::function<void(TAutoPtr<IEventHandle>&)>;
+
+public:
+    TLambdaActor(TCallback&& callback)
+        : IActorCallback(static_cast<TReceiveFunc>(&TLambdaActor::StateWork))
+        , Callback(std::move(callback))
+    { }
+
+private:
+    STFUNC(StateWork) {
+        Y_UNUSED(ctx);
+        Callback(ev);
+    }
+
+private:
+    TCallback Callback;
+};
+
 enum class EShadowDataMode {
     Default,
     Enabled,

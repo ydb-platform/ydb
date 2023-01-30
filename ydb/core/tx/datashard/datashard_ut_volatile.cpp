@@ -948,6 +948,284 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
 
+    Y_UNIT_TEST(DistributedWriteThenReadIterator) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false},
+                            {"value2", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        ui64 maxReadSetStep = 0;
+        bool captureReadSets = true;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    maxReadSetStep = Max(maxReadSetStep, msg->Record.GetStep());
+                    if (captureReadSets) {
+                        Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                        capturedReadSets.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+
+        // Note: observer works strangely with edge actor results, so we use a normal actor here
+        TVector<THolder<IEventHandle>> readResults;
+        auto readSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvReadResult::EventType: {
+                    Cerr << "... observed TEvReadResult:" << Endl;
+                    Cerr << ev->Get<TEvDataShard::TEvReadResult>()->Record.DebugString() << Endl;
+                    readResults.emplace_back(ev.Release());
+                    break;
+                }
+                default: {
+                    Cerr << "... ignore event " << ev->GetTypeRewrite() << Endl;
+                }
+            }
+        }));
+
+        {
+            auto msg = std::make_unique<TEvDataShard::TEvRead>();
+            msg->Record.SetReadId(1);
+            msg->Record.MutableTableId()->SetOwnerId(tableId1.PathId.OwnerId);
+            msg->Record.MutableTableId()->SetTableId(tableId1.PathId.LocalPathId);
+            msg->Record.MutableTableId()->SetSchemaVersion(tableId1.SchemaVersion);
+            msg->Record.MutableSnapshot()->SetStep(maxReadSetStep);
+            msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
+            msg->Record.AddColumns(1);
+            msg->Record.AddColumns(2);
+            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+
+            TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
+            TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
+            auto fromBuf = TSerializedCellVec::Serialize(fromKeyCells);
+            auto toBuf = TSerializedCellVec::Serialize(toKeyCells);
+            msg->Ranges.emplace_back(fromBuf, toBuf, true, true);
+
+            ForwardToTablet(runtime, shard1, readSender, msg.release());
+        }
+
+        // Since key=2 is not committed we must not observe results yet
+        SimulateSleep(runtime, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(readResults.size(), 0u);
+
+        captureReadSets = false;
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitFor(runtime, [&]{ return readResults.size() > 0; }, "read result");
+        UNIT_ASSERT_VALUES_EQUAL(readResults.size(), 1u);
+
+        {
+            auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
+                "key:   [\n"
+                "    1,\n"
+                "    2\n"
+                "  ]\n"
+                "value:   [\n"
+                "    1,\n"
+                "    2\n"
+                "  ]\n");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
+        }
+    }
+
+    Y_UNIT_TEST(DistributedWriteThenReadIteratorStream) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false},
+                            {"value2", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        ui64 maxReadSetStep = 0;
+        bool captureReadSets = true;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    maxReadSetStep = Max(maxReadSetStep, msg->Record.GetStep());
+                    if (captureReadSets) {
+                        Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                        capturedReadSets.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+
+        // Note: observer works strangely with edge actor results, so we use a normal actor here
+        TVector<THolder<IEventHandle>> readResults;
+        auto readSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvReadResult::EventType: {
+                    Cerr << "... observed TEvReadResult:" << Endl;
+                    Cerr << ev->Get<TEvDataShard::TEvReadResult>()->Record.DebugString() << Endl;
+                    readResults.emplace_back(ev.Release());
+                    break;
+                }
+                default: {
+                    Cerr << "... ignore event " << ev->GetTypeRewrite() << Endl;
+                }
+            }
+        }));
+
+        {
+            auto msg = std::make_unique<TEvDataShard::TEvRead>();
+            msg->Record.SetReadId(1);
+            msg->Record.MutableTableId()->SetOwnerId(tableId1.PathId.OwnerId);
+            msg->Record.MutableTableId()->SetTableId(tableId1.PathId.LocalPathId);
+            msg->Record.MutableTableId()->SetSchemaVersion(tableId1.SchemaVersion);
+            msg->Record.MutableSnapshot()->SetStep(maxReadSetStep);
+            msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
+            msg->Record.AddColumns(1);
+            msg->Record.AddColumns(2);
+            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetMaxRowsInResult(1);
+
+            TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
+            TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
+            auto fromBuf = TSerializedCellVec::Serialize(fromKeyCells);
+            auto toBuf = TSerializedCellVec::Serialize(toKeyCells);
+            msg->Ranges.emplace_back(fromBuf, toBuf, true, true);
+
+            ForwardToTablet(runtime, shard1, readSender, msg.release());
+        }
+
+        // We expect to receive key=1 as soon as possible since it's committed
+        // However further data should not be available so soon
+        SimulateSleep(runtime, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(readResults.size(), 1u);
+
+        // Verify we actually receive key=1
+        {
+            auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
+                "key:   [\n"
+                "    1\n"
+                "  ]\n"
+                "value:   [\n"
+                "    1\n"
+                "  ]\n");
+            readResults.clear();
+        }
+
+        // Unblock readsets and let key=2 to commit
+        captureReadSets = false;
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitFor(runtime, [&]{ return readResults.size() > 0; }, "read result");
+        UNIT_ASSERT_GE(readResults.size(), 1u);
+
+        {
+            auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
+                "key:   [\n"
+                "    2\n"
+                "  ]\n"
+                "value:   [\n"
+                "    2\n"
+                "  ]\n");
+
+            msg = readResults.back()->Get<TEvDataShard::TEvReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

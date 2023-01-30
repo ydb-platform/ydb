@@ -19,105 +19,107 @@ Y_UNIT_TEST_SUITE(VersionParser) {
     }
 }
 
+using EComponentId = NKikimrConfig::TCompatibilityRule;
+using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
+struct TYdbVersion {
+    std::optional<ui32> Year;
+    std::optional<ui32> Major;
+    std::optional<ui32> Minor;
+    std::optional<ui32> Hotfix;
+
+    NKikimrConfig::TYdbVersion ToPB() {
+        NKikimrConfig::TYdbVersion res;
+        if (Year) {
+            res.SetYear(*Year);
+        }
+        if (Major) {
+            res.SetMajor(*Major);
+        }
+        if (Minor) {
+            res.SetMinor(*Minor);
+        }
+        if (Hotfix) {
+            res.SetHotfix(*Hotfix);
+        }
+
+        return res;
+    }
+};
+
+struct TCompatibilityRule {
+    std::optional<std::string> Build;
+    std::optional<TYdbVersion> BottomLimit;
+    std::optional<TYdbVersion> UpperLimit;
+    std::optional<ui32> ComponentId;
+    std::optional<bool> Forbidden;
+
+    NKikimrConfig::TCompatibilityRule ToPB() {
+        NKikimrConfig::TCompatibilityRule res;
+        if (Build) {
+            res.SetBuild(Build->data());
+        }
+        if (BottomLimit) {
+            res.MutableBottomLimit()->CopyFrom(BottomLimit->ToPB());
+        }
+        if (UpperLimit) {
+            res.MutableUpperLimit()->CopyFrom(UpperLimit->ToPB());
+        }
+        if (ComponentId) {
+            res.SetComponentId(*ComponentId);
+        }
+        if (Forbidden) {
+            res.SetForbidden(*Forbidden);
+        }
+
+        return res;
+    }
+};
+
+struct TCurrentCompatibilityInfo {
+    std::string Build = "ydb";
+    std::optional<TYdbVersion> YdbVersion;
+    std::vector<TCompatibilityRule> CanLoadFrom;
+    std::vector<TCompatibilityRule> StoresReadableBy;
+
+    NKikimrConfig::TCurrentCompatibilityInfo ToPB() {
+        NKikimrConfig::TCurrentCompatibilityInfo res;
+        res.SetBuild(Build.data());
+        if (YdbVersion) {
+            res.MutableYdbVersion()->CopyFrom(YdbVersion->ToPB());
+        }
+
+        for (auto canLoadFrom : CanLoadFrom) {
+            res.AddCanLoadFrom()->CopyFrom(canLoadFrom.ToPB());
+        }
+        for (auto storesReadableBy : StoresReadableBy) {
+            res.AddStoresReadableBy()->CopyFrom(storesReadableBy.ToPB());
+        }
+
+        return res;
+    }
+};
+
+struct TStoredCompatibilityInfo {
+    std::string Build = "ydb";
+    std::optional<TYdbVersion> YdbVersion;
+    std::vector<TCompatibilityRule> ReadableBy;
+
+    NKikimrConfig::TStoredCompatibilityInfo ToPB() {
+        NKikimrConfig::TStoredCompatibilityInfo res;
+        res.SetBuild(Build.data());
+        if (YdbVersion) {
+            res.MutableYdbVersion()->CopyFrom(YdbVersion->ToPB());
+        }
+
+        for (auto readableBy : ReadableBy) {
+            res.AddReadableBy()->CopyFrom(readableBy.ToPB());
+        }
+
+        return res;
+    }
+};
+
 Y_UNIT_TEST_SUITE(YdbVersion) {
-    using EComponentId = NKikimrConfig::TCompatibilityRule;
-    struct TYdbVersion {
-        std::optional<ui32> Year;
-        std::optional<ui32> Major;
-        std::optional<ui32> Minor;
-        std::optional<ui32> Hotfix;
-
-        NKikimrConfig::TYdbVersion ToPB() {
-            NKikimrConfig::TYdbVersion res;
-            if (Year) {
-                res.SetYear(*Year);
-            }
-            if (Major) {
-                res.SetMajor(*Major);
-            }
-            if (Minor) {
-                res.SetMinor(*Minor);
-            }
-            if (Hotfix) {
-                res.SetHotfix(*Hotfix);
-            }
-
-            return res;
-        }
-    };
-
-    struct TCompatibilityRule {
-        std::optional<std::string> Build;
-        std::optional<TYdbVersion> BottomLimit;
-        std::optional<TYdbVersion> UpperLimit;
-        std::optional<ui32> ComponentId;
-        std::optional<bool> Forbidden;
-
-        NKikimrConfig::TCompatibilityRule ToPB() {
-            NKikimrConfig::TCompatibilityRule res;
-            if (Build) {
-                res.SetBuild(Build->data());
-            }
-            if (BottomLimit) {
-                res.MutableBottomLimit()->CopyFrom(BottomLimit->ToPB());
-            }
-            if (UpperLimit) {
-                res.MutableUpperLimit()->CopyFrom(UpperLimit->ToPB());
-            }
-            if (ComponentId) {
-                res.SetComponentId(*ComponentId);
-            }
-            if (Forbidden) {
-                res.SetForbidden(*Forbidden);
-            }
-
-            return res;
-        }
-    };
-
-    struct TCurrentCompatibilityInfo {
-        std::string Build = "ydb";
-        std::optional<TYdbVersion> YdbVersion;
-        std::vector<TCompatibilityRule> CanLoadFrom;
-        std::vector<TCompatibilityRule> StoresReadableBy;
-
-        NKikimrConfig::TCurrentCompatibilityInfo ToPB() {
-            NKikimrConfig::TCurrentCompatibilityInfo res;
-            res.SetBuild(Build.data());
-            if (YdbVersion) {
-                res.MutableYdbVersion()->CopyFrom(YdbVersion->ToPB());
-            }
-
-            for (auto canLoadFrom : CanLoadFrom) {
-                res.AddCanLoadFrom()->CopyFrom(canLoadFrom.ToPB());
-            }
-            for (auto storesReadableBy : StoresReadableBy) {
-                res.AddStoresReadableBy()->CopyFrom(storesReadableBy.ToPB());
-            }
-
-            return res;
-        }
-    };
-
-    struct TStoredCompatibilityInfo {
-        std::string Build = "ydb";
-        std::optional<TYdbVersion> YdbVersion;
-        std::vector<TCompatibilityRule> ReadableBy;
-
-        NKikimrConfig::TStoredCompatibilityInfo ToPB() {
-            NKikimrConfig::TStoredCompatibilityInfo res;
-            res.SetBuild(Build.data());
-            if (YdbVersion) {
-                res.MutableYdbVersion()->CopyFrom(YdbVersion->ToPB());
-            }
-
-            for (auto readableBy : ReadableBy) {
-                res.AddReadableBy()->CopyFrom(readableBy.ToPB());
-            }
-
-            return res;
-        }
-    };
 
     void Test(TCurrentCompatibilityInfo current, TCurrentCompatibilityInfo store, bool expected) {
         TString errorReason;
@@ -125,7 +127,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         auto storePB = store.ToPB();
         auto storedPB = TCompatibilityInfo::MakeStored((ui32)NKikimrConfig::TCompatibilityRule::Test1, &storePB);
         UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, &storedPB, 
-            (ui32)NKikimrConfig::TCompatibilityRule::Test1, errorReason), expected, errorReason);
+            (ui32)EComponentId::Test1, errorReason), expected, errorReason);
     }
 
     Y_UNIT_TEST(DefaultSameVersion) {
@@ -636,5 +638,125 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         auto stored = TCompatibilityInfo::MakeStored(EComponentId::Test1);
         TString errorReason;
         UNIT_ASSERT_C(TCompatibilityInfo::CheckCompatibility(&stored, EComponentId::Test1, errorReason), errorReason);
+    }
+}
+
+Y_UNIT_TEST_SUITE(OldFormat) {
+    void TestOldFormat(TCurrentCompatibilityInfo current, TOldFormat stored, bool expected) {
+        TString errorReason;
+        auto currentPB = current.ToPB();
+        UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, stored, 
+            (ui32)EComponentId::Interconnect, errorReason), expected, errorReason);
+    }
+
+    Y_UNIT_TEST(SameVersion) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .YdbVersion = TYdbVersion{ .Year = 22, .Major = 4, .Minor = 1, .Hotfix = 0 }
+                }, 
+                TOldFormat{
+                    .Tag = "stable-22-4-1",
+                    .AcceptedTags = { "stable-22-4-1" }
+                },
+                true
+        );
+    }
+
+    Y_UNIT_TEST(DefaultRules) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .YdbVersion = TYdbVersion{ .Year = 22, .Major = 5, .Minor = 1, .Hotfix = 0 }
+                }, 
+                TOldFormat{
+                    .Tag = "stable-22-4",
+                    .AcceptedTags = { "stable-22-4" }
+                },
+                true
+        );
+    }
+
+    Y_UNIT_TEST(PrevYear) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .YdbVersion = TYdbVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .BottomLimit = TYdbVersion{ .Year = 22, .Major = 5 },
+                            .UpperLimit = TYdbVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                        },
+                    }
+                }, 
+                TOldFormat{
+                    .Tag = "stable-22-5-1",
+                    .AcceptedTags = { "stable-22-5-1" }
+                },
+                true
+        );
+    }
+
+    Y_UNIT_TEST(Trunk) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .Build = "trunk"
+                }, 
+                TOldFormat{
+                    .Tag = "trunk",
+                    .AcceptedTags = { "trunk" }
+                },
+                true
+        );
+    }
+
+    Y_UNIT_TEST(UnexpectedTrunk) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .YdbVersion = TYdbVersion{ .Year = 22, .Major = 4, .Minor = 1, .Hotfix = 0 },
+                }, 
+                TOldFormat{
+                    .Tag = "trunk",
+                    .AcceptedTags = { "trunk" }
+                },
+                false
+        );
+    }
+
+    Y_UNIT_TEST(TooOld) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .YdbVersion = TYdbVersion{ .Year = 22, .Major = 4, .Minor = 1, .Hotfix = 0 },
+                }, 
+                TOldFormat{
+                    .Tag = "stable-22-2",
+                    .AcceptedTags = { "stable-22-2" }
+                },
+                false
+        );
+    }
+
+    Y_UNIT_TEST(OldNbs) {
+        TestOldFormat(
+                TCurrentCompatibilityInfo{
+                    .YdbVersion = TYdbVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .BottomLimit = TYdbVersion{ .Year = 22, .Major = 4 },
+                            .UpperLimit = TYdbVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                            .ComponentId = (ui32)EComponentId::Interconnect
+                        },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .BottomLimit = TYdbVersion{ .Year = 22, .Major = 4 },
+                            .UpperLimit = TYdbVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                            .ComponentId = (ui32)EComponentId::Interconnect
+                        },
+                    }
+                }, 
+                TOldFormat{
+                    .Tag = "stable-22-4-1",
+                    .AcceptedTags = { "stable-22-4-1" }
+                },
+                true
+        );
     }
 }

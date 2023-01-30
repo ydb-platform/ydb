@@ -5,6 +5,7 @@
 
 class TCompatibilityInfo {
     friend class TCompatibilityInfoTest;
+    using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
 
 public:
     TCompatibilityInfo() = delete;
@@ -15,10 +16,12 @@ public:
 
     static bool CheckCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
             ui32 componentId, TString& errorReason);
-
     static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
-            const NKikimrConfig::TStoredCompatibilityInfo* stored,
-            ui32 componentId, TString& errorReason);
+            const NKikimrConfig::TStoredCompatibilityInfo* stored, ui32 componentId, TString& errorReason);
+
+    static bool CheckCompatibility(const TOldFormat& stored, ui32 componentId, TString& errorReason);
+    static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+            const TOldFormat& stored, ui32 componentId, TString& errorReason);
 
     static NKikimrConfig::TStoredCompatibilityInfo MakeStored(ui32 componentId,
             const NKikimrConfig::TCurrentCompatibilityInfo* current);

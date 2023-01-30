@@ -706,8 +706,8 @@ public:
         handoffForParts.resize(inPrimary.size());
 
         for (auto &[subgroupIdx, partId] : FoundParts) {
-            if (subgroupIdx == partId) {
-                inPrimary[subgroupIdx] = true;
+            if (subgroupIdx == partId - 1) {
+                inPrimary[partId - 1] = true;
             } else {
                 handoffForParts[partId - 1].push_back(subgroupIdx);
             }

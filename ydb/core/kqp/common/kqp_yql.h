@@ -59,6 +59,8 @@ struct TKqpReadTableSettings {
     void SetReverse() { Reverse = true; }
     void SetSorted() { Sorted = true; }
 
+    bool operator == (const TKqpReadTableSettings&) const = default;
+
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node);
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node);
     static TKqpReadTableSettings Parse(const NNodes::TCoNameValueTupleList& node);

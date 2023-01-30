@@ -8,6 +8,7 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+//FIXME: simplify KIKIMR-16987
 TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     auto stage = node.Cast<TDqStage>();
     TMaybe<size_t> tableSourceIndex;

@@ -54,6 +54,94 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
         .Done();
 }
 
+// ReadRangesSource can't deal with skipnullkeys, so we should expand it to (ExtractMembers (SkipNullKeys))
+//FIXME: simplify KIKIMR-16987
+NYql::NNodes::TExprBase ExpandSkipNullMembersForReadTableSource(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx, const TKqpOptimizeContext&) {
+    auto stage = node.Cast<TDqStage>();
+    TMaybe<size_t> tableSourceIndex;
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        auto input = stage.Inputs().Item(i);
+        if (input.Maybe<TDqSource>() && input.Cast<TDqSource>().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+            tableSourceIndex = i;
+        }
+    }
+    if (!tableSourceIndex) {
+        return node;
+    }
+
+    auto source = stage.Inputs().Item(*tableSourceIndex).Cast<TDqSource>();
+    auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
+    auto settings = TKqpReadTableSettings::Parse(readRangesSource.Settings());
+    
+    if (settings.SkipNullKeys.empty()) {
+        return node;
+    }
+
+    auto sourceArg = stage.Program().Args().Arg(*tableSourceIndex);
+
+    THashSet<TString> seenColumns;
+    TVector<TCoAtom> columns;
+    TVector<TCoAtom> skipNullColumns;
+    for (size_t i = 0; i < readRangesSource.Columns().Size(); ++i) {
+        auto atom = readRangesSource.Columns().Item(i);
+        auto column = atom.StringValue();
+        if (seenColumns.insert(column).second) {
+            columns.push_back(atom);
+        }
+    }
+    for (auto& column : settings.SkipNullKeys) {
+        TCoAtom atom(ctx.NewAtom(readRangesSource.Settings().Pos(), column));
+        skipNullColumns.push_back(atom);
+        if (seenColumns.insert(column).second) {
+            columns.push_back(atom);
+        }
+    }
+
+    TCoArgument replaceArg{ctx.NewArgument(sourceArg.Pos(), TStringBuilder() << "_kqp_source_arg_0")};
+    NYql::TNodeOnNodeOwnedMap bodyReplaces;
+
+    bodyReplaces[sourceArg.Raw()] =
+        Build<TCoExtractMembers>(ctx, node.Pos())
+            .Members(readRangesSource.Columns())
+            .Input<TCoSkipNullMembers>()
+                .Input(replaceArg)
+                .Members().Add(skipNullColumns).Build()
+            .Build()
+        .Done().Ptr();
+
+    NYql::TNodeOnNodeOwnedMap inputsReplaces;
+    settings.SkipNullKeys.clear();
+
+    auto newSource = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
+        .Table(readRangesSource.Table())
+        .Columns().Add(columns).Build()
+        .Settings(settings.BuildNode(ctx, source.Settings().Pos()))
+        .RangesExpr(readRangesSource.RangesExpr())
+        .ExplainPrompt(readRangesSource.ExplainPrompt())
+        .Done();
+    inputsReplaces[readRangesSource.Raw()] = newSource.Ptr();
+
+    TVector<TCoArgument> args;
+    for (auto arg : stage.Program().Args()) {
+        if (arg.Raw() == sourceArg.Raw()) {
+            args.push_back(replaceArg);
+        } else {
+            args.push_back(arg);
+        }
+    }
+
+    return Build<TDqStage>(ctx, node.Pos())
+        .Settings(stage.Settings())
+        .Inputs(TExprList(ctx.ReplaceNodes(stage.Inputs().Ptr(), inputsReplaces)))
+        .Outputs(stage.Outputs())
+        .Program<TCoLambda>()
+            .Args(args)
+            .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), bodyReplaces))
+            .Build()
+        .Done();
+}
+
+//FIXME: simplify KIKIMR-16987
 TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlReadTable>()) {
         return node;

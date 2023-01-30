@@ -48,7 +48,7 @@ public:
         TSmallVec<TSerializedCellVec> Points;
 
         TOwnedCellVec LastKey;
-        ui32 FirstUnprocessedRequest = 0;
+        TMaybe<ui32> FirstUnprocessedRequest;
         TMaybe<ui32> ReadId;
         ui64 TabletId;
 
@@ -57,9 +57,9 @@ public:
 
         bool NeedResolve = false;
 
-        void CopyContinuationToken(TShardState* state) {
+        void AssignContinuationToken(TShardState* state) {
             if (state->LastKey.DataSize() != 0) {
-                LastKey = state->LastKey;
+                LastKey = std::move(state->LastKey);
             }
             FirstUnprocessedRequest = state->FirstUnprocessedRequest;
         }
@@ -136,7 +136,8 @@ public:
 
         void FillUnprocessedRanges(
             TVector<TSerializedTableRange>& result,
-            TConstArrayRef<NScheme::TTypeInfo> keyTypes) const
+            TConstArrayRef<NScheme::TTypeInfo> keyTypes,
+            bool reverse) const
         {
             // Form new vector. Skip ranges already read.
             bool lastKeyEmpty = LastKey.DataSize() == 0;
@@ -145,32 +146,50 @@ public:
                 YQL_ENSURE(keyTypes.size() == LastKey.size(), "Key columns size != last key");
             }
 
-            auto rangeIt = Ranges.begin() + FirstUnprocessedRequest;
+            if (reverse) {
+                auto rangeIt = Ranges.begin() + FirstUnprocessedRequest.GetOrElse(Ranges.size());
 
-            if (!lastKeyEmpty) {
-                // It is range, where read was interrupted. Restart operation from last read key.
-                result.emplace_back(std::move(TSerializedTableRange(
-                    TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
-                    )));
-                ++rangeIt;
+                if (!lastKeyEmpty) {
+                    // It is range, where read was interrupted. Restart operation from last read key.
+                    result.emplace_back(std::move(TSerializedTableRange(
+                        rangeIt->From.GetBuffer(), TSerializedCellVec::Serialize(LastKey), rangeIt->ToInclusive, false
+                        )));
+                }
+                result.insert(result.begin(), Ranges.begin(), rangeIt);
+            } else {
+                auto rangeIt = Ranges.begin() + FirstUnprocessedRequest.GetOrElse(0);
+
+                if (!lastKeyEmpty) {
+                    // It is range, where read was interrupted. Restart operation from last read key.
+                    result.emplace_back(std::move(TSerializedTableRange(
+                        TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
+                        )));
+                    ++rangeIt;
+                }
+
+                // And push all others
+                result.insert(result.end(), rangeIt, Ranges.end());
             }
-
-            // And push all others
-            result.insert(result.end(), rangeIt, Ranges.end());
             for (auto& range : result) {
                 MakePrefixRange(range, keyTypes.size());
             }
         }
 
-        void FillUnprocessedPoints(TVector<TSerializedCellVec>& result) const {
-            result.insert(result.begin(), Points.begin() + FirstUnprocessedRequest, Points.end());
+        void FillUnprocessedPoints(TVector<TSerializedCellVec>& result, bool reverse) const {
+            if (reverse) {
+                auto it = FirstUnprocessedRequest ? Points.begin() + *FirstUnprocessedRequest + 1 : Points.end();
+                result.insert(result.begin(), Points.begin(), it);
+            } else {
+                auto it = FirstUnprocessedRequest ? Points.begin() + *FirstUnprocessedRequest : Points.begin();
+                result.insert(result.begin(), it, Points.end());
+            }
         }
 
-        void FillEvRead(TEvDataShard::TEvRead& ev, TConstArrayRef<NScheme::TTypeInfo> keyTypes) {
+        void FillEvRead(TEvDataShard::TEvRead& ev, TConstArrayRef<NScheme::TTypeInfo> keyTypes, bool reversed) {
             if (Ranges.empty()) {
-                FillUnprocessedPoints(ev.Keys);
+                FillUnprocessedPoints(ev.Keys, reversed);
             } else {
-                FillUnprocessedRanges(ev.Ranges, keyTypes);
+                FillUnprocessedRanges(ev.Ranges, keyTypes, reversed);
             }
         }
 
@@ -300,9 +319,15 @@ public:
                 CA_LOG_D("BEFORE: " << PendingShards.Size() << "." << RunningReads());
                 isFirst = false;
             }
-            auto state = THolder<TShardState>(PendingShards.PopFront());
-            InFlightShards.PushFront(state.Get());
-            StartRead(state.Release());
+            if (Settings.GetReverse()) {
+                auto state = THolder<TShardState>(PendingShards.PopBack());
+                InFlightShards.PushBack(state.Get());
+                StartRead(state.Release());
+            } else {
+                auto state = THolder<TShardState>(PendingShards.PopFront());
+                InFlightShards.PushFront(state.Get());
+                StartRead(state.Release());
+            }
         }
         if (!isFirst) {
             CA_LOG_D("AFTER: " << PendingShards.Size() << "." << RunningReads());
@@ -434,8 +459,8 @@ public:
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
 
-            if (idx == 0 && state) {
-                newShard->CopyContinuationToken(state.Get());
+            if (((!Settings.GetReverse() && idx == 0) || (Settings.GetReverse() && idx + 1 == keyDesc->GetPartitions().size())) && state) {
+                newShard->AssignContinuationToken(state.Get());
             }
 
             for (ui64 j = i; j < state->Ranges.size(); ++j) {
@@ -464,12 +489,14 @@ public:
         }
 
         YQL_ENSURE(!newShards.empty());
-        for (int i = newShards.ysize() - 1; i >= 0; --i) {
-            PendingShards.PushFront(newShards[i].Release());
-        }
-
-        if (!state->LastKey.empty()) {
-            PendingShards.Front()->LastKey = std::move(state->LastKey);
+        if (Settings.GetReverse()) {
+            for (size_t i = 0; i < newShards.size(); ++i) {
+                PendingShards.PushBack(newShards[i].Release());
+            }
+        } else {
+            for (int i = newShards.ysize() - 1; i >= 0; --i) {
+                PendingShards.PushFront(newShards[i].Release());
+            }
         }
 
         if (IsDebugLogEnabled(TlsActivationContext->ActorSystem(), NKikimrServices::KQP_COMPUTE)
@@ -541,7 +568,7 @@ public:
         THolder<TEvDataShard::TEvRead> ev(new TEvDataShard::TEvRead());
         auto& record = ev->Record;
 
-        state->FillEvRead(*ev, KeyColumnTypes);
+        state->FillEvRead(*ev, KeyColumnTypes, Settings.GetReverse());
         for (const auto& column : Settings.GetColumns()) {
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());

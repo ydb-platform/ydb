@@ -70,6 +70,8 @@ TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node
 
         if (hasMember) {
             filteredMembers.push_back(x.Ptr());
+        } else {
+            return nullptr;
         }
     }
 

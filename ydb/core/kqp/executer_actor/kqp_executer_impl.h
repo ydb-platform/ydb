@@ -670,14 +670,11 @@ protected:
         auto columns = BuildKqpColumns(source, table);
         auto partitions = PrunePartitions(TableKeys, source, stageInfo, HolderFactory(), TypeEnv());
 
-        bool reverse = false;
         ui64 itemsLimit = 0;
 
         TString itemsLimitParamName;
         NYql::NDqProto::TData itemsLimitBytes;
         NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
-
-        YQL_ENSURE(!source.GetReverse(), "reverse not supported yet");
 
         for (auto& [shardId, shardInfo] : partitions) {
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
@@ -696,9 +693,6 @@ protected:
 
             NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
             FillTableMeta(stageInfo, settings.MutableTable());
-            for (auto& key : source.GetSkipNullKeys()) {
-                settings.AddSkipNullKeys(key);
-            }
 
             for (auto& keyColumn : keyTypes) {
                 settings.AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
@@ -727,7 +721,7 @@ protected:
             }
 
             shardInfo.KeyReadRanges->SerializeTo(&settings);
-            settings.SetReverse(reverse);
+            settings.SetReverse(source.GetReverse());
             settings.SetSorted(source.GetSorted());
 
             settings.SetShardIdHint(shardId);

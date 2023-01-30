@@ -84,4 +84,23 @@ TCoAtomList BuildColumnsList(const TVector<TString>& columns, TPositionHandle po
     return BuildColumnsListImpl(columns, pos, ctx);
 }
 
+bool AllowFuseJoinInputs(TExprBase node) {
+    if (!node.Maybe<TDqJoin>()) {
+        return false;
+    }
+    auto join = node.Cast<TDqJoin>();
+    for (auto& input : {join.LeftInput(), join.RightInput()}) {
+        if (auto conn = input.Maybe<TDqConnection>()) {
+            auto stage = conn.Cast().Output().Stage();
+            for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+                auto input = stage.Inputs().Item(i);
+                if (input.Maybe<TDqSource>() && input.Cast<TDqSource>().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace NKikimr::NKqp::NOpt

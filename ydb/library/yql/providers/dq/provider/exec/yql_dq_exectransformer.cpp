@@ -1081,6 +1081,9 @@ private:
                 settings->MaxTasksPerStage = tasksPerStage;
                 executionPlanner->Clear();
             }
+        } catch (const TErrorException& err) {
+            ctx.IssueManager.RaiseIssue(ExceptionToIssue(err));
+            return SyncError();
         } catch (const TFallbackError& err) {
             YQL_ENSURE(canFallback, "Unexpected TFallbackError: " << err.what());
             return SyncStatus(FallbackWithMessage(pull.Ref(), err.what(), ctx, true));

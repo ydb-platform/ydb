@@ -14,7 +14,8 @@ namespace NLevenshtein {
         EMT_PRESERVE,
         EMT_REPLACE,
         EMT_DELETE,
-        EMT_INSERT
+        EMT_INSERT,
+        EMT_TRANSPOSE
     };
 
     inline bool IsImportantEditMove(EEditMoveType p) {
@@ -23,6 +24,10 @@ namespace NLevenshtein {
 
     inline void MakeMove(EEditMoveType t, int& p1, int& p2) {
         switch (t) {
+            case EMT_TRANSPOSE:
+                p1 += 2;
+                p2 += 2;
+                break;
             case EMT_PRESERVE:
             case EMT_REPLACE:
                 p1++;
@@ -41,17 +46,24 @@ namespace NLevenshtein {
 
     using TEditChain = TVector<EEditMoveType>;
 
-    template <typename TArgType>
+    template <typename TArgType, typename TWeightType = int>
     struct TWeightOneUnaryGetter {
-        int operator()(const TArgType&) const {
+        TWeightType operator()(const TArgType&) const {
             return 1;
         }
     };
 
-    template <typename TArgType>
+    template <typename TArgType, typename TWeightType = int>
     struct TWeightOneBinaryGetter {
-        int operator()(const TArgType&, const TArgType&) const {
+        TWeightType operator()(const TArgType&, const TArgType&) const {
             return 1;
+        }
+    };
+
+    template <typename TArgType, typename TWeightType = int>
+    struct TWeightInfBinaryGetter {
+        TWeightType operator()(const TArgType&, const TArgType&) const {
+            return std::numeric_limits<TWeightType>::max();
         }
     };
 
@@ -60,14 +72,16 @@ namespace NLevenshtein {
 
     /// Finds sequence of "edit moves" for two strings
     template <class TStringType, class TWeightType = int,
-        class TReplaceWeigher = TWeightOneBinaryGetter<TCharType<TStringType>>,
-        class TDeleteWeigher = TWeightOneUnaryGetter<TCharType<TStringType>>,
-        class TInsertWeigher = TWeightOneUnaryGetter<TCharType<TStringType>>
+        class TReplaceWeigher = TWeightOneBinaryGetter<TCharType<TStringType>, TWeightType>,
+        class TDeleteWeigher = TWeightOneUnaryGetter<TCharType<TStringType>, TWeightType>,
+        class TInsertWeigher = TWeightOneUnaryGetter<TCharType<TStringType>, TWeightType>,
+        class TTransposeWeigher = TWeightInfBinaryGetter<TCharType<TStringType>, TWeightType>
     >
     void GetEditChain(const TStringType& str1, const TStringType& str2, TEditChain& res, TWeightType* weight = nullptr,
         const TReplaceWeigher& replaceWeigher = TReplaceWeigher(),
         const TDeleteWeigher& deleteWeigher = TDeleteWeigher(),
-        const TInsertWeigher& insertWeigher = TInsertWeigher())
+        const TInsertWeigher& insertWeigher = TInsertWeigher(),
+        const TTransposeWeigher& transposeWeigher = TTransposeWeigher())
     {
         int l1 = (int)str1.size();
         int l2 = (int)str2.size();
@@ -80,7 +94,8 @@ namespace NLevenshtein {
         for (int i = 1; i <= l2; i++) {
             ma[0][i] = std::make_pair(ma[0][i - 1].first + insertWeigher(str2[i - 1]), EMT_INSERT);
         }
-        // Here goes basic Levestein's algorithm
+        const TWeightType maxWeight = std::numeric_limits<TWeightType>::max();
+        // Here goes basic Damerau-Levestein's algorithm
         for (int i = 1; i <= l1; i++) {
             for (int j = 1; j <= l2; j++) {
                 if (str1[i - 1] == str2[j - 1]) {
@@ -88,24 +103,43 @@ namespace NLevenshtein {
                 } else {
                     const TWeightType replaceWeight = replaceWeigher(str1[i - 1], str2[j - 1]);
                     Y_ASSERT(replaceWeight >= 0);
-                    ma[i][j] = std::make_pair(ma[i - 1][j - 1].first + replaceWeight, EMT_REPLACE);
+                    if (replaceWeight < maxWeight) {
+                        ma[i][j] = std::make_pair(ma[i - 1][j - 1].first + replaceWeight, EMT_REPLACE);
+                    } else {
+                        ma[i][j] = std::make_pair(replaceWeight, EMT_REPLACE);
+                    }
                 }
 
                 if (ma[i][j].first > ma[i - 1][j].first) {
                     const TWeightType deleteWeight = deleteWeigher(str1[i - 1]);
                     Y_ASSERT(deleteWeight >= 0);
-                    const TWeightType deletePathWeight = ma[i - 1][j].first + deleteWeight;
-                    if (deletePathWeight <= ma[i][j].first) {
-                        ma[i][j] = std::make_pair(deletePathWeight, EMT_DELETE);
+                    if (deleteWeight < maxWeight) {
+                        const TWeightType deletePathWeight = ma[i - 1][j].first + deleteWeight;
+                        if (deletePathWeight <= ma[i][j].first) {
+                            ma[i][j] = std::make_pair(deletePathWeight, EMT_DELETE);
+                        }
                     }
                 }
 
                 if (ma[i][j].first > ma[i][j - 1].first) {
                     const TWeightType insertWeight = insertWeigher(str2[j - 1]);
                     Y_ASSERT(insertWeight >= 0);
-                    const TWeightType insertPathWeight = ma[i][j - 1].first + insertWeight;
-                    if (insertPathWeight <= ma[i][j].first) {
-                        ma[i][j] = std::make_pair(insertPathWeight, EMT_INSERT);
+                    if (insertWeight < maxWeight) {
+                        const TWeightType insertPathWeight = ma[i][j - 1].first + insertWeight;
+                        if (insertPathWeight <= ma[i][j].first) {
+                            ma[i][j] = std::make_pair(insertPathWeight, EMT_INSERT);
+                        }
+                    }
+                }
+
+                if (i > 1 && j > 1 && str1[i - 1] == str2[j - 2] && str1[i - 2] == str2[j - 1]) {
+                    const TWeightType transposeWeight = transposeWeigher(str1[i - 2], str2[j - 2]);
+                    Y_ASSERT(transposeWeight >= 0);
+                    if (transposeWeight < maxWeight) {
+                        const TWeightType transposePathWeight = ma[i - 2][j - 2].first + transposeWeight;
+                        if (transposePathWeight <= ma[i][j].first) {
+                            ma[i][j] = std::make_pair(transposePathWeight, EMT_TRANSPOSE);
+                        }
                     }
                 }
             }
@@ -116,6 +150,10 @@ namespace NLevenshtein {
         for (int i = l1, j = l2; ma[i][j].second != EMT_SPECIAL;) {
             res.push_back(ma[i][j].second);
             switch (ma[i][j].second) {
+                case EMT_TRANSPOSE:
+                    i -= 2;
+                    j -= 2;
+                    break;
                 case EMT_PRESERVE:
                 case EMT_REPLACE:
                     --i;
@@ -139,16 +177,42 @@ namespace NLevenshtein {
         }
     }
 
-    template <class TStringType>
-    size_t Distance(const TStringType& str1, const TStringType& str2) {
+    template <class TStringType, bool Damerau = false, class TWeightType = int>
+    void GetEditChainGeneric(const TStringType& str1, const TStringType& str2, TEditChain& res, TWeightType* weight = nullptr) {
+        typedef TCharType<TStringType> TArgType;
+        GetEditChain<
+            TStringType, TWeightType,
+            TWeightOneBinaryGetter<TArgType, TWeightType>,
+            TWeightOneUnaryGetter<TArgType, TWeightType>,
+            TWeightOneUnaryGetter<TArgType, TWeightType>,
+            std::conditional_t<
+                Damerau,
+                TWeightOneBinaryGetter<TArgType, TWeightType>,
+                TWeightInfBinaryGetter<TArgType, TWeightType>
+            >
+        >(str1, str2, res, weight);
+    }
+
+    template <class TStringType, bool Damerau = false>
+    size_t DistanceImpl(const TStringType& str1, const TStringType& str2) {
         TEditChain editChain;
-        GetEditChain(str1, str2, editChain);
+        GetEditChainGeneric<TStringType, Damerau>(str1, str2, editChain);
         size_t result = 0;
         for (auto edit : editChain) {
             if (IsImportantEditMove(edit))
                 result++;
         }
         return result;
+    }
+
+    template <class TStringType>
+    size_t Distance(const TStringType& str1, const TStringType& str2) {
+        return DistanceImpl<TStringType, false>(str1, str2);
+    }
+
+    template <class TStringType>
+    size_t DamerauDistance(const TStringType& str1, const TStringType& str2) {
+        return DistanceImpl<TStringType, true>(str1, str2);
     }
 
     /// Calculates substrings to be replaced for str1->str2 transformation

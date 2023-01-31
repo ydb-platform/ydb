@@ -1090,7 +1090,7 @@ private:
             }
 
             TString statistics;
-            if (SaveAndPackStatistics("Precompute=" + ToString(DqGraphIndex), result.metric(), statistics)) {
+            if (SaveAndPackStatistics("Precompute=" + ToString(it->second.Index), result.metric(), statistics)) {
                 QueryStateUpdateRequest.set_statistics(statistics);
             }
 

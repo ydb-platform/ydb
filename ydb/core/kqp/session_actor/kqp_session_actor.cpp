@@ -1967,8 +1967,14 @@ public:
             PassAway();
         } else {
             CleanupCtx.reset();
+            bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
-            Become(&TKqpSessionActor::ReadyState);
+            if (doNotKeepSession) {
+                // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
+                CleanupAndPassAway();
+            } else {
+                Become(&TKqpSessionActor::ReadyState);
+            }
         }
         ExecuterId = TActorId{};
     }

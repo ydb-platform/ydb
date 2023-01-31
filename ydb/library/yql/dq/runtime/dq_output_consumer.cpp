@@ -81,6 +81,25 @@ private:
 };
 
 class TDqOutputHashPartitionConsumer : public IDqOutputConsumer {
+private:
+    mutable bool IsWaitingFlag = false;
+    mutable TUnboxedValue WaitingValue;
+    mutable IDqOutput::TPtr OutputWaiting;
+protected:
+    void DrainWaiting() const {
+        if (Y_UNLIKELY(IsWaitingFlag)) {
+            if (OutputWaiting->IsFull()) {
+                return;
+            }
+            OutputWaiting->Push(std::move(WaitingValue));
+            IsWaitingFlag = false;
+        }
+    }
+
+    virtual bool DoTryFinish() override {
+        DrainWaiting();
+        return !IsWaitingFlag;
+    }
 public:
     TDqOutputHashPartitionConsumer(TVector<IDqOutput::TPtr>&& outputs,
         TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
@@ -96,12 +115,20 @@ public:
     }
 
     bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+        DrainWaiting();
+        return IsWaitingFlag;
     }
 
     void Consume(TUnboxedValue&& value) final {
         ui32 partitionIndex = GetHashPartitionIndex(value);
-        Outputs[partitionIndex]->Push(std::move(value));
+        if (Outputs[partitionIndex]->IsFull()) {
+            YQL_ENSURE(!IsWaitingFlag);
+            IsWaitingFlag = true;
+            OutputWaiting = Outputs[partitionIndex];
+            WaitingValue = std::move(value);
+        } else {
+            Outputs[partitionIndex]->Push(std::move(value));
+        }
     }
 
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {

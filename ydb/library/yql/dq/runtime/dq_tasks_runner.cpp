@@ -827,6 +827,11 @@ private:
         return Context.Alloc ? *Context.Alloc : *SelfAlloc;
     }
 
+    void FinishImpl() {
+        LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
+        Output->Finish();
+    }
+
     ERunStatus FetchAndDispatch() {
         if (!Output) {
             LOG("no consumers, Finish execution");
@@ -847,6 +852,14 @@ private:
         };
 
         auto guard = BindAllocator();
+        if (Output->IsFinishing()) {
+            if (Output->TryFinish()) {
+                FinishImpl();
+                return ERunStatus::Finished;
+            } else {
+                return ERunStatus::PendingOutput;
+            }
+        }
         while (!Output->IsFull()) {
             if (Y_UNLIKELY(CollectProfileStats)) {
                 auto now = TInstant::Now();
@@ -863,8 +876,10 @@ private:
                     break;
                 }
                 case NUdf::EFetchStatus::Finish: {
-                    LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
-                    Output->Finish();
+                    if (!Output->TryFinish()) {
+                        break;
+                    }
+                    FinishImpl();
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {

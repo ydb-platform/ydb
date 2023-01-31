@@ -19,7 +19,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TDeque<TPathId> BlockStoreVolumesToClean;
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
-    TVector<TPathId> CdcStreamScansToResume;
+    THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -2830,11 +2830,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                         << ", cdc stream pathId: " << pathId
                         << ", parent pathId: " << path->ParentPathId);
-                    auto parent = Self->PathsById.at(path->ParentPathId);
-
-                    if (parent->NormalState()) {
-                        CdcStreamScansToResume.push_back(pathId);
-                    }
+                    CdcStreamScansToResume[path->ParentPathId].push_back(pathId);
                 }
 
                 if (!rowset.Next()) {
@@ -3370,6 +3366,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 // Remember which paths are still under operation
                 pathsUnderOperation.insert(txState.TargetPathId);
+
+                if (CdcStreamScansToResume.contains(txState.TargetPathId)) {
+                    CdcStreamScansToResume.erase(txState.TargetPathId);
+                }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Adjusted PathState"
@@ -4771,11 +4771,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return;
         }
 
+        // flatten
+        TVector<TPathId> cdcStreamScansToResume;
+        for (auto& [_, v] : CdcStreamScansToResume) {
+            std::move(v.begin(), v.end(), std::back_inserter(cdcStreamScansToResume));
+        }
+
         Self->ActivateAfterInitialization(ctx, {
             .DelayPublications = std::move(delayPublications),
             .ExportIds = ExportsToResume,
             .ImportsIds = ImportsToResume,
-            .CdcStreamScans = std::move(CdcStreamScansToResume),
+            .CdcStreamScans = std::move(cdcStreamScansToResume),
             .TablesToClean = std::move(TablesToClean),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
         });

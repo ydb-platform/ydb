@@ -913,7 +913,47 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST(ShouldReadNoColumnsCellVec) {
+    Y_UNIT_TEST(ShouldReadNoColumnsKeysRequestCellVec) {
+        // KIKIMR-16897: no columns mean we want to calc row count
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        request->Record.ClearColumns();
+        AddKeyQuery(*request, {3, 3, 3});
+        AddKeyQuery(*request, {1, 1, 1});
+        AddKeyQuery(*request, {5, 5, 5});
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        UNIT_ASSERT(readResult);
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+            std::vector<ui32>(),
+            std::vector<ui32>(),
+            std::vector<ui32>(),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), 3UL);
+    }
+
+    Y_UNIT_TEST(ShouldReadNoColumnsKeysRequestArrow) {
+        // KIKIMR-16897: no columns mean we want to calc row count
+        TTestHelper helper;
+
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        request->Record.ClearColumns();
+        AddKeyQuery(*request, {3, 3, 3});
+        AddKeyQuery(*request, {1, 1, 1});
+        AddKeyQuery(*request, {5, 5, 5});
+
+        auto readResult = helper.SendRead("table-1", request.release());
+        UNIT_ASSERT(readResult);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), 3UL);
+        UNIT_ASSERT(readResult->GetArrowBatch());
+
+        auto batch = readResult->GetArrowBatch();
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3UL);
+    }
+
+    Y_UNIT_TEST(ShouldReadNoColumnsRangeRequestCellVec) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
@@ -937,7 +977,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), 3UL);
     }
 
-    Y_UNIT_TEST(ShouldReadNoColumnsArrow) {
+    Y_UNIT_TEST(ShouldReadNoColumnsRangeRequestArrow) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 

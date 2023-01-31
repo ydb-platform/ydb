@@ -1,0 +1,16 @@
+[Unit]
+Description=YDB MultiTenancy starter service
+AssertFileNotEmpty=/opt/ydb/cfg/config.yaml
+AssertPathIsDirectory=/opt/ydb-tenant
+After=network-online.target rc-local.service
+
+[Service]
+Type=oneshot
+Environment=YDBD_SERVICE_TENANTS_DIR=/opt/ydb-tenant
+ExecStart=/opt/ydb/bin/ydb-server-mt-starter.sh
+ExecReload=/bin/true
+ExecStop=/bin/true
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

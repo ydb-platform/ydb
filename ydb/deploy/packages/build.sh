@@ -36,6 +36,8 @@ while [[ $1 == --* ]]; do
     # platform specific depends syntax
     # var referenced in ydb*.template.yaml configs
     export YDB_PACKAGE_DEPENDS_LIBC="libc6 (>= 2.30.0)"
+    export YDB_PACKAGE_DEPENDS_YDB_SERVER="ydb-server (>= $YDB_VERSION_STRING)"
+    export YDB_PACKAGE_DEPENDS_JQ="jq (>= 1.6)"
     shift
     ;;
   --help)

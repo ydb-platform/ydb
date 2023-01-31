@@ -1,18 +1,17 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-opt="/opt/ydb"
 optional_args=""
 
-if [ -f "$opt/token/ydbd.token" ]; then
-  optional_args="--auth-token-file $opt/token/ydbd.token"
+if [ -f "$YDBD_SERVICE_MAIN_DIR/token/ydbd.token" ]; then
+  optional_args="--auth-token-file $YDBD_SERVICE_MAIN_DIR/token/ydbd.token"
 fi
 
-exec $opt/bin/ydbd server \
+exec "$YDBD_SERVICE_MAIN_DIR/bin/ydbd" server \
+  --yaml-config "$YDBD_SERVICE_MAIN_DIR/cfg/config.yaml" \
   --log-level 3 \
   --syslog \
   --tcp \
-  --yaml-config $opt/cfg/config.yaml \
   --grpc-port 2135 \
   --ic-port 19001 \
   --mon-port 8765 \

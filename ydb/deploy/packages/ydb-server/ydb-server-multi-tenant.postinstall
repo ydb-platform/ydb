@@ -1,5 +1,4 @@
-#!/bin/sh
-
+#!/bin/bash
 set -e
 
 # summary of how this script can be called:
@@ -18,22 +17,22 @@ case "$1" in
 configure)
 
   # create ydb user & group
-  groupadd ydb || true
-  useradd ydb -g ydb || true
+  useradd ydb_tenant -g ydb || true
 
-  # to make sure that YDB has access to block disks to run
-  usermod -aG disk ydb
+  chown -R ydb_tenant:ydb /opt/ydb-tenant
+  chown ydb_tenant:ydb /opt/ydb/bin/ydb-server-mt*
 
-  # fix ownership of ydb stuff
-  chown -R ydb:ydb /opt/ydb
-
-  mkdir /opt/ydb/cache
-  chown -R ydb:ydb /opt/ydb/cache
-
-  if [ -x /bin/systemctl -a -f /etc/systemd/system/ydb-server-storage.service ]; then
+  if [ -x /bin/systemctl ] &&
+    [ -f /etc/systemd/system/ydb-server-mt-starter.service ] &&
+    [ -f /etc/systemd/system/ydb-server-mt-tenant@.service ]; then
     /bin/systemctl daemon-reload || true
-    if ! /bin/systemctl enable ydb-server-storage; then
-      echo "Cannot enable ydb service!"
+
+    if ! /bin/systemctl enable ydb-server-mt-starter; then
+      echo "Cannot enable ydb multi tenancy starter service!"
+    fi
+
+    if ! /bin/systemctl enable ydb-server-mt-tenant@; then
+      echo "Cannot enable ydb multi tenancy tenant service!"
     fi
   fi
 

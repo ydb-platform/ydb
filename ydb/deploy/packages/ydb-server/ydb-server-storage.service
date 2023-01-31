@@ -9,10 +9,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=ydb
+
 LimitNOFILE=65536
 LimitCORE=0
 LimitMEMLOCK=3221225472
-
 PermissionsStartOnly=true
 CapabilityBoundingSet=CAP_SETFCAP CAP_SYS_RAWIO CAP_SYS_NICE
 
@@ -24,6 +24,7 @@ SyslogLevel=err
 
 ExecStartPre=/usr/bin/install -o ydb -d /opt/ydb/cache
 Environment=LD_LIBRARY_PATH=/opt/ydb/lib
+Environment=YDBD_SERVICE_MAIN_DIR=/opt/ydb
 ExecStart=/opt/ydb/bin/ydb-server-storage-start.sh
 
 KillMode=mixed

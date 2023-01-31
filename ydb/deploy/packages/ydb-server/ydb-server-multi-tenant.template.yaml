@@ -1,0 +1,43 @@
+name: ydb-server-multi-tenant
+arch: "${DEB_ARCH}"
+platform: linux
+version: "${YDB_VERSION_STRING}"
+
+vendor: "YDB Platform"
+homepage: https://ydb.tech
+license: Apache2.0
+section: database
+priority: optional
+maintainer: "info@ydb.tech"
+description: |
+  YDB is an open-source Distributed SQL Database that combines
+  high availability and scalability with strong consistency and ACID transactions.
+  This package provides multi tenancy systemd services and configuration.
+
+provides: []
+depends:
+  - "${YDB_PACKAGE_DEPENDS_YDB_SERVER}"
+  - "${YDB_PACKAGE_DEPENDS_JQ}"
+recommends: []
+suggests: []
+
+contents:
+  - src: ydb/deploy/packages/ydb-server/ydb-server-mt-starter.service
+    dst: /etc/systemd/system/ydb-server-mt-starter.service
+  - src: ydb/deploy/packages/ydb-server/ydb-server-mt-tenant@.service
+    dst: /etc/systemd/system/ydb-server-mt-tenant@.service
+  - src: ydb/deploy/packages/ydb-server/ydb-server-mt-starter.sh
+    dst: /opt/ydb/bin/ydb-server-mt-starter.sh
+  - src: ydb/deploy/packages/ydb-server/ydb-server-mt-tenant-pre.sh
+    dst: /opt/ydb/bin/ydb-server-mt-tenant-pre.sh
+  - src: ydb/deploy/packages/ydb-server/ydb-server-mt-tenant-post.sh
+    dst: /opt/ydb/bin/ydb-server-mt-tenant-post.sh
+  - src: ydb/deploy/packages/ydb-server/ydb-server-mt-tenant-start.sh
+    dst: /opt/ydb/bin/ydb-server-mt-tenant-start.sh
+  - dst: /opt/ydb-tenant
+    type: dir
+    file_info:
+      mode: 0774
+
+scripts:
+  postinstall: ydb/deploy/packages/ydb-server/ydb-server-multi-tenant.postinstall

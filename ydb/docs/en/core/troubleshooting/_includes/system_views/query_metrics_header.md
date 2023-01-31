@@ -1,46 +1,48 @@
 ## Query details {#query-metrics}
 
-* **query_metrics_one_minute**
+The following system view stores detailed information about queries:
 
-Detailed information about queries, broken down by minute. Each table row contains information about a set of queries with identical text that were made during one minute. The table fields provide the minimum, maximum, and total values for each query metric tracked. Within the interval, queries are sorted in descending order of the total CPU time used.
+* `query_metrics_one_minute`: Data is split into one-minute intervals, contains up to 256 queries for the last 6 hours.
 
-Table structure:
-
-| **Field** | **Type** | **Key** | **Value** |
-| --- | --- | --- | --- |
-| IntervalEnd | Timestamp | 0 | Closing time of a minute interval |
-| Rank | Uint32 | 1 | Query rank per interval (by the SumCPUTime field) |
-| QueryText | Utf8 |  | Query text |
-| Count | Uint64 |  | Number of query runs |
-| SumDuration | Interval |  | Total query duration |
-| MinDuration | Interval |  | Minimum query duration |
-| MaxDuration | Interval |  | Maximum query duration |
-| SumCPUTime | Uint64 |  | Total CPU time used |
-| MinCPUTime | Uint64 |  | Minimum CPU time used |
-| MaxCPUTime | Uint64 |  | Maximum CPU time used |
-| SumReadRows | Uint64 |  | Total number of rows read |
-| MinReadRows | Uint64 |  | Minimum number of rows read |
-| MaxReadRows | Uint64 |  | Maximum number of rows read |
-| SumReadBytes | Uint64 |  | Total number of bytes read |
-| MinReadBytes | Uint64 |  | Minimum number of bytes read |
-| MaxReadBytes | Uint64 |  | Maximum number of bytes read |
-| SumUpdateRows | Uint64 |  | Total number of rows updated |
-| MinUpdateRows | Uint64 |  | Minimum number of rows updated |
-| MaxUpdateRows | Uint64 |  | Maximum number of rows updated |
-| SumUpdateBytes | Uint64 |  | Total number of bytes updated |
-| MinUpdateBytes | Uint64 |  | Minimum number of bytes updated |
-| MaxUpdateBytes | Uint64 |  | Maximum number of bytes updated |
-| SumDeleteRows | Uint64 |  | Total number of rows deleted |
-| MinDeleteRows | Uint64 |  | Minimum number of rows deleted |
-| MaxDeleteRows | Uint64 |  | Maximum number of rows deleted |
-| SumRequestUnits | Uint64 |  | Total number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used |
-| MinRequestUnits | Uint64 |  | Minimum number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used |
-| MaxRequestUnits | Uint64 |  | Maximum number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used |
+Each table row contains information about a set of queries with identical text that were made during one minute. The table fields provide the minimum, maximum, and total values for each query metric tracked. Within the interval, queries are sorted in descending order of the total CPU time used.
 
 Restrictions:
 
 * Query text limit is 4 KB.
-* The table contains the history for the last 6 hours.
-* Within the interval, information is provided for no more than 256 different queries.
 * Statistics may be incomplete if the database is under heavy load.
+
+Table structure:
+
+| Field | Description |
+---|---
+| `IntervalEnd` | The end of a one-minute interval.<br>Type: `Timestamp`.<br>Key: `0`. |
+| `Rank` | Query rank within an interval (by the SumCPUTime field).<br>Type: `Uint32`.<br>Key: `1`. |
+| `QueryText` | Query text.<br>Type: `Utf8`. |
+| `Count` | Number of query runs.<br>Type: `Uint64`. |
+| `SumDuration` | Total duration of queries.<br>Type: `Interval`. |
+| `Count` | Number of query runs.<br>Type: `Uint64`. |
+| `SumDuration` | Total duration of queries.<br>Type: `Interval`. |
+| `MinDuration` | Minimum query duration.<br>Type: `Interval`. |
+| `MaxDuration` | Maximum query duration.<br>Type: `Interval`. |
+| `SumCPUTime` | Total CPU time used.<br>Type: `Uint64`. |
+| `MinCPUTime` | Minimum CPU time used.<br>Type: `Uint64`. |
+| `MaxCPUTime` | Maximum CPU time used.<br>Type: `Uint64`. |
+| `SumReadRows` | Total number of rows read.<br>Type: `Uint64`. |
+| `MinReadRows` | Minimum number of rows read.<br>Type: `Uint64`. |
+| `MaxReadRows` | Maximum number of rows read.<br>Type: `Uint64`. |
+| `SumReadBytes` | Total number of bytes read.<br>Type: `Uint64`. |
+| `MinReadBytes` | Minimum number of bytes read.<br>Type: `Uint64`. |
+| `MaxReadBytes` | Maximum number of bytes read.<br>Type: `Uint64`. |
+| `SumUpdateRows` | Total number of rows written.<br>Type: `Uint64`. |
+| `MinUpdateRows` | Minimum number of rows written.<br>Type: `Uint64`. |
+| `MaxUpdateRows` | Maximum number of rows written.<br>Type: `Uint64`. |
+| `SumUpdateBytes` | Total number of bytes written.<br>Type: `Uint64`. |
+| `MinUpdateBytes` | Minimum number of bytes written.<br>Type: `Uint64`. |
+| `MaxUpdateBytes` | Maximum number of bytes written.<br>Type: `Uint64`. |
+| `SumDeleteRows` | Total number of rows deleted.<br>Type: `Uint64`. |
+| `MinDeleteRows` | Minimum number of rows deleted.<br>Type: `Uint64`. |
+| `MaxDeleteRows` | Maximum number of rows deleted.<br>Type: `Uint64`. |
+| `SumRequestUnits` | Total number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used.<br>Type: `Uint64`. |
+| `MinRequestUnits` | Minimum number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used.<br>Type: `Uint64`. |
+| `MaxRequestUnits` | Maximum number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used.<br>Type: `Uint64`. |
 

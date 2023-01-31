@@ -422,8 +422,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 return typeSpec.ArrayPrint(str);
             };
 
-            testSingleType(arrayId, false, false, textInArray, textOutArray);
-            testSingleType(arrayId, false, true, textInArray, textOutArray);
+            testSingleType(arrayId, typeSpec.IsKey, false, textInArray, textOutArray);
+            testSingleType(arrayId, typeSpec.IsKey, true, textInArray, textOutArray);
         };
 
         auto testByteaType = [&] () {
@@ -528,23 +528,19 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             testSingleType(id, typeSpec.IsKey, typeSpec.TextIn, typeSpec.TextOut);
 
-            //arrays do not work for now due to postgress requesting null-terminated
-            //data in ReadArrayBinary
-            //KIKIMR-16501
+            auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
 
-            // auto arrayId = NYql::NPg::LookupType(id).ArrayTypeId;
+            auto textInArray = [&typeSpec] (auto i) {
+                auto str = typeSpec.TextIn(i);
+                return typeSpec.ArrayPrint(str);
+            };
 
-            // auto textInArray = [&typeSpec] (auto i) {
-            //     auto str = typeSpec.TextIn(i);
-            //     return typeSpec.ArrayPrint(str);
-            // };
+            auto textOutArray = [&typeSpec] (auto i) {
+            auto str = typeSpec.TextOut(i);
+                return typeSpec.ArrayPrint(str);
+            };
 
-            // auto textOutArray = [&typeSpec] (auto i) {
-            //     auto str = typeSpec.TextOut(i);
-            //     return typeSpec.ArrayPrint(str);
-            // };
-
-            // testSingleType(arrayId, false, textInArray, textOutArray);
+            testSingleType(arrayId, typeSpec.IsKey, textInArray, textOutArray);
         };
 
         auto testByteaType = [&] () {

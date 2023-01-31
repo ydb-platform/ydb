@@ -54,7 +54,14 @@ struct TServerOptions {
     //! Number of worker threads.
     DECLARE_FIELD(WorkerThreads, size_t, 2);
 
-    //! Create one completion queue per thread
+    //! Number of workers per completion queue, i.e. when
+    // WorkerThreads=8 and PriorityWorkersPerCompletionQueue=2
+    // there will be 4 completion queues. When set to 0 then
+    // only UseCompletionQueuePerThread affects number of CQ.
+    DECLARE_FIELD(WorkersPerCompletionQueue, size_t, 0);
+
+    //! Obsolete. Create one completion queue per thread.
+    // Setting true equals to the WorkersPerCompletionQueue=1
     DECLARE_FIELD(UseCompletionQueuePerThread, bool, false);
 
     //! Memory quota size for grpc server in bytes. Zero means unlimited.
@@ -166,7 +173,17 @@ class IGRpcService: public TThrRefBase {
 public:
     virtual grpc::Service* GetService() = 0;
     virtual void StopService() noexcept = 0;
+
     virtual void InitService(grpc::ServerCompletionQueue* cq, TLoggerPtr logger) = 0;
+
+    virtual void InitService(
+        const std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs,
+        TLoggerPtr logger,
+        size_t index)
+    {
+        InitService(cqs[index % cqs.size()].get(), logger);
+    }
+
     virtual void SetGlobalLimiterHandle(TGlobalLimiter* limiter) = 0;
     virtual bool IsUnsafeToShutdown() const = 0;
     virtual size_t RequestsInProgress() const = 0;

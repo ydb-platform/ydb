@@ -130,11 +130,16 @@ void TGRpcServer::Start() {
         builder.SetOption(std::make_unique<TKeepAliveOption>());
     }
 
-    if (Options_.UseCompletionQueuePerThread) {
-        for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
-            CQS_.push_back(builder.AddCompletionQueue());
-        }
-    } else {
+    size_t completionQueueCount = 1;
+    if (Options_.WorkersPerCompletionQueue) {
+        size_t threadsPerQueue = Max(std::size_t{1}, Options_.WorkersPerCompletionQueue);
+        completionQueueCount = (Options_.WorkerThreads + threadsPerQueue - 1)  / threadsPerQueue; // ceiling
+    } else if (Options_.UseCompletionQueuePerThread) {
+        completionQueueCount = Options_.WorkerThreads;
+    }
+
+    CQS_.reserve(completionQueueCount);
+    for (size_t i = 0; i < completionQueueCount; ++i) {
         CQS_.push_back(builder.AddCompletionQueue());
     }
 
@@ -159,23 +164,15 @@ void TGRpcServer::Start() {
     size_t index = 0;
     for (IGRpcServicePtr service : Services_) {
         // TODO: provide something else for services instead of ServerCompletionQueue
-        service->InitService(CQS_[index++ % CQS_.size()].get(), Options_.Logger);
+        service->InitService(CQS_, Options_.Logger, index++);
     }
 
-    if (Options_.UseCompletionQueuePerThread) {
-        for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
-            auto* cq = &CQS_[i];
-            Ts.push_back(SystemThreadFactory()->Run([cq] {
-                PullEvents(cq->get());
-            }));
-        }
-    } else {
-        for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
-            auto* cq = &CQS_[0];
-            Ts.push_back(SystemThreadFactory()->Run([cq] {
-                PullEvents(cq->get());
-            }));
-        }
+    Ts.reserve(Options_.WorkerThreads);
+    for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
+        auto* cq = &CQS_[i % CQS_.size()];
+        Ts.push_back(SystemThreadFactory()->Run([cq] {
+            PullEvents(cq->get());
+        }));
     }
 
     if (Options_.ExternalListener) {

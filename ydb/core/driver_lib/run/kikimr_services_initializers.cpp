@@ -770,6 +770,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                     return TCompatibilityInfo::CheckCompatibility(&peerPB, (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                 };
+
+                icCommon->ValidateCompatibilityOldFormat = [&](const NActors::TInterconnectProxyCommon::TVersionInfo& peer, TString& errorReason) {
+                    return TCompatibilityInfo::CheckCompatibility(peer, (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                };
             }
 
             setup->LocalServices.emplace_back(GetDestructActorID(), TActorSetupCmd(new TDestructActor,

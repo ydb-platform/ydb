@@ -291,10 +291,22 @@ namespace NActors {
         template<typename T, typename TCallback>
         void ValidateCompatibilityInfo(const T& proto, TCallback&& errorCallback) {
             // if possible, use new CompatibilityInfo field
-            if (Common->ValidateCompatibilityInfo && proto.HasCompatibilityInfo()) {
+            if (proto.HasCompatibilityInfo() && Common->ValidateCompatibilityInfo) {
                 TString errorReason;
                 if (!Common->ValidateCompatibilityInfo(proto.GetCompatibilityInfo(), errorReason)) {
                     TStringStream s("Local and peer CompatibilityInfo are incompatible");
+                    s << ", errorReason# " << errorReason;
+                    errorCallback(s.Str());
+                }
+            } else if (proto.HasVersionTag() && Common->ValidateCompatibilityOldFormat) {
+                TInterconnectProxyCommon::TVersionInfo oldFormat;
+                oldFormat.Tag = proto.GetVersionTag();
+                for (ui32 i = 0; i < proto.AcceptedVersionTagsSize(); ++i) {
+                    oldFormat.AcceptedTags.insert(proto.GetAcceptedVersionTags(i));
+                }
+                TString errorReason;
+                if (!Common->ValidateCompatibilityOldFormat(oldFormat, errorReason)) {
+                    TStringStream s("Local CompatibilityInfo and peer TVersionInfo are incompatible");
                     s << ", errorReason# " << errorReason;
                     errorCallback(s.Str());
                 }

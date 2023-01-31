@@ -709,7 +709,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.SetICCommonSetupper([&](ui32 nodeNum, TIntrusivePtr<TInterconnectProxyCommon> common) {
             common->CompatibilityInfo = TString();
             NKikimrConfig::TCurrentCompatibilityInfo* current = nullptr;
-            if (nodeNum == 0) {
+            if (nodeNum % 2 == 0) {
                 current = node0.get();
             } else if (nodeNum == 1) {
                 current = node1.get();
@@ -782,6 +782,78 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         TestConnectionWithDifferentVersions(node0, node1);
         TestConnectionWithDifferentVersions(node1, node0);
     }
+    
+    Y_UNIT_TEST(OldFormat) {
+        std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node0 = 
+            std::make_shared<NKikimrConfig::TCurrentCompatibilityInfo>();
+        {
+            node0->SetBuild("ydb");
+            auto* version = node0->MutableYdbVersion();
+            version->SetYear(23);
+            version->SetMajor(1);
+            version->SetMinor(1);
+            version->SetHotfix(0);
+
+            {
+                auto* rule = node0->AddCanLoadFrom();
+                rule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
+
+                auto* bottomLimit = rule->MutableBottomLimit();
+                bottomLimit->SetYear(22);
+                bottomLimit->SetMajor(5);
+
+                rule->MutableUpperLimit()->CopyFrom(*version);
+
+                node0->AddStoresReadableBy()->CopyFrom(*rule);
+            }
+        }
+
+        TTestBasicRuntime runtime(2);
+        runtime.SetUseRealInterconnect();
+        runtime.SetICCommonSetupper([=](ui32 nodeNum, TIntrusivePtr<TInterconnectProxyCommon> common) {
+            if (nodeNum % 2 == 0) {
+                common->CompatibilityInfo = TString();
+
+                common->ValidateCompatibilityInfo = 
+                    [=](const TString& peer, TString& errorReason) {
+                        NKikimrConfig::TStoredCompatibilityInfo peerPB;
+                        if (!peerPB.ParseFromString(peer)) {
+                            errorReason = "Cannot parse given CompatibilityInfo";
+                            return false;
+                        }
+
+                        return TCompatibilityInfo::CheckCompatibility(node0.get(), &peerPB, 
+                            (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                    };
+
+                common->ValidateCompatibilityOldFormat = 
+                    [=](const TMaybe<TInterconnectProxyCommon::TVersionInfo>& peer, TString& errorReason) {
+                        if (!peer) {
+                            return true;
+                        }
+                        return TCompatibilityInfo::CheckCompatibility(node0.get(), *peer, 
+                            (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                    }; 
+            } else {
+                common->VersionInfo = TInterconnectProxyCommon::TVersionInfo{
+                    .Tag = "stable-22-5-6-hotfix-1",
+                    .AcceptedTags = {"stable-22-5-6-hotfix-1"}
+                };
+            }
+        });
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        const auto edge = runtime.AllocateEdgeActor(0);
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvConnectNode), 0, true);
+
+        TAutoPtr<IEventHandle> handle;
+        {
+            const auto event = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
+            UNIT_ASSERT_EQUAL(event->NodeId, runtime.GetNodeId(1));
+        }
+    }
+    
 }
 
 }

@@ -106,6 +106,7 @@ namespace NActors {
 
         std::optional<TString> CompatibilityInfo;
         std::function<bool(const TString&, TString&)> ValidateCompatibilityInfo;
+        std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

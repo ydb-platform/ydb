@@ -1661,8 +1661,9 @@ private:
         if (i64 msc = (i64) RequestControls.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
-        if (shardsLimit > 0 && datashardTasks.size() > shardsLimit) {
-            LOG_W("Too many affected shards: datashardTasks=" << datashardTasks.size() << ", limit: " << shardsLimit);
+        size_t shards = datashardTasks.size() + remoteComputeTasks.size();
+        if (shardsLimit > 0 && shards > shardsLimit) {
+            LOG_W("Too many affected shards: datashardTasks=" << shards << ", limit: " << shardsLimit);
             Counters->TxProxyMon->TxResultError->Inc();
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()

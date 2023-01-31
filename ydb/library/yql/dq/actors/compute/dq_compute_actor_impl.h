@@ -1917,10 +1917,11 @@ public:
 
             THashMap<ui64, ui64> ingressBytesMap;
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
-                if (sourceInfo.AsyncInput) {
+                if (auto* source = sourceInfo.AsyncInput) {
                     auto ingressBytes = sourceInfo.AsyncInput->GetIngressBytes();
                     ingressBytesMap.emplace(inputIndex, ingressBytes);
                     Ingress[sourceInfo.Type] = Ingress.Value(sourceInfo.Type, 0) + ingressBytes;
+                    source->FillExtraStats(protoTask, last);
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats(), ingressBytesMap);
@@ -1970,6 +1971,10 @@ public:
                     protoTransform->SetIngressBytes(ingressBytes);
 
                     protoTransform->SetMaxMemoryUsage(transformStats->MaxMemoryUsage);
+
+                    if (auto* transform = transformInfo.AsyncInput) {
+                        transform->FillExtraStats(protoTask, last);
+                    }
                 }
             }
 

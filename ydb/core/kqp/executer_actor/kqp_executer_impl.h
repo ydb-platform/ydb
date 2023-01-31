@@ -651,7 +651,7 @@ protected:
         }
     }
 
-    void BuildScanTasksFromSource(TStageInfo& stageInfo, IKqpGateway::TKqpSnapshot snapshot, const TMaybe<ui64> lockTxId = {}) {
+    size_t BuildScanTasksFromSource(TStageInfo& stageInfo, IKqpGateway::TKqpSnapshot snapshot, const TMaybe<ui64> lockTxId = {}) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -695,6 +695,12 @@ protected:
             FillTableMeta(stageInfo, settings.MutableTable());
 
             for (auto& keyColumn : keyTypes) {
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfo(keyColumn);
+                if (columnType.TypeInfo) {
+                    *settings.AddKeyColumnTypeInfos() = *columnType.TypeInfo;
+                } else {
+                    *settings.AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
+                }
                 settings.AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
             }
 
@@ -725,6 +731,9 @@ protected:
             settings.SetSorted(source.GetSorted());
 
             settings.SetShardIdHint(shardId);
+            if (Stats) {
+                Stats->AffectedShards.insert(shardId);
+            }
 
             ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
                 Request.TxAlloc->TypeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
@@ -744,6 +753,7 @@ protected:
             taskSourceSettings->PackFrom(settings);
             input.SourceType = NYql::KqpReadRangesSourceName;
         }
+        return partitions.size();
     }
 
 protected:

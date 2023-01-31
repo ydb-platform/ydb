@@ -89,6 +89,8 @@ struct IDqComputeActorAsyncInput {
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
+    virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */) { }
+
     // The same signature as IActor::PassAway().
     // It is guaranted that this method will be called with bound MKQL allocator.
     // So, it is the right place to destroy all internal UnboxedValues.

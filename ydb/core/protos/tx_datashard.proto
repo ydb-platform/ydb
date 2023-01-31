@@ -255,8 +255,10 @@ message TKqpReadRangesSourceSettings {
     repeated TKqpTransaction.TColumnMeta Columns = 4;
     optional uint64 ItemsLimit = 5;
     optional bool Reverse = 6;
-    repeated string SkipNullKeys = 7;
+
     repeated uint32 KeyColumnTypes = 8;
+    repeated NKikimrProto.TTypeInfo KeyColumnTypeInfos = 15;
+
     optional EScanDataFormat DataFormat = 9;
     optional NKikimrProto.TRowVersion Snapshot = 10;
     optional uint64 ShardIdHint = 11;

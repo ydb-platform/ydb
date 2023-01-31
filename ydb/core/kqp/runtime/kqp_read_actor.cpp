@@ -31,6 +31,7 @@ bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::
 
 }
 
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -43,6 +44,19 @@ using namespace NKikimr::NDataShard;
 class TKqpReadActor : public TActorBootstrapped<TKqpReadActor>, public NYql::NDq::IDqComputeActorAsyncInput {
     using TBase = TActorBootstrapped<TKqpReadActor>;
 public:
+    struct TResult {
+        ui64 ShardId;
+        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+        TMaybe<NKikimr::NMiniKQL::TUnboxedValueVector> Batch;
+        size_t ProcessedRows = 0;
+
+        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult)
+            : ShardId(shardId)
+            , ReadResult(std::move(readResult))
+        {
+        }
+    };
+
     struct TShardState : public TIntrusiveListItem<TShardState> {
         TSmallVec<TSerializedTableRange> Ranges;
         TSmallVec<TSerializedCellVec> Points;
@@ -261,8 +275,15 @@ public:
         );
 
         KeyColumnTypes.reserve(Settings.GetKeyColumnTypes().size());
-        for (auto typeId : Settings.GetKeyColumnTypes()) {
-            KeyColumnTypes.push_back(NScheme::TTypeInfo((NScheme::TTypeId)typeId));
+        for (size_t i = 0; i < Settings.KeyColumnTypesSize(); ++i) {
+            auto typeId = Settings.GetKeyColumnTypes(i);
+            KeyColumnTypes.push_back(
+                NScheme::TTypeInfo(
+                    (NScheme::TTypeId)typeId,
+                    (typeId == NScheme::NTypeIds::Pg) ?
+                        NPg::TypeDescFromPgTypeId(
+                            Settings.GetKeyColumnTypeInfos(i).GetPgTypeId()
+                        ) : nullptr));
         }
     }
 
@@ -355,7 +376,7 @@ public:
             TKeyDesc::TColumnOp op;
             op.Column = column.GetId();
             op.Operation = TKeyDesc::EColumnOperation::Read;
-            op.ExpectedType = NScheme::TTypeInfo((NScheme::TTypeId)column.GetType());
+            op.ExpectedType = MakeTypeInfo(column);
             columns.emplace_back(std::move(op));
         }
 
@@ -561,7 +582,6 @@ public:
             limit = EVREAD_MAX_ROWS;
         }
         if (limit == 0) {
-            delete state;
             return;
         }
 
@@ -613,6 +633,7 @@ public:
 
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings.GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
+            << ", limit: " << limit
             << ", readId = " << id
             << " snapshot = (txid=" << Settings.GetSnapshot().GetTxId() << ",step=" << Settings.GetSnapshot().GetStep() << ")"
             << " lockTxId = " << Settings.GetLockTxId());
@@ -649,6 +670,7 @@ public:
 
         Reads[id].RegisterMessage(*ev->Get());
 
+
         RecievedRowCount += ev->Get()->GetRowsCount();
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         CA_LOG_D(TStringBuilder() << "new data for read #" << id << " pushed");
@@ -679,8 +701,7 @@ public:
             if (IsSystemColumn(Settings.GetColumns(resultColumnIndex).GetId())) {
                 rowStats.AllocatedBytes += sizeof(NUdf::TUnboxedValue);
             } else {
-                rowStats.AddStatistics(NMiniKQL::GetUnboxedValueSize(
-                        row[columnIndex], NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(resultColumnIndex).GetType())));
+                rowStats.AddStatistics(NMiniKQL::GetUnboxedValueSize(row[columnIndex], MakeTypeInfo(Settings.GetColumns(resultColumnIndex))));
                 columnIndex += 1;
             }
         }
@@ -694,24 +715,21 @@ public:
         return TypeEnv.BindAllocator();
     }
 
-    NMiniKQL::TBytesStatistics PackArrow(
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result,
-        ui64 shardId,
-        NKikimr::NMiniKQL::TUnboxedValueVector& batch)
-    {
+    NMiniKQL::TBytesStatistics PackArrow(TResult& handle) {
+        auto& [shardId, result, batch, _] = handle;
         NMiniKQL::TBytesStatistics stats;
         bool hasResultColumns = false;
         if (result->Get()->GetRowsCount() == 0) {
             return {};
         }
         if (Settings.ColumnsSize() == 0) {
-            batch.resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
+            batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
         } else {
             TVector<NUdf::TUnboxedValue*> editAccessors(result->Get()->GetRowsCount());
-            batch.reserve(result->Get()->GetRowsCount());
+            batch->reserve(result->Get()->GetRowsCount());
 
             for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
-                batch.emplace_back(HolderFactory.CreateDirectArrayHolder(
+                batch->emplace_back(HolderFactory.CreateDirectArrayHolder(
                     Settings.columns_size(),
                     editAccessors[rowIndex])
                 );
@@ -743,29 +761,29 @@ public:
         return stats;
     }
 
-    NMiniKQL::TBytesStatistics PackCells(
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result,
-        ui64 shardId,
-        NKikimr::NMiniKQL::TUnboxedValueVector& batch)
-    {
+    NMiniKQL::TBytesStatistics PackCells(TResult& handle) {
+        auto& [shardId, result, batch, _] = handle;
         NMiniKQL::TBytesStatistics stats;
-        batch.reserve(batch.size());
+        batch->reserve(batch->size());
         for (size_t rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
             NUdf::TUnboxedValue* rowItems = nullptr;
-            batch.emplace_back(HolderFactory.CreateDirectArrayHolder(Settings.ColumnsSize(), rowItems));
+            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings.ColumnsSize(), rowItems));
+            size_t rowSize = 0;
             size_t columnIndex = 0;
             for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
                 auto tag = Settings.GetColumns(resultColumnIndex).GetId();
-                auto type = NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(resultColumnIndex).GetType());
+                auto type = MakeTypeInfo(Settings.GetColumns(resultColumnIndex));
                 if (IsSystemColumn(tag)) {
                     NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, tag, type);
                 } else {
                     rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], type);
+                    rowSize += row[columnIndex].Size(); 
                     columnIndex += 1;
                 }
             }
-            stats.AddStatistics(GetRowSize(rowItems));
+            stats.DataBytes += std::max(rowSize, (size_t)8);
+            stats.AllocatedBytes += GetRowSize(rowItems).AllocatedBytes;
         }
         return stats;
     }
@@ -778,39 +796,40 @@ public:
     {
         ui64 bytes = 0;
         while (!Results.empty()) {
-            auto& [shardId, result, batch, processedRows] = Results.front();
-            auto& msg = *result->Get();
+            auto& result = Results.front();
+            auto& batch = result.Batch;
+            auto& msg = *result.ReadResult->Get();
             if (!batch.Defined()) {
                 batch.ConstructInPlace();
                 switch (msg.Record.GetResultFormat()) {
                     case NKikimrTxDataShard::EScanDataFormat::ARROW:
-                        PackArrow(result, shardId, *batch);
+                        BytesStats.AddStatistics(PackArrow(result));
                         break;
                     case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
                     case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
-                        PackCells(result, shardId, *batch);
+                        BytesStats.AddStatistics(PackCells(result));
                 }
             }
 
-            auto id = result->Get()->Record.GetReadId();
+            auto id = result.ReadResult->Get()->Record.GetReadId();
             if (!Reads[id]) {
                 Results.pop();
                 continue;
             }
             auto* state = Reads[id].Shard;
 
-            for (; processedRows < batch->size(); ++processedRows) {
-                NMiniKQL::TBytesStatistics rowSize = GetRowSize((*batch)[processedRows].GetElements());
+            for (; result.ProcessedRows < batch->size(); ++result.ProcessedRows) {
+                NMiniKQL::TBytesStatistics rowSize = GetRowSize((*batch)[result.ProcessedRows].GetElements());
                 if (static_cast<ui64>(freeSpace) < bytes + rowSize.AllocatedBytes) {
                     break;
                 }
-                resultVector.push_back(std::move((*batch)[processedRows]));
+                resultVector.push_back(std::move((*batch)[result.ProcessedRows]));
                 ProcessedRowCount += 1;
                 bytes += rowSize.AllocatedBytes;
             }
             CA_LOG_D(TStringBuilder() << "returned " << resultVector.size() << " rows");
 
-            if (batch->size() == processedRows) {
+            if (batch->size() == result.ProcessedRows) {
                 auto& record = msg.Record;
                 if (Reads[id].IsLastMessage(msg)) {
                     Reads[id].Reset();
@@ -835,7 +854,6 @@ public:
                         auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
                         cancel->Record.SetReadId(id);
                         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId), IEventHandle::FlagTrackDelivery);
-                        delete state;
                         Reads[id].Reset();
                         ResetReads++;
                     }
@@ -860,6 +878,29 @@ public:
 
         return bytes;
     }
+
+    void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last) override {
+        if (last) {
+            NDqProto::TDqTableStats* tableStats = nullptr;
+            for (size_t i = 0; i < stats->TablesSize(); ++i) {
+                auto* table = stats->MutableTables(i);
+                if (table->GetTablePath() == Settings.GetTable().GetTablePath()) {
+                    tableStats = table;
+                }
+            }
+            if (!tableStats) {
+                tableStats = stats->AddTables();
+                tableStats->SetTablePath(Settings.GetTable().GetTablePath());
+
+            }
+
+            //FIXME: use evread statistics after KIKIMR-16924
+            tableStats->SetReadRows(tableStats->GetReadRows() + RecievedRowCount);
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
+            tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
+        }
+    }
+
 
     void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) override {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) override {}
@@ -897,13 +938,25 @@ public:
         return result;
     }
 
+
+    NScheme::TTypeInfo MakeTypeInfo(const NKikimrTxDataShard::TKqpTransaction_TColumnMeta& info) {
+        auto typeId = info.GetType();
+        return NScheme::TTypeInfo(
+            (NScheme::TTypeId)typeId,
+            (typeId == NScheme::NTypeIds::Pg) ?
+                NPg::TypeDescFromPgTypeId(
+                    info.GetTypeInfo().GetPgTypeId()
+                ) : nullptr);
+    }
+
 private:
     NKikimrTxDataShard::TKqpReadRangesSourceSettings Settings;
 
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
-    size_t RecievedRowCount = 0;
-    size_t ProcessedRowCount = 0;
+    NMiniKQL::TBytesStatistics BytesStats;
+    ui64 RecievedRowCount = 0;
+    ui64 ProcessedRowCount = 0;
     ui64 ResetReads = 0;
     ui64 ReadId = 0;
     TVector<TReadState> Reads;
@@ -915,18 +968,6 @@ private:
     TShardQueue InFlightShards;
     TShardQueue PendingShards;
 
-    struct TResult {
-        ui64 ShardId;
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
-        TMaybe<NKikimr::NMiniKQL::TUnboxedValueVector> Batch;
-        size_t ProcessedRows = 0;
-
-        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult)
-            : ShardId(shardId)
-            , ReadResult(std::move(readResult))
-        {
-        }
-    };
     TQueue<TResult> Results;
 
     TVector<NKikimrTxDataShard::TLock> Locks;

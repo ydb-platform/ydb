@@ -293,7 +293,22 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.dt.unit" : "YEARS",
                 "storage.location.template" : "yellow_tripdata_${dt}-01/"
             }
-        )", {"dt"}), yexception, "error in datetime parsing. Input data: 1980-1-1");;
+        )", {"dt"}), yexception, "error in datetime parsing. Input data: 1980-1-1");
+    }
+
+    Y_UNIT_TEST(EmptyOutput) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.dt.type" : "date",
+                "projection.dt.min" : "2012-01-01",
+                "projection.dt.max" : "2011-02-01",
+                "projection.dt.interval" : "1",
+                "projection.dt.format" : "asdf asdf 444",
+                "projection.dt.unit" : "YEARS",
+                "storage.location.template" : "/yellow_tripdata_${dt}-01/"
+            }
+        )", {"dt"}), yexception, "The projection contains an empty set of paths");
     }
 
     Y_UNIT_TEST(LocationPathCollision) {

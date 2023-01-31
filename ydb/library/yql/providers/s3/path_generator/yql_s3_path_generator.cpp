@@ -580,6 +580,10 @@ private:
         for (const auto& p: result) {
             Rules.push_back(TExpandedPartitioningRule{.Path=p.first, .ColumnValues=p.second});
         }
+
+        if (Rules.empty()) {
+            ythrow yexception() << "The projection contains an empty set of paths";
+        }
     }
 
     void DoGenerateDate(const std::vector<TColumnPartitioningConfig>& rules,

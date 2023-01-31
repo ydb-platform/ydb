@@ -262,14 +262,16 @@ namespace NKikimr::NBlobDepot {
             EKeepState KeepState = EKeepState::Default;
             bool Public = false;
             bool GoingToAssimilate = false;
+            ui32 ValueVersion = 0;
             bool UncertainWrite = false;
 
             TValue() = default;
-            TValue(const TValue&) = delete;
             TValue(TValue&&) = default;
 
             TValue& operator =(const TValue&) = delete;
             TValue& operator =(TValue&&) = default;
+
+            explicit TValue(const TValue&) = default;
 
             explicit TValue(NKikimrBlobDepot::TValue&& proto, bool uncertainWrite)
                 : Meta(proto.GetMeta())
@@ -277,6 +279,7 @@ namespace NKikimr::NBlobDepot {
                 , KeepState(proto.GetKeepState())
                 , Public(proto.GetPublic())
                 , GoingToAssimilate(proto.GetGoingToAssimilate())
+                , ValueVersion(proto.GetValueVersion())
                 , UncertainWrite(uncertainWrite)
             {}
 
@@ -316,6 +319,9 @@ namespace NKikimr::NBlobDepot {
                 if (GoingToAssimilate != proto->GetGoingToAssimilate()) {
                     proto->SetGoingToAssimilate(GoingToAssimilate);
                 }
+                if (ValueVersion != proto->GetValueVersion()) {
+                    proto->SetValueVersion(ValueVersion);
+                }
             }
 
             static bool Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item);
@@ -342,8 +348,19 @@ namespace NKikimr::NBlobDepot {
                     << " KeepState# " << EKeepState_Name(KeepState)
                     << " Public# " << (Public ? "true" : "false")
                     << " GoingToAssimilate# " << (GoingToAssimilate ? "true" : "false")
+                    << " ValueVersion# " << ValueVersion
                     << " UncertainWrite# " << (UncertainWrite ? "true" : "false")
                     << "}";
+            }
+
+            bool Changed(const TValue& other) const {
+                return Meta != other.Meta ||
+                    !IsSameValueChain(ValueChain, other.ValueChain) ||
+                    KeepState != other.KeepState ||
+                    Public != other.Public ||
+                    GoingToAssimilate != other.GoingToAssimilate ||
+                    ValueVersion != other.ValueVersion ||
+                    UncertainWrite != other.UncertainWrite;
             }
         };
 

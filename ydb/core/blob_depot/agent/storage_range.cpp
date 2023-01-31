@@ -59,7 +59,6 @@ namespace NKikimr::NBlobDepot {
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
                 item->SetExactKey(Reads[tag].Id.AsBinaryString());
-                item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
                 item->SetCookie(tag);
 

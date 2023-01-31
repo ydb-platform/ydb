@@ -170,6 +170,26 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    inline bool IsSameValueChain(const TValueChain& x, const TValueChain& y) {
+        if (x.size() != y.size()) {
+            return false;
+        }
+        for (int i = 0; i < x.size(); ++i) {
+            TString a;
+            bool success = x[i].SerializeToString(&a);
+            Y_VERIFY(success);
+
+            TString b;
+            success = y[i].SerializeToString(&b);
+            Y_VERIFY(success);
+
+            if (a != b) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     class TGenStep {
         ui64 Value = 0;
 

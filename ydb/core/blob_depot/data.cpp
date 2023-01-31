@@ -92,6 +92,10 @@ namespace NKikimr::NBlobDepot {
             const bool wasUncertain = value.IsWrittenUncertainly();
             const bool wasGoingToAssimilate = value.GoingToAssimilate;
 
+#ifndef NDEBUG
+            TValue originalValue(value);
+#endif
+
             if (!inserted) {
                 EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
                     const auto it = RefCount.find(id);
@@ -103,6 +107,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             EUpdateOutcome outcome = callback(value, inserted);
+
+#ifndef NDEBUG
+            Y_VERIFY(outcome != EUpdateOutcome::NO_CHANGE || !value.Changed(originalValue));
+            Y_VERIFY(value.ValueVersion == originalValue.ValueVersion + 1 || IsSameValueChain(value.ValueChain, originalValue.ValueChain));
+#endif
 
             if ((underSoft && value.KeepState != EKeepState::Keep) || underHard) {
                 outcome = EUpdateOutcome::DROP;
@@ -215,6 +224,7 @@ namespace NKikimr::NBlobDepot {
                 auto *chain = value.ValueChain.Add();
                 auto *locator = chain->MutableLocator();
                 locator->CopyFrom(item.GetBlobLocator());
+                ++value.ValueVersion;
 
                 // clear assimilation flag -- we have blob overwritten with fresh copy (of the same data)
                 value.GoingToAssimilate = false;
@@ -245,6 +255,7 @@ namespace NKikimr::NBlobDepot {
                 locator->SetTotalDataLen(key.GetBlobId().BlobSize());
                 locator->SetFooterLen(0);
                 value.GoingToAssimilate = false;
+                ++value.ValueVersion;
                 outcome = EUpdateOutcome::CHANGE;
             }
             return outcome;

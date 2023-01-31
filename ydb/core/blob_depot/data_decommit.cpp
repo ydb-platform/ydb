@@ -35,7 +35,7 @@ namespace NKikimr::NBlobDepot {
 
         void Bootstrap() {
             if (Token.expired()) {
-                return;
+                return PassAway();
             }
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT42, "TResolveDecommitActor::Bootstrap", (Id, Self->GetLogId()),
@@ -49,6 +49,8 @@ namespace NKikimr::NBlobDepot {
             } else {
                 Handle(Ev);
             }
+
+            Become(&TThis::StateFunc);
         }
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
@@ -114,7 +116,6 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            Become(&TThis::StateFunc);
             CheckIfDone();
         }
 

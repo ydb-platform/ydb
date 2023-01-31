@@ -18,10 +18,12 @@ namespace NKikimr::NBlobDepot {
         switch (ev->GetTypeRewrite()) {
             case TEvBlobStorage::EvGet:
                 doForward = ev->Get<TEvBlobStorage::TEvGet>()->Decommission;
+                Y_VERIFY(!doForward || !ev->Get<TEvBlobStorage::TEvGet>()->MustRestoreFirst);
                 break;
 
             case TEvBlobStorage::EvRange:
                 doForward = ev->Get<TEvBlobStorage::TEvRange>()->Decommission;
+                Y_VERIFY(!doForward || !ev->Get<TEvBlobStorage::TEvRange>()->MustRestoreFirst);
                 break;
         }
 

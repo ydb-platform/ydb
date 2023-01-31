@@ -3091,6 +3091,9 @@ private:
                 if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
                     auto newConstr = input.GetConstraint(expectedConstr->GetName());
                     if (!newConstr) {
+                        if (const auto sort = dynamic_cast<const TSortedConstraintNode*>(expectedConstr))
+                            if (const auto& constent = sort->GetContent(); constent.size() == 1U && constent.front().first.size() == 1U && constent.front().first.front().empty())
+                                continue;
                         if (expectedConstr->GetName() == TMultiConstraintNode::Name()
                             || expectedConstr->GetName() == TPassthroughConstraintNode::Name()) {
                             // Constraint Multi(0:{Empty},1:{Empty}, ..., N:{Empty}) can be reduced to Empty

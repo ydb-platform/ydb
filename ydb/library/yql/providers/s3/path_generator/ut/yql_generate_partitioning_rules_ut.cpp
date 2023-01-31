@@ -295,6 +295,21 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"dt"}), yexception, "error in datetime parsing. Input data: 1980-1-1");;
     }
+
+    Y_UNIT_TEST(LocationPathCollision) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
+            {
+                "projection.enabled" : "true",
+                "storage.location.template" : "${year}",
+                "projection.year.type" : "date",
+                "projection.year.min" : "1900",
+                "projection.year.max" : "NOW",
+                "projection.year.interval" : "1",
+                "projection.year.format" : "%Y",
+                "projection.year.unit" : "DAYS"
+            }
+        )", {"year"}), yexception, "Location path 1970/ is composed by different projection value sets { ${year} = 1970-01-01 } and { ${year} = 1970-01-02 }");;
+    }
 }
 
 }

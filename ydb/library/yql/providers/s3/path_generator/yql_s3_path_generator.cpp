@@ -591,18 +591,20 @@ private:
                     size_t p = 0) {
         const auto& rule = rules[p];
         const TInstant to = ParseDate(rule.To, now);
-        TInstant current = ParseDate(rule.From, now);
-        try {
-            for (; current <= to; current = AddUnit(current, rule.Interval, rule.IntervalUnit)) {
-                TString copyLocationTemplate = locationTemplate;
-                const TString time = Strftime(rule.Format.c_str(), current);
-                ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
-                columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::Date, .Value=Strftime("%F", current)});
-                DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
-                columnsWithValue.pop_back();
+        for (TInstant current = ParseDate(rule.From, now); current <= to; ) {
+            TString copyLocationTemplate = locationTemplate;
+            const TString time = Strftime(rule.Format.c_str(), current);
+            ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
+            columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::Date, .Value=Strftime("%F", current)});
+            DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);
+            columnsWithValue.pop_back();
+
+            try {
+                current = AddUnit(current, rule.Interval, rule.IntervalUnit);
+            } catch (...) {
+                // correct overflow handling
+                break;
             }
-        } catch (...) {
-            // correct overflow handling
         }
     }
 

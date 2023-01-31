@@ -8,7 +8,7 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
-import "ydb/public/api/protos/yq.proto";
+import "ydb/public/api/protos/draft/fq.proto";
 
 ////////////////////////////////////////////////////////////
 
@@ -43,7 +43,7 @@ message ResultSetMeta {
 }
 
 message CreateQueryRequest {
-    YandexQuery.QueryContent.QueryType type = 1;
+    FederatedQuery.QueryContent.QueryType type = 1;
     string name = 2;
     string text = 3;
     string description = 4;
@@ -66,7 +66,7 @@ message GetQueryResult {
     }
 
     google.protobuf.StringValue id = 1;
-    YandexQuery.QueryContent.QueryType type = 2;
+    FederatedQuery.QueryContent.QueryType type = 2;
     google.protobuf.StringValue name = 3;
     google.protobuf.StringValue description = 4;
     ComputeStatus status = 5;

@@ -4,7 +4,6 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/viewer/json/json.h>
-#include <ydb/public/api/protos/yq.pb.h>
 #include <library/cpp/actors/http/http_proxy.h>
 
 namespace NKikimr::NPublicHttp {

@@ -395,16 +395,12 @@ public:
             return EReadStatus::Done;
         }
 
-        if (ColumnTypes.size()) {
-            // TODO: looks kind of ugly: we assume that cells in rowState are stored in array
-            TDbTupleRef value(&ColumnTypes[0], &rowState.Get(0), ColumnTypes.size());
+        // TODO: looks kind of ugly: we assume that cells in rowState are stored in array
+        TDbTupleRef value(ColumnTypes.data(), (*rowState).data(), ColumnTypes.size());
 
-            // note that if user requests key columns then they will be in
-            // rowValues and we don't have to add rowKey columns
-            BlockBuilder.AddRow(TDbTupleRef(), value);
-        } else {
-            BlockBuilder.AddRow(TDbTupleRef(), TDbTupleRef());
-        }
+        // note that if user requests key columns then they will be in
+        // rowValues and we don't have to add rowKey columns
+        BlockBuilder.AddRow(TDbTupleRef(), value);
 
         ++RowsRead;
 

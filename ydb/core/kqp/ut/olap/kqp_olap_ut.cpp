@@ -471,6 +471,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
                 TStringBuilder() << planNode << " was not found. Query: " << query);
         }
+        UNIT_ASSERT_C(ast.find("SqueezeToDict") == std::string::npos, TStringBuilder() << "SqueezeToDict denied for aggregation requests. Query: " << query);
 
         if (!readNodeType.empty()) {
             NJson::TJsonValue planJson;
@@ -1309,7 +1310,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             // Check plan
 #if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
+//            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
 #else
             CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");
 #endif
@@ -1471,6 +1473,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TExpectedLimitChecker LimitChecker;
         TExpectedRecordChecker RecordChecker;
     public:
+        void FillExpectedAggregationGroupByPlanOptions() {
+#if SSA_RUNTIME_VERSION >= 2U
+//            AddExpectedPlanOptions("TKqpOlapAgg");
+            AddExpectedPlanOptions("WideCombiner");
+#else
+            AddExpectedPlanOptions("CombineCore");
+#endif
+        }
         TString GetFixedQuery() const {
             TStringBuilder queryFixed;
             queryFixed << "--!syntax_v1" << Endl;
@@ -1737,9 +1747,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level
             )")
-            .AddExpectedPlanOptions("CombineCore")
             .SetExpectedReply("[[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]]")
             ;
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestAggregations({ testCase });
     }
@@ -1753,12 +1763,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     WHERE level = 2
                 )")
             .SetExpectedReply("[[4600u;]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg")
             .AddExpectedPlanOptions("KqpOlapFilter")
+#if SSA_RUNTIME_VERSION >= 2U
+            .AddExpectedPlanOptions("WideCombiner")
+//            .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(1)
 #else
-            .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("Condense")
 #endif
             ;
@@ -1775,13 +1785,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
+            .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-            .AddExpectedPlanOptions("KqpOlapFilter")
             .MutableLimitChecker().SetExpectedResultCount(1)
 #else
             .AddExpectedPlanOptions("CombineCore")
-            .AddExpectedPlanOptions("KqpOlapFilter")
 #endif
             ;
 
@@ -1797,9 +1806,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE level = 2
             )")
             .SetExpectedReply("[[4600u;]]")
+            .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-            .AddExpectedPlanOptions("KqpOlapFilter")
             .MutableLimitChecker().SetExpectedResultCount(1)
 #else
             .AddExpectedPlanOptions("CombineCore")
@@ -1946,12 +1955,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[4;1u];[5;1u]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[4;1u];[5;1u]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -1966,12 +1971,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[6;0u];[7;0u]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[6;0u];[7;0u]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -1986,12 +1987,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[5;1u];[6;0u]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[5;1u];[6;0u]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2008,12 +2005,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;5u;0u;5u]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;5u;0u;5u]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2030,12 +2023,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;5u;0u;5u];[[5];1u;1u;1u]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;5u;0u;5u];[[5];1u;1u;1u]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2135,12 +2124,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[4;[4.]];[5;[5.]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[4;[4.]];[5;[5.]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2155,12 +2140,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[6;#];[7;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[6;#];[7;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2175,12 +2156,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[5;[5.]];[6;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[5;[5.]];[6;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2195,12 +2172,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;8.;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;8.;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2215,12 +2188,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;8.;#];[[5];5.;[5.]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;8.;#];[[5];5.;[5.]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2287,12 +2256,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[4;[4]];[5;[5]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[4;[4]];[5;[5]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2307,12 +2272,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[6;#];[7;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[6;#];[7;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2327,12 +2288,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[5;[5]];[6;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[5;[5]];[6;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2347,12 +2304,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;40;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;40;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2367,12 +2320,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;40;#];[[5];5;[5]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;40;#];[[5];5;[5]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2386,12 +2335,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level
             )")
-            .SetExpectedReply("[[[0];[0]];[[1];[4600]];[[2];[9200]];[[3];[13800]];[[4];[18400]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[[0];[0]];[[1];[4600]];[[2];[9200]];[[3];[13800]];[[4];[18400]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestAggregations({ testCase });
     }
@@ -2439,12 +2384,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level
             )")
-            .SetExpectedReply("[[[0];[\"10000\"]];[[1];[\"10001\"]];[[2];[\"10002\"]];[[3];[\"10003\"]];[[4];[\"10004\"]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[[0];[\"10000\"]];[[1];[\"10001\"]];[[2];[\"10002\"]];[[3];[\"10003\"]];[[4];[\"10004\"]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestAggregations({ testCase });
     }
@@ -2458,12 +2399,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level
             )")
-            .SetExpectedReply("[[[0];[\"40995\"]];[[1];[\"40996\"]];[[2];[\"40997\"]];[[3];[\"40998\"]];[[4];[\"40999\"]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[[0];[\"40995\"]];[[1];[\"40996\"]];[[2];[\"40997\"]];[[3];[\"40998\"]];[[4];[\"40999\"]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestAggregations({ testCase });
     }
@@ -2479,12 +2416,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
 #if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
-#else
-            .AddExpectedPlanOptions("CombineCore");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
 #endif
-
+        testCase.FillExpectedAggregationGroupByPlanOptions();
         TestAggregations({ testCase });
     }
 
@@ -2526,12 +2460,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[4;[4]];[5;[5]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[4;[4]];[5;[5]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2546,12 +2476,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[6;#];[7;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[6;#];[7;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2566,12 +2492,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY id
                 ORDER BY id;
             )")
-            .SetExpectedReply("[[5;[5]];[6;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[5;[5]];[6;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2586,12 +2508,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;6;#];[[5];5;[5]]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;6;#];[[5];5;[5]]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2606,12 +2524,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 GROUP BY level
                 ORDER BY level;
             )")
-            .SetExpectedReply("[[#;6;#]]")
-#if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg");
-#else
-            .AddExpectedPlanOptions("CombineCore");
-#endif
+            .SetExpectedReply("[[#;6;#]]");
+        testCase.FillExpectedAggregationGroupByPlanOptions();
 
         TestTableWithNulls({ testCase });
     }
@@ -2627,8 +2541,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY c DESC
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
             .SetExpectedReadNodeType("TableFullScan");
+        ;
+        q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
         q9.SetQuery(R"(
@@ -2640,8 +2555,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
             .SetExpectedReadNodeType("TableFullScan");
+        q9.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q12;
         q12.SetQuery(R"(
@@ -2656,6 +2571,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             .AddExpectedPlanOptions("TKqpOlapAgg")
             .SetExpectedReadNodeType("TableFullScan");
+        q12.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q14;
         q14.SetQuery(R"(
@@ -2668,8 +2584,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10;
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
             .SetExpectedReadNodeType("TableFullScan");
+        q14.FillExpectedAggregationGroupByPlanOptions();
 
         TestClickBench({ q7, q9, q12, q14 });
     }

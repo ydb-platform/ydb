@@ -218,6 +218,11 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
         return node;
     }
 
+    // temporary for keys grouping push down not useful
+    if (!aggCombine.Keys().Empty()) {
+        return node;
+    }
+
     auto maybeRead = aggCombine.Input().Maybe<TKqpReadOlapTableRanges>();
     if (!maybeRead) {
         maybeRead = aggCombine.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>();

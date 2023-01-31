@@ -32,7 +32,7 @@ Install {{ ydb-short-name }} in the standard configuration:
   helm upgrade --install ydb-operator deploy/ydb-operator --set metrics.enabled=false
   ```
   * `ydb-operator`: The release name.
-  * `ydb/operator`: The name of the chart in the repository you added earlier.
+  * `ydb-operator`: The name of the chart in the repository you added earlier.
 
   Output:
 

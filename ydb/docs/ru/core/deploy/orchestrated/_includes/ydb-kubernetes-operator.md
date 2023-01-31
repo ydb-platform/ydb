@@ -11,11 +11,11 @@
   Выполните команду:
 
   ```bash
-  helm install ydb-operator ydb/operator
+  helm install ydb-operator ydb/ydb-operator
   ```
 
   * `ydb-operator` — имя релиза;
-  * `ydb/operator` — название чарта в добавленном ранее репозитории.
+  * `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
 
   Результат выполнения:
 

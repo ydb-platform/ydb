@@ -11,11 +11,11 @@ Install {{ ydb-short-name }} in the standard configuration:
    Run the command:
 
    ```bash
-   helm install ydb-operator ydb/operator
+   helm install ydb-operator ydb/ydb-operator
    ```
 
    * `ydb-operator`: The release name.
-   * `ydb/operator`: The name of the chart in the repository you added earlier.
+   * `ydb/ydb-operator`: The name of the chart in the repository you added earlier.
 
    Result:
 

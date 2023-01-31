@@ -136,8 +136,9 @@ public:
     }
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-        TKqpRequestCounters::TPtr counters)
+        TKqpRequestCounters::TPtr counters, bool streamResult)
         : TBase(std::move(request), database, userToken, counters, TWilsonKqp::DataExecuter, "DataExecuter")
+        , StreamResult(streamResult)
     {
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
@@ -2213,8 +2214,11 @@ public:
 
         if (channel.DstTask) {
             FillEndpointDesc(*channelDesc.MutableDstEndpoint(), TasksGraph.GetTask(channel.DstTask));
+        } else if (StreamResult) {
+            auto proxy = GetOrCreateChannelProxy(channel);
+            ActorIdToProto(proxy->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
         } else {
-            // result channel
+            // For non-stream execution, collect results in executer and forward with response.
             ActorIdToProto(SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());
         }
 
@@ -2317,6 +2321,8 @@ private:
     }
 
 private:
+    bool StreamResult = false;
+
     NTxProxy::TRequestControls RequestControls;
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
@@ -2356,9 +2362,9 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-    TKqpRequestCounters::TPtr counters)
+    TKqpRequestCounters::TPtr counters, bool streamResult)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters);
+    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult);
 }
 
 } // namespace NKqp

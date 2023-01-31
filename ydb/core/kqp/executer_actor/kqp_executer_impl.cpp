@@ -150,10 +150,9 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
         YQL_ENSURE(request.EraseLocks);
-        return CreateKqpDataExecuter(std::move(request), database, userToken, counters);
+        return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false);
     }
 
-    bool data = true; // `false` stands for Scan
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
     for (auto& tx : request.Transactions) {
         if (txsType) {
@@ -161,31 +160,23 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             YQL_ENSURE(*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA, "Cannot execute multiple non-data physical txs.");
         } else {
             txsType = tx.Body->GetType();
-
-            switch (tx.Body->GetType()) {
-                case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                case NKqpProto::TKqpPhyTx::TYPE_DATA:
-                    data = true;
-                    break;
-
-                case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-                    data = false;
-                    break;
-
-                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-                    // TODO: Use separate executer.
-                    data = false;
-                    break;
-
-                default:
-                    YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)tx.Body->GetType());
-            }
         }
     }
 
-    return data
-        ? CreateKqpDataExecuter(std::move(request), database, userToken, counters)
-        : CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation);
+    switch (*txsType) {
+        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+        case NKqpProto::TKqpPhyTx::TYPE_DATA:
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false);
+
+        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
+            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation);
+
+        case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+            return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true);
+
+        default:
+            YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
+    }
 }
 
 } // namespace NKqp

@@ -730,34 +730,6 @@ public:
         }
     }
 
-    IActor* GetOrCreateChannelProxy(const TChannel& channel) {
-        IActor* proxy;
-
-        if (ResponseEv->TxResults[0].IsStream) {
-            if (!ResultChannelProxies.empty()) {
-                return ResultChannelProxies.begin()->second;
-            }
-
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
-                ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), SelfId());
-        } else {
-            YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
-
-            auto channelIt = ResultChannelProxies.find(channel.Id);
-
-            if (channelIt != ResultChannelProxies.end()) {
-                return channelIt->second;
-            }
-
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), SelfId(), channel.DstInputIndex, ResponseEv.get());
-        }
-
-        RegisterWithSameMailbox(proxy);
-        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
-
-        return proxy;
-    }
-
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel) {
         channelDesc.SetId(channel.Id);
         channelDesc.SetSrcTaskId(channel.SrcTask);
@@ -776,9 +748,6 @@ public:
         channelDesc.SetIsPersistent(IsCrossShardChannel(TasksGraph, channel));
         channelDesc.SetInMemory(channel.InMemory);
     }
-
-private:
-    std::unordered_map<ui64, IActor*> ResultChannelProxies;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
 };
 

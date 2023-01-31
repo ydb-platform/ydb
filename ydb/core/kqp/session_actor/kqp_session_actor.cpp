@@ -171,8 +171,7 @@ struct TKqpQueryState {
         auto type = GetType();
         return (
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
-            type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
-            type == NKikimrKqp::QUERY_TYPE_SQL_QUERY // TODO: Switch to MVCC snapshots after moving to separate executer.
+            type == NKikimrKqp::QUERY_TYPE_AST_SCAN
         );
     }
 
@@ -999,8 +998,12 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareGenericRequest(TKqpQueryState *queryState) {
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
-        YQL_ENSURE(queryState);
-        request.Snapshot = queryState->TxCtx->GetSnapshot();
+        if (queryState) {
+            request.Snapshot = queryState->TxCtx->GetSnapshot();
+            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+        } else {
+            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+        }
 
         return request;
     }

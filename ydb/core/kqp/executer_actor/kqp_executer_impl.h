@@ -996,6 +996,35 @@ protected:
         return true;
     }
 
+    IActor* GetOrCreateChannelProxy(const NYql::NDq::TChannel& channel) {
+        IActor* proxy;
+
+        if (ResponseEv->TxResults[0].IsStream) {
+            if (!ResultChannelProxies.empty()) {
+                return ResultChannelProxies.begin()->second;
+            }
+
+            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
+                ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), this->SelfId());
+        } else {
+            YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
+
+            auto channelIt = ResultChannelProxies.find(channel.Id);
+
+            if (channelIt != ResultChannelProxies.end()) {
+                return channelIt->second;
+            }
+
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), this->SelfId(),
+                channel.DstInputIndex, ResponseEv.get());
+        }
+
+        this->RegisterWithSameMailbox(proxy);
+        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
+
+        return proxy;
+    }
+
 protected:
     void PassAway() override {
         LOG_D("terminate execution.");
@@ -1072,6 +1101,7 @@ protected:
     TActorId KqpShardsResolverId;
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
+    std::unordered_map<ui64, IActor*> ResultChannelProxies;
 
     TVector<TProgressStat> LastStats;
 
@@ -1089,6 +1119,7 @@ protected:
 
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -1098,7 +1129,7 @@ private:
 IActor* CreateKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters);
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters);
+    const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation);

@@ -70,6 +70,9 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
@@ -78,7 +81,7 @@
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
-                                                "Node Type": "TableFullScan"
+                                                "Node Type": "Aggregate-TableFullScan"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -172,8 +175,6 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "GroupBy": "0",
-                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
                                                         "Name": "Aggregate"
                                                     },
                                                     {
@@ -248,6 +249,9 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Name": "Aggregate"
+                                                    },
+                                                    {
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
@@ -256,7 +260,7 @@
                                                         "Table": "base_explain_script_script/ScriptingTest"
                                                     }
                                                 ],
-                                                "Node Type": "TableFullScan"
+                                                "Node Type": "Aggregate-TableFullScan"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -350,8 +354,6 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "GroupBy": "0",
-                                                        "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
                                                         "Name": "Aggregate"
                                                     },
                                                     {

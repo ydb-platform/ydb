@@ -1905,7 +1905,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     FROM `/Root/olapStore/olapTable`
                 )")
             .SetExpectedReply("[[23000u;]]")
-            .AddExpectedPlanOptions("CombineCore");
+            .AddExpectedPlanOptions("Condense1");
 
         TestAggregations({ testCase });
     }
@@ -2038,7 +2038,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     FROM `/Root/olapStore/olapTable`
                 )")
             .SetExpectedReply("[[23000u;]]")
-            .AddExpectedPlanOptions("CombineCore");
+            .AddExpectedPlanOptions("Condense1");
 
         TestAggregations({ testCase });
     }

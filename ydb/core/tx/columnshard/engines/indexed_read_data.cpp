@@ -49,13 +49,14 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 
 #if 1 // Optimization [remove portion's dups]
     if (batches.size() == 1) {
-        if (NArrow::IsSortedAndUnique(batches[0], description->ReplaceKey)) {
+        Y_UNUSED(size);
+//        if (NArrow::IsSortedAndUnique(batches[0], description->ReplaceKey)) {
             std::vector<std::shared_ptr<arrow::RecordBatch>> out;
             SliceBatch(batches[0], maxRowsInBatch, out);
             return out;
-        } else {
-            return NArrow::MergeSortedBatches(batches, description, size);
-        }
+//        } else {
+//            return NArrow::MergeSortedBatches(batches, description, size);
+//        }
     }
 #endif
 
@@ -104,11 +105,11 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 
         // The core of optimization: do not merge slice if it's alone in its key range
         if (slices.size() == 1) {
-            if (NArrow::IsSortedAndUnique(slices[0], description->ReplaceKey)) {
+//            if (NArrow::IsSortedAndUnique(slices[0], description->ReplaceKey)) {
                 // Split big batch into smaller batches if needed
                 SliceBatch(slices[0], maxRowsInBatch, out);
                 continue;
-            }
+//            }
         }
 
         auto merged = NArrow::MergeSortedBatches(slices, description, maxRowsInBatch);

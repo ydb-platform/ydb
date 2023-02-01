@@ -1238,10 +1238,13 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
 
 Y_UNIT_TEST_TWIN(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -1330,10 +1333,13 @@ Y_UNIT_TEST_TWIN(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc) {
 
 Y_UNIT_TEST_TWIN(TestOnlyDataTxLagCausesRejects, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -1415,10 +1421,13 @@ Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
 
 Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -1668,10 +1677,13 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
 
 Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -2427,10 +2439,13 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc) {
 
 Y_UNIT_TEST_TWIN(TestCopyTableNoDeadlock, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -2608,9 +2623,12 @@ Y_UNIT_TEST_TWIN(TestCopyTableNoDeadlock, UseMvcc) {
 
 Y_UNIT_TEST(TestPlannedCancelSplit) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -3510,10 +3528,14 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
 
 void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool enableMvcc = false) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+    app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(enableMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -3839,10 +3861,13 @@ Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
 
 Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -3942,10 +3967,13 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, UseMvcc) {
 
 Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, UseMvcc) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();

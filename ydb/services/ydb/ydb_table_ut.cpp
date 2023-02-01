@@ -1396,7 +1396,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
     Y_UNIT_TEST(TestExecError) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;

@@ -381,10 +381,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+            .SetDomainPlanResolution(1000)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -468,10 +471,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+            .SetDomainPlanResolution(1000)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

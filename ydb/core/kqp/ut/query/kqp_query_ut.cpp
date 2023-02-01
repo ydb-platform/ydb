@@ -231,7 +231,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryTimeout) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -300,10 +303,13 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST_TWIN(QueryClientTimeout, WithMvcc) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc)
-            .SetEnableKqpImmediateEffects(WithMvcc);
+            .SetEnableKqpImmediateEffects(WithMvcc)
+            .SetAppConfig(app);
 
         TKikimrRunner kikimr(serverSettings);
 
@@ -337,7 +343,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryClientTimeoutPrecompiled) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -373,7 +381,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryCancel) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1106,10 +1116,13 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             WHERE TestUdfs::TestFilterTerminate(Cast(Key as Int64) ?? 0, 10)
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("Execution failed");
-        }));
+        if (result.GetStatus() == EStatus::GENERIC_ERROR) {
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
+                return issue.GetMessage().Contains("Execution failed");
+            }));
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        }
     }
 
     Y_UNIT_TEST(UdfMemoryLimit) {

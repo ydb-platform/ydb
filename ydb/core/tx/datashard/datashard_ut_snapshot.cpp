@@ -1440,6 +1440,31 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         TTestActorRuntime::EEventAction Process(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvRead::EventType: {
+                    auto& record = ev->Get<TEvDataShard::TEvRead>()->Record;
+                    Cerr << "TEvRead:" << Endl;
+                    Cerr << record.DebugString() << Endl;
+                    Last = {};
+                    if (record.GetLockTxId()) {
+                        Last.LockId = record.GetLockTxId();
+                        Last.LockNodeId = record.GetLockNodeId();
+                    } else if (Inject.LockId) {
+                        record.SetLockTxId(Inject.LockId);
+                        if (Inject.LockNodeId) {
+                            record.SetLockNodeId(Inject.LockNodeId);
+                        }
+                        Cerr << "TEvRead: injected LockId" << Endl;
+                    }
+                    if (record.HasSnapshot()) {
+                        Last.MvccSnapshot.Step = record.GetSnapshot().GetStep();
+                        Last.MvccSnapshot.TxId = record.GetSnapshot().GetTxId();
+                    } else if (Inject.MvccSnapshot) {
+                        record.MutableSnapshot()->SetStep(Inject.MvccSnapshot.Step);
+                        record.MutableSnapshot()->SetTxId(Inject.MvccSnapshot.TxId);
+                        Cerr << "TEvRead: injected MvccSnapshot" << Endl;
+                    }
+                    break;
+                }
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
                     Cerr << "TEvProposeTransaction:" << Endl;
@@ -2250,12 +2275,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
-            .SetControls(controls);
+            .SetControls(controls)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

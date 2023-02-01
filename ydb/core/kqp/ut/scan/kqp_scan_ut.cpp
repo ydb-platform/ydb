@@ -2301,6 +2301,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        if (!indexRead.IsDefined()) {
+            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+        }
         UNIT_ASSERT(indexRead.IsDefined());
         auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
         UNIT_ASSERT(indexTable.IsDefined());
@@ -2336,6 +2339,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        if (!indexRead.IsDefined()) {
+            indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+        }
         UNIT_ASSERT(indexRead.IsDefined());
         auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
         UNIT_ASSERT(indexTable.IsDefined());

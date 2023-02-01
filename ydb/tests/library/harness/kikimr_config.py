@@ -140,6 +140,7 @@ class KikimrConfigGenerator(object):
             use_legacy_pq=False,
             dc_mapping={},
             enable_alter_database_create_hive_first=False,
+            disable_iterator_reads=False
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -209,6 +210,13 @@ class KikimrConfigGenerator(object):
         self.__bs_cache_file_path = bs_cache_file_path
 
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+
+        if disable_iterator_reads:
+            if "table_service_config" not in self.yaml_config:
+                self.yaml_config["table_service_config"] = {}
+            self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
+            self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False
+
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         if enable_alter_database_create_hive_first:

@@ -261,10 +261,17 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         auto read = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        size_t operatorsCount = 2;
+        size_t lookupMember = 1;
+        if (!read.IsDefined()) {
+            read = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            operatorsCount = 3;
+            lookupMember = 2;
+        }
         auto& operators = read.GetMapSafe().at("Operators").GetArraySafe();
-        UNIT_ASSERT(operators.size() == 2);
+        UNIT_ASSERT(operators.size() == operatorsCount);
 
-        auto& lookup = operators[1].GetMapSafe();
+        auto& lookup = operators[lookupMember].GetMapSafe();
         UNIT_ASSERT(lookup.at("Name") == "TablePointLookup");
         UNIT_ASSERT(lookup.at("ReadRange").GetArraySafe()[0] == "App (new_app_1)");
     }
@@ -289,6 +296,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         auto scanSort = FindPlanNodeByKv(plan, "Node Type", "Sort-TableRangeScan");
+        if (!scanSort.IsDefined()) {
+            scanSort = FindPlanNodeByKv(plan, "Node Type", "Sort-Filter-TableRangeScan");
+        }
         UNIT_ASSERT(scanSort.IsDefined());
     }
 
@@ -483,7 +493,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        // Cerr << plan << Endl;
+        Cerr << plan << Endl;
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2);
@@ -491,10 +501,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto deletesCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, 1);
 
-        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
+        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan") +
+            CountPlanNodesByKv(plan, "Node Type", "Stage-TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
 
-        auto rangeScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan");
+        auto rangeScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan") +
+            CountPlanNodesByKv(plan, "Name", "TableRangeScan");
         UNIT_ASSERT_VALUES_EQUAL(rangeScansCount, 1);
 
         auto lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TablePointLookup-ConstantExpr");
@@ -600,14 +612,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        TVector<std::pair<TString, TString>> testData = {
+        TVector<std::pair<TString, TVector<TString>>> testData = {
             {
                 "SELECT * FROM `/Root/TwoKeys`;",
-                "TableFullScan"
+                {"TableFullScan", "Collect-TableFullScan"}
             },
             {
                 "SELECT * FROM `/Root/TwoKeys` WHERE Key2 > 101;",
-                "Filter-TableFullScan"
+                {"Filter-TableFullScan"}
             }
         };
 
@@ -618,11 +630,19 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             UNIT_ASSERT(res.PlanJson);
 
+            Cerr << *res.PlanJson << Endl;
+
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(*res.PlanJson, &plan, true);
             UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-            auto read = FindPlanNodeByKv(plan, "Node Type", data.second);
+            auto read = FindPlanNodeByKv(plan, "Node Type", data.second[0]);
+            if (!read.IsDefined()) {
+                size_t i = 1;
+                while (!read.IsDefined() && i < data.second.size()) {
+                    read = FindPlanNodeByKv(plan, "Node Type", data.second[i]);
+                }
+            }
             UNIT_ASSERT(read.IsDefined());
 
             auto rangesKeys = FindPlanNodeByKv(plan, "ReadRangesKeys", "[]");
@@ -650,11 +670,16 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         UNIT_ASSERT(res.PlanJson);
 
+        Cerr << *res.PlanJson << Endl;
+
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         auto read = FindPlanNodeByKv(plan, "Node Type", "TableRangesScan");
+        if (!read.IsDefined()) {
+            read = FindPlanNodeByKv(plan, "Name", "TableRangesScan");
+        }
         UNIT_ASSERT(read.IsDefined());
         auto keys = FindPlanNodeByKv(plan, "ReadRangesKeys", "[\"Key\"]");
         UNIT_ASSERT(keys.IsDefined());

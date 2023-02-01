@@ -26,7 +26,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 pqTabletsN, bool enableSVP) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 pqTabletsN, bool enableSVP, bool disableSources) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -50,6 +50,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
         TString poolName = Sprintf("test%d", i);
         Settings->AddStoragePool(poolName, TString("/Root:") + poolName, 2);
     }
+
+    Settings->AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(!disableSources);
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);

@@ -244,6 +244,7 @@ class BaseSuiteRunner(object):
             KikimrConfigGenerator(
                 load_udfs=True,
                 use_in_memory_pdisks=True,
+                disable_iterator_reads=True,
                 # additional_log_configs={'KQP_YQL': 7}
             )
         )

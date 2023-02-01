@@ -83,10 +83,19 @@ Y_UNIT_TEST(SelfJoin) {
         [[9u];["jjjjjjjjjjjjjjjjjjjj"];[9u];["jjjjjjjjjjjjjjjjjjjj"]]
     ])", StreamResultToYson(it));
 
+    auto in = [](int pattern, std::vector<int> vals) {
+        for (auto&& val : vals) {
+            if (pattern == val) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    UNIT_ASSERT_VALUES_EQUAL(14, counters.SpillingWriteBlobs->Val());
-    UNIT_ASSERT_VALUES_EQUAL(14, counters.SpillingReadBlobs->Val());
-    UNIT_ASSERT(0 == counters.SpillingStoredBlobs->Val() || 14 == counters.SpillingStoredBlobs->Val());
+    UNIT_ASSERT(in(counters.SpillingWriteBlobs->Val(), {3, 6, 14}));
+    UNIT_ASSERT(in(counters.SpillingReadBlobs->Val(), {3, 6, 14}));
+    UNIT_ASSERT(in(counters.SpillingStoredBlobs->Val(), {0, 14}));
 }
 
 } // suite

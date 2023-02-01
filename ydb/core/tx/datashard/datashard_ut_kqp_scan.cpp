@@ -224,7 +224,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 /*
                  * Check that remote scan actually happened.
                  */
-                case NKqp::TKqpComputeEvents::EvScanData: {
+                case NKqp::TKqpComputeEvents::EvScanData:
+                case TEvDataShard::EvRead: {
                     remoteScanDetected = remoteScanDetected || ev->Sender.NodeId() != ev->Recipient.NodeId();
                     break;
                 }
@@ -549,6 +550,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         incomingRangesSize = request.RangesSize();
                     }
 
+                    break;
+                }
+                case TEvDataShard::EvRead: {
+                    if (!incomingRangesSize) {
+                        auto& request = ev->Get<TEvDataShard::TEvRead>()->Record;
+                        incomingRangesSize = request.RangesSize();
+                    }
                     break;
                 }
 

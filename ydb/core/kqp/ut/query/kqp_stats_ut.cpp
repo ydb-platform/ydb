@@ -33,9 +33,13 @@ Y_UNIT_TEST(MultiTxStatsFullExp) {
     ])", res.ResultSetYson);
 
     UNIT_ASSERT(res.PlanJson);
+    Cerr << *res.PlanJson << Endl;
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+    if (!node.IsDefined()) {
+        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-Filter-TableRangeScan");
+    }
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 
@@ -118,6 +122,9 @@ Y_UNIT_TEST(MultiTxStatsFull) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+    if (!node.IsDefined()) {
+        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-Filter-TableRangeScan");
+    }
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 

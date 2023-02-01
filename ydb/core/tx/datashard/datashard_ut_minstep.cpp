@@ -68,9 +68,12 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
 Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
     void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -156,8 +159,11 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
     void TestAlterProposeRebootMinStep(ERebootOnPropose rebootOnPropose) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -377,9 +383,12 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
     void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

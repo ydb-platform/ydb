@@ -36,10 +36,13 @@ class TLocalFixture {
 public:
     TLocalFixture() {
         TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();

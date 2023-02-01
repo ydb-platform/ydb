@@ -1765,8 +1765,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReply("[[4600u;]]")
             .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("WideCombiner")
-//            .AddExpectedPlanOptions("TKqpOlapAgg")
+//            .AddExpectedPlanOptions("WideCombiner")
+            .AddExpectedPlanOptions("TKqpOlapAgg")
             .MutableLimitChecker().SetExpectedResultCount(1)
 #else
             .AddExpectedPlanOptions("Condense")

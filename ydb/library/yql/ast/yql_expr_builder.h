@@ -32,6 +32,8 @@ public:
     TExprNodeBuilder& Atom(TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
     TExprNodeBuilder& Atom(ui32 index, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
     TExprNodeBuilder& Atom(const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
+    TExprNodeBuilder& Atom(ui32 index, ui32 literalIndexValue);
+    TExprNodeBuilder& Atom(ui32 literalIndexValue);
 
     TExprNodeBuilder List(ui32 index, TPositionHandle pos);
     TExprNodeBuilder List(TPositionHandle pos);

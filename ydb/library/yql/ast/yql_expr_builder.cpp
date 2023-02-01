@@ -102,6 +102,14 @@ TExprNodeBuilder& TExprNodeBuilder::Atom(const TStringBuf& content, ui32 flags) 
     return Atom(Pos, content, flags);
 }
 
+TExprNodeBuilder& TExprNodeBuilder::Atom(ui32 index, ui32 literalIndexValue) {
+    return Atom(index, Pos, Ctx.GetIndexAsString(literalIndexValue), TNodeFlags::Default);
+}
+
+TExprNodeBuilder& TExprNodeBuilder::Atom(ui32 literalIndexValue) {
+    return Atom(Pos, Ctx.GetIndexAsString(literalIndexValue), TNodeFlags::Default);
+}
+
 TExprNodeBuilder TExprNodeBuilder::List(ui32 index, TPositionHandle pos) {
     Y_ENSURE(Container, "Container expected");
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),

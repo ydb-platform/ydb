@@ -5131,7 +5131,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Param("item")
                         .Callable("Guess")
                             .Arg(0, "item")
-                            .Add(1, ctx.NewAtom(node->Pos(), indicies.begin()->first))
+                            .Atom(1, indicies.begin()->first)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -5195,7 +5195,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                             .Param("mapItem")
                             .Callable("Variant")
                                 .Arg(0, "mapItem")
-                                .Add(1, ctx.NewAtom(node->Pos(), i))
+                                .Atom(1,  i)
                                 .Add(2, outVarType)
                             .Seal()
                         .Seal()
@@ -5221,7 +5221,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 body = ctx.Builder(node->Pos())
                     .Callable("Variant")
                         .Add(0, arg)
-                        .Add(1, ctx.NewAtom(node->Pos(), i))
+                        .Atom(1, i)
                         .Add(2, outVarType)
                     .Seal()
                     .Build();
@@ -5276,7 +5276,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
                             ui32 i = 1;
                             for (auto& item: indicies) {
-                                builder.Add(i++, ctx.NewAtom(node->Pos(), item.first));
+                                builder.Atom(i++, item.first);
                                 if (item.second.size() > 1) {
                                     builder.Lambda(i++)
                                         .Param("subItem")

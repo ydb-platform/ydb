@@ -1649,32 +1649,21 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
     auto preprocessLambda = GeneratePreprocessLambda(keyExtractor);
     TExprNode::TPtr postAgg;
     if (!UsePartitionsByKeys && UseFinalizeByKeys) {
-        if (KeyColumns->ChildrenSize() == 0) {
-            postAgg = Ctx.Builder(Node->Pos())
-                .Apply(GetContextLambda())
-                    .With(0)
-                        .Apply(BuildFinalizeByKeyLambda(preprocessLambda, keyExtractor))
-                            .With(0, preAgg)
-                        .Seal()
-                    .Done()
-                .Seal().Build();
-        } else {
-            postAgg = Ctx.Builder(Node->Pos())
-                .Callable("ShuffleByKeys")
-                    .Add(0, std::move(preAgg))
-                    .Add(1, keyExtractor)
-                    .Lambda(2)
-                        .Param("stream")
-                        .Apply(GetContextLambda())
-                            .With(0)
-                                .Apply(BuildFinalizeByKeyLambda(preprocessLambda, keyExtractor))
-                                    .With(0, "stream")
-                                .Seal()
-                            .Done()
-                        .Seal()
+        postAgg = Ctx.Builder(Node->Pos())
+            .Callable("ShuffleByKeys")
+                .Add(0, std::move(preAgg))
+                .Add(1, keyExtractor)
+                .Lambda(2)
+                    .Param("stream")
+                    .Apply(GetContextLambda())
+                        .With(0)
+                            .Apply(BuildFinalizeByKeyLambda(preprocessLambda, keyExtractor))
+                                .With(0, "stream")
+                            .Seal()
+                        .Done()
                     .Seal()
-                .Seal().Build();
-        }
+                .Seal()
+            .Seal().Build();
     } else {
         auto condenseSwitch = GenerateCondenseSwitch(keyExtractor);
         postAgg = Ctx.Builder(Node->Pos())

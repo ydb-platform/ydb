@@ -32,11 +32,11 @@ public:
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
-        AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage));
-        AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage));
-        AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage));
+        AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
+        AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
+        AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
         AddHandler(0, &TDqCnHashShuffle::Match, HNDL(BuildHashShuffleByKeyStage));
-        AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage));
+        AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
         AddHandler(0, &TCoSort::Match, HNDL(BuildSortStage<false>));
@@ -66,6 +66,10 @@ public:
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
+        AddHandler(1, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<true>));
+        AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
+        AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
+        AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
         AddHandler(1, &TCoSort::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeOrTakeSkipStage<true>));
@@ -267,24 +271,28 @@ protected:
         return DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
-    TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildPartitionsStage(node, ctx, *getParents());
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
-    TMaybeNode<TExprBase> BuildPartitionStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildPartitionStage(node, ctx, *getParents());
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildPartitionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
-    TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildShuffleStage(node, ctx, *getParents());
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     TMaybeNode<TExprBase> BuildHashShuffleByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         return DqBuildHashShuffleByKeyStage(node, ctx, *getParents());
     }
 
+    template<bool IsGlobal>
     TMaybeNode<TExprBase> BuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildFinalizeByKeyStage(node, ctx, *getParents());
+        return DqBuildFinalizeByKeyStage(node, ctx, *getParents(), IsGlobal);
     }
 
     TMaybeNode<TExprBase> BuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {

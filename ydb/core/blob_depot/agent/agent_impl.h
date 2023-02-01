@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "resolved_value.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -33,8 +34,43 @@ namespace NKikimr::NBlobDepot {
     struct TTabletDisconnected {};
 
     struct TKeyResolved {
-        const TResolvedValueChain* ValueChain;
-        std::optional<TString> ErrorReason;
+        struct TSuccess {
+            const TResolvedValue *Value;
+        };
+        struct TError {
+            TString ErrorReason;
+        };
+        std::variant<TSuccess, TError> Outcome;
+
+        TKeyResolved(const TResolvedValue *value)
+            : Outcome(TSuccess{value})
+        {}
+
+        static constexpr struct TResolutionError {} ResolutionError{};
+
+        TKeyResolved(TResolutionError, TString errorReason)
+            : Outcome(TError{std::move(errorReason)})
+        {}
+
+        bool Error() const { return std::holds_alternative<TError>(Outcome); }
+        bool Success() const { return std::holds_alternative<TSuccess>(Outcome); }
+        const TResolvedValue *GetResolvedValue() const { return std::get<TSuccess>(Outcome).Value; }
+
+        void Output(IOutputStream& s) const {
+            if (auto *success = std::get_if<TSuccess>(&Outcome)) {
+                s << (success->Value ? success->Value->ToString() : "<no data>");
+            } else if (auto *error = std::get_if<TError>(&Outcome)) {
+                s << "Error# '" << EscapeC(error->ErrorReason) << '\'';
+            } else {
+                Y_FAIL();
+            }
+        }
+
+        TString ToString() const {
+            TStringStream s;
+            Output(s);
+            return s.Str();
+        }
     };
 
     class TRequestSender;
@@ -297,6 +333,23 @@ namespace NKikimr::NBlobDepot {
             virtual void OnIdAllocated() {}
             virtual void OnDestroy(bool /*success*/) {}
 
+        protected: // reading logic
+            struct TReadContext;
+            struct TReadArg {
+                TResolvedValue Value;
+                NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+                bool MustRestoreFirst = false;
+                ui64 Offset = 0;
+                ui64 Size = 0;
+                ui64 Tag = 0;
+                std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
+                TString Key; // the key we are reading -- this is used for retries when we are getting NODATA
+            };
+
+            bool IssueRead(TReadArg&& arg, TString& error);
+            void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
+            void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+
         public:
             struct TDeleter {
                 static void Destroy(TQuery *query) { delete query; }
@@ -394,26 +447,6 @@ namespace NKikimr::NBlobDepot {
         TBlocksManager& BlocksManager;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Reading
-
-        struct TReadContext;
-        struct TReadArg {
-            const TResolvedValueChain& Values;
-            NKikimrBlobStorage::EGetHandleClass GetHandleClass;
-            bool MustRestoreFirst = false;
-            TQuery *Query = nullptr;
-            ui64 Offset = 0;
-            ui64 Size = 0;
-            ui64 Tag = 0;
-            std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
-        };
-
-        bool IssueRead(const TReadArg& arg, TString& error);
-        static TString GetValueChainId(const TResolvedValueChain& valueChain);
-
-        void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blob mapping cache
 
         class TBlobMappingCache;
@@ -425,6 +458,17 @@ namespace NKikimr::NBlobDepot {
 
         TStorageStatusFlags GetStorageStatusFlags() const;
         float GetApproximateFreeSpaceShare() const;
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Logging
+
+        TString PrettyKey(const TString& key) const {
+            if (VirtualGroupId) {
+                return TLogoBlobID::FromBinary(key).ToString();
+            } else {
+                return EscapeC(key);
+            }
+        }
     };
 
 #define BDEV_QUERY(MARKER, TEXT, ...) BDEV(MARKER, TEXT, (VG, Agent.VirtualGroupId), (BDT, Agent.TabletId), \

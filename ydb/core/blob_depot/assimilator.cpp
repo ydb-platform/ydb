@@ -314,8 +314,8 @@ namespace NKikimr::NBlobDepot {
                 }
             };
 
-            Self->Data->ScanRange(LastScannedKey ? std::make_optional<TData::TKey>(*LastScannedKey) : std::nullopt,
-                std::optional<TData::TKey>(), {}, callback);
+            TData::TScanRange r{LastScannedKey ? TData::TKey(*LastScannedKey) : TData::TKey::Min(), TData::TKey::Max()};
+            Self->Data->ScanRange(r, nullptr, nullptr, callback);
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT56, "ScanDataForCopying step", (Id, Self->GetLogId()),
                 (LastScannedKey, LastScannedKey), (ScanQ.size, ScanQ.size()), (TotalSize, TotalSize),

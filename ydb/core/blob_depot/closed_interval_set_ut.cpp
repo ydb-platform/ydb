@@ -19,7 +19,7 @@ TString ToString(const T& ivs) {
 ui64 Convert(const T& ivs) {
     ui64 res = 0;
     ivs([&](ui8 first, ui8 last) {
-        const ui64 mask = ((ui64(1) << (last - first + 1)) - 1) << first;
+        const ui64 mask = (ui64(1) << last + 1) - (ui64(1) << first);
         UNIT_ASSERT_VALUES_EQUAL_C(res & mask, 0, ToString(ivs));
         res |= mask;
         return true;
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(ClosedIntervalSet) {
                 for (ui32 end = begin; end <= 12; ++end) {
                     T x = Make(i);
                     x |= {begin, end};
-                    UNIT_ASSERT_VALUES_EQUAL(Convert(x), i | ((1 << (end - begin + 1)) - 1) << begin);
+                    UNIT_ASSERT_VALUES_EQUAL(Convert(x), i | ((1 << end + 1) - (1 << begin)));
                 }
             }
         }
@@ -99,6 +99,54 @@ Y_UNIT_TEST_SUITE(ClosedIntervalSet) {
             T x = Make(i);
             for (ui32 j = 0; j < 12; ++j) {
                 UNIT_ASSERT_VALUES_EQUAL(x[j], (i >> j) & 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(EnumInRange) {
+        for (ui32 i = 0; i < 4096; ++i) {
+            T x = Make(i);
+            for (ui32 j = 0; j <= 12; ++j) {
+                for (ui32 k = j; k <= 12; ++k) {
+                    ui8 expectedLeft = j;
+                    ui32 res = 0;
+                    x.EnumInRange(j, k, false, [&](ui8 left, ui8 right, bool inside) {
+                        UNIT_ASSERT_VALUES_EQUAL(left, expectedLeft);
+                        UNIT_ASSERT(left <= right);
+                        expectedLeft = right;
+                        if (inside) {
+                            const ui32 mask = (1 << right + 1) - (1 << left);
+                            res |= mask;
+                        }
+                        return true;
+                    });
+                    UNIT_ASSERT_VALUES_EQUAL(expectedLeft, k);
+                    UNIT_ASSERT_VALUES_EQUAL(res, i & ((1 << k + 1) - (1 << j)));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(EnumInRangeReverse) {
+        for (ui32 i = 0; i < 4096; ++i) {
+            T x = Make(i);
+            for (ui32 j = 0; j <= 12; ++j) {
+                for (ui32 k = j; k <= 12; ++k) {
+                    ui8 expectedRight = k;
+                    ui32 res = 0;
+                    x.EnumInRange(j, k, true, [&](ui8 left, ui8 right, bool inside) {
+                        UNIT_ASSERT_VALUES_EQUAL(right, expectedRight);
+                        UNIT_ASSERT(left <= right);
+                        expectedRight = left;
+                        if (inside) {
+                            const ui32 mask = (1 << right + 1) - (1 << left);
+                            res |= mask;
+                        }
+                        return true;
+                    });
+                    UNIT_ASSERT_VALUES_EQUAL(expectedRight, j);
+                    UNIT_ASSERT_VALUES_EQUAL(res, i & ((1 << k + 1) - (1 << j)));
+                }
             }
         }
     }

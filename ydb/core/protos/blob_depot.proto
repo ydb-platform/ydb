@@ -222,6 +222,7 @@ message TEvResolveResult {
         repeated uint64 Owners = 5;
         optional string ErrorReason = 6; // if set, this means value wasn't resolved due to error
         optional uint32 ValueVersion = 7; // ValueChain version, gets increased every time value is changed
+        optional bool ReliablyWritten = 8; // MustRestoreFirst was either set, or the blob is in local storage
     }
     optional NKikimrProto.EReplyStatus Status = 1; // OVERRUN means there are more messages on the way
     optional string ErrorReason = 2;

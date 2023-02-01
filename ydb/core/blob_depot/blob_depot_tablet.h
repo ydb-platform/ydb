@@ -15,6 +15,8 @@ namespace NKikimr::NBlobDepot {
 
     using NTabletFlatExecutor::TTabletExecutedFlat;
 
+    struct TToken {};
+
     class TBlobDepot
         : public TActor<TBlobDepot>
         , public TTabletExecutedFlat
@@ -50,7 +52,6 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
-        struct TToken {};
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
 
         struct TAgent {

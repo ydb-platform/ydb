@@ -16,10 +16,6 @@ namespace NKikimr::NBlobDepot {
             TString Buffer;
             ui32 BlockedGeneration = 0;
 
-            std::unordered_set<TString> ValueChainsWithNodata;
-            TString ValueChain;
-            bool IsUnassimilated = false;
-
             NKikimrBlobDepot::TEvResolve Resolve;
 
         public:
@@ -69,9 +65,13 @@ namespace NKikimr::NBlobDepot {
                 if (std::holds_alternative<TTabletDisconnected>(response)) {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
-                    Agent.HandleGetResult(context, **p);
+                    TQuery::HandleGetResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-                    HandleResolveResult(id, std::move(context), **p);
+                    if (context) {
+                        TQuery::HandleResolveResult(std::move(context), **p);
+                    } else {
+                        HandleResolveResult(id, std::move(context), **p);
+                    }
                 } else {
                     Y_FAIL();
                 }
@@ -115,20 +115,18 @@ namespace NKikimr::NBlobDepot {
                                 // FIXME(alexvru): hypothetically this can be considered normal and we may continue scan
                                 return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "empty ValueChain");
                             }
-                            ValueChain = GetValueChainId(item.GetValueChain());
-                            IsUnassimilated = item.ValueChainSize() == 1 && item.GetValueChain(0).GetGroupId() == Agent.DecommitGroupId &&
-                                LogoBlobIDFromLogoBlobID(item.GetValueChain(0).GetBlobId()) == Id;
                             TReadArg arg{
-                                item.GetValueChain(),
+                                item,
                                 NKikimrBlobStorage::Discover,
                                 true,
-                                this,
                                 0,
                                 0,
                                 0,
-                                {}};
+                                {},
+                                item.GetKey(),
+                            };
                             TString error;
-                            if (!Agent.IssueRead(arg, error)) {
+                            if (!IssueRead(std::move(arg), error)) {
                                 return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                     << error);
                             }
@@ -152,29 +150,26 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Status, status));
 
-                if (status == NKikimrProto::OK) {
-                    Buffer = std::move(dataOrErrorReason);
-                    DoneWithData = true;
-                    CheckIfDone();
-                } else if (status == NKikimrProto::NODATA) {
-                    if (ValueChainsWithNodata.insert(std::exchange(ValueChain, {})).second) {
-                        // this may indicate a data race between locator and key value, we have to restart our resolution query
-                        IssueResolve();
-                    } else if (IsUnassimilated) {
+                switch (status) {
+                    case NKikimrProto::OK:
+                        Buffer = std::move(dataOrErrorReason);
+                        DoneWithData = true;
+                        CheckIfDone();
+                        break;
+
+                    case NKikimrProto::NODATA: {
                         // we are reading blob from the original group and it may be partially written -- it is totally
                         // okay to have some; we need to advance to the next readable blob
                         auto *range = Resolve.MutableItems(0)->MutableKeyRange();
                         range->SetEndingKey(Id.AsBinaryString());
                         range->ClearIncludeEnding();
                         IssueResolve();
-                    } else {
-                        Y_VERIFY_DEBUG_S(false, "data is lost AgentId# " << Agent.LogId << " BlobId# " << Id);
-                        STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA39, "failed to Discover blob -- data is lost",
-                            (AgentId, Agent.LogId), (BlobId, Id));
-                        status = NKikimrProto::ERROR;
+                        break;
                     }
-                } else {
-                    EndWithError(status, dataOrErrorReason);
+
+                    default:
+                        EndWithError(status, std::move(dataOrErrorReason));
+                        break;
                 }
             }
 

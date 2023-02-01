@@ -372,6 +372,15 @@ namespace NKikimr::NBlobDepot {
 
         Y_DECLARE_FLAGS(TScanFlags, EScanFlags)
 
+        struct TScanRange {
+            TKey Begin;
+            TKey End;
+            TScanFlags Flags = {};
+            ui64 MaxKeys = 0;
+            ui32 PrechargeRows = 0;
+            ui64 PrechargeBytes = 0;
+        };
+
     private:
         struct TRecordWithTrash {};
 
@@ -413,13 +422,6 @@ namespace NKikimr::NBlobDepot {
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
 
-        struct TResolveDecommitContext {
-            TEvBlobDepot::TEvResolve::TPtr Ev; // original resolve request
-            TActorId ReturnAfterLoadingKeys;
-            std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs = {};
-            std::vector<TKey> ResolutionErrors = {};
-        };
-
         class TTxIssueGC;
         class TTxConfirmGC;
 
@@ -442,39 +444,157 @@ namespace NKikimr::NBlobDepot {
         ui64 LastCollectCmdId = 0;
         std::unordered_map<ui64, TCollectCmd> CollectCmds;
 
+        struct TLoadRangeFromDB {
+            TData* const Data;
+            const TScanRange& Range;
+            bool* const Progress;
+            bool Processing = true;
+            std::optional<TKey> LastProcessedKey = {};
+
+            static constexpr struct TReverse {} Reverse{};
+            static constexpr struct TLeftBound {} LeftBound{};
+            static constexpr struct TRightBound {} RightBound{};
+
+            template<typename TCallback>
+            bool operator ()(NTabletFlatExecutor::TTransactionContext& txc, const TKey& left, const TKey& right, TCallback&& callback) {
+                auto table = NIceDb::TNiceDb(txc.DB).Table<Schema::Data>();
+                return Range.Flags & EScanFlags::REVERSE
+                    ? Load(Reverse, table.Reverse(), left, right, std::forward<TCallback>(callback))
+                    : Load(Reverse, std::move(table), left, right, std::forward<TCallback>(callback));
+            }
+
+            template<typename TTable, typename TCallback>
+            bool Load(TReverse, TTable&& table, const TKey& left, const TKey& right, TCallback&& callback) {
+                return left != TKey::Min()
+                    ? Load(LeftBound, table.GreaterOrEqual(left.MakeBinaryKey()), left, right, std::forward<TCallback>(callback))
+                    : right != TKey::Max()
+                    ? Load(RightBound, table.LessOrEqual(right.MakeBinaryKey()), left, right, std::forward<TCallback>(callback))
+                    : Load(RightBound, table.All(), left, right, std::forward<TCallback>(callback));
+            }
+
+            template<typename TTable, typename TCallback>
+            bool Load(TLeftBound, TTable&& table, const TKey& left, const TKey& right, TCallback&& callback) {
+                return right != TKey::Max()
+                    ? Load(RightBound, table.LessOrEqual(right.MakeBinaryKey()), left, right, std::forward<TCallback>(callback))
+                    : Load(RightBound, std::forward<TTable>(table), left, right, std::forward<TCallback>(callback));
+            }
+
+            template<typename TTable, typename TCallback>
+            bool Load(TRightBound, TTable&& table, const TKey& left, const TKey& right, TCallback&& callback) {
+                if ((Range.PrechargeRows || Range.PrechargeBytes) && !table.Precharge(Range.PrechargeRows, Range.PrechargeBytes)) {
+                    return false;
+                }
+                auto rowset = table.Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+                while (rowset.IsValid()) {
+                    TKey key = TKey::FromBinaryKey(rowset.GetKey(), Data->Self->Config);
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT46, "ScanRange.Load", (Id, Data->Self->GetLogId()), (Left, left),
+                        (Right, right), (Key, key));
+                    LastProcessedKey.emplace(key);
+                    if (left < key && key < right) {
+                        TValue* const value = Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
+                            rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
+                        if (Processing) {
+                            // we should not feed keys out of range when we are processing prefetched data outside the range
+                            if (Range.Flags & EScanFlags::REVERSE) {
+                                Processing = Range.Flags & EScanFlags::INCLUDE_BEGIN ? Range.Begin <= key : Range.Begin < key;
+                            } else {
+                                Processing = Range.Flags & EScanFlags::INCLUDE_END ? key <= Range.End : key < Range.End;
+                            }
+                        }
+                        Processing = Processing && callback(std::move(key), *value);
+                        *Progress = true;
+                    } else {
+                        Y_VERIFY_DEBUG(key == left || key == right);
+                    }
+                    if (!rowset.Next()) {
+                        return false; // we break iteration anyway, because we can't read more data
+                    }
+                }
+                if (!LastProcessedKey || (Range.Flags & EScanFlags::REVERSE ? left < *LastProcessedKey : *LastProcessedKey < right)) {
+                    LastProcessedKey.emplace(Range.Flags & EScanFlags::REVERSE ? left : right);
+                }
+                return Processing;
+            };
+        };
+
     public:
         TData(TBlobDepot *self);
         ~TData();
 
-        template<typename TCallback, typename T>
-        bool ScanRange(const T& begin, const T& end, TScanFlags flags, TCallback&& callback) {
-            auto beginIt = !begin ? Data.begin()
-                : flags & EScanFlags::INCLUDE_BEGIN ? Data.lower_bound(*begin)
-                : Data.upper_bound(*begin);
+        template<typename TCallback>
+        bool ScanRange(TScanRange& range, NTabletFlatExecutor::TTransactionContext *txc, bool *progress, TCallback&& callback) {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT76, "ScanRange", (Id, Self->GetLogId()), (Begin, range.Begin), (End, range.End),
+                (Flags, range.Flags), (MaxKeys, range.MaxKeys));
 
-            auto endIt = !end ? Data.end()
-                : flags & EScanFlags::INCLUDE_END ? Data.upper_bound(*end)
-                : Data.lower_bound(*end);
+            const bool reverse = range.Flags & EScanFlags::REVERSE;
+            TLoadRangeFromDB loader{this, range, progress};
 
-            if (flags & EScanFlags::REVERSE) {
-                if (beginIt != endIt) {
-                    --endIt;
-                    do {
-                        auto& current = *endIt--;
-                        if (!callback(current.first, current.second)) {
-                            return false;
-                        }
-                    } while (beginIt != endIt);
+            bool res = true;
+
+            auto issue = [&](TKey&& key, const TValue& value) {
+                Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_BEGIN ? range.Begin <= key : range.Begin < key);
+                Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_END ? key <= range.End : key < range.End);
+
+                if (!callback(key, value) || (range.MaxKeys && !--range.MaxKeys)) {
+                    return false; // scan aborted by user or finished scanning the required range
+                } else {
+                    // remove already scanned items from the range query
+                    return true;
                 }
-            } else {
-                while (beginIt != endIt) {
-                    auto& current = *beginIt++;
-                    if (!callback(current.first, current.second)) {
-                        return false;
+            };
+
+            const auto& from = reverse ? TKey::Min() : range.Begin;
+            const auto& to = reverse ? range.End : TKey::Max();
+            LoadedKeys.EnumInRange(from, to, reverse, [&](const TKey& left, const TKey& right, bool isRangeLoaded) {
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT83, "ScanRange.Step", (Id, Self->GetLogId()), (Left, left), (Right, right),
+                    (IsRangeLoaded, isRangeLoaded), (From, from), (To, to));
+                if (!isRangeLoaded) {
+                    // we have to load range (left, right), not including both ends
+                    Y_VERIFY(txc && progress);
+                    if (!loader(*txc, left, right, issue)) {
+                        res = !loader.Processing;
+                        return false; // break the iteration
+                    }
+                } else if (reverse) {
+                    for (auto it = Data.upper_bound(right); it != Data.begin(); ) {
+                        const auto& [key, value] = *--it;
+                        if (key < left) {
+                            break;
+                        } else if (range.Flags & EScanFlags::INCLUDE_BEGIN ? key < range.Begin : key <= range.Begin) {
+                            return false; // just left the left side of the range
+                        } else if ((key != range.End || range.Flags & EScanFlags::INCLUDE_END) && !issue(TKey(key), value)) {
+                            return false; // enough keys processed
+                        }
+                    }
+                } else {
+                    // we have a range of loaded keys in the interval [left, right], including both ends -- load
+                    // data from memory
+                    for (auto it = Data.lower_bound(left); it != Data.end() && it->first <= right; ++it) {
+                        const auto& [key, value] = *it;
+                        if (range.Flags & EScanFlags::INCLUDE_END ? range.End < key : range.End <= key) {
+                            return false; // just left the right side of the range
+                        } else if ((key != range.Begin || range.Flags & EScanFlags::INCLUDE_BEGIN) && !issue(TKey(key), value)) {
+                            return false; // enough keys processed
+                        }
                     }
                 }
+                return true;
+            });
+
+            if (loader.LastProcessedKey) {
+                if (reverse) {
+                    LoadedKeys.AddRange(std::make_tuple(*loader.LastProcessedKey, range.End));
+                } else {
+                    LoadedKeys.AddRange(std::make_tuple(range.Begin, *loader.LastProcessedKey));
+                }
+                (reverse ? range.End : range.Begin) = std::move(*loader.LastProcessedKey);
+                range.Flags.RemoveFlags(reverse ? EScanFlags::INCLUDE_END : EScanFlags::INCLUDE_BEGIN);
             }
-            return true;
+
+            return res;
         }
 
         template<typename TCallback>
@@ -505,7 +625,7 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(ui8 channel, ui32 groupId);
 
-        void AddDataOnLoad(TKey key, TString value, bool uncertainWrite);
+        TValue *AddDataOnLoad(TKey key, TString value, bool uncertainWrite);
         bool AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
@@ -546,9 +666,12 @@ namespace NKikimr::NBlobDepot {
         }
 
         void StartLoad();
+        bool LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
+
+        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -560,7 +683,7 @@ namespace NKikimr::NBlobDepot {
             ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep = false, bool doNotKeep = false);
 
         class TTxResolve;
-        void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, TResolveDecommitContext&& context);
+        void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
 
@@ -578,7 +701,7 @@ namespace NKikimr::NBlobDepot {
         void EndCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
+
         TMonotonic LastRecordsValidationTimestamp;
 
         void ValidateRecords();

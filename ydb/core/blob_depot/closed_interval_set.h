@@ -102,6 +102,37 @@ namespace NKikimr {
             return *this;
         }
 
+        static std::optional<std::pair<T, T>> PartialSubtractFromRange(T myLeft, T myRight, const TClosedIntervalSet& other) {
+            for (auto otherIt = other.Intervals.begin(); otherIt != other.Intervals.end(); ) {
+                if (myRight < otherIt->Left) {
+                    break;
+                } else if (otherIt->Right < myLeft) {
+                    ++otherIt;
+                    if (otherIt != other.Intervals.end() && otherIt->Right < myLeft) {
+                        otherIt = other.Intervals.lower_bound(TByRight{myLeft});
+                    }
+                } else if (otherIt->Left <= myLeft) {
+                    if (myRight <= otherIt->Right) {
+                        return std::nullopt;
+                    } else {
+                        myLeft = otherIt->Right;
+                        ++otherIt;
+                    }
+                } else if (myRight <= otherIt->Right) {
+                    myRight = otherIt->Left;
+                    break;
+                } else {
+                    if (otherIt->Left < otherIt->Right) {
+                        myRight = otherIt->Left;
+                        break;
+                    }
+                    ++otherIt;
+                }
+            }
+
+            return std::make_pair(std::move(myLeft), std::move(myRight));
+        }
+
         // returns the first subrange of the full subtraction result
         std::optional<std::pair<T, T>> PartialSubtract(const TClosedIntervalSet& other) const {
             if (auto myIt = Intervals.begin(); myIt != Intervals.end()) {
@@ -160,6 +191,79 @@ namespace NKikimr {
                 }
             }
             return true;
+        }
+
+        template<typename TCallback>
+        void EnumInRange(const T& left, const T& right, bool reverse, TCallback&& callback) const {
+            if (reverse) {
+                const T *cursor = &right;
+                for (auto it = Intervals.upper_bound(TByLeft{right}); it != Intervals.begin(); ) {
+                    --it;
+                    if (it->Right < *cursor) {
+                        if (it->Right < left) {
+                            callback(left, *cursor, false);
+                            return;
+                        }
+                        if (!callback(it->Right, *cursor, false)) {
+                            return;
+                        }
+                        cursor = &it->Right;
+                    }
+                    if (it->Left <= left) {
+                        callback(left, *cursor, true);
+                        return;
+                    }
+                    if (!callback(it->Left, *cursor, true)) {
+                        return;
+                    }
+                    cursor = &it->Left;
+                }
+                if (left < *cursor) {
+                    callback(left, *cursor, false);
+                }
+            } else {
+                const T *cursor = &left;
+                for (auto it = Intervals.lower_bound(TByRight{left}); it != Intervals.end(); ++it) {
+                    if (*cursor < it->Left) {
+                        if (right < it->Left) {
+                            callback(*cursor, right, false);
+                            return;
+                        }
+                        if (!callback(*cursor, it->Left, false)) {
+                            return;
+                        }
+                        cursor = &it->Left;
+                    }
+                    if (right <= it->Right) {
+                        callback(*cursor, right, true);
+                        return;
+                    }
+                    if (!callback(*cursor, it->Right, true)) {
+                        return;
+                    }
+                    cursor = &it->Right;
+                }
+                if (*cursor < right) {
+                    callback(*cursor, right, false);
+                }
+            }
+        }
+
+        void Output(IOutputStream& s) const {
+            s << '{';
+            for (auto it = Intervals.begin(); it != Intervals.end(); ++it) {
+                if (it != Intervals.begin()) {
+                    s << ' ';
+                }
+                s << it->Left << '-' << it->Right;
+            }
+            s << '}';
+        }
+
+        TString ToString() const {
+            TStringStream s;
+            Output(s);
+            return s.Str();
         }
     };
 

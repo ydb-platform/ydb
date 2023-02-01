@@ -7,7 +7,6 @@ namespace NKikimr::NBlobDepot {
         class TRangeQuery : public TBlobStorageQuery<TEvBlobStorage::TEvRange> {
             struct TRead {
                 TLogoBlobID Id;
-                TString ValueChain;
             };
 
             std::unique_ptr<TEvBlobStorage::TEvRangeResult> Response;
@@ -15,7 +14,6 @@ namespace NKikimr::NBlobDepot {
             ui32 ResolvesInFlight = 0;
             std::map<TLogoBlobID, TString> FoundBlobs;
             std::vector<TRead> Reads;
-            std::unordered_set<std::tuple<ui64, TString>> ValueChainsWithNodata; // processed value chains with this status
             bool Reverse = false;
             bool Finished = false;
 
@@ -68,9 +66,13 @@ namespace NKikimr::NBlobDepot {
 
             void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override {
                 if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-                    HandleResolveResult(id, std::move(context), (*p)->Record);
+                    if (context) {
+                        TQuery::HandleResolveResult(std::move(context), **p);
+                    } else {
+                        HandleResolveResult(id, std::move(context), (*p)->Record);
+                    }
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
-                    Agent.HandleGetResult(context, **p);
+                    TQuery::HandleGetResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 } else {
@@ -96,25 +98,24 @@ namespace NKikimr::NBlobDepot {
                         FoundBlobs.try_emplace(id);
                     } else if (key.ValueChainSize()) {
                         const ui64 tag = key.HasCookie() ? key.GetCookie() : Reads.size();
-                        TString valueChain = GetValueChainId(key.GetValueChain());
                         if (tag == Reads.size()) {
-                            Reads.push_back(TRead{id, std::move(valueChain)});
+                            Reads.push_back(TRead{id});
                         } else {
                             Y_VERIFY(Reads[tag].Id == id);
-                            Reads[tag].ValueChain = std::move(valueChain);
                         }
                         TReadArg arg{
-                            key.GetValueChain(),
+                            key,
                             NKikimrBlobStorage::EGetHandleClass::FastRead,
                             Request.MustRestoreFirst,
-                            this,
                             0,
                             0,
                             tag,
-                            {}};
+                            {},
+                            key.GetKey(),
+                        };
                         ++ReadsInFlight;
                         TString error;
-                        if (!Agent.IssueRead(arg, error)) {
+                        if (!IssueRead(std::move(arg), error)) {
                             return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                 << error);
                         }
@@ -133,7 +134,6 @@ namespace NKikimr::NBlobDepot {
 
                 Y_VERIFY(tag < Reads.size());
                 TRead& read = Reads[tag];
-                Y_VERIFY(read.ValueChain);
 
                 switch (status) {
                     case NKikimrProto::OK: {
@@ -144,15 +144,8 @@ namespace NKikimr::NBlobDepot {
                     }
 
                     case NKikimrProto::NODATA:
-                        if (ValueChainsWithNodata.emplace(tag, std::exchange(read.ValueChain, {})).second) { // real race
-                            IssueResolve(tag);
-                        } else {
-                            Y_VERIFY_DEBUG_S(false, "data is lost AgentId# " << Agent.LogId << " BlobId# " << read.Id);
-                            STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA40, "failed to ReadRange blob -- data is lost",
-                                (AgentId, Agent.LogId), (BlobId, read.Id));
-                            return EndWithError(status, TStringBuilder() << "failed to retrieve BlobId# "
-                                << read.Id << " data is lost");
-                        }
+                        // this blob has just vanished since we found it in index -- may be it was partially written and
+                        // now gone; it's okay to have this situation, not a data loss
                         break;
 
                     default:

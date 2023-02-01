@@ -693,7 +693,6 @@ public:
 
         QueryState->TxCtx->OnBeginQuery();
 
-
         if (QueryState->NeedPersistentSnapshot()) {
             return AcquirePersistentSnapshot();
         } else if (NeedSnapshot(*QueryState->TxCtx, *Config, /*rollback*/ false, QueryState->Commit,
@@ -792,6 +791,7 @@ public:
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
+        QueryState->TxCtx->OnBeginQuery();
 
         if (!Transactions.CreateNew(QueryState->TxId, QueryState->TxCtx)) {
             std::vector<TIssue> issues{

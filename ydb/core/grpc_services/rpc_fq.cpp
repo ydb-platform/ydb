@@ -531,12 +531,18 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryDeleteQueryRequestOper
 }
 
 std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryControlQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx) {
-    static const std::function permissions{[](const FederatedQuery::ControlQueryRequest&) -> TVector<NPerms::TPermission> {
-        return {
+    static const std::function permissions{[](const FederatedQuery::ControlQueryRequest& request) -> TVector<NPerms::TPermission> {
+        TVector<NPerms::TPermission> basePermissions{
             NPerms::Required("yq.queries.control"),
             NPerms::Optional("yq.resources.managePublic"),
             NPerms::Optional("yq.resources.managePrivate")
         };
+        if (request.action() == FederatedQuery::RESUME) {
+            basePermissions.push_back(NPerms::Required("yq.queries.start"));
+        } else if (request.action() != FederatedQuery::QUERY_ACTION_UNSPECIFIED) {
+            basePermissions.push_back(NPerms::Required("yq.queries.abort"));
+        }
+        return basePermissions;
     }};
 
     return std::make_unique<TGrpcFqRequestOperationCall<FederatedQuery::ControlQueryRequest, FederatedQuery::ControlQueryResponse>>(ctx.Release(), &DoFederatedQueryControlQueryRequest, permissions);

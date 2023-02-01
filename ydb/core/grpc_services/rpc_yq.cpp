@@ -450,12 +450,18 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateDeleteQueryRequestOperationCall(TInt
 }
 
 std::unique_ptr<TEvProxyRuntimeEvent> CreateControlQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx) {
-    static const std::function permissions{[](const YandexQuery::ControlQueryRequest&) -> TVector<NPerms::TPermission> {
-        return {
+    static const std::function permissions{[](const YandexQuery::ControlQueryRequest& request) -> TVector<NPerms::TPermission> {
+        TVector<NPerms::TPermission> basePermissions{
             NPerms::Required("yq.queries.control"),
             NPerms::Optional("yq.resources.managePublic"),
             NPerms::Optional("yq.resources.managePrivate")
         };
+        if (request.action() == YandexQuery::RESUME) {
+            basePermissions.push_back(NPerms::Required("yq.queries.start"));
+        } else if (request.action() != YandexQuery::QUERY_ACTION_UNSPECIFIED) {
+            basePermissions.push_back(NPerms::Required("yq.queries.abort"));
+        }
+        return basePermissions;
     }};
 
     return std::make_unique<TGrpcYqRequestOperationCall<YandexQuery::ControlQueryRequest, YandexQuery::ControlQueryResponse>>(ctx.Release(), &DoYandexQueryControlQueryRequest, permissions);

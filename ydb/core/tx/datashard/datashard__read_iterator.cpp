@@ -260,6 +260,8 @@ class TReader {
     const TMonotonic StartTs;
     TDataShard* Self;
 
+    const TTableId TableId;
+
     std::vector<NScheme::TTypeInfo> ColumnTypes;
 
     ui32 FirstUnprocessedQuery;
@@ -300,6 +302,7 @@ public:
         , TableInfo(tableInfo)
         , StartTs(ts)
         , Self(self)
+        , TableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion)
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
     {
         GetTimeFast(&StartTime);
@@ -391,6 +394,9 @@ public:
         if (ready == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
+
+        Self->GetKeyAccessSampler()->AddSample(TableId, keyCells.GetCells());
+
         if (ready == NTable::EReady::Gone) {
             return EReadStatus::Done;
         }
@@ -401,7 +407,6 @@ public:
         // note that if user requests key columns then they will be in
         // rowValues and we don't have to add rowKey columns
         BlockBuilder.AddRow(TDbTupleRef(), value);
-
         ++RowsRead;
 
         return EReadStatus::Done;
@@ -655,10 +660,12 @@ private:
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
             BlockBuilder.AddRow(TDbTupleRef(), rowValues);
-
             ++RowsRead;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             RowsSinceLastCheck += 1 + ResetRowStats(iter->Stats);
+
+            Self->GetKeyAccessSampler()->AddSample(TableId, rowKey.Cells());
+
             if (ShouldStop()) {
                 return EReadStatus::StoppedByLimit;
             }

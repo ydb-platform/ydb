@@ -762,6 +762,7 @@ public:
             , List1(Self->PackerLeft.RefMutableObject(ctx, false, Self->InputLeftType), IsAnyJoinLeft(Self->AnyJoinSettings), Self->InputLeftType->GetElementsCount())
             , List2(Self->PackerRight.RefMutableObject(ctx, false, Self->InputRightType), IsAnyJoinRight(Self->AnyJoinSettings), Self->InputRightType->GetElementsCount())
             , Fields(GetPointers(Values))
+            , Stubs(Values.size(), nullptr)
         {
             Init();
         }
@@ -817,12 +818,14 @@ public:
                         }
 
                         if (Self->SortedTableOrder && *Self->SortedTableOrder == RightIndex) {
-                            TLiveFetcher fetcher = [this] (TComputationContext& ctx, NUdf::TUnboxedValue* output) {
-                                if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status)
-                                    return status;
-                                std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), output, [this] (ui32 index) { return std::move(this->Values[index]); });
-                                return EFetchResult::One;
-                            };
+                            auto fetcher = IsAnyJoinLeft(Self->AnyJoinSettings) ?
+                                TLiveFetcher(std::bind(Fetcher, std::placeholders::_1, Stubs.data())):
+                                [this] (TComputationContext& ctx, NUdf::TUnboxedValue* output) {
+                                    if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status)
+                                        return status;
+                                    std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), output, [this] (ui32 index) { return std::move(this->Values[index]); });
+                                    return EFetchResult::One;
+                                };
                             std::transform(Self->LeftInputColumns.cbegin(), Self->LeftInputColumns.cend(), Values.data(), [this] (ui32 index) { return std::move(this->Values[index]); });
                             List1.Live(std::move(fetcher), Values.data());
                             EatInput = false;
@@ -844,12 +847,14 @@ public:
                         }
 
                         if (Self->SortedTableOrder && *Self->SortedTableOrder == LeftIndex) {
-                            TLiveFetcher fetcher = [this] (TComputationContext& ctx, NUdf::TUnboxedValue* output) {
-                                if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status)
-                                    return status;
-                                std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), output, [this] (ui32 index) { return std::move(this->Values[index]); });
-                                return EFetchResult::One;
-                            };
+                            auto fetcher = IsAnyJoinRight(Self->AnyJoinSettings) ?
+                                TLiveFetcher(std::bind(Fetcher, std::placeholders::_1, Stubs.data())):
+                                [this] (TComputationContext& ctx, NUdf::TUnboxedValue* output) {
+                                    if (const auto status = Fetcher(ctx, Fields.data()); EFetchResult::One != status)
+                                        return status;
+                                    std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), output, [this] (ui32 index) { return std::move(this->Values[index]); });
+                                    return EFetchResult::One;
+                                };
                             std::transform(Self->RightInputColumns.cbegin(), Self->RightInputColumns.cend(), Values.data(), [this] (ui32 index) { return std::move(this->Values[index]); });
                             List2.Live(std::move(fetcher), Values.data());
                             EatInput = false;
@@ -1118,6 +1123,7 @@ public:
 
         NUdf::TUnboxedValue* ResItems = nullptr;
         const std::vector<NUdf::TUnboxedValue*> Fields;
+        const std::vector<NUdf::TUnboxedValue*> Stubs;
     };
 
     TWideCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, const TTupleType* inputLeftType, const TTupleType* inputRightType,

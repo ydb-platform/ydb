@@ -14,21 +14,21 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetModifyACL().GetName();
+        const auto& op = Transaction.GetModifyACL();
+        const auto& name = op.GetName();
+        const auto& acl = op.GetDiffACL();
+        const auto& owner = op.GetNewOwner();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TModifyACL Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TModifyACL Propose"
+            << ", path: " << parentPathStr << "/" << name
+            << ", operationId: " << OperationId
+            << ", at schemeshard: " << ssId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        const TString acl = Transaction.GetModifyACL().GetDiffACL();
-
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        const auto path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
-            TPath::TChecker checks = path.Check();
+            const auto checks = path.Check();
             checks
                 .NotEmpty()
                 .NotUnderDomainUpgrade()
@@ -46,62 +46,72 @@ public:
         }
 
         TString errStr;
-
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
+        THashSet<TPathId> subTree;
+        if (acl || (owner && path.Base()->IsTable())) {
+            subTree = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
+        }
+
+        THashSet<TPathId> affectedPaths;
         NIceDb::TNiceDb db(context.GetDB());
 
-        const TString owner = Transaction.GetModifyACL().GetNewOwner();
-
-        if (!acl.empty()) {
+        if (acl) {
             ++path.Base()->ACLVersion;
             path.Base()->ApplyACL(acl);
             context.SS->PersistACL(db, path.Base());
 
-            auto subtree = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
-            for (const TPathId pathId : subtree) {
+            for (const auto& pathId : subTree) {
                 if (context.SS->PathsById.at(pathId)->IsMigrated()) {
                     continue;
                 }
                 context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
             }
 
-            if (!path.Base()->IsPQGroup()) {
-                // YDBOPS-1328
-                // its better we do not republish parent but
-                // it is possible when we do not show ALC for children
-                TPath parent = path.Parent();
-                ++parent.Base()->DirAlterVersion;
-                context.SS->PersistPathDirAlterVersion(db, parent.Base());
-                context.SS->ClearDescribePathCaches(parent.Base());
-                context.OnComplete.PublishToSchemeBoard(OperationId, parent.Base()->PathId);
-            }
-
-            context.OnComplete.UpdateTenants(std::move(subtree));
+            affectedPaths.insert(subTree.begin(), subTree.end());
         }
 
-        if (!owner.empty()) {
-            path.Base()->Owner = owner;
-            context.SS->PersistOwner(db, path.Base());
+        if (owner) {
+            THashSet<TPathId> pathIds = {path.Base()->PathId};
+            if (path.Base()->IsTable()) {
+                pathIds = subTree;
+            }
 
-            ++path.Base()->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, path.Base());
+            for (const auto& pathId : pathIds) {
+                if (!context.SS->PathsById.contains(pathId)) {
+                    Y_VERIFY_DEBUG_S(false, "unreachable");
+                    continue;
+                }
 
-            context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+                auto pathEl = context.SS->PathsById.at(pathId);
 
-            TPath parent = path.Parent(); // we show owner in children listing, so we have to update it
+                pathEl->Owner = owner;
+                context.SS->PersistOwner(db, pathEl);
+
+                ++pathEl->DirAlterVersion;
+                context.SS->PersistPathDirAlterVersion(db, pathEl);
+
+                context.SS->ClearDescribePathCaches(pathEl);
+                context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+            }
+
+            affectedPaths.insert(pathIds.begin(), pathIds.end());
+        }
+
+        if ((acl && !path.Base()->IsPQGroup()) || owner) {
+            const auto parent = path.Parent();
             ++parent.Base()->DirAlterVersion;
             context.SS->PersistPathDirAlterVersion(db, parent.Base());
             context.SS->ClearDescribePathCaches(parent.Base());
             context.OnComplete.PublishToSchemeBoard(OperationId, parent.Base()->PathId);
-
-            context.OnComplete.UpdateTenants({path.Base()->PathId});
         }
 
+        context.OnComplete.UpdateTenants(std::move(affectedPaths));
         context.OnComplete.DoneOperation(OperationId);
+
         return result;
     }
 
@@ -110,11 +120,11 @@ public:
     }
 
     void ProgressState(TOperationContext&) override {
-        Y_FAIL("no progress state for modify acl");
+        Y_FAIL("no ProgressState for TModifyACL");
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for modify acl");
+        Y_FAIL("no AbortUnsafe for TModifyACL");
     }
 };
 

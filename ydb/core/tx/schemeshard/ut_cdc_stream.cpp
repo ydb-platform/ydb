@@ -828,6 +828,45 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         Metering(false);
     }
 
+    Y_UNIT_TEST(ChangeOwner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto* path : {"Table", "Table/Stream", "Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/%s", path)), {
+                NLs::HasOwner("root@builtin"),
+            });
+        }
+
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table", "", "user@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto* path : {"Table", "Table/Stream", "Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/%s", path)), {
+                NLs::HasOwner("user@builtin"),
+            });
+        }
+    }
+
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {

@@ -997,6 +997,12 @@ TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
     };
 }
 
+TCheckFunc HasOwner(const TString& owner) {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSelf().GetOwner(), owner);
+    };
+}
+
 void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
     const auto& self = record.GetPathDescription().GetSelf();
     TSecurityObject src(self.GetOwner(), self.GetEffectiveACL(), false);

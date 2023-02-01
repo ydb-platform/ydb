@@ -2254,7 +2254,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(24),
+                                NLs::PathVersionEqual(23),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2301,7 +2301,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28),
+                                NLs::PathVersionEqual(27),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2322,7 +2322,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28),
+                                NLs::PathVersionEqual(27),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2339,7 +2339,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28),
+                                NLs::PathVersionEqual(27),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2357,7 +2357,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(30),
+                                NLs::PathVersionEqual(29),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(4)});
@@ -2374,7 +2374,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(30),
+                                NLs::PathVersionEqual(29),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(5)});
@@ -2391,7 +2391,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(30),
+                                NLs::PathVersionEqual(29),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(1),
                                 NLs::ShardsInsideDomain(5)});

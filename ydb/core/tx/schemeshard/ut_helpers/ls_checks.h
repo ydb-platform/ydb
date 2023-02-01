@@ -130,6 +130,7 @@ namespace NLs {
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc BackupHistoryCount(ui64 count);
 
+    TCheckFunc HasOwner(const TString& owner);
     TCheckFunc HasEffectiveRight(const TString& right);
     TCheckFunc HasNotEffectiveRight(const TString& right);
 

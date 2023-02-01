@@ -45,8 +45,8 @@ private:
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, const TCompareFunc& compare, const std::vector<ui32>& indexes)
-        : TBase(memInfo), Count(count), Indexes(indexes), Directions(directons, directons + Indexes.size())
+    TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes)
+        : TBase(memInfo), Count(count), Indexes(indexes), Directions(directons, directons + keyWidth)
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Storage(GetStorageSize() * Indexes.size()), Free(GetStorageSize(), nullptr), Fields(Indexes.size(), nullptr)
     {
@@ -384,9 +384,9 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(count, directions, TMyValueCompare(KeyTypes), Indexes);
+        state = ctx.HolderFactory.Create<TState>(count, directions, Directions.size(), TMyValueCompare(KeyTypes), Indexes);
 #else
-        state = ctx.HolderFactory.Create<TState>(count, directions, ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(KeyTypes)), Indexes);
+        state = ctx.HolderFactory.Create<TState>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(KeyTypes)), Indexes);
 #endif
     }
 

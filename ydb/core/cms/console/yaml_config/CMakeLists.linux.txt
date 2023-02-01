@@ -6,5 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(as)
-add_subdirectory(fyamlcpp)
+find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
+
+add_library(cms-console-yaml_config)
+target_link_libraries(cms-console-yaml_config PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-yaml-fyamlcpp
+  OpenSSL::OpenSSL
+)
+target_sources(cms-console-yaml_config PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config.cpp
+)

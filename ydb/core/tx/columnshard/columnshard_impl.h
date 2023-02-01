@@ -126,7 +126,6 @@ class TColumnShard
     void Handle(TEvPrivate::TEvForget::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
-    void Handle(NTiers::TEvTiersManagerReadyForUsage::TPtr& ev);
 
 
     ITransaction* CreateTxInitSchema();
@@ -229,7 +228,6 @@ protected:
             HFunc(TEvPrivate::TEvScanStats, Handle);
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
-            hFunc(NTiers::TEvTiersManagerReadyForUsage, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
@@ -360,7 +358,6 @@ private:
     TActorId EvictionActor;
     TActorId StatsReportPipe;
 
-    bool TieringWaiting = false;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
@@ -389,7 +386,7 @@ private:
     bool ActiveIndexingOrCompaction = false;
     bool ActiveCleanup = false;
     bool ActiveTtl = false;
-    bool ActiveEviction = false;
+    ui32 ActiveEvictions = 0;
     std::unique_ptr<TBlobManager> BlobManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TSettings Settings;

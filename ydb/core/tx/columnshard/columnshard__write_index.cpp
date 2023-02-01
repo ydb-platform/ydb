@@ -33,7 +33,6 @@ private:
     };
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
-    THashMap<TUnifiedBlobId, NOlap::TPortionEvictionFeatures> BlobsToExport;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
     THashMap<TString, std::vector<NOlap::TEvictedBlob>> TierBlobsToForget;
     ui64 ExportNo = 0;
@@ -49,6 +48,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
     ui64 blobsWritten = 0;
     ui64 bytesWritten = 0;
+    THashMap<TUnifiedBlobId, NOlap::TPortionEvictionFeatures> blobsToExport;
 
     auto changes = Ev->Get()->IndexChanges;
     Y_VERIFY(changes);
@@ -141,8 +141,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 if (tManager.NeedExport()) {
                     for (auto& rec : portionInfo.Records) {
                         auto& blobId = rec.BlobRange.BlobId;
-                        if (!BlobsToExport.count(blobId)) {
-                            BlobsToExport.emplace(blobId, evictionFeatures);
+                        if (!blobsToExport.count(blobId)) {
+                            blobsToExport.emplace(blobId, evictionFeatures);
 
                             NKikimrTxColumnShard::TEvictMetadata meta;
                             meta.SetTierName(tierName);
@@ -195,7 +195,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
             }
             for (const auto& blobId : blobsToEvict) {
-                if (BlobsToExport.count(blobId)) {
+                if (blobsToExport.count(blobId)) {
                     // DS to S3 eviction. Keep source blob in DS till EEvictState::EXTERN state.
                     continue;
                 }
@@ -223,16 +223,16 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             << ") cannot write index blobs at tablet " << Self->TabletID());
     }
 
-    if (BlobsToExport.size()) {
-        size_t numBlobs = BlobsToExport.size();
-        for (auto& [blobId, evFeatures] : BlobsToExport) {
+    if (blobsToExport.size()) {
+        size_t numBlobs = blobsToExport.size();
+        for (auto& [blobId, evFeatures] : blobsToExport) {
             auto it = ExportTierBlobs.find(evFeatures.TargetTierName);
             if (it == ExportTierBlobs.end()) {
                 it = ExportTierBlobs.emplace(evFeatures.TargetTierName, TPathIdBlobs(evFeatures.PathId)).first;
             }
             it->second.Blobs.emplace(blobId);
         }
-        BlobsToExport.clear();
+        blobsToExport.clear();
 
         ExportNo = Self->LastExportNo + 1;
         Self->LastExportNo += ExportTierBlobs.size();
@@ -273,6 +273,10 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
         Self->ActiveTtl = false;
+
+        // Do not start new TTL till we evict current PortionsToEvict. We could evict them twice otherwise
+        Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
+        Self->ActiveEvictions = ExportTierBlobs.size();
 
         Self->IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
         Self->IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);

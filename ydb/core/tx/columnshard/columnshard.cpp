@@ -29,15 +29,10 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
     CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID));
     EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
-    ui32 tieringsCount = 0;
     for (auto&& i : Tables) {
         ActivateTiering(i.first, i.second.TieringUsage);
-        tieringsCount += (i.second.TieringUsage ? 1 : 0);
     }
-    TieringWaiting = tieringsCount;
-    if (!TieringWaiting) {
-        SignalTabletActive(ctx);
-    }
+    SignalTabletActive(ctx);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {

@@ -869,6 +869,10 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
         return {};
     }
+    if (ActiveEvictions) {
+        LOG_S_DEBUG("Do not start TTL while eviction is in progress at tablet " << TabletID());
+        return {};
+    }
     if (!PrimaryIndex) {
         LOG_S_NOTICE("TTL not started. No index for TTL at tablet " << TabletID());
         return {};
@@ -1082,18 +1086,10 @@ TActorId TColumnShard::GetS3ActorForTier(const TString& tierId) const {
     return Tiers->GetStorageActorId(tierId);
 }
 
-void TColumnShard::Handle(NTiers::TEvTiersManagerReadyForUsage::TPtr& /*ev*/) {
-    Y_VERIFY(Tiers);
-    Y_VERIFY(Tiers->IsReadyForUsage());
-    if (TieringWaiting) {
-        TieringWaiting = false;
-        SignalTabletActive(TActivationContext::AsActorContext());
-    }
-}
-
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(Tiers);
-    ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadata::NProvider::TEvRefreshSubscriberData" << ev->Get()->GetSnapshot()->SerializeToString();
+    ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadata::NProvider::TEvRefreshSubscriberData"
+        << ev->Get()->GetSnapshot()->SerializeToString();
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 

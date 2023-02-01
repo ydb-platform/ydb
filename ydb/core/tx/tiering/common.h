@@ -16,9 +16,5 @@ enum EEvents {
     EvEnd
 };
 
-class TEvTiersManagerReadyForUsage: public TEventLocal<TEvTiersManagerReadyForUsage, EvTiersManagerReadyForUsage> {
-
-};
-
 static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_TIERING), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TIERING)");
 }

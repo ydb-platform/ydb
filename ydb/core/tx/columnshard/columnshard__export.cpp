@@ -99,26 +99,23 @@ void TTxExportFinish::Complete(const TActorContext& ctx) {
 
     auto& msg = *Ev->Get();
     Y_VERIFY(!msg.TierName.empty());
-    Self->ActiveEviction = false;
     if (!BlobsToForget.empty()) {
         Self->ForgetBlobs(ctx, msg.TierName, std::move(BlobsToForget));
     }
+
+    Y_VERIFY(Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
+    --Self->ActiveEvictions;
 }
 
 
 void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx) {
     auto status = ev->Get()->Status;
 
-    Y_VERIFY(!ActiveTtl, "TTL already in progress at tablet %lu", TabletID());
-    Y_VERIFY(!ActiveEviction || status != NKikimrProto::UNKNOWN, "Eviction in progress at tablet %lu", TabletID());
+    Y_VERIFY(ActiveEvictions, "Unexpected active evictions count at tablet %lu", TabletID());
     ui64 exportNo = ev->Get()->ExportNo;
     auto& tierName = ev->Get()->TierName;
 
-    if (status == NKikimrProto::ERROR) {
-        LOG_S_WARN("Export (fail): " << exportNo << " tier '" << tierName << "' error: "
-            << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
-        ActiveEviction = false;
-    } else if (status == NKikimrProto::UNKNOWN) {
+    if (status == NKikimrProto::UNKNOWN) {
         LOG_S_DEBUG("Export (write): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
         auto& tierBlobs = ev->Get()->Blobs;
         Y_VERIFY(tierBlobs.size());
@@ -126,10 +123,13 @@ void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& 
     } else if (status == NKikimrProto::OK) {
         LOG_S_DEBUG("Export (apply): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
         Execute(new TTxExportFinish(this, ev), ctx);
+    } else if (status == NKikimrProto::ERROR) {
+        LOG_S_WARN("Export (fail): " << exportNo << " tier '" << tierName << "' error: "
+            << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
+        --ActiveEvictions;
     } else {
         Y_VERIFY(false);
     }
-    ActiveEviction = true;
 }
 
 }

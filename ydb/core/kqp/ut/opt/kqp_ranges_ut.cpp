@@ -40,7 +40,8 @@ static void CreateSampleTables(TSession session) {
             (3u,   200u, "Eleven"),
             (3u,   300u, "Twelve"),
             (3u,   400u, "Thirteen"),
-            (3u,   500u, "Fourteen");
+            (3u,   500u, "Fourteen"),
+            (3u,   600u, NULL);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
@@ -56,6 +57,23 @@ static void CreateSampleTables(TSession session) {
             (NULL, "One"),
             (Date("2019-05-08"), "Two"),
             (Date("2019-07-01"), "Three");
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/TestJson` (
+            Key1 Int32,
+            Key2 Int32,
+            Value Json,
+            PRIMARY KEY (Key1, Key2)
+        );
+    )").GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteDataQuery(R"(
+        REPLACE INTO `/Root/TestJson` (Key1, Key2, Value) VALUES
+            (0, 0, NULL),
+            (0, 1, "[0]"),
+            (1, 0, NULL),
+            (1, 1, "[1]");
     )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 
     {
@@ -354,6 +372,117 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         CompareYson(R"([[["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(IsNotNullSecondComponent) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TestNulls` WHERE
+                    Key1 IS NULL AND Key2 IS NOT NULL
+            )"),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([[#;[100u];["Two"]];[#;[200u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(IsNullInValue) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TestNulls` WHERE
+                    Key1 = 3u AND Value IS NULL
+            )"),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[3u];[600u];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(IsNullInJsonValue) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TestJson` WHERE
+                    Key1 = 0 AND Value IS NULL
+            )"),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0];[0];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(IsNotNullInValue) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TestNulls` WHERE
+                    Key1 = 3u AND Value IS NOT NULL
+            )"),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[3u];[100u];["Ten"]];
+            [[3u];[200u];["Eleven"]];
+            [[3u];[300u];["Twelve"]];
+            [[3u];[400u];["Thirteen"]];
+            [[3u];[500u];["Fourteen"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(IsNotNullInJsonValue) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TestJson` WHERE
+                    Key1 = 0 AND Value IS NOT NULL
+            )"),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0];[1];["[0]"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(IsNotNullInJsonValue2) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TestJson` WHERE
+                    Value IS NOT NULL
+            )"),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0];[1];["[0]"]];
+            [[1];[1];["[1]"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(IsNullPartial) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -402,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         UNIT_ASSERT(result.IsSuccess());
 
         CompareYson(R"([
-            [["Seven"]];[["Eight"]];[["Nine"]];[["Ten"]];[["Eleven"]];[["Twelve"]];[["Thirteen"]];[["Fourteen"]]
+            [["Seven"]];[["Eight"]];[["Nine"]];[["Ten"]];[["Eleven"]];[["Twelve"]];[["Thirteen"]];[["Fourteen"]];[#]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -668,7 +797,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
                 [[3u];["Eleven"]];
                 [[3u];["Twelve"]];
                 [[3u];["Thirteen"]];
-                [[3u];["Fourteen"]]
+                [[3u];["Fourteen"]];
+                [[3u];#]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

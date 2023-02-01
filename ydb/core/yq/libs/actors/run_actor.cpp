@@ -265,7 +265,7 @@ struct TEvaluationGraphInfo {
     NActors::TActorId ControlId;
     NActors::TActorId ResultId;
     NThreading::TPromise<NYql::IDqGateway::TResult> Result;
-    ui64 Index;
+    ui64 Index = 0;
 };
 
 class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
@@ -1697,7 +1697,7 @@ private:
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.PgParser = (Params.QuerySyntax == YandexQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs" });
+        sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes" });
         try {
             AddTableBindingsFromBindings(Params.Bindings, YqConnections, sqlSettings);
         } catch (const std::exception& e) {

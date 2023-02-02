@@ -16,7 +16,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
             NKikimrSchemeOp::TStorageTierConfig proto;
             if (!::google::protobuf::TextFormat::ParseFromString(it->second, &proto)) {
                 return "incorrect proto format";
-            } else {
+            } else if (proto.HasObjectStorage()) {
                 TString defaultUserId;
                 if (context.GetUserToken()) {
                     defaultUserId = context.GetUserToken()->GetUserSID();

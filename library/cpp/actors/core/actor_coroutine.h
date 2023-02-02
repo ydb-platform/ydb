@@ -21,7 +21,7 @@ namespace NActors {
         THolder<IEventHandle> PendingEvent;
         bool Finished = false;
         ui64 WaitCookie = 0;
-        TActorContext *ActorContext = nullptr;
+        std::optional<TActorContext> ActorContext;
 
     protected:
         TActorIdentity SelfActorId = TActorIdentity(TActorId());

@@ -78,7 +78,7 @@ namespace NActors {
 
     const TActorContext& TActorCoroImpl::GetActorContext() const {
         Y_VERIFY(ActorContext);
-        return *ActorContext;
+        return ActorContext.value();
     }
 
     bool TActorCoroImpl::ProcessEvent(THolder<IEventHandle> ev) {
@@ -92,16 +92,16 @@ namespace NActors {
         }
 
         // prepare actor context for in-coroutine use
+        Y_VERIFY(!ActorContext);
         TActivationContext *ac = TlsActivationContext;
-        TlsActivationContext = nullptr;
-        TActorContext ctx(ac->Mailbox, ac->ExecutorThread, ac->EventStart, SelfActorId);
-        ActorContext = &ctx;
+        ActorContext.emplace(ac->Mailbox, ac->ExecutorThread, ac->EventStart, SelfActorId);
+        TlsActivationContext = &ActorContext.value();
 
         Resume();
 
         // drop actor context
         TlsActivationContext = ac;
-        ActorContext = nullptr;
+        ActorContext.reset();
 
         return Finished;
     }

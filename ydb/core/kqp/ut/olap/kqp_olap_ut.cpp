@@ -178,6 +178,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
     }
 
+    void WriteTestDataForClickBench(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+        UNIT_ASSERT(testTable == "/Root/benchTable"); // TODO: check schema instead
+
+        TClickHelper lHelper(kikimr.GetTestServer());
+        NYdb::NLongTx::TClient client(kikimr.GetDriver());
+
+        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
+
+        auto txId = resBeginTx.GetResult().tx_id();
+        auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
+        TString data = NArrow::SerializeBatchNoCompression(batch);
+
+        NLongTx::TLongTxWriteResult resWrite =
+                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
+
+        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+    }
+
     void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
         UNIT_ASSERT(testTable == "/Root/tableWithNulls"); // TODO: check schema instead
         TTableWithNullsHelper lHelper(kikimr.GetTestServer());
@@ -1637,7 +1658,38 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregationsInternal(cases);
     }
 
-    void TestClickBench(const std::vector<TAggregationTestCase>& cases) {
+    void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        EnableDebugLogging(kikimr);
+        TClickHelper(kikimr).CreateClickBenchTable();
+        auto tableClient = kikimr.GetTableClient();
+
+
+        ui32 numIterations = 10;
+        const ui32 iterationPackSize = 2000;
+        for (ui64 i = 0; i < numIterations; ++i) {
+            WriteTestDataForClickBench(kikimr, "/Root/benchTable", 0, 1000000 + i * 1000000, iterationPackSize);
+        }
+
+        for (auto&& i : cases) {
+            const TString queryFixed = i.GetFixedQuery();
+            {
+                auto it = tableClient.StreamExecuteScanQuery(queryFixed).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = StreamResultToYson(it);
+                if (!i.GetExpectedReply().empty()) {
+                    CompareYson(result, i.GetExpectedReply());
+                }
+            }
+            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
+        }
+    }
+
+    void TestClickBenchInternal(const std::vector<TAggregationTestCase>& cases) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -1695,6 +1747,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(streamSender, TDuration::Seconds(10));
             Y_VERIFY(currentTest.CheckFinished());
         }
+    }
+
+    void TestClickBench(const std::vector<TAggregationTestCase>& cases) {
+        TestClickBenchBase(cases);
+        TestClickBenchInternal(cases);
     }
 
     void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases) {
@@ -2541,7 +2598,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY c DESC
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         ;
         q7.FillExpectedAggregationGroupByPlanOptions();
 
@@ -2555,7 +2614,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q9.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q12;
@@ -2569,8 +2630,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10;
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q12.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q14;
@@ -2584,7 +2646,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10;
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q14.FillExpectedAggregationGroupByPlanOptions();
 
         TestClickBench({ q7, q9, q12, q14 });

@@ -13,12 +13,12 @@ void TInitializer::DoPrepare(IInitializerInput::TPtr controller) const {
         {
             auto& column = *request.add_columns();
             column.set_name(TDBInitialization::TDecoder::ComponentId);
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
             column.set_name(TDBInitialization::TDecoder::ModificationId);
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();

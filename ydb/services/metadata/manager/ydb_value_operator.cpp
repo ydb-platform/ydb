@@ -78,21 +78,39 @@ Ydb::Value TYDBValue::NullValue() {
     return result;
 }
 
-Ydb::Value TYDBValue::Bytes(const TString& value) {
+Ydb::Value TYDBValue::RawBytes(const TString& value) {
     Ydb::Value result;
     result.set_bytes_value(value);
     return result;
 }
 
-Ydb::Value TYDBValue::Bytes(const TStringBuf& value) {
+Ydb::Value TYDBValue::RawBytes(const TStringBuf& value) {
     Ydb::Value result;
     result.set_bytes_value(TString(value.data(), value.size()));
     return result;
 }
 
-Ydb::Value TYDBValue::Bytes(const char* value) {
+Ydb::Value TYDBValue::RawBytes(const char* value) {
     Ydb::Value result;
     result.set_bytes_value(TString(value));
+    return result;
+}
+
+Ydb::Value TYDBValue::Utf8(const TString& value) {
+    Ydb::Value result;
+    result.set_text_value(value);
+    return result;
+}
+
+Ydb::Value TYDBValue::Utf8(const TStringBuf& value) {
+    Ydb::Value result;
+    result.set_text_value(TString(value.data(), value.size()));
+    return result;
+}
+
+Ydb::Value TYDBValue::Utf8(const char* value) {
+    Ydb::Value result;
+    result.set_text_value(TString(value));
     return result;
 }
 
@@ -108,10 +126,17 @@ Ydb::Value TYDBValue::UInt32(const ui32 value) {
     return result;
 }
 
-Ydb::Column TYDBColumn::Bytes(const TString& columnId) {
+Ydb::Column TYDBColumn::RawBytes(const TString& columnId) {
     Ydb::Column result;
     result.set_name(columnId);
     result.mutable_type()->set_type_id(Ydb::Type::STRING);
+    return result;
+}
+
+Ydb::Column TYDBColumn::Utf8(const TString& columnId) {
+    Ydb::Column result;
+    result.set_name(columnId);
+    result.mutable_type()->set_type_id(Ydb::Type::UTF8);
     return result;
 }
 

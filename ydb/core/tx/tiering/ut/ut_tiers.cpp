@@ -295,13 +295,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 }
             }
             {
-                std::vector<NMetadata::NInternal::TTableRecord> patches;
-                {
-                    NMetadata::NInternal::TTableRecord patch;
-                    patch.SetColumn("ownerPath", NMetadata::NInternal::TYDBValue::Bytes("/Root/olapStore"));
-                    patch.SetColumn("tierName", NMetadata::NInternal::TYDBValue::Bytes("tier1"));
-                    patches.emplace_back(std::move(patch));
-                }
                 emulator->ResetConditions();
                 emulator->SetExpectedTieringsCount(0);
                 emulator->SetExpectedTiersCount(0);

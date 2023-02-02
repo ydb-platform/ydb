@@ -13,17 +13,17 @@ TVector<NKikimr::NMetadata::NInitializer::ITableModifier::TPtr> TTierRulesInitia
         {
             auto& column = *request.add_columns();
             column.set_name("tieringRuleId");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
             column.set_name("defaultColumn");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
             column.set_name("description");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
         auto hRequest = TTieringRule::AddHistoryTableScheme(request);

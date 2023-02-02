@@ -37,10 +37,10 @@ protected:
             return;
         }
         if (UserToken) {
-            Objects.AddColumn(NInternal::TYDBColumn::Bytes("historyUserId"), NInternal::TYDBValue::Bytes(UserToken->GetUserSID()));
+            Objects.AddColumn(NInternal::TYDBColumn::Utf8("historyUserId"), NInternal::TYDBValue::Utf8(UserToken->GetUserSID()));
         }
         Objects.AddColumn(NInternal::TYDBColumn::UInt64("historyInstant"), NInternal::TYDBValue::UInt64(TActivationContext::Now().MicroSeconds()));
-        Objects.AddColumn(NInternal::TYDBColumn::Bytes("historyAction"), NInternal::TYDBValue::Bytes(GetModifyType()));
+        Objects.AddColumn(NInternal::TYDBColumn::Utf8("historyAction"), NInternal::TYDBValue::Utf8(GetModifyType()));
         Ydb::Table::ExecuteDataQueryRequest request = Objects.BuildInsertQuery(TObject::GetBehaviour()->GetStorageHistoryTablePath());
         request.set_session_id(SessionId);
         request.mutable_tx_control()->set_tx_id(TransactionId);

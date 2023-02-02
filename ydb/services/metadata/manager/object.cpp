@@ -9,12 +9,12 @@ Ydb::Table::CreateTableRequest TBaseObject::AddHistoryTableScheme(const Ydb::Tab
     {
         auto& column = *result.add_columns();
         column.set_name("historyAction");
-        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
     }
     {
         auto& column = *result.add_columns();
         column.set_name("historyUserId");
-        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
     }
     {
         auto& column = *result.add_columns();

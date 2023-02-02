@@ -8,7 +8,7 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor
     Ydb::Table::ExecuteDataQueryRequest request;
     TStringBuilder sb;
     const auto now = TActivationContext::Now();
-    sb << "DECLARE $taskIds AS List<String>;" << Endl;
+    sb << "DECLARE $taskIds AS List<Utf8>;" << Endl;
     sb << "DECLARE $lastPingNewValue AS Uint32;" << Endl;
     sb << "UPDATE `" + ExecutorController->GetTableName() + "`" << Endl;
     sb << "SET lastPing = $lastPingNewValue" << Endl;
@@ -22,9 +22,9 @@ std::optional<NMetadata::NRequest::TDialogYQLRequest::TRequest> TLockPingerActor
     }
 
     auto& idStrings = (*request.mutable_parameters())["$taskIds"];
-    idStrings.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+    idStrings.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
     for (auto&& i : TaskIds) {
-        idStrings.mutable_value()->add_items()->set_bytes_value(i);
+        idStrings.mutable_value()->add_items()->set_text_value(i);
     }
 
     request.set_session_id(sessionId);

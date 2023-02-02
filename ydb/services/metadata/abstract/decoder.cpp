@@ -21,7 +21,14 @@ bool TDecoderBase::Read(const i32 columnIdx, TString& result, const Ydb::Value& 
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;
     }
-    result = r.items()[columnIdx].bytes_value();
+    if (r.items()[columnIdx].has_bytes_value()) {
+        result = r.items()[columnIdx].bytes_value();
+    } else if (r.items()[columnIdx].has_text_value()) {
+        result = r.items()[columnIdx].text_value();
+    } else {
+        // its normally for empty strings
+        result = "";
+    }
     return true;
 }
 
@@ -75,9 +82,17 @@ bool TDecoderBase::ReadJson(const i32 columnIdx, NJson::TJsonValue& result, cons
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;
     }
-    const TString& s = r.items()[columnIdx].bytes_value();
-    if (!NJson::ReadJsonFastTree(s, &result)) {
-        ALS_ERROR(0) << "cannot parse json string: " << s;
+    const TString* jsonString = nullptr;
+    if (r.items()[columnIdx].has_bytes_value()) {
+        jsonString = &r.items()[columnIdx].bytes_value();
+    } else if (r.items()[columnIdx].has_text_value()) {
+        jsonString = &r.items()[columnIdx].text_value();
+    } else {
+        ALS_ERROR(0) << "no data for json string";
+        return false;
+    }
+    if (!NJson::ReadJsonFastTree(*jsonString, &result)) {
+        ALS_ERROR(0) << "cannot parse json string: " << *jsonString;
         return false;
     }
     return true;
@@ -87,9 +102,17 @@ bool TDecoderBase::ReadDebugProto(const i32 columnIdx, ::google::protobuf::Messa
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;
     }
-    const TString& s = r.items()[columnIdx].bytes_value();
-    if (!::google::protobuf::TextFormat::ParseFromString(s, &result)) {
-        ALS_ERROR(0) << "cannot parse proto string: " << s;
+    const TString* jsonString = nullptr;
+    if (r.items()[columnIdx].has_bytes_value()) {
+        jsonString = &r.items()[columnIdx].bytes_value();
+    } else if (r.items()[columnIdx].has_text_value()) {
+        jsonString = &r.items()[columnIdx].text_value();
+    } else {
+        ALS_ERROR(0) << "no data for debug proto string";
+        return false;
+    }
+    if (!::google::protobuf::TextFormat::ParseFromString(*jsonString, &result)) {
+        ALS_ERROR(0) << "cannot parse proto string: " << *jsonString;
         return false;
     }
     return true;

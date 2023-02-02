@@ -43,13 +43,13 @@ bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue & json
 
 NMetadata::NInternal::TTableRecord TTieringRule::SerializeToRecord() const {
     NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Bytes(TieringRuleId));
-    result.SetColumn(TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Bytes(DefaultColumn));
+    result.SetColumn(TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Utf8(TieringRuleId));
+    result.SetColumn(TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Utf8(DefaultColumn));
     {
         auto jsonDescription = SerializeDescriptionToJson();
         NJsonWriter::TBuf sout;
         sout.WriteJsonValue(&jsonDescription, true);
-        result.SetColumn(TDecoder::Description, NMetadata::NInternal::TYDBValue::Bytes(sout.Str()));
+        result.SetColumn(TDecoder::Description, NMetadata::NInternal::TYDBValue::Utf8(sout.Str()));
     }
     return result;
 }

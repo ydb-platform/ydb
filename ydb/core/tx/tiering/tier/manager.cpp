@@ -31,8 +31,8 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                     return "SecretKey is incorrect";
                 }
                 *proto.MutableObjectStorage()->MutableSecretKey() = secretKey->SerializeToString();
-                result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));
             }
+            result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));
         }
     }
     return result;

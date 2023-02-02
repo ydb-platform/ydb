@@ -35,7 +35,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     THashMap<TLogoBlobID, std::pair<bool, bool>> KeepFlags;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
-        A_LOG_DEBUG_S("DSPI14", "ReplyAndDie"
+        A_LOG_INFO_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
             << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr"));
         if (status != NKikimrProto::OK) {
@@ -270,7 +270,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_INDEXRESTOREGET, false, latencyQueueKind, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.IndexRestoreGet")
+                ev->RestartCounter, "DSProxy.IndexRestoreGet", std::move(ev->ExecutionRelay))
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)

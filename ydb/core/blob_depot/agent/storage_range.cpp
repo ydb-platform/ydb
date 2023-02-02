@@ -11,7 +11,6 @@ namespace NKikimr::NBlobDepot {
 
             std::unique_ptr<TEvBlobStorage::TEvRangeResult> Response;
             ui32 ReadsInFlight = 0;
-            ui32 ResolvesInFlight = 0;
             std::map<TLogoBlobID, TString> FoundBlobs;
             std::vector<TRead> Reads;
             bool Reverse = false;
@@ -27,10 +26,7 @@ namespace NKikimr::NBlobDepot {
                 Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, Request.From, Request.To,
                     Agent.VirtualGroupId);
 
-                IssueResolve();
-            }
-
-            void IssueResolve() {
+                // issue resolve query
                 TString from = Request.From.AsBinaryString();
                 TString to = Request.To.AsBinaryString();
                 Reverse = Request.To < Request.From;
@@ -50,18 +46,6 @@ namespace NKikimr::NBlobDepot {
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
-                ++ResolvesInFlight;
-            }
-
-            void IssueResolve(ui64 tag) {
-                NKikimrBlobDepot::TEvResolve resolve;
-                auto *item = resolve.AddItems();
-                item->SetExactKey(Reads[tag].Id.AsBinaryString());
-                item->SetMustRestoreFirst(Request.MustRestoreFirst);
-                item->SetCookie(tag);
-
-                Agent.Issue(std::move(resolve), this, nullptr);
-                ++ResolvesInFlight;
             }
 
             void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override {
@@ -81,7 +65,8 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NKikimrBlobDepot::TEvResolveResult& msg) {
-                --ResolvesInFlight;
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA47, "HandleResolveResult", (AgentId, Agent.LogId),
+                    (QueryId, GetQueryId()), (Msg, msg));
 
                 if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
                     return EndWithError(msg.GetStatus(), msg.GetErrorReason());
@@ -139,7 +124,8 @@ namespace NKikimr::NBlobDepot {
                     case NKikimrProto::OK: {
                         Y_VERIFY(dataOrErrorReason.size() == read.Id.BlobSize());
                         const bool inserted = FoundBlobs.try_emplace(read.Id, std::move(dataOrErrorReason)).second;
-                        Y_VERIFY(inserted);
+                        Y_VERIFY_S(inserted, "AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
+                            << " duplicate BlobId# " << read.Id << " received");
                         break;
                     }
 
@@ -157,7 +143,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void CheckAndFinish() {
-                if (!ReadsInFlight && !ResolvesInFlight && !Finished) {
+                if (!ReadsInFlight && !Finished) {
                     for (auto& [id, buffer] : FoundBlobs) {
                         Y_VERIFY_S(buffer.size() == Request.IsIndexOnly ? 0 : id.BlobSize(), "Id# " << id << " Buffer.size# " << buffer.size());
                         Response->Responses.emplace_back(id, std::move(buffer));

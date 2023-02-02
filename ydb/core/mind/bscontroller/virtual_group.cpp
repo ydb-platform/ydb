@@ -338,8 +338,10 @@ namespace NKikimr::NBsController {
         void OnPipeError(TActorId clientId) {
             if (clientId == HivePipeId) {
                 HivePipeId = {};
+                Bootstrap();
             } else if (clientId == BlobDepotPipeId) {
                 BlobDepotPipeId = {};
+                Bootstrap();
             }
         }
 
@@ -371,13 +373,12 @@ namespace NKikimr::NBsController {
             }
 
             NTabletPipe::CloseAndForgetClient(SelfId(), HivePipeId);
+            ConfigureBlobDepot();
         }
 
         void Handle(TEvHive::TEvTabletCreationResult::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG05, "received TEvTabletCreationResult", (TabletId, Self->TabletID()),
                 (Msg, ev->Get()->Record));
-
-            ConfigureBlobDepot();
         }
 
         void ConfigureBlobDepot() {

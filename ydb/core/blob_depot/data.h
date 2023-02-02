@@ -379,6 +379,9 @@ namespace NKikimr::NBlobDepot {
             ui64 MaxKeys = 0;
             ui32 PrechargeRows = 0;
             ui64 PrechargeBytes = 0;
+#ifndef NDEBUG
+            std::set<TKey> KeysInRange = {}; // runtime state
+#endif
         };
 
     private:
@@ -490,9 +493,8 @@ namespace NKikimr::NBlobDepot {
                 }
                 while (rowset.IsValid()) {
                     TKey key = TKey::FromBinaryKey(rowset.GetKey(), Data->Self->Config);
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT46, "ScanRange.Load", (Id, Data->Self->GetLogId()), (Left, left),
+                    STLOG(PRI_TRACE, BLOB_DEPOT, BDT46, "ScanRange.Load", (Id, Data->Self->GetLogId()), (Left, left),
                         (Right, right), (Key, key));
-                    LastProcessedKey.emplace(key);
                     if (left < key && key < right) {
                         TValue* const value = Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
                             rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
@@ -504,17 +506,15 @@ namespace NKikimr::NBlobDepot {
                                 Processing = Range.Flags & EScanFlags::INCLUDE_END ? key <= Range.End : key < Range.End;
                             }
                         }
-                        Processing = Processing && callback(std::move(key), *value);
+                        Processing = Processing && callback(key, *value);
                         *Progress = true;
                     } else {
                         Y_VERIFY_DEBUG(key == left || key == right);
                     }
+                    LastProcessedKey.emplace(std::move(key));
                     if (!rowset.Next()) {
                         return false; // we break iteration anyway, because we can't read more data
                     }
-                }
-                if (!LastProcessedKey || (Range.Flags & EScanFlags::REVERSE ? left < *LastProcessedKey : *LastProcessedKey < right)) {
-                    LastProcessedKey.emplace(Range.Flags & EScanFlags::REVERSE ? left : right);
                 }
                 return Processing;
             };
@@ -526,7 +526,7 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         bool ScanRange(TScanRange& range, NTabletFlatExecutor::TTransactionContext *txc, bool *progress, TCallback&& callback) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT76, "ScanRange", (Id, Self->GetLogId()), (Begin, range.Begin), (End, range.End),
+            STLOG(PRI_TRACE, BLOB_DEPOT, BDT76, "ScanRange", (Id, Self->GetLogId()), (Begin, range.Begin), (End, range.End),
                 (Flags, range.Flags), (MaxKeys, range.MaxKeys));
 
             const bool reverse = range.Flags & EScanFlags::REVERSE;
@@ -534,11 +534,13 @@ namespace NKikimr::NBlobDepot {
 
             bool res = true;
 
-            auto issue = [&](TKey&& key, const TValue& value) {
+            auto issue = [&](const TKey& key, const TValue& value) {
                 Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_BEGIN ? range.Begin <= key : range.Begin < key);
                 Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_END ? key <= range.End : key < range.End);
-
-                if (!callback(key, value) || (range.MaxKeys && !--range.MaxKeys)) {
+#ifndef NDEBUG
+                Y_VERIFY(range.KeysInRange.insert(key).second); // ensure that the generated key is unique
+#endif
+                if (!callback(key, value) || !--range.MaxKeys) {
                     return false; // scan aborted by user or finished scanning the required range
                 } else {
                     // remove already scanned items from the range query
@@ -549,7 +551,7 @@ namespace NKikimr::NBlobDepot {
             const auto& from = reverse ? TKey::Min() : range.Begin;
             const auto& to = reverse ? range.End : TKey::Max();
             LoadedKeys.EnumInRange(from, to, reverse, [&](const TKey& left, const TKey& right, bool isRangeLoaded) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT83, "ScanRange.Step", (Id, Self->GetLogId()), (Left, left), (Right, right),
+                STLOG(PRI_TRACE, BLOB_DEPOT, BDT83, "ScanRange.Step", (Id, Self->GetLogId()), (Left, left), (Right, right),
                     (IsRangeLoaded, isRangeLoaded), (From, from), (To, to));
                 if (!isRangeLoaded) {
                     // we have to load range (left, right), not including both ends
@@ -565,7 +567,7 @@ namespace NKikimr::NBlobDepot {
                             break;
                         } else if (range.Flags & EScanFlags::INCLUDE_BEGIN ? key < range.Begin : key <= range.Begin) {
                             return false; // just left the left side of the range
-                        } else if ((key != range.End || range.Flags & EScanFlags::INCLUDE_END) && !issue(TKey(key), value)) {
+                        } else if ((key != range.End || range.Flags & EScanFlags::INCLUDE_END) && !issue(key, value)) {
                             return false; // enough keys processed
                         }
                     }
@@ -576,10 +578,14 @@ namespace NKikimr::NBlobDepot {
                         const auto& [key, value] = *it;
                         if (range.Flags & EScanFlags::INCLUDE_END ? range.End < key : range.End <= key) {
                             return false; // just left the right side of the range
-                        } else if ((key != range.Begin || range.Flags & EScanFlags::INCLUDE_BEGIN) && !issue(TKey(key), value)) {
+                        } else if ((key != range.Begin || range.Flags & EScanFlags::INCLUDE_BEGIN) && !issue(key, value)) {
                             return false; // enough keys processed
                         }
                     }
+                }
+                if (!loader.LastProcessedKey || (reverse & EScanFlags::REVERSE ? left < *loader.LastProcessedKey :
+                        *loader.LastProcessedKey < right)) {
+                    loader.LastProcessedKey.emplace(reverse ? left : right);
                 }
                 return true;
             });

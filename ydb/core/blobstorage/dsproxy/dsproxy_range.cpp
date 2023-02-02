@@ -299,7 +299,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         if (To < From) {
             std::reverse(result->Responses.begin(), result->Responses.end());
         }
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSR05", "Result# " << result->Print(false));
+        A_LOG_LOG_S(true, NLog::PRI_INFO, "DSR05", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -307,7 +307,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         std::unique_ptr<TEvBlobStorage::TEvRangeResult> result(new TEvBlobStorage::TEvRangeResult(
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
-        A_LOG_LOG_S(true, PriorityForStatusOutbound(status), "DSR06", "Result# " << result->Print(false));
+        A_LOG_LOG_S(true, NLog::PRI_NOTICE, "DSR06", "Result# " << result->Print(false));
         SendReply(result);
     }
 
@@ -342,7 +342,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, "DSProxy.Range")
+                ev->RestartCounter, "DSProxy.Range", std::move(ev->ExecutionRelay))
         , TabletId(ev->TabletId)
         , From(ev->From)
         , To(ev->To)

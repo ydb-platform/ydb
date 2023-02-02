@@ -109,6 +109,9 @@ namespace NKikimr::NBlobDepot {
     protected:
         TBlobDepotAgent& Agent;
 
+        friend class TBlobDepotAgent;
+        std::set<std::weak_ptr<TEvBlobStorage::TExecutionRelay>, std::owner_less<std::weak_ptr<TEvBlobStorage::TExecutionRelay>>> SubrequestRelays;
+
     public:
         using TResponse = std::variant<
             // internal events
@@ -135,7 +138,8 @@ namespace NKikimr::NBlobDepot {
         TRequestSender(TBlobDepotAgent& agent);
         virtual ~TRequestSender();
         void ClearRequestsInFlight();
-        void OnRequestComplete(TRequestInFlight& requestInFlight, TResponse response);
+        void OnRequestComplete(TRequestInFlight& requestInFlight, TResponse response,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay);
 
     protected:
         virtual void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) = 0;
@@ -150,7 +154,7 @@ namespace NKikimr::NBlobDepot {
         , public TRequestSender
     {
         const ui32 VirtualGroupId;
-        const TActorId ProxyId;
+        TActorId ProxyId;
         const ui64 AgentInstanceId;
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
@@ -230,12 +234,14 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
                 if (!info->GetTotalVDisksNum()) {
+                    // proxy finishes serving user requests
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
-                    return;
+                    ProxyId = {};
                 }
             }
-
-            TActivationContext::Send(ev->Forward(ProxyId));
+            if (ProxyId) {
+                TActivationContext::Send(ev->Forward(ProxyId));
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -249,7 +255,8 @@ namespace NKikimr::NBlobDepot {
         TRequestsInFlight OtherRequestInFlight;
 
         void RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,
-            TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet);
+            TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay = nullptr);
 
         template<typename TEvent>
         void HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev);
@@ -257,7 +264,8 @@ namespace NKikimr::NBlobDepot {
         template<typename TEvent>
         void HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev);
 
-        void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map);
+        void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map,
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay = nullptr);
         void DropTabletRequest(ui64 id);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -312,6 +320,7 @@ namespace NKikimr::NBlobDepot {
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
+            std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
 
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
@@ -365,7 +374,9 @@ namespace NKikimr::NBlobDepot {
             TBlobStorageQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
                 : TQuery(agent, std::move(event))
                 , Request(*Event->Get<TEvent>())
-            {}
+            {
+                ExecutionRelay = std::move(Request.ExecutionRelay);
+            }
 
         protected:
             TEvent& Request;

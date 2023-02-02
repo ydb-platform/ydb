@@ -159,6 +159,10 @@ namespace NKikimr::NBlobDepot {
         auto nh = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
         nh.key() = now + WatchdogDuration;
         QueryWatchdogMapIter = Agent.QueryWatchdogMap.insert(std::move(nh));
+        for (const auto& cookie : SubrequestRelays) {
+            Y_VERIFY_S(!cookie.expired(), "AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
+                << " subrequest got stuck");
+        }
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
@@ -171,7 +175,9 @@ namespace NKikimr::NBlobDepot {
 #define XX(TYPE) \
             case TEvBlobStorage::TYPE: \
                 response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, Agent.VirtualGroupId); \
-                break;
+                static_cast<TEvBlobStorage::T##TYPE##Result&>(*response).ExecutionRelay = std::move(ExecutionRelay); \
+                break; \
+            //
 
             ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
@@ -185,6 +191,16 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (AgentId, Agent.LogId),
             (QueryId, GetQueryId()), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
+        switch (response->Type()) {
+#define XX(TYPE) \
+            case TEvBlobStorage::TYPE##Result: \
+                static_cast<TEvBlobStorage::T##TYPE##Result&>(*response).ExecutionRelay = std::move(ExecutionRelay); \
+                break; \
+            //
+
+            ENUMERATE_INCOMING_EVENTS(XX)
+#undef XX
+        }
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(true);
         DoDestroy();

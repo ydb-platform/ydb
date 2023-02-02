@@ -454,7 +454,7 @@ namespace NKikimr::NBlobDepot {
             };
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Id, ev->Cookie), (Channel, channelIndex), (InvalidatedStep, invalidatedStep),
+                (Id, ev->Cookie), (Channel, int(channelIndex)), (InvalidatedStep, invalidatedStep),
                 (GivenIdRanges, channel.GivenIdRanges),
                 (Agent.GivenIdRanges, agent.GivenIdRanges[channelIndex]),
                 (WritesInFlight, makeWritesInFlight()));

@@ -70,6 +70,8 @@ void TNodeWarden::SendRegisterNode() {
         }
     }
 
+    WorkingLocalDrives = ListLocalDrives();
+
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>(LocalNodeId, startedDynamicGroups, generations,
         WorkingLocalDrives);
     FillInVDiskStatus(ev->Record.MutableVDiskStatus(), true);

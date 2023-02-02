@@ -120,9 +120,10 @@ message TYtGatewayConfig {
 /////////////////////////////// Grut ///////////////////////////////
 
 message TYtOrmClusterConfig {
-    optional string Name = 1;
-    optional string Cluster = 2; // Real cluster server name with port
+    optional string Name = 1; // Examples: grut_testing, grut_stable, grut_dev
+    optional string Cluster = 2; // Examples: sas, vla, etc
     optional bool Enabled = 3 [default = true]; // Allow to handle YTORM queries
+    optional string EndpointSetId = 4; // Examples: grut-stable.object_api, grut-testing.object_api, etc
 }
 
 message TYtOrmGatewayConfig {

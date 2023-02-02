@@ -39,7 +39,9 @@ private:
         TReadItem(const TReadBlobRangeOptions& opts, const TBlobRange& blobRange)
             : TReadBlobRangeOptions(opts)
             , BlobRange(blobRange)
-        {}
+        {
+            Y_VERIFY(blobRange.BlobId.IsValid());
+        }
 
         bool PromoteInCache() const {
             return CacheAfterRead;
@@ -550,7 +552,6 @@ private:
             CookieToRange.erase(readCookie);
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
-                Y_VERIFY(blobRanges[i].BlobId.IsSmallBlob());
                 Y_VERIFY(blobRanges[i].BlobId.GetTabletId() == tabletId);
                 ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, ctx);
             }

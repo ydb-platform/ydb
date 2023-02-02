@@ -25,7 +25,10 @@ public:
     TS3Export() = default;
 
     explicit TS3Export(TAutoPtr<TEvPrivate::TEvExport> ev)
-        : Event(ev.Release()) {
+        : Event(ev.Release())
+    {
+        Y_VERIFY(Event);
+        Y_VERIFY(Event->Status == NKikimrProto::UNKNOWN);
     }
 
     TEvPrivate::TEvExport::TBlobDataMap& Blobs() {
@@ -125,7 +128,7 @@ public:
 
             ex.RegisterKey(key);
             ExportingKeys[key] = exportNo;
-            
+
             if (blob.Evicting) {
                 SendPutObjectIfNotExists(key, std::move(blob.Data));
             } else {
@@ -185,7 +188,7 @@ public:
         const bool hasError = !resultOutcome.IsSuccess();
         TString errStr;
         if (hasError) {
-            errStr = LogError("PutObjectResponse", resultOutcome.GetError(), !!msg.Key);
+            errStr = LogError("PutObjectResponse", resultOutcome.GetError(), msg.Key);
         }
 
         Y_VERIFY(msg.Key); // FIXME
@@ -225,7 +228,7 @@ public:
         const auto& resultOutcome = msg.Result;
 
         if (!resultOutcome.IsSuccess()) {
-            KeyFinished(context->GetKey(), true, LogError("CheckObjectExistsResponse", resultOutcome.GetError(), !!context->GetKey()));
+            KeyFinished(context->GetKey(), true, LogError("CheckObjectExistsResponse", resultOutcome.GetError(), context->GetKey()));
         } else if (!msg.IsExists()) {
             SendPutObject(context->GetKey(), std::move(context->DetachData()));
         } else {
@@ -241,7 +244,7 @@ public:
 
         TString errStr;
         if (!resultOutcome.IsSuccess()) {
-            errStr = LogError("DeleteObjectResponse", resultOutcome.GetError(), !!msg.Key);
+            errStr = LogError("DeleteObjectResponse", resultOutcome.GetError(), msg.Key);
         }
 
         Y_VERIFY(msg.Key); // FIXME
@@ -287,7 +290,7 @@ public:
 
         TString errStr;
         if (!resultOutcome.IsSuccess()) {
-            errStr = LogError("GetObjectResponse", resultOutcome.GetError(), !!key);
+            errStr = LogError("GetObjectResponse", resultOutcome.GetError(), key);
         }
 
         if (!key || key->empty()) {
@@ -357,12 +360,12 @@ public:
         if (hasError) {
             ex.Event->Status = NKikimrProto::ERROR;
             Y_VERIFY(ex.Event->ErrorStrings.emplace(key, errStr).second, "%s", key.data());
-            if (ex.ExtractionFinished()) {
-                Send(ShardActor, ex.Event.release());
-                Exports.erase(exportNo);
+        }
+
+        if (ex.ExtractionFinished()) {
+            if (ex.Event->Status == NKikimrProto::UNKNOWN) {
+                ex.Event->Status = NKikimrProto::OK;
             }
-        } else if (ex.ExtractionFinished()) {
-            ex.Event->Status = NKikimrProto::OK;
             Send(ShardActor, ex.Event.release());
             Exports.erase(exportNo);
         }
@@ -392,7 +395,7 @@ private:
             hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvCheckObjectExistsResponse, Handle);
-            
+
 #if 0
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
 #endif
@@ -460,13 +463,16 @@ private:
         Send(ExternalStorageActorId, new TEvExternalStorage::TEvDeleteObjectRequest(request));
     }
 
-    TString LogError(const TString& responseType, const Aws::S3::S3Error& error, bool hasKey) const {
+    TString LogError(const TString& responseType, const Aws::S3::S3Error& error,
+                     const std::optional<TString>& key) const {
         TString errStr = TString(error.GetExceptionName()) + " " + error.GetMessage();
-        if (errStr.empty() && !hasKey) {
+
+        LOG_S_NOTICE("[S3] Error in " << responseType << " for key '" << (key ? *key : TString())
+            << "' at tablet " << TabletId << ": " << errStr);
+
+        if (errStr.empty() && !key) {
             errStr = responseType + " with no key";
         }
-
-        LOG_S_NOTICE("[S3] Error in " << responseType << " at tablet " << TabletId << ": " << errStr);
         return errStr;
     }
 };

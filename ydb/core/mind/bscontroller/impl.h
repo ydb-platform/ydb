@@ -848,7 +848,7 @@ public:
 
     };
 
-    std::map<TString, TNodeId> NodeForSerial;
+    std::unordered_map<TString, TNodeId> NodeIdByDiskSerialNumber;
     TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
 
     struct THostConfigInfo {

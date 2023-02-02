@@ -221,8 +221,8 @@ message TDriveLifeStage {
     enum E {
         UNKNOWN = 0; // life stage is unknown (default)
         NOT_SEEN = 1; // info about drive is located in BSC db, but drive is not seen in any node
-        ALLOCATED = 2; // PDisk is created
-        REMOVED = 3; // drive marked as removed
+        ADDED = 2; // PDisk has been added to the DrivesSerials table
+        REMOVED = 3; // PDisk has been removed from the DrivesSerials table
         ERROR = 4; // drive was moved between nodes with allocated VDisks
     }
 }
@@ -706,6 +706,7 @@ message TConfigResponse {
                 NKikimrBlobStorage.TVDiskID VDiskId = 12;
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
                 string StoragePoolName = 14;
+                string DiskSerialNumber = 15;
             }
         }
 

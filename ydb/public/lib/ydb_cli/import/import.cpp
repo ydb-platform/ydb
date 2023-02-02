@@ -176,7 +176,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     std::deque<TAsyncStatus> inFlightRequests;
 
-    ui32 idx = 0;
+    ui32 idx = settings.SkipRows_;
     ui64 readSize = 0;
     const ui32 mb100 = 1 << 27;
     ui64 nextBorder = mb100;

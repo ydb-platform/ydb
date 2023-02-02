@@ -1516,6 +1516,11 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
         }
     }
 
+    if (service == SolomonProviderName) {
+        Ctx.Error() << "Selecting data from monitoring source is not supported";
+        return false;
+    }
+
     TTableRef tr(Context().MakeName("table"), service, cluster, nullptr);
     TPosition pos(Context().Pos());
     TTableHints hints = GetContextHints(Ctx);

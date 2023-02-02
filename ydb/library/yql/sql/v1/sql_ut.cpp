@@ -32,6 +32,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     const TString cluster = "plato";
     settings.ClusterMapping[cluster] = service;
     settings.ClusterMapping["hahn"] = NYql::YtProviderName;
+    settings.ClusterMapping["mon"] = NYql::SolomonProviderName;
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
     settings.Arena = &arena;
@@ -4693,5 +4694,13 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:0:5: Error: Unknown type: 'BadType'\n"
             "<main>: Error: Failed to parse type for externally declared name 'foo'\n");
+    }
+
+    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
+        NSQLTranslation::TTranslationSettings settings;
+        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
 }

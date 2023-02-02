@@ -59,7 +59,7 @@ void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream&
 enum class EParseFromTextFormatOption : ui64 {
     // Unknown fields will be ignored by the parser
     AllowUnknownField = 1,
-    // Error message will be will be written to stderr in the original format
+    // Error message will be written to stderr in the original format
     ForceWriteParsingErrorsToCerr = 2
 };
 

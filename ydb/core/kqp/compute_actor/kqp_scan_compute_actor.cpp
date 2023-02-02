@@ -626,6 +626,7 @@ private:
         if (state->State == EShardState::PostRunning || state->State == EShardState::Running) {
             state->State = EShardState::Initial;
             state->ActorId = {};
+            InFlightShards.ClearAckState(state);
             state->ResetRetry();
             return StartReadShard(state);
         }
@@ -954,6 +955,7 @@ private:
             return ResolveShard(*state);
         }
 
+        InFlightShards.ClearAckState(state);
         state->RetryAttempt++;
         state->TotalRetries++;
         state->Generation = InFlightShards.AllocateGeneration(state);

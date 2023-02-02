@@ -6,11 +6,13 @@
 #include "kqp_table_resolver.h"
 #include "kqp_shards_resolver.h"
 
+
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -366,11 +368,19 @@ protected:
         return false;
     }
 
+    void InvalidateNode(ui64 node) {
+        for (auto tablet : ShardsOnNode[node]) {
+            auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
+            this->Send(MakePipePeNodeCacheID(false), ev.Release());
+        }
+    }
+
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 eventType = ev->Get()->SourceType;
         auto reason = ev->Get()->Reason;
         switch (eventType) {
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
+                InvalidateNode(ev->Cookie);
                 return InternalError(TStringBuilder()
                     << "TEvKqpNode::TEvStartKqpTasksRequest lost: " << reason);
             }

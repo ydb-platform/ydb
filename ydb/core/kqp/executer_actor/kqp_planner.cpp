@@ -187,7 +187,7 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
             auto target = MakeKqpNodeServiceID(nodeId);
             LOG_D("Send request to kqpnode: " << target << ", node_id: " << SelfId().NodeId() << ", TxId: " << TxId);
             TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(),
-                CalcSendMessageFlagsForNode(target.NodeId()), 0, nullptr, KqpPlannerSpan.GetTraceId()));
+                CalcSendMessageFlagsForNode(target.NodeId()), nodeId, nullptr, KqpPlannerSpan.GetTraceId()));
             ++requestsCnt;
         }
         Y_VERIFY(ScanTasks.empty());

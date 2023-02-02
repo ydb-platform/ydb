@@ -367,12 +367,15 @@ public:
             return;
         }
 
-        TStringStream json;
-        auto* httpResult = google::protobuf::Arena::CreateMessage<THttpProtoResultType>(resp->GetArena());
-        FqConvert(*grpcResult, *httpResult);
-        FqPackToJson(json, *httpResult, jsonSettings);
-
-        requestContext.ResponseOKJson(json.Str());
+        try {
+            TStringStream json;
+            auto* httpResult = google::protobuf::Arena::CreateMessage<THttpProtoResultType>(resp->GetArena());
+            FqConvert(*grpcResult, *httpResult);
+            FqPackToJson(json, *httpResult, jsonSettings);
+            requestContext.ResponseOKJson(json.Str());
+        } catch (const std::exception& e) {
+            requestContext.ResponseInternalServerError(TStringBuilder() << "Error during formatting response: " << e.what());
+        }
     }
 };
 

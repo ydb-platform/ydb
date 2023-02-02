@@ -22,6 +22,7 @@ public:
     void ResponseNotFound() const;
     void ResponseNoContent() const;
     void ResponseUnauthenticated(const TString& message) const;
+    void ResponseInternalServerError(const TString& message) const;
 
     void SetPathParams(std::map<TString, TString> pathParams);
     const std::map<TString, TString>& GetPathParams() const;

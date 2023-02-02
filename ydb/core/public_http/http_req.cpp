@@ -126,6 +126,10 @@ namespace NKikimr::NPublicHttp {
         DoResponse("401", "Unauthorized", message);
     }
 
+    void THttpRequestContext::ResponseInternalServerError(const TString& message) const {
+        DoResponse("500", "Internal Server Error", message);
+    }
+
     void THttpRequestContext::DoResponse(TStringBuf status, TStringBuf message, TStringBuf body, TStringBuf contentType) const {
         auto res = Request->CreateResponse(status, message, contentType, body);
         ActorSystem->Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));

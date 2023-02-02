@@ -4523,8 +4523,8 @@ TExprNode::TPtr UnpickleInput(TExprNode::TPtr originalLambda, TListExpandMap& li
                                 inner
                                     .With(j)
                                         .Callable("Unpickle")
-                                            .Arg(0, "out", j)
-                                            .Add(1, ExpandType(originalLambda->Pos(), *it->second, ctx))
+                                            .Add(0, ExpandType(originalLambda->Pos(), *it->second, ctx))
+                                            .Arg(1, "out", j)
                                         .Seal()
                                     .Done()
                                     ;

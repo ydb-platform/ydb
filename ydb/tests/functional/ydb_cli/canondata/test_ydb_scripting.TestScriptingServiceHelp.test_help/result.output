@@ -19,11 +19,18 @@ Options:
                            Several parameter options can be specified.
                            To change input format use --input-format option.
                            Escaping depends on operating system.
-  --input-format STRING    Input format. Available options:
-                             json-unicode
-                               Input in json format, binary strings are decoded with unicode characters
-                             json-base64
-                               Input in json format, binary strings are decoded with base64
+  --param-file PATH        File name with parameter names and values in json format. You may specify this option repeatedly.
+  --stdin-par STRING       Parameter name on stdin, required/applicable when stdin-format implies values only.
+  --batch STRING           Batching mode for stdin parameters processing. Available options:
+                             iterative
+                               Executes script for each parameter set (exactly one execution when no framing specified in "stdin-format")
+                             full
+                               Executes script once, with all parameter sets wrapped in json list, when EOF is reached on stdin
+                             adaptive
+                               Executes script with a json list of parameter sets every time when its number reaches batch-limit, or the waiting time reaches batch-max-delay.
+                           Default: "iterative".
+  --batch-limit INT        Maximum size of list for adaptive batching mode (default: 1000)
+  --batch-max-delay VAL    Maximum delay to process first item in the list for adaptive batching mode (default: "1.000000s")
   --format STRING          Output format. Available options:
                              pretty
                                Human readable output
@@ -35,3 +42,25 @@ Options:
                                Output in json format, binary strings are encoded with base64. Every row is a separate json on a separate line.
                              json-base64-array
                                Output in json format, binary strings are encoded with base64. Every resultset is a json array of rows. Every row is a separate json on a separate line.
+                           Default: "pretty".
+  --input-format STRING    Input format. Available options:
+                             json-unicode
+                               Input in json format, binary strings are decoded with unicode characters
+                             json-base64
+                               Input in json format, binary strings are decoded with base64
+                           Default: "json-unicode".
+  --stdin-format STRING    Stdin parameters format and framing. Specify this option twice to select both.
+                           1. Parameters format. Available options:
+                             json-unicode
+                               Parameter names and values in json unicode format
+                             json-base64
+                               Parameter names and values in json unicode format, binary string parameter values are base64-encoded
+                             raw
+                               Binary value with no transformations or parsing, parameter name is set by an "stdin-par" option
+                           Default: "json-unicode".
+                           2. Framing: defines how parameter sets are delimited on the stdin. Available options:
+                             no-framing
+                               Data from stdin is taken as a single set of parameters
+                             newline-delimited
+                               Newline character delimits parameter sets on stdin and triggers processing in accordance to "batch" option
+                           Default: "no-framing".

@@ -64,14 +64,14 @@ class BaseTestTableService(object):
             cls.cluster.stop()
 
     @classmethod
-    def execute_ydb_cli_command(cls, args):
+    def execute_ydb_cli_command(cls, args, stdin=None):
         execution = yatest_common.execute(
             [
                 ydb_bin(),
                 "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
                 "--database", cls.root_dir
             ] +
-            args
+            args, stdin=stdin
         )
 
         result = execution.std_out
@@ -228,3 +228,396 @@ class TestExecuteQueryWithFormats(BaseTestTableService):
 
     def test_read_table_tsv(self):
         return self.execute_read_table('tsv')
+
+
+class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
+    @classmethod
+    def setup_class(cls):
+        BaseTestTableService.setup_class()
+
+        session = cls.driver.table_client.session().create()
+        cls.table_path = cls.root_dir + "/table_params_from_json"
+        create_table_with_data(session, cls.table_path)
+
+    @staticmethod
+    def write_data(data, filename="params.json"):
+        with open(filename, "w") as file:
+            file.write(data)
+
+    def uint32(self, query_type):
+        param_data = '{\n' \
+            '   "par1": 1\n' \
+            '}'
+        query = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
+        )
+        return self.canonical_result(output)
+
+    def uint64_and_string(self, query_type):
+        param_data = '{\n' \
+            '   "value": "seven",\n' \
+            '   "id": 2222' \
+            '}'
+        query = "DECLARE $id AS Uint64; "\
+                "DECLARE $value AS String; "\
+                "SELECT * FROM `{}` WHERE id = $id OR value = $value;".format(self.table_path)
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
+        )
+        return self.canonical_result(output)
+
+    def list(self, query_type):
+        param_data = '{\n' \
+            '   "values": [1, 2, 3]\n' \
+            '}'
+        query = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
+        )
+        return self.canonical_result(output)
+
+    def struct(self, query_type):
+        param_data = '{\n' \
+            '   "values": [\n' \
+            '       {\n'\
+            '           "key": 1,\n'\
+            '           "value": "one"\n'\
+            '       },\n'\
+            '       {\n'\
+            '           "key": 2,\n'\
+            '           "value": "two"\n'\
+            '       }\n'\
+            '   ]\n'\
+            '}'
+        query = "DECLARE $values AS List<Struct<key:Uint64, value:Utf8>>; "\
+                "SELECT "\
+                "Table.key AS key, "\
+                "Table.value AS value "\
+                "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
+        )
+        return self.canonical_result(output)
+
+    def multiple_files(self, query_type):
+        param_data1 = '{\n' \
+            '   "str": "Строчка"\n' \
+            '}'
+        param_data2 = '{\n' \
+            '   "num": 1542\n' \
+            '}'
+        param_data3 = '{\n' \
+            '   "date": "2011-11-11"\n' \
+            '}'
+        query = "DECLARE $str AS Utf8; "\
+                "DECLARE $num AS Uint64; "\
+                "DECLARE $date AS Date; "\
+                "SELECT $str AS str, $num as num, $date as date; "
+        self.write_data(param_data1, "param1.json")
+        self.write_data(param_data2, "param2.json")
+        self.write_data(param_data3, "param3.json")
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "--param-file", "param1.json", "--param-file",
+             "param2.json", "--param-file", "param3.json", "-q", query]
+        )
+        return self.canonical_result(output)
+
+    def ignore_excess_parameters(self, query_type):
+        param_data = '{\n' \
+            '   "a": 12,\n' \
+            '   "b": 34' \
+            '}'
+        query = "DECLARE $a AS Uint64; " \
+                "SELECT $a AS a; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--param-file", "params.json"]
+        )
+        return self.canonical_result(output)
+
+    def test_data_query_uint32(self):
+        return self.uint32("data")
+
+    def test_data_query_uint64_and_string(self):
+        return self.uint64_and_string("data")
+
+    def test_data_query_list(self):
+        return self.list("data")
+
+    def test_data_query_struct(self):
+        return self.struct("data")
+
+    def test_data_query_multiple_files(self):
+        return self.multiple_files("data")
+
+    def test_data_ignore_excess_parameters(self):
+        return self.ignore_excess_parameters("data")
+
+    def test_scan_query_uint32(self):
+        return self.uint32("scan")
+
+    def test_scan_query_uint64_and_string(self):
+        return self.uint64_and_string("scan")
+
+    def test_scan_query_list(self):
+        return self.list("scan")
+
+    def test_scan_query_struct(self):
+        return self.struct("scan")
+
+    def test_scan_query_multiple_files(self):
+        return self.multiple_files("scan")
+
+    def test_scan_ignore_excess_parameters(self):
+        return self.ignore_excess_parameters("scan")
+
+
+class TestExecuteQueryWithParamsFromStdin(BaseTestTableService):
+    @classmethod
+    def setup_class(cls):
+        BaseTestTableService.setup_class()
+
+        session = cls.driver.table_client.session().create()
+        cls.table_path = cls.root_dir + "/table_params_from_stdin"
+        create_table_with_data(session, cls.table_path)
+
+    @staticmethod
+    def write_data(data, filename="stdin.txt"):
+        with open(filename, "w") as file:
+            file.write(data)
+
+    @classmethod
+    def get_stdin(cls):
+        cls.stdin = open("stdin.txt", "r")
+        return cls.stdin
+
+    @classmethod
+    def close_stdin(cls):
+        cls.stdin.close()
+
+    def simple_json(self, query_type):
+        param_data = '{\n' \
+            '   "s": "Some_string",\n' \
+            '   "val": 32\n' \
+            '}'
+        query = "DECLARE $s AS Utf8; "\
+                "DECLARE $val AS Uint64; "\
+                "SELECT $s AS s, $val AS val; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(["table", "query", "execute", "-t", query_type, "-q", query], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def text_data(self, query_type):
+        param_data = 'Line1\n' \
+            'Line2\n' \
+            'Line3\n'
+        query = "DECLARE $s AS Utf8; " \
+                "SELECT $s AS s; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-format", "raw", "--stdin-par", "s"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def unnamed_json(self, query_type):
+        param_data = "[1, 2, 3, 4]"
+        query = "DECLARE $arr AS List<Uint64>; "\
+                "SELECT $arr AS arr; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-par", "arr"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def mix_json_and_binary(self, query_type):
+        param_data1 = 'Строка номер 1\n' \
+            'String number 2\n' \
+            'Строка номер 3'
+        param_data2 = '{\n' \
+            '   "date": "2044-08-21",\n' \
+            '   "val": 32\n' \
+            '}'
+        query = "DECLARE $s AS String; " \
+                "DECLARE $date AS Date; " \
+                "DECLARE $val AS Uint64; " \
+                "SELECT $s AS s, $date AS date, $val AS val; "
+        self.write_data(param_data1)
+        self.write_data(param_data2, "params.json")
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-par", "s",
+             "--stdin-format", "raw", "--param-file", "params.json"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def different_sources(self, query_type):
+        param_data1 = '{\n' \
+            '   "s": "Строка utf-8"\n' \
+            '}'
+        param_data2 = '{\n' \
+            '   "date": "2000-09-01"\n' \
+            '}'
+        query = "DECLARE $s AS Utf8; " \
+                "DECLARE $date AS Date; " \
+                "DECLARE $val AS Uint64; " \
+                "SELECT $s AS s, $date AS date, $val AS val; "
+        self.write_data(param_data1)
+        self.write_data(param_data2, "params.json")
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--param-file", "params.json", "--param", "$val=100"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def framing_newline_delimited(self, query_type):
+        param_data = '{"s": "Some text", "num": 1}\n' \
+            '{"s": "Строка 1\\nСтрока2", "num": 2}\n' \
+            '{"s": "Abacaba", "num": 3}\n'
+        query = "DECLARE $s AS Utf8; " \
+                "DECLARE $num AS Uint64; " \
+                "SELECT $s AS s, $num AS num; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-format", "newline-delimited"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def text_data_framing(self, query_type):
+        param_data = 'Line1\n' \
+            'Line2\n' \
+            'Line3\n'
+        query = "DECLARE $s AS Utf8; " \
+                "SELECT $s AS s; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-format", "raw",
+             "--stdin-par", "s", "--stdin-format", "newline-delimited"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def batching_full(self, query_type):
+        param_data = 'Line1\n' \
+            'Line2\n' \
+            'Line3\n'
+        query = "DECLARE $s AS List<Utf8>; " \
+                "SELECT $s AS s; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-format", "raw", "--stdin-par", "s",
+             "--stdin-format", "newline-delimited", "--batch", "full"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def batching_adaptive(self, query_type):
+        param_data = '{"s": "Line1", "id": 1}\n' \
+            '{"s": "Line2", "id": 2}\n' \
+            '{"s": "Line3", "id": 3}\n' \
+            '{"s": "Line4", "id": 4}\n' \
+            '{"s": "Line5", "id": 5}\n' \
+            '{"s": "Line6", "id": 6}\n' \
+            '{"s": "Line7", "id": 7}\n' \
+            '{"s": "Line8", "id": 8}\n' \
+            '{"s": "Line9", "id": 9}\n'
+        query = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
+                "SELECT $arr as arr; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-par", "arr", "--stdin-format", "newline-delimited",
+             "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def ignore_excess_parameters(self, query_type):
+        param_data = '{\n' \
+            '   "a": 12,\n' \
+            '   "b": 34' \
+            '}'
+        query = "DECLARE $a AS Uint64; " \
+                "SELECT $a AS a; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            ["table", "query", "execute", "-t", query_type, "-q", query],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def test_data_query_simple_json(self):
+        return self.simple_json("data")
+
+    def test_data_query_text_data(self):
+        return self.text_data("data")
+
+    def test_data_query_unnamed_json(self):
+        return self.unnamed_json("data")
+
+    def test_data_query_mix_json_and_binary(self):
+        return self.mix_json_and_binary("data")
+
+    def test_data_query_different_sources(self):
+        return self.different_sources("data")
+
+    def test_data_query_framing_newline_delimited(self):
+        return self.framing_newline_delimited("data")
+
+    def test_data_query_text_data_framing(self):
+        return self.text_data_framing("data")
+
+    def test_data_query_batching_full(self):
+        return self.batching_full("data")
+
+    def test_data_query_batching_adaptive(self):
+        return self.batching_adaptive("data")
+
+    def test_data_ignore_excess_parameters(self):
+        return self.ignore_excess_parameters("data")
+
+    def test_scan_query_simple_json(self):
+        return self.simple_json("scan")
+
+    def test_scan_query_text_data(self):
+        return self.text_data("scan")
+
+    def test_scan_query_unnamed_json(self):
+        return self.unnamed_json("scan")
+
+    def test_scan_query_mix_json_and_binary(self):
+        return self.mix_json_and_binary("scan")
+
+    def test_scan_query_different_sources(self):
+        return self.different_sources("scan")
+
+    def test_scan_query_framing_newline_delimited(self):
+        return self.framing_newline_delimited("scan")
+
+    def test_scan_query_text_data_framing(self):
+        return self.text_data_framing("scan")
+
+    def test_scan_query_batching_full(self):
+        return self.batching_full("scan")
+
+    def test_scan_query_batching_adaptive(self):
+        return self.batching_adaptive("scan")
+
+    def test_scan_ignore_excess_parameters(self):
+        return self.ignore_excess_parameters("scan")

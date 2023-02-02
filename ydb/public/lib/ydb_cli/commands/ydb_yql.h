@@ -21,7 +21,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    void PrintResponse(NScripting::TYqlResultPartIterator& result);
+    bool PrintResponse(NScripting::TYqlResultPartIterator& result);
 
     TString CollectStatsMode;
     TString Script;

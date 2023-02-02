@@ -355,12 +355,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
 
-    AddParametersOption(config, "(for data & scan queries)");
-
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
+    AddParametersOption(config, "query", "(for data & scan queries)");
 
     AddFormats(config, {
         EOutputFormat::Pretty,
@@ -370,6 +365,20 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
         EOutputFormat::Tsv
+    });
+
+    AddInputFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64
+    });
+
+    AddStdinFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64,
+        EOutputFormat::Raw,
+    }, {
+        EOutputFormat::NoFraming,
+        EOutputFormat::NewlineDelimited
     });
 
     CheckExamples(config);
@@ -383,10 +392,13 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
     if (BasicStats && CollectStatsMode) {
         throw TMisuseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
     }
-    if (ParameterOptions.size() && QueryType == "scheme") {
+    if ((!ParameterOptions.empty() || !ParameterFiles.empty() || !StdinParameters.empty() || IsStdinFormatSet || IsFramingFormatSet ||
+            config.ParseResult->Has("batch")) && QueryType == "scheme") {
         throw TMisuseException() << "Scheme queries does not support parameters.";
     }
-    ParseParameters();
+    ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+        ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
+    ParseParameters(config);
     CheckQueryOptions();
 }
 
@@ -427,25 +439,52 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
             }
         }
     }
+    NTable::TTableClient client(CreateDriver(config));
     NTable::TAsyncDataQueryResult asyncResult;
-    if (Parameters.size()) {
-        auto validateResult = ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate);
-        asyncResult = GetSession(config).ExecuteDataQuery(
-            Query,
-            NTable::TTxControl::BeginTx(txSettings).CommitTx(),
-            BuildParams(validateResult.GetParameterTypes(), InputFormat),
-            FillSettings(settings)
-        );
+
+    if (!Parameters.empty() || !IsStdinInteractive()) {
+        THolder<TParamsBuilder> paramBuilder;
+        while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
+            auto operation = [this, &txSettings, &paramBuilder, &settings, &asyncResult](NTable::TSession session) {
+                auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
+                asyncResult = promise.GetFuture();
+                auto result = session.ExecuteDataQuery(
+                    Query,
+                    NTable::TTxControl::BeginTx(txSettings).CommitTx(),
+                    paramBuilder->Build(),
+                    FillSettings(settings)
+                );
+                return result.Apply([promise](const NTable::TAsyncDataQueryResult& result) mutable {
+                    promise.SetValue(result.GetValue());
+                    return static_cast<TStatus>(result.GetValue());
+                });
+            };
+            auto retryResult = client.RetryOperation(std::move(operation));
+            retryResult.GetValueSync();
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            PrintDataQueryResponse(result);
+        }
     } else {
-        asyncResult = GetSession(config).ExecuteDataQuery(
-            Query,
-            NTable::TTxControl::BeginTx(txSettings).CommitTx(),
-            FillSettings(settings)
-        );
+        auto operation = [this, &txSettings, &settings, &asyncResult](NTable::TSession session) {
+            auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
+            asyncResult = promise.GetFuture();
+            auto result = session.ExecuteDataQuery(
+                Query,
+                NTable::TTxControl::BeginTx(txSettings).CommitTx(),
+                FillSettings(settings)
+            );
+            return result.Apply([promise](const NTable::TAsyncDataQueryResult& result) mutable {
+                promise.SetValue(result.GetValue());
+                return static_cast<TStatus>(result.GetValue());
+            });
+        };
+        auto retryResult = client.RetryOperation(std::move(operation));
+        retryResult.GetValueSync();
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        PrintDataQueryResponse(result);
     }
-    NTable::TDataQueryResult result = asyncResult.GetValueSync();
-    ThrowOnError(result);
-    PrintDataQueryResponse(result);
     return EXIT_SUCCESS;
 }
 
@@ -485,25 +524,56 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
 
     NTable::TAsyncScanQueryPartIterator asyncResult;
-    if (Parameters.size()) {
-        auto validateResult = ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate);
-        asyncResult = client.StreamExecuteScanQuery(
-            Query,
-            BuildParams(validateResult.GetParameterTypes(), InputFormat),
-            settings
-        );
+    SetInterruptHandlers();
+    if (!Parameters.empty() || !IsStdinInteractive()) {
+        THolder<TParamsBuilder> paramBuilder;
+        while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
+            auto operation = [this, &paramBuilder, &settings, &asyncResult](NTable::TTableClient client) {
+                auto promise = NThreading::NewPromise<NTable::TScanQueryPartIterator>();
+                asyncResult = promise.GetFuture();
+                auto result = client.StreamExecuteScanQuery(
+                    Query,
+                    paramBuilder->Build(),
+                    settings
+                );
+                return result.Apply([promise](const NTable::TAsyncScanQueryPartIterator& result) mutable {
+                    promise.SetValue(result.GetValue());
+                    return static_cast<TStatus>(result.GetValue());
+                });
+            };
+            auto retryResult = client.RetryOperation(std::move(operation));
+            retryResult.GetValueSync();
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            if (!PrintScanQueryResponse(result)) {
+                return EXIT_FAILURE;
+            }
+        }
     } else {
-        asyncResult = client.StreamExecuteScanQuery(Query, settings);
+        auto operation = [this, &settings, &asyncResult](NTable::TTableClient client) {
+            auto promise = NThreading::NewPromise<NTable::TScanQueryPartIterator>();
+            asyncResult = promise.GetFuture();
+            auto result = client.StreamExecuteScanQuery(
+                Query,
+                settings
+            );
+            return result.Apply([promise](const NTable::TAsyncScanQueryPartIterator& result) mutable {
+                promise.SetValue(result.GetValue());
+                return static_cast<TStatus>(result.GetValue());
+            });
+        };
+        auto retryResult = client.RetryOperation(std::move(operation));
+        retryResult.GetValueSync();
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        if (!PrintScanQueryResponse(result)) {
+            return EXIT_FAILURE;
+        }
     }
-
-    auto result = asyncResult.GetValueSync();
-    ThrowOnError(result);
-    PrintScanQueryResponse(result);
     return EXIT_SUCCESS;
 }
 
-void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator& result) {
-    SetInterruptHandlers();
+bool TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator& result) {
     TMaybe<TString> stats;
     TMaybe<TString> fullStats;
     {
@@ -546,7 +616,9 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
 
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
+        return false;
     }
+    return true;
 }
 
 TCommandExplain::TCommandExplain()

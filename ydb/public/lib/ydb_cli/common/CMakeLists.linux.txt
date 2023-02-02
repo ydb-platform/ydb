@@ -53,3 +53,8 @@ generate_enum_serilization(common
   INCLUDE_HEADERS
   ydb/public/lib/ydb_cli/common/formats.h
 )
+generate_enum_serilization(common
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.h
+  INCLUDE_HEADERS
+  ydb/public/lib/ydb_cli/common/parameters.h
+)

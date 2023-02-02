@@ -17,6 +17,15 @@ namespace {
         { EOutputFormat::Tsv, "Input in tsv format" },
     };
 
+    THashMap<EOutputFormat, TString> StdinFormatDescriptions = {
+        { EOutputFormat::JsonUnicode, "Parameter names and values in json unicode format" },
+        { EOutputFormat::JsonBase64, "Parameter names and values in json unicode format, binary string parameter values are base64-encoded" },
+        { EOutputFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
+                                            "processing in accordance to \"batch\" option" },
+        { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
+        { EOutputFormat::NoFraming, "Data from stdin is taken as a single set of parameters" }
+    };
+
     THashMap<EOutputFormat, TString> FormatDescriptions = {
         { EOutputFormat::Pretty, "Human readable output" },
         { EOutputFormat::Json, "Output in json format" },
@@ -78,10 +87,13 @@ void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config
         .Hidden();
 }
 
-void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats) {
+void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, 
+                                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_VERIFY(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = InputFormatDescriptions.find(format);
         Y_VERIFY(findResult != InputFormatDescriptions.end(),
@@ -89,15 +101,48 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, const 
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
             << "\n    " << findResult->second;
     }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("input-format", description.Str())
         .RequiredArgument("STRING").StoreResult(&InputFormat);
     AllowedInputFormats = allowedFormats;
 }
 
-void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats) {
+void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EOutputFormat>& allowedStdinFormats,
+                                         const TVector<EOutputFormat>& allowedFramingFormats) {
+    TStringStream description;
+    description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
+                << "1. Parameters format. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    for (const auto& format : allowedStdinFormats) {
+        auto findResult = StdinFormatDescriptions.find(format);
+        Y_VERIFY(findResult != StdinFormatDescriptions.end(),
+                 "Couldn't find description for %s stdin format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+                    << "\n    " << findResult->second;
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"json-unicode\"" << colors.OldColor() << ".";
+    description << "\n2. Framing: defines how parameter sets are delimited on the stdin. Available options: ";
+    for (const auto& format : allowedFramingFormats) {
+        auto findResult = StdinFormatDescriptions.find(format);
+        Y_VERIFY(findResult != StdinFormatDescriptions.end(),
+                 "Couldn't find description for %s framing format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+                    << "\n    " << findResult->second;
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"no-framing\"" << colors.OldColor() << ".";
+    config.Opts->AddLongOption("stdin-format", description.Str())
+            .RequiredArgument("STRING").AppendTo(&StdinFormats);
+    AllowedStdinFormats = allowedStdinFormats;
+    AllowedFramingFormats = allowedFramingFormats;
+}
+
+void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, 
+                                    const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_VERIFY(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = FormatDescriptions.find(format);
         Y_VERIFY(findResult != FormatDescriptions.end(),
@@ -105,6 +150,7 @@ void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, const TVect
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
             << "\n    " << findResult->second;
     }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("format", description.Str())
         .RequiredArgument("STRING").StoreResult(&OutputFormat);
     AllowedFormats = allowedFormats;
@@ -133,6 +179,37 @@ void TCommandWithFormat::ParseFormats() {
         throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
     }
 
+    if (!StdinFormats.empty()) {
+        for (const auto& format : AllowedInputFormats) {
+            Y_VERIFY(std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end(), 
+                     "Allowed stdin formats should contain all allowed input formats");
+        }
+        for (const auto& format : StdinFormats) {
+            if (format == EOutputFormat::Default) {
+                IsStdinFormatSet = true;
+                IsFramingFormatSet = true;
+            } else if (std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end()) {
+                if (IsStdinFormatSet) {
+                    throw TMisuseException() << "Formats " << StdinFormat << " and " << format
+                                             << " are mutually exclusive, choose only one of them.";
+                }
+                StdinFormat = format;
+                IsStdinFormatSet = true;
+            } else if (std::find(AllowedFramingFormats.begin(), AllowedFramingFormats.end(), format) != AllowedFramingFormats.end()) {
+                if (IsFramingFormatSet) {
+                    throw TMisuseException() << "Formats " << StdinFormat << " and " << format
+                                             << " are mutually exclusive, choose only one of them.";
+                }
+                FramingFormat = format;
+                IsFramingFormatSet = true;
+            } else {
+                throw TMisuseException() << "Stdin format " << format << " is not available for this command";
+            }
+        }
+        if (!IsStdinFormatSet) {
+            StdinFormat = InputFormat;
+        }
+    }
 
     if (OutputFormat == EOutputFormat::Default || DeprecatedOptionUsed) {
         return;

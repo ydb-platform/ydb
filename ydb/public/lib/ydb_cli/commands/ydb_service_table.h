@@ -106,7 +106,7 @@ public:
     int ExecuteSchemeQuery(TConfig& config);
 
     int ExecuteScanQuery(TConfig& config);
-    void PrintScanQueryResponse(NTable::TScanQueryPartIterator& result);
+    bool PrintScanQueryResponse(NTable::TScanQueryPartIterator& result);
 
 private:
     TString CollectStatsMode;

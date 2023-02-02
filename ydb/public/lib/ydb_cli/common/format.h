@@ -21,8 +21,12 @@ protected:
 
 class TCommandWithFormat {
 protected:
-    void AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);
-    void AddFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);
+    void AddInputFormats(TClientCommand::TConfig& config, 
+                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat = EOutputFormat::JsonUnicode);
+    void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedStdinFormats, 
+                         const TVector<EOutputFormat>& allowedFramingFormats);
+    void AddFormats(TClientCommand::TConfig& config, 
+                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat = EOutputFormat::Pretty);
     void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
     void ParseFormats();
     void ParseMessagingFormats();
@@ -35,13 +39,22 @@ protected:
 protected:
     EOutputFormat OutputFormat = EOutputFormat::Default;
     EOutputFormat InputFormat = EOutputFormat::Default;
+    EOutputFormat FramingFormat = EOutputFormat::Default;
+    EOutputFormat StdinFormat = EOutputFormat::Default;
+    TVector<EOutputFormat> StdinFormats;
     EMessagingFormat MessagingFormat = EMessagingFormat::SingleMessage;
 
 private:
     TVector<EOutputFormat> AllowedInputFormats;
+    TVector<EOutputFormat> AllowedStdinFormats;
+    TVector<EOutputFormat> AllowedFramingFormats;
     TVector<EOutputFormat> AllowedFormats;
     TVector<EMessagingFormat> AllowedMessagingFormats;
     bool DeprecatedOptionUsed = false;
+    
+protected:
+    bool IsStdinFormatSet = false;
+    bool IsFramingFormatSet = false;
 };
 
 class TResultSetPrinter {

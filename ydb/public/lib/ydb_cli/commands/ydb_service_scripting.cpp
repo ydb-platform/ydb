@@ -29,12 +29,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
     config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
 
-    AddParametersOption(config);
-
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-    });
+    AddParametersOption(config, "script");
 
     AddFormats(config, {
         EOutputFormat::Pretty,
@@ -42,6 +37,20 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         EOutputFormat::JsonUnicodeArray,
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array
+    });
+
+    AddInputFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64
+    });
+
+    AddStdinFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64,
+        EOutputFormat::Raw,
+    }, {
+        EOutputFormat::NoFraming,
+        EOutputFormat::NewlineDelimited
     });
 
     config.SetFreeArgsNum(0);
@@ -73,7 +82,9 @@ void TCommandExecuteYqlScript::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
-    ParseParameters();
+    ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+        ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+    ParseParameters(config);
 }
 
 int TCommandExecuteYqlScript::Run(TConfig& config) {
@@ -94,25 +105,30 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         NScripting::TExecuteYqlRequestSettings settings;
         settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
 
-        NScripting::TAsyncExecuteYqlResult asyncResult;
-        if (Parameters.size()) {
-            auto validateResult = ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate);
-            asyncResult = client.ExecuteYqlScript(
-                    Script,
-                    BuildParams(validateResult.GetParameterTypes(), InputFormat),
-                    FillSettings(settings)
-            );
+        if (!Parameters.empty() || !IsStdinInteractive()) {
+            THolder<TParamsBuilder> paramBuilder;
+            while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
+                auto asyncResult = client.ExecuteYqlScript(
+                        Script,
+                        paramBuilder->Build(),
+                        FillSettings(settings)
+                );
+                
+                auto result = asyncResult.GetValueSync();
+                ThrowOnError(result);
+                PrintResponseHeader(result);
+                PrintResponse(result);
+            }
         } else {
-            asyncResult = client.ExecuteYqlScript(
+            auto asyncResult = client.ExecuteYqlScript(
                     Script,
                     FillSettings(settings)
             );
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            PrintResponseHeader(result);
+            PrintResponse(result);
         }
-        auto result = asyncResult.GetValueSync();
-
-        ThrowOnError(result);
-        PrintResponseHeader(result);
-        PrintResponse(result);
     }
 
     return EXIT_SUCCESS;

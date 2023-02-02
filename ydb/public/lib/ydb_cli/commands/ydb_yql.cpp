@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
+#include <util/generic/queue.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -18,14 +19,9 @@ void TCommandYql::Config(TConfig& config) {
     config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
-    config.Opts->AddLongOption('f', "file", "[Required] Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
+    config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
 
-    AddParametersOption(config);
-
-    AddInputFormats(config, {
-        EOutputFormat::JsonUnicode,
-        EOutputFormat::JsonBase64
-        });
+    AddParametersOption(config, "script");
 
     AddFormats(config, {
         EOutputFormat::Pretty,
@@ -35,7 +31,21 @@ void TCommandYql::Config(TConfig& config) {
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
         EOutputFormat::Tsv
-        });
+    });
+
+    AddInputFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64
+    });
+
+    AddStdinFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64,
+        EOutputFormat::Raw,
+    }, {
+        EOutputFormat::NoFraming,
+        EOutputFormat::NewlineDelimited
+    });
 
     CheckExamples(config);
 
@@ -56,40 +66,51 @@ void TCommandYql::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    ParseParameters();
+    ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+        ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
+    ParseParameters(config);
 }
 
 int TCommandYql::Run(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NScripting::TScriptingClient client(driver);
-    NTable::TTableClient tableClient(driver);
 
     NScripting::TExecuteYqlRequestSettings settings;
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
-
-    NScripting::TAsyncYqlResultPartIterator asyncResult;
-    if (Parameters.size()) {
-        auto validateResult = ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate);
-        asyncResult = client.StreamExecuteYqlScript(
-            Script,
-            BuildParams(validateResult.GetParameterTypes(), InputFormat),
-            FillSettings(settings)
-        );
+    SetInterruptHandlers();
+    if (!Parameters.empty() || !IsStdinInteractive()) {
+        THolder<TParamsBuilder> paramBuilder;
+        while (!IsInterrupted() && 
+            GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
+            
+            auto asyncResult = client.StreamExecuteYqlScript(
+                    Script,
+                    paramBuilder->Build(),
+                    FillSettings(settings)
+            );
+            
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            if (!PrintResponse(result)) {
+                return EXIT_FAILURE;
+            }
+        }
     } else {
-        asyncResult = client.StreamExecuteYqlScript(
-            Script,
-            FillSettings(settings)
+        auto asyncResult = client.StreamExecuteYqlScript(
+                Script,
+                FillSettings(settings)
         );
-    }
-    NScripting::TYqlResultPartIterator result = asyncResult.GetValueSync();
 
-    ThrowOnError(result);
-    PrintResponse(result);
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        if (!PrintResponse(result)) {
+            return EXIT_FAILURE;
+        }
+    }
     return EXIT_SUCCESS;
 }
 
-void TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
-    SetInterruptHandlers();
+bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
     TStringStream statsStr;
     {
         ui32 currentIndex = 0;
@@ -129,7 +150,9 @@ void TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
 
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
+        return false;
     }
+    return true;
 }
 
 }

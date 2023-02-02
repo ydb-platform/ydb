@@ -94,7 +94,7 @@ private:
     TTypeAnnotationContext& TypesCtx;
     bool AllowPickle;
     bool UsePartitionsByKeys;
-    bool UseFinalizeByKeys = false;
+    bool UseFinalizeByKeys = true;
     bool ForceCompact;
     bool CompactForDistinct;
     bool UsePhases;

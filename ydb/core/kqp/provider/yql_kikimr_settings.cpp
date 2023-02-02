@@ -119,7 +119,7 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
 }
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
-    return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) == EOptionalFlag::Enabled;
+    return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

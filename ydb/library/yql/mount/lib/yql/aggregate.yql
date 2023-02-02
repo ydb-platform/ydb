@@ -44,10 +44,10 @@
 # list_type:type init:lambda
 # doesn't support optional values
 (let count_traits_factory (lambda '(list_type init) (block '(
-  (let update (lambda '(value state) (AggrAdd state (Apply init value))))
+  (let update (lambda '(value state) (+ state (Apply init value))))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) (AggrAdd state1 state2)))
+  (let merge (lambda '(state1 state2) (+ state1 state2)))
   (let finish (lambda '(state) state))
   (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0)))
 ))))
@@ -59,7 +59,7 @@
   (let update (lambda '(value state) (AggrCountUpdate value state)))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) (AggrAdd state1 state2)))
+  (let merge (lambda '(state1 state2) (+ state1 state2)))
   (let finish (lambda '(state) state))
   (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0)))
 ))))
@@ -86,7 +86,7 @@
                                           ) (Inc (Nth state '1)))))
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) '((AggrAdd (Nth state1 '0) (Nth state2 '0)) (AggrAdd (Nth state1 '1) (Nth state2 '1)))))
+  (let merge (lambda '(state1 state2) '((+ (Nth state1 '0) (Nth state2 '0)) (+ (Nth state1 '1) (Nth state2 '1)))))
   (let finish (lambda '(state)
                 (MatchType (ListItemType list_type)
                            'Decimal

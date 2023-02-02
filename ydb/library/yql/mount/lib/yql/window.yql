@@ -91,8 +91,8 @@
 # list_type:type init:lambda
 # doesn't support optional values
 (let count_traits_factory (lambda '(list_type init) (block '(
-  (let update (lambda '(value state) (AggrAdd state (Apply init value))))
-  (let shift (lambda '(value state) (AggrAdd state (Minus (Apply init value)))))
+  (let update (lambda '(value state) (+ state (Apply init value))))
+  (let shift (lambda '(value state) (+ state (Minus (Apply init value)))))
   (let current (lambda '(state) state))
   (return (WindowTraits (ListItemType list_type) init update shift current (Uint64 '0)))
 ))))
@@ -118,7 +118,7 @@
   (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
   (let convert_decimal_to_interval (lambda '(value) (Unwrap (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval)))))
   (let init (lambda '(value) '((MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double))) (Uint64 '1))))
-  (let update (lambda '(value state) '((AggrAdd (Nth state '0) (MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double)))) (Inc (Nth state '1)))))
+  (let update (lambda '(value state) '((+ (Nth state '0) (MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double)))) (Inc (Nth state '1)))))
   (let shift (lambda '(value state) '((- (Nth state '0) value) (Dec (Nth state '1)))))
   (let current (lambda '(state) (MatchType (ListItemType list_type)
                                            'Decimal (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))

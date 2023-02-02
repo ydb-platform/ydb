@@ -4593,7 +4593,7 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
     tupleExpandMap.resize(originalStateSize);
     structExpandMap.resize(originalStateSize);
 
-    const auto needStateFlatten = GetExpandMapsForLambda<false>(*node->Child(3U), tupleExpandMap, structExpandMap);
+    const auto needStateFlatten = GetExpandMapsForLambda<true>(*node->Child(3U), tupleExpandMap, structExpandMap);
 
     if (needStateFlatten.front()) {
         const auto flattenSize = *needStateFlatten.front();

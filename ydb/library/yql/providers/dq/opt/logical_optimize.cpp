@@ -86,7 +86,7 @@ protected:
             if (hopSetting) {
                 return RewriteAsHoppingWindow(node, ctx, input.Cast());
             } else {
-                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(true));
+                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false));
             }
         }
         return node;

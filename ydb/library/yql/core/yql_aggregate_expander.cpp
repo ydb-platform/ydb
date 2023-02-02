@@ -1347,7 +1347,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
 {
     auto preprocessLambda = GeneratePreprocessLambda(keyExtractor);
     TExprNode::TPtr postAgg;
-    if (!UsePartitionsByKeys && UseFinalizeByKeys && !SessionWindowParams.Update) {
+    if (!UsePartitionsByKeys && UseFinalizeByKeys) {
         postAgg = Ctx.Builder(Node->Pos())
             .Callable("ShuffleByKeys")
                 .Add(0, std::move(preAgg))
@@ -2207,7 +2207,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         return mergeFinalize;
     }
 
-    // process with distinct
+    // process with distincts
     // Combine + Map with Just over states
     //      for each distinct field:
     //          Aggregate by keys + field w/o aggs

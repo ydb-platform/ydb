@@ -34,8 +34,24 @@ public:
     , GRpcRequestProxyId_(id)
 { }
 
+    void InitService(
+        const std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs,
+        NGrpc::TLoggerPtr logger,
+        size_t index) override
+    {
+        CQS.reserve(cqs.size());
+        for (auto& cq: cqs) {
+            CQS.push_back(cq.get());
+        }
+
+        CQ_ = CQS[index % cqs.size()];
+
+        // note that we might call an overloaded InitService(), and not the one from this class
+        InitService(CQ_, logger);
+    }
+
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override {
-        CQ_ = cq;
+        CQ_ = cq; // might be self assignment, but it's OK
         SetupIncomingRequests(std::move(logger));
     }
 
@@ -57,6 +73,8 @@ protected:
 
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
+
+    std::vector<grpc::ServerCompletionQueue*> CQS;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     const NActors::TActorId GRpcRequestProxyId_;

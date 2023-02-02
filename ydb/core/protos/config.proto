@@ -653,6 +653,9 @@ message TGRpcConfig {
     optional uint32 KeepAliveMaxProbeCount = 102 [default = 3]; // TCP_KEEPCNT
     optional uint32 KeepAliveProbeIntervalSec = 103 [default = 10]; // TCP_KEEPINTVL
 
+    optional uint32 WorkersPerCompletionQueue = 104 [default = 1];
+    optional uint32 HandlersPerCompletionQueue = 105 [default = 10];
+
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 }
 

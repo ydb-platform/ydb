@@ -59,7 +59,6 @@ class TBlobStorageController::TTxUpdateNodeDrives
                 if (pdiskInfo.ExpectedSerial != serial) {
                     // the disk on the node with the same label (path) as pdisk has a different serial number
                     TStringStream log;
-                    auto prio = NLog::PRI_ERROR;
 
                     if (Self->SerialManagementStage == NKikimrBlobStorage::TSerialManagementStage::CHECK_SERIAL) {
                         // don't update ExpectedSerial so that the corresponding PDisk wouldn't be able to start next time
@@ -71,7 +70,7 @@ class TBlobStorageController::TTxUpdateNodeDrives
                         db.Table<T>().Key(key).Update<T::ExpectedSerial>(serial);
                     }
 
-                    STLOG(prio, BS_CONTROLLER, BSCTXRN06, log.Str(), (PDiskId, pdiskId), (Path, pdiskInfo.Path),
+                    STLOG(NLog::PRI_ERROR, BS_CONTROLLER, BSCTXRN06, log.Str(), (PDiskId, pdiskId), (Path, pdiskInfo.Path),
                         (OldSerial, pdiskInfo.ExpectedSerial), (NewSerial, serial));
                 }
             }
@@ -196,7 +195,7 @@ public:
         UpdateNodeDrivesRecord.SetNodeId(nodeId);
 
         for (const auto& data : record.GetDrivesData()) {
-            *UpdateNodeDrivesRecord.AddDrivesData() = data;
+            UpdateNodeDrivesRecord.AddDrivesData()->CopyFrom(data);
         }
 
         Self->OnRegisterNode(request->Recipient, nodeId);

@@ -100,25 +100,25 @@ namespace NKikimr::NBsController {
 
         auto driveInfo = DrivesSerials.Find(serial);
         if (driveInfo && driveInfo->LifeStage != NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
-            throw TExAlready() << "Device with such serial already exists in BSC database in lifeStage" << driveInfo->LifeStage;
+            throw TExAlready() << "Device with such serial already exists in BSC database in lifeStage " << driveInfo->LifeStage;
         }
 
         auto it = NodeIdByDiskSerialNumber.find(serial);
         if (it == NodeIdByDiskSerialNumber.end()) {
-            throw TExError() << "Couldn't find node id for disk with serial number: " << serial;
+            throw TExError() << "Couldn't find node id for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
         auto nodeId = it->second;
 
         const auto& nodes = Nodes.Get();
         auto nodeIt = nodes.find(nodeId);
         if (nodeIt == nodes.end()) {
-            throw TExError() << "Couldn't find node with node id: " << nodeId << " for disk with serial number: " << serial;
+            throw TExError() << "Couldn't find node by node id" << TErrorParams::NodeId(nodeId) << " for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
         const auto& nodeInfo = nodeIt->second;
         auto driveIt = nodeInfo.KnownDrives.find(serial);
         if (driveIt == nodeInfo.KnownDrives.end()) {
-            throw TExError() << "Couldn't find disk on node: " << nodeId << " by serial number: " << serial;
+            throw TExError() << "Couldn't find disk on node" << TErrorParams::NodeId(nodeId) << " by serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
         // delete REMOVED entry, if any, but keep its GUID
@@ -153,11 +153,11 @@ namespace NKikimr::NBsController {
 
         auto driveInfo = DrivesSerials.Find(serial);
         if (!driveInfo) {
-            throw TExError() << "Couldn't find disk with serial number: " << serial;
+            throw TExError() << "Couldn't find disk with serial number" << TErrorParams::DiskSerialNumber(serial);
         }
 
         if (driveInfo->LifeStage == NKikimrBlobStorage::TDriveLifeStage::REMOVED) {
-            throw TExError() << "Disk with serial number: " << serial << " has already been removed";
+            throw TExError() << "Disk with serial number" << TErrorParams::DiskSerialNumber(serial) << " has already been removed";
         }
 
         auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);

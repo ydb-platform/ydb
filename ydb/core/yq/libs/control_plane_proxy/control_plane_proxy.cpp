@@ -1385,6 +1385,8 @@ private:
         static const TPermissions availablePermissions {
             TPermissions::TPermission::VIEW_PUBLIC
             | TPermissions::TPermission::VIEW_PRIVATE
+            | TPermissions::TPermission::VIEW_AST
+            | TPermissions::VIEW_QUERY_TEXT
         };
 
         Register(new TRequestActor<YandexQuery::DescribeJobRequest,

@@ -479,7 +479,8 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryDescribeQueryRequestOp
             NPerms::Required("yq.queries.get"),
             NPerms::Optional("yq.queries.viewAst"),
             NPerms::Optional("yq.resources.viewPublic"),
-            NPerms::Optional("yq.resources.viewPrivate")
+            NPerms::Optional("yq.resources.viewPrivate"),
+            NPerms::Optional("yq.queries.viewQueryText")
         };
     }};
 
@@ -577,7 +578,9 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryDescribeJobRequestOper
         return {
             NPerms::Required("yq.jobs.get"),
             NPerms::Optional("yq.resources.viewPublic"),
-            NPerms::Optional("yq.resources.viewPrivate")
+            NPerms::Optional("yq.resources.viewPrivate"),
+            NPerms::Optional("yq.queries.viewAst"),
+            NPerms::Optional("yq.queries.viewQueryText")
         };
     } };
 

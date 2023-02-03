@@ -50,6 +50,44 @@ struct TSchemeBoardEvents {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SCHEME_BOARD), "expect End < EventSpaceEnd(ES_SCHEME_BOARD)");
 
+    template <typename T>
+    static TStringBuilder& PrintOwnerGeneration(TStringBuilder& out, const T& record) {
+        return out
+            << " Owner: " << record.GetOwner()
+            << " Generation: " << record.GetGeneration();
+    }
+
+    template <typename T>
+    static TString PrintOwnerGeneration(const IEventBase* ev, const T& record) {
+        auto out = TStringBuilder() << ev->ToStringHeader() << " {";
+        PrintOwnerGeneration(out, record);
+        return out << " }";
+    }
+
+    template <typename T>
+    static TStringBuilder& PrintPath(TStringBuilder& out, const T& record) {
+        if (record.HasPath() && record.HasPathOwnerId() && record.HasLocalPathId()) {
+            out << " Path: " << record.GetPath()
+                << " PathId: " << TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
+        } else if (record.HasPath()) {
+            out << " Path: " << record.GetPath();
+        } else if (record.HasPathOwnerId() && record.HasLocalPathId()) {
+            out << " PathId: " << TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
+        } else {
+            out << " Path: <empty>"
+                << " PathId: <empty>";
+        }
+
+        return out;
+    }
+
+    template <typename T>
+    static TString PrintPath(const IEventBase* ev, const T& record) {
+        auto out = TStringBuilder() << ev->ToStringHeader() << " {";
+        PrintPath(out, record);
+        return out << " }";
+    }
+
     // populator events
     struct TEvRequestDescribe: public TEventLocal<TEvRequestDescribe, EvRequestDescribe> {
         const TPathId PathId;
@@ -61,6 +99,13 @@ struct TSchemeBoardEvents {
             : PathId(pathId)
             , Replica(replica)
         {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " PathId: " << PathId
+                << " Replica: " << Replica
+            << " }";
         }
     };
 
@@ -136,6 +181,12 @@ struct TSchemeBoardEvents {
             : PathId(pathId)
         {
         }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " PathId: " << PathId
+            << " }";
+        }
     };
 
     // replica <--> populator events
@@ -146,6 +197,10 @@ struct TSchemeBoardEvents {
             Record.SetOwner(owner);
             Record.SetGeneration(generation);
         }
+
+        TString ToString() const override {
+            return PrintOwnerGeneration(this, Record);
+        }
     };
 
     struct TEvHandshakeResponse: public TEventPB<TEvHandshakeResponse, NKikimrSchemeBoard::TEvHandshake, EvHandshakeResponse> {
@@ -154,6 +209,10 @@ struct TSchemeBoardEvents {
         explicit TEvHandshakeResponse(const ui64 owner, const ui64 generation) {
             Record.SetOwner(owner);
             Record.SetGeneration(generation);
+        }
+
+        TString ToString() const override {
+            return PrintOwnerGeneration(this, Record);
         }
     };
 
@@ -169,6 +228,10 @@ struct TSchemeBoardEvents {
                 Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(),
                 Record.GetLocalPathId()
             );
+        }
+
+        TString ToString() const override {
+            return PrintOwnerGeneration(this, Record);
         }
     };
 
@@ -253,6 +316,15 @@ struct TSchemeBoardEvents {
                 Record.GetLocalPathId()
             );
         }
+
+        TString ToString() const override {
+            auto out = TStringBuilder() << ToStringHeader() << " {";
+            PrintOwnerGeneration(out, Record);
+            return out
+                << " PathId: " << GetPathId()
+                << " Version: " << Record.GetVersion()
+            << " }";
+        }
     };
 
     struct TEvCommitRequest: public TEventPB<TEvCommitRequest, NKikimrSchemeBoard::TEvCommitGeneration, EvCommitRequest> {
@@ -262,6 +334,10 @@ struct TSchemeBoardEvents {
             Record.SetOwner(owner);
             Record.SetGeneration(generation);
         }
+
+        TString ToString() const override {
+            return PrintOwnerGeneration(this, Record);
+        }
     };
 
     struct TEvCommitResponse: public TEventPB<TEvCommitResponse, NKikimrSchemeBoard::TEvCommitGeneration, EvCommitResponse> {
@@ -270,6 +346,10 @@ struct TSchemeBoardEvents {
         explicit TEvCommitResponse(const ui64 owner, const ui64 generation) {
             Record.SetOwner(owner);
             Record.SetGeneration(generation);
+        }
+
+        TString ToString() const override {
+            return PrintOwnerGeneration(this, Record);
         }
     };
 
@@ -290,6 +370,12 @@ struct TSchemeBoardEvents {
             FillCapabilities(Record);
         }
 
+        TString ToString() const override {
+            auto out = TStringBuilder() << ToStringHeader() << " {";
+            PrintPath(out, Record);
+            return out << " DomainOwnerId: " << Record.GetDomainOwnerId() << " }";
+        }
+
         static void FillCapabilities(NKikimrSchemeBoard::TEvSubscribe& record) {
             record.MutableCapabilities()->SetAckNotifications(true);
         }
@@ -306,10 +392,18 @@ struct TSchemeBoardEvents {
             Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
         }
+
+        TString ToString() const override {
+            return PrintPath(this, Record);
+        }
     };
 
     struct TEvNotify: public TEventPreSerializedPB<TEvNotify, NKikimrSchemeBoard::TEvNotify, EvNotify> {
         TEvNotify() = default;
+
+        TString ToString() const override {
+            return PrintPath(this, Record);
+        }
     };
 
     struct TEvNotifyBuilder: public TEvNotify {
@@ -351,6 +445,12 @@ struct TSchemeBoardEvents {
         explicit TEvNotifyAck(ui64 version) {
             Record.SetVersion(version);
         }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " Version: " << Record.GetVersion()
+            << " }";
+        }
     };
 
     struct TEvSyncVersionRequest: public TEventPB<TEvSyncVersionRequest, NKikimrSchemeBoard::TEvSyncVersionRequest, EvSyncVersionRequest> {
@@ -364,6 +464,10 @@ struct TSchemeBoardEvents {
             Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
         }
+
+        TString ToString() const override {
+            return PrintPath(this, Record);
+        }
     };
 
     struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSchemeBoard::TEvSyncVersionResponse, EvSyncVersionResponse> {
@@ -372,6 +476,13 @@ struct TSchemeBoardEvents {
         explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false) {
             Record.SetVersion(version);
             Record.SetPartial(partial);
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " Version: " << Record.GetVersion()
+                << " Partial: " << Record.GetPartial()
+            << " }";
         }
     };
 

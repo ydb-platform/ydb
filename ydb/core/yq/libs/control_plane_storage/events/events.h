@@ -53,7 +53,8 @@ struct TPermissions {
         MANAGE_PRIVATE = 0x10,
         CONNECTIONS_USE = 0x40,
         BINDINGS_USE = 0x80,
-        QUERY_INVOKE = 0x100
+        QUERY_INVOKE = 0x100,
+        VIEW_QUERY_TEXT = 0x400
     };
 
 private:

@@ -802,6 +802,7 @@ private:
         {"yq.connections.use@as", TPermissions::CONNECTIONS_USE},
         {"yq.bindings.use@as", TPermissions::BINDINGS_USE},
         {"yq.queries.invoke@as", TPermissions::QUERY_INVOKE},
+        {"yq.queries.viewQueryText@as", TPermissions::VIEW_QUERY_TEXT},
     };
 
     template<typename T>
@@ -985,6 +986,7 @@ private:
             TPermissions::TPermission::VIEW_AST
             | TPermissions::TPermission::VIEW_PUBLIC
             | TPermissions::TPermission::VIEW_PRIVATE
+            | TPermissions::VIEW_QUERY_TEXT
         };
 
         Register(new TRequestActor<YandexQuery::DescribeQueryRequest,

@@ -398,7 +398,8 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateDescribeQueryRequestOperationCall(TI
             NPerms::Required("yq.queries.get"),
             NPerms::Optional("yq.queries.viewAst"),
             NPerms::Optional("yq.resources.viewPublic"),
-            NPerms::Optional("yq.resources.viewPrivate")
+            NPerms::Optional("yq.resources.viewPrivate"),
+            NPerms::Optional("yq.queries.viewQueryText")
         };
     }};
 

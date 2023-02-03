@@ -462,7 +462,8 @@ TVector<TString> AllPermissions() {
         "yq.resources.viewPrivate@as",
         "yq.resources.managePublic@as",
         "yq.resources.managePrivate@as",
-        "iam.serviceAccounts.use@as"
+        "iam.serviceAccounts.use@as",
+        "yq.queries.viewQueryText@as"
     };
 }
 
@@ -946,6 +947,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListQueries)
@@ -966,6 +968,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeQuery)
@@ -986,6 +989,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendGetQueryStatus)
@@ -1006,6 +1010,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyQuery)
@@ -1026,6 +1031,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteQuery)
@@ -1046,6 +1052,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendControlQuery)
@@ -1066,6 +1073,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendGetResultData)
@@ -1086,6 +1094,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListJobs)
@@ -1106,6 +1115,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeJob)
@@ -1126,6 +1136,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateConnection)
@@ -1146,6 +1157,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateConnectionWithServiceAccount)
@@ -1166,6 +1178,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListConnections)
@@ -1186,6 +1199,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeConnection)
@@ -1206,6 +1220,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyConnection)
@@ -1226,6 +1241,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyConnectionWithServiceAccount)
@@ -1246,6 +1262,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteConnection)
@@ -1266,6 +1283,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendTestConnection)
@@ -1286,6 +1304,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendTestConnectionWithServiceAccount)
@@ -1306,6 +1325,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateBinding)
@@ -1326,6 +1346,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListBindings)
@@ -1346,6 +1367,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeBinding)
@@ -1366,6 +1388,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyBinding)
@@ -1386,6 +1409,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteBinding)
@@ -1406,6 +1430,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 };
 
@@ -1434,6 +1459,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListQueries)
@@ -1458,6 +1484,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeQuery)
@@ -1469,7 +1496,8 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
             "yq.queries.get@as",
             "yq.queries.viewAst@as",
             "yq.resources.viewPublic@as",
-            "yq.resources.viewPrivate@as"
+            "yq.resources.viewPrivate@as",
+            "yq.queries.viewQueryText@as",
         });
         auto request = bootstrap.MetaStorageGrab->GetRequest();
         auto event = request->Get<TEvControlPlaneStorage::TEvDescribeQueryRequest>();
@@ -1483,6 +1511,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyQuery)
@@ -1510,6 +1539,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteQuery)
@@ -1534,6 +1564,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendControlQuery)
@@ -1558,6 +1589,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendGetResultData)
@@ -1582,6 +1614,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListJobs)
@@ -1606,6 +1639,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeJob)
@@ -1630,6 +1664,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateConnection)
@@ -1653,6 +1688,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateConnectionWithServiceAccount)
@@ -1677,6 +1713,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListConnections)
@@ -1701,6 +1738,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeConnection)
@@ -1725,6 +1763,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyConnection)
@@ -1749,6 +1788,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyConnectionWithServiceAccount)
@@ -1774,6 +1814,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteConnection)
@@ -1798,6 +1839,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendTestConnection)
@@ -1821,6 +1863,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendTestConnectionWithServiceAccount)
@@ -1845,6 +1888,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateBinding)
@@ -1868,6 +1912,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListBindings)
@@ -1892,6 +1937,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeBinding)
@@ -1916,6 +1962,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyBinding)
@@ -1940,6 +1987,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteBinding)
@@ -1964,6 +2012,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 };
 
@@ -2252,6 +2301,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListQueries)
@@ -2272,6 +2322,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeQuery)
@@ -2292,6 +2343,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendGetQueryStatus)
@@ -2312,6 +2364,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyQuery)
@@ -2332,6 +2385,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteQuery)
@@ -2352,6 +2406,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendControlQuery)
@@ -2372,6 +2427,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendGetResultData)
@@ -2392,6 +2448,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListJobs)
@@ -2412,6 +2469,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeJob)
@@ -2432,6 +2490,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateConnection)
@@ -2452,6 +2511,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateConnectionWithServiceAccount)
@@ -2472,6 +2532,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListConnections)
@@ -2492,6 +2553,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeConnection)
@@ -2512,6 +2574,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyConnection)
@@ -2532,6 +2595,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyConnectionWithServiceAccount)
@@ -2552,6 +2616,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteConnection)
@@ -2572,6 +2637,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendTestConnection)
@@ -2592,6 +2658,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendTestConnectionWithServiceAccount)
@@ -2612,6 +2679,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendCreateBinding)
@@ -2632,6 +2700,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendListBindings)
@@ -2652,6 +2721,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDescribeBinding)
@@ -2672,6 +2742,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendModifyBinding)
@@ -2692,6 +2763,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 
     Y_UNIT_TEST(ShouldSendDeleteBinding)
@@ -2712,6 +2784,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
 };
 
@@ -2773,6 +2846,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2792,6 +2866,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2811,6 +2886,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2830,6 +2906,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2849,6 +2926,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2868,6 +2946,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2887,6 +2966,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2906,6 +2986,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2925,6 +3006,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2944,6 +3026,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2963,6 +3046,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -2982,6 +3066,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3001,6 +3086,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3020,6 +3106,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3039,6 +3126,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3058,6 +3146,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3077,6 +3166,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3096,6 +3186,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3115,6 +3206,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3134,6 +3226,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3153,6 +3246,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         const TVector<TString> testUser2Permissions {
@@ -3204,6 +3298,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3223,6 +3318,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3242,6 +3338,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3261,6 +3358,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3280,6 +3378,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3299,6 +3398,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3318,6 +3418,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3337,6 +3438,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3356,6 +3458,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3375,6 +3478,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3394,6 +3498,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3413,6 +3518,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3432,6 +3538,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3451,6 +3558,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3470,6 +3578,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3489,6 +3598,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3508,6 +3618,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3527,6 +3638,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3546,6 +3658,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3565,6 +3678,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3584,6 +3698,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         const TVector<TString> testUser3Permissions {
@@ -3620,6 +3735,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3639,6 +3755,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3703,6 +3820,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3722,6 +3840,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3750,6 +3869,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3769,6 +3889,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3824,6 +3945,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3843,6 +3965,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3890,6 +4013,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3927,6 +4051,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {
@@ -3973,6 +4098,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
 
         {

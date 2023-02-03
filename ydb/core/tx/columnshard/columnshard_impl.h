@@ -455,6 +455,7 @@ private:
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
         TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
     void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;
+    void ForgetBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& blobs);
     bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                          NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges);
 

@@ -1055,6 +1055,29 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName
     }
 }
 
+void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& blobs) {
+    THashMap<TString, std::vector<NOlap::TEvictedBlob>> tierBlobs;
+
+    for (const auto& blobId : blobs) {
+        TEvictMetadata meta;
+        auto evict = BlobManager->GetDropped(blobId, meta);
+
+        if (evict.State == EEvictState::UNKNOWN) {
+            LOG_S_ERROR("Forget unknown blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
+        } else if (NOlap::IsExported(evict.State)) {
+            LOG_S_DEBUG("Forget blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
+            tierBlobs[meta.GetTierName()].emplace_back(std::move(evict));
+        } else {
+            LOG_S_DEBUG("Forget blob (deleyed) '" << blobId.ToStringNew() << "' at tablet " << TabletID());
+            DelayedForgetBlobs.insert(blobId);
+        }
+    }
+
+    for (auto& [tierName, blobs] : tierBlobs) {
+        ForgetBlobs(ctx, tierName, std::move(blobs));
+    }
+}
+
 bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
                                    NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges) {
     if (auto s3 = GetS3ActorForTier(tierName)) {

@@ -116,15 +116,15 @@ void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& 
     auto& tierName = ev->Get()->TierName;
 
     if (status == NKikimrProto::UNKNOWN) {
-        LOG_S_DEBUG("Export (write): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
+        LOG_S_DEBUG("Export (write): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
         auto& tierBlobs = ev->Get()->Blobs;
         Y_VERIFY(tierBlobs.size());
         ExportBlobs(ctx, exportNo, tierName, std::move(tierBlobs));
     } else if (status == NKikimrProto::OK) {
-        LOG_S_DEBUG("Export (apply): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
+        LOG_S_DEBUG("Export (apply): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
         Execute(new TTxExportFinish(this, ev), ctx);
     } else if (status == NKikimrProto::ERROR) {
-        LOG_S_WARN("Export (fail): " << exportNo << " tier '" << tierName << "' error: "
+        LOG_S_WARN("Export (fail): id " << exportNo << " tier '" << tierName << "' error: "
             << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
         --ActiveEvictions;
     } else {

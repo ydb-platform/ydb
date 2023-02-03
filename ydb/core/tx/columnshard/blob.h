@@ -315,6 +315,15 @@ enum class EEvictState : ui8 {
     ERASED = 5,         // source, extern, cached blobs: ---
 };
 
+inline bool IsExported(EEvictState state) {
+    return state == EEvictState::SELF_CACHED ||
+        state == EEvictState::EXTERN;
+}
+
+inline bool IsDeleted(EEvictState state) {
+    return ui8(state) >= ui8(EEvictState::EXTERN); // !EVICTING and !SELF_CACHED
+}
+
 struct TEvictedBlob {
     EEvictState State = EEvictState::UNKNOWN;
     TUnifiedBlobId Blob;

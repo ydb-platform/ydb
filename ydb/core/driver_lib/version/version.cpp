@@ -10,19 +10,25 @@ using TStored = NKikimrConfig::TStoredCompatibilityInfo;
 /////////////////////////////////////////////////////////////
 
 // new version control
-TCurrent* TCompatibilityInfo::CompatibilityInfo = nullptr;
+std::optional<TCurrent> TCompatibilityInfo::CompatibilityInfo = std::nullopt;
 TSpinLock TCompatibilityInfo::LockCurrent = TSpinLock();
 const TCurrent* TCompatibilityInfo::GetCurrent() {
     TGuard<TSpinLock> g(TCompatibilityInfo::LockCurrent);
 
     if (!CompatibilityInfo) {
-        CompatibilityInfo = new TCurrent();
+        // using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
+        // using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
+        using TCurrentCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
+
         // Look for protobuf message format in ydb/core/protos/config.proto
         // To be changed in new release:
-        CompatibilityInfo->SetBuild("trunk");
+        CompatibilityInfo = TCurrent();
+        CompatibilityInfo->CopyFrom(TCurrentCompatibilityInfo{
+            .Build = "trunk"
+        }.ToPB());
     }
 
-    return CompatibilityInfo;
+    return &*CompatibilityInfo;
 }
 
 // obsolete version control
@@ -44,23 +50,25 @@ TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInte
 // Last stable YDB release, which doesn't include version control change
 // When the compatibility information is not present in component's data,
 // we assume component's version to be this version
-TStored* TCompatibilityInfo::UnknownYdbRelease = nullptr;
+std::optional<TStored> TCompatibilityInfo::UnknownYdbRelease = std::nullopt;
 const TStored* TCompatibilityInfo::GetUnknown() {
     static TSpinLock lock;
     TGuard<TSpinLock> g(lock);
 
     if (!UnknownYdbRelease) {
-        UnknownYdbRelease = new TStored();
-        UnknownYdbRelease->SetBuild("ydb");
+        using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
+        // using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
+        using TStoredCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
 
-        auto* version = UnknownYdbRelease->MutableYdbVersion();
-        version->SetYear(22);
-        version->SetMajor(5);
-        version->SetMinor(7);
-        version->SetHotfix(0);
+        UnknownYdbRelease = TStored();
+        UnknownYdbRelease->CopyFrom(TStoredCompatibilityInfo{
+            .Build = "ydb",
+            .YdbVersion = TYdbVersion{ .Year = 22, .Major = 5, .Minor = 7, .Hotfix = 0 }
+
+        }.ToPB());
     }
 
-    return UnknownYdbRelease;
+    return &*UnknownYdbRelease;
 }
 
 TStored TCompatibilityInfo::MakeStored(ui32 componentId, const TCurrent* current) {
@@ -288,7 +296,10 @@ bool TCompatibilityInfo::CheckCompatibility(const TStored* stored, ui32 componen
 
 void TCompatibilityInfo::Reset(TCurrent* newCurrent) {
     TGuard<TSpinLock> g(TCompatibilityInfo::LockCurrent);
-    CompatibilityInfo = newCurrent;
+    if (!CompatibilityInfo) {
+        CompatibilityInfo = TCurrent();
+    }
+    CompatibilityInfo->CopyFrom(*newCurrent);
 }
 
 TString GetBranchName(TString url) {

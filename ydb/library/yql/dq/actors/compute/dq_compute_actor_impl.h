@@ -1524,7 +1524,8 @@ protected:
                         .ComputeActorId = this->SelfId(),
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .TaskCounters = TaskCounters
+                        .TaskCounters = TaskCounters,
+                        .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -1552,7 +1553,8 @@ protected:
                             .ComputeActorId = this->SelfId(),
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
-                            .ProgramBuilder = *transform.ProgramBuilder
+                            .ProgramBuilder = *transform.ProgramBuilder,
+                            .Alloc = TaskRunner->GetAllocatorPtr()
                         });
                 } catch (const std::exception& ex) {
                     throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();

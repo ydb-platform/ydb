@@ -24,9 +24,9 @@ class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLooku
 public:
     TKqpStreamLookupActor(ui64 inputIndex, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
         const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-        NKikimrKqp::TKqpStreamLookupSettings&& settings)
+        std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings)
         : InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
-        , HolderFactory(holderFactory), TableId(MakeTableId(settings.GetTable()))
+        , HolderFactory(holderFactory), Alloc(alloc), TableId(MakeTableId(settings.GetTable()))
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , ImmediateTx(settings.GetImmediateTx())
@@ -35,6 +35,13 @@ public:
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , RetryReadTimeout(RETRY_READ_TIMEOUT) {
     };
+
+    virtual ~TKqpStreamLookupActor() {
+        if (Input.HasValue() && Alloc) {
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            Input.Clear();
+        }
+    }
 
     void Bootstrap() {
         ResolveTable();
@@ -624,6 +631,7 @@ private:
     const NActors::TActorId ComputeActorId;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const TTableId TableId;
     IKqpGateway::TKqpSnapshot Snapshot;
     const TMaybe<ui64> LockTxId;
@@ -647,8 +655,9 @@ private:
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(ui64 inputIndex,
     const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NMiniKQL::THolderFactory& holderFactory, NKikimrKqp::TKqpStreamLookupSettings&& settings) {
-    auto actor = new TKqpStreamLookupActor(inputIndex, input, computeActorId, typeEnv, holderFactory,
+    const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
+    NKikimrKqp::TKqpStreamLookupSettings&& settings) {
+    auto actor = new TKqpStreamLookupActor(inputIndex, input, computeActorId, typeEnv, holderFactory, alloc,
         std::move(settings));
     return {actor, actor};
 }

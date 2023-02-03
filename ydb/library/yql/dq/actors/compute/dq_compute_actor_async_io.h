@@ -174,6 +174,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     };
 
     struct TSinkArguments {
@@ -201,6 +202,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     };
 
     struct TOutputTransformArguments {

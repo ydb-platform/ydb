@@ -266,6 +266,7 @@ public:
         , InputIndex(args.InputIndex)
         , TypeEnv(args.TypeEnv)
         , HolderFactory(args.HolderFactory)
+        , Alloc(args.Alloc)
     {
         TableId = TTableId(
             Settings.GetTable().GetTableId().GetOwnerId(),
@@ -284,6 +285,13 @@ public:
                         NPg::TypeDescFromPgTypeId(
                             Settings.GetKeyColumnTypeInfos(i).GetPgTypeId()
                         ) : nullptr));
+        }
+    }
+
+    virtual ~TKqpReadActor() {
+        if (!Results.empty() && Alloc) {
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            Results.clear();
         }
     }
 
@@ -981,6 +989,7 @@ private:
     const ui64 InputIndex;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
 
 

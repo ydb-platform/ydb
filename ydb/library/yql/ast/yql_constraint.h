@@ -73,6 +73,7 @@ public:
     virtual void ToJson(NJson::TJsonWriter& out) const = 0;
 
     virtual bool IsApplicableToType(const TTypeAnnotationNode&) const { return true; }
+    virtual const TConstraintNode* OnlySimpleColumns(TExprContext&) const { return this; }
 
     template <typename T>
     const T* Cast() const {
@@ -201,6 +202,7 @@ public:
     const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
     TFullSetType Sets_;
 };
@@ -238,11 +240,12 @@ public:
 
     static const TSortedConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
-    static const TSortedConstraintNode* FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx);
 
+    const TSortedConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
     const TSortedConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 protected:
     TContainerType Content_;
 };
@@ -298,11 +301,19 @@ public:
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
     static const TOriginalConstraintNode* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TOriginalConstraintNode* original);
+
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
     TMapType Mapping_;
 };
 
+using TPartOfSortedConstraintNode = TPartOfConstraintNode<TSortedConstraintNode>;
 using TPartOfUniqueConstraintNode = TPartOfConstraintNode<TUniqueConstraintNode>;
+
+template<>
+constexpr std::string_view TPartOfSortedConstraintNode::Name() {
+    return "PartOfSoted";
+}
 
 template<>
 constexpr std::string_view TPartOfUniqueConstraintNode::Name() {
@@ -431,6 +442,7 @@ public:
     static const TMultiConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
     bool FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const;
+    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 protected:
     TMapType Items_;
 };

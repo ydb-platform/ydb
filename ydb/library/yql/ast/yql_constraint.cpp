@@ -374,30 +374,6 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const TSortedCons
     return content.empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
 }
 
-const TSortedConstraintNode* TSortedConstraintNode::FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx) {
-    if (sorted) {
-        auto content = sorted->GetContent();
-        for (size_t i = 0; i < content.size(); ++i) {
-            for (auto it = content[i].first.cbegin(); content[i].first.cend() != it;) {
-                if (GetSubTypeByPath(*it, *outItemType))
-                    ++it;
-                else
-                    it = content[i].first.erase(it);
-            }
-
-            if (content[i].first.empty()) {
-                content.resize(i);
-                break;
-            }
-        }
-
-        if (!content.empty()) {
-            return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
-        }
-    }
-    return nullptr;
-}
-
 const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLength, TExprContext& ctx) const {
     if (!newPrefixLength)
         return nullptr;
@@ -410,6 +386,25 @@ const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLe
     return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
 }
 
+const TSortedConstraintNode* TSortedConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& filter) const {
+    TContainerType sorted;
+    sorted.reserve(Content_.size());
+    for (const auto& item : Content_) {
+        TSetType newSet;
+        newSet.reserve(item.first.size());
+        for (const auto& path : item.first) {
+            if (filter(path))
+                newSet.insert_unique(path);
+        }
+
+        if (newSet.empty())
+            break;
+        else
+            sorted.emplace_back(std::move(newSet), item.second);
+    }
+    return sorted.empty() ? nullptr : ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted));
+}
+
 const TSortedConstraintNode* TSortedConstraintNode::RenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
     TContainerType sorted;
     sorted.reserve(Content_.size());
@@ -417,8 +412,7 @@ const TSortedConstraintNode* TSortedConstraintNode::RenameFields(TExprContext& c
         TSetType newSet;
         newSet.reserve(item.first.size());
         for (const auto& path : item.first) {
-            auto newPaths = reduce(path);
-            if (!newPaths.empty())
+            if (const auto& newPaths = reduce(path); !newPaths.empty())
                 newSet.insert_unique(newPaths.cbegin(), newPaths.cend());
         }
 
@@ -435,6 +429,10 @@ bool TSortedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) 
     return std::all_of(Content_.cbegin(), Content_.cend(), [&itemType](const std::pair<TSetType, bool>& pair) {
         return std::all_of(pair.first.cbegin(), pair.first.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
     });
+}
+
+const TConstraintNode* TSortedConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
+    return FilterFields(ctx, std::bind(std::equal_to<TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -693,6 +691,10 @@ bool TUniqueConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) 
     return std::all_of(Sets_.cbegin(), Sets_.cend(), [&itemType](const TSetType& set) {
         return std::all_of(set.cbegin(), set.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
     });
+}
+
+const TConstraintNode* TUniqueConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
+    return FilterFields(ctx, std::bind(std::equal_to<TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1003,6 +1005,16 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, 
     return nullptr;
 }
 
+template<class TOriginalConstraintNode>
+bool TPartOfConstraintNode<TOriginalConstraintNode>::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    const auto itemType = GetSeqItemType(&type);
+    const auto& actualType = itemType ? *itemType : type;
+    return std::all_of(Mapping_.cbegin(), Mapping_.cend(), [&actualType](const typename TMapType::value_type& pair) {
+        return std::all_of(pair.second.cbegin(), pair.second.cend(), [&actualType](const typename TPartType::value_type& part) { return bool(GetSubTypeByPath(part.first, actualType)); });
+    });
+}
+
+template class TPartOfConstraintNode<TSortedConstraintNode>;
 template class TPartOfConstraintNode<TUniqueConstraintNode>;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1557,7 +1569,7 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
         return constraints.front()->GetConstraint<TMultiConstraintNode>();
     }
 
-    TMultiConstraintNode::TMapType multiItems;
+    TMapType multiItems;
     for (auto c: constraints) {
         if (auto m = c->GetConstraint<TMultiConstraintNode>()) {
             multiItems.insert(m->GetItems().begin(), m->GetItems().end());
@@ -1589,9 +1601,9 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
             break;
         default:
             {
-                std::vector<TMultiConstraintNode::TMapType::value_type> nonEmpty;
+                std::vector<TMapType::value_type> nonEmpty;
                 std::copy_if(start, cur, std::back_inserter(nonEmpty),
-                    [] (const TMultiConstraintNode::TMapType::value_type& v) {
+                    [] (const TMapType::value_type& v) {
                         return !v.second.GetConstraint<TEmptyConstraintNode>();
                     }
                 );
@@ -1610,6 +1622,18 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
     }
 
     return nullptr;
+}
+
+const TConstraintNode* TMultiConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
+    auto items = Items_;
+    for (auto& item : items) {
+        TConstraintSet newSet;
+        for (const auto& constraint : item.second.GetAllConstraints())
+            if (const auto filtered = constraint->OnlySimpleColumns(ctx))
+                newSet.AddConstraint(filtered);
+        item.second = std::move(newSet);
+    }
+    return ctx.MakeConstraint<TMultiConstraintNode>(std::move(items));
 }
 
 } // namespace NYql
@@ -1649,6 +1673,11 @@ void Out<NYql::TGroupByConstraintNode>(IOutputStream& out, const NYql::TGroupByC
 
 template<>
 void Out<NYql::TUniqueConstraintNode>(IOutputStream& out, const NYql::TUniqueConstraintNode& c) {
+    c.Out(out);
+}
+
+template<>
+void Out<NYql::TPartOfSortedConstraintNode>(IOutputStream& out, const NYql::TPartOfSortedConstraintNode& c) {
     c.Out(out);
 }
 

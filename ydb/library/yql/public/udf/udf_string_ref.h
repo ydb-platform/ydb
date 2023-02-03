@@ -126,12 +126,16 @@ public:
         return Compare(*this, rhs) >= 0;
     }
 
+    inline constexpr i64 Compare(const TStringRef& rhs) const noexcept {
+        return Compare(*this, rhs);
+    }
+
 private:
-    inline static constexpr int Compare(const TStringRef& s1, const TStringRef& s2) noexcept {
+    inline static constexpr i64 Compare(const TStringRef& s1, const TStringRef& s2) noexcept {
         auto minSize = std::min(s1.Size(), s2.Size());
         if (const auto result = minSize > 0 ? std::memcmp(s1.Data(), s2.Data(), minSize) : 0)
             return result;
-        return int(s1.Size()) - int(s2.Size());
+        return i64(s1.Size()) - i64(s2.Size());
     }
 
     Y_HAS_MEMBER(Data);

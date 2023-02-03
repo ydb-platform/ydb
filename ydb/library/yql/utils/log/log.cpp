@@ -1,7 +1,10 @@
 #include "log.h"
 
+#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
+
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/logger/system.h>
+#include <library/cpp/logger/composite.h>
 
 #include <util/datetime/systime.h>
 #include <util/generic/strbuf.h>
@@ -67,6 +70,85 @@ private:
     TAtomic Limit;
 };
 
+// Conversions between NYql::NProto::TLoggingConfig enums and NYql::NLog enums
+
+NYql::NLog::ELevel ConvertLevel(NYql::NProto::TLoggingConfig::ELevel level) {
+    using namespace NYql::NProto;
+    using namespace NYql::NLog;
+    switch (level) {
+    case TLoggingConfig::FATAL: return ELevel::FATAL;
+    case TLoggingConfig::ERROR: return ELevel::ERROR;
+    case TLoggingConfig::WARN: return ELevel::WARN;
+    case TLoggingConfig::INFO: return ELevel::INFO;
+    case TLoggingConfig::DEBUG: return ELevel::DEBUG;
+    case TLoggingConfig::TRACE: return ELevel::TRACE;
+    }
+
+    ythrow yexception() << "unknown log level: "
+            << TLoggingConfig::ELevel_Name(level);
+}
+
+NYql::NLog::EComponent ConvertComponent(NYql::NProto::TLoggingConfig::EComponent c) {
+    using namespace NYql::NProto;
+    using namespace NYql::NLog;
+    switch (c) {
+    case TLoggingConfig::DEFAULT: return EComponent::Default;
+    case TLoggingConfig::CORE: return EComponent::Core;
+    case TLoggingConfig::CORE_EVAL: return EComponent::CoreEval;
+    case TLoggingConfig::CORE_PEEPHOLE: return EComponent::CorePeepHole;
+    case TLoggingConfig::CORE_EXECUTION: return EComponent::CoreExecution;
+    case TLoggingConfig::SQL: return EComponent::Sql;
+    case TLoggingConfig::PROVIDER_COMMON: return EComponent::ProviderCommon;
+    case TLoggingConfig::PROVIDER_CONFIG: return EComponent::ProviderConfig;
+    case TLoggingConfig::PROVIDER_RESULT: return EComponent::ProviderResult;
+    case TLoggingConfig::PROVIDER_YT: return EComponent::ProviderYt;
+    case TLoggingConfig::PROVIDER_KIKIMR: return EComponent::ProviderKikimr;
+    case TLoggingConfig::PROVIDER_KQP: return EComponent::ProviderKqp;
+    case TLoggingConfig::PROVIDER_RTMR: return EComponent::ProviderRtmr;
+    case TLoggingConfig::PERFORMANCE: return EComponent::Perf;
+    case TLoggingConfig::NET: return EComponent::Net;
+    case TLoggingConfig::PROVIDER_STAT: return EComponent::ProviderStat;
+    case TLoggingConfig::PROVIDER_SOLOMON: return EComponent::ProviderSolomon;
+    case TLoggingConfig::PROVIDER_DQ: return EComponent::ProviderDq;
+    case TLoggingConfig::PROVIDER_CLICKHOUSE: return EComponent::ProviderClickHouse;
+    case TLoggingConfig::PROVIDER_YDB: return EComponent::ProviderYdb;
+    case TLoggingConfig::PROVIDER_PQ: return EComponent::ProviderPq;
+    case TLoggingConfig::PROVIDER_S3: return EComponent::ProviderS3;
+    case TLoggingConfig::CORE_DQ: return EComponent::CoreDq;
+    case TLoggingConfig::HTTP_GATEWAY: return EComponent::HttpGateway;
+    }
+
+    ythrow yexception() << "unknown log component: "
+            << TLoggingConfig::EComponent_Name(c);
+}
+
+TString ConvertDestinationType(NYql::NProto::TLoggingConfig::ELogTo c) {
+    switch (c) {
+    case NYql::NProto::TLoggingConfig::STDOUT: return "stdout";
+    case NYql::NProto::TLoggingConfig::STDERR: return "stderr";
+    case NYql::NProto::TLoggingConfig::CONSOLE: return "console";
+    default : {
+        ythrow yexception() << "unsupported ELogTo destination in Convert";
+    }
+    }
+
+    ythrow yexception() << "unknown ELogTo destination";
+}
+
+NYql::NProto::TLoggingConfig::TLogDestination CreateLogDestination(const TString& c) {
+    NYql::NProto::TLoggingConfig::TLogDestination destination;
+    if (c == "stdout") {
+        destination.SetType(NYql::NProto::TLoggingConfig::STDOUT);
+    } else if (c == "stderr") {
+        destination.SetType(NYql::NProto::TLoggingConfig::STDERR);
+    } else if (c == "console") {
+        destination.SetType(NYql::NProto::TLoggingConfig::CONSOLE);
+    } else {
+        destination.SetType(NYql::NProto::TLoggingConfig::FILE);
+        destination.SetTarget(c);
+    }
+    return destination;
+}
 
 } // namspace
 
@@ -164,6 +246,13 @@ void TYqlLog::SetMaxLogLimit(ui64 limit) {
 }
 
 void InitLogger(const TString& logType, bool startAsDaemon) {
+    NProto::TLoggingConfig config;
+    *config.AddLogDest() = CreateLogDestination(logType);
+
+    InitLogger(config, startAsDaemon);
+}
+
+void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
     with_lock(g_InitLoggerMutex) {
         ++g_LoggerInitialized;
         if (g_LoggerInitialized > 1) {
@@ -171,24 +260,58 @@ void InitLogger(const TString& logType, bool startAsDaemon) {
         }
 
         TComponentLevels levels;
-        levels.fill(ELevel::INFO);
-
-        if (startAsDaemon && (
-                TStringBuf("console") == logType ||
-                TStringBuf("cout") == logType ||
-                TStringBuf("cerr") == logType))
-        {
-            TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels));
-            return;
+        if (config.HasAllComponentsLevel()) {
+            levels.fill(ConvertLevel(config.GetAllComponentsLevel()));
+        } else {
+            levels.fill(ELevel::INFO);
         }
 
-        if (TStringBuf("syslog") == logType) {
-            auto backend = MakeHolder<TSysLogBackend>(
-                        GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1);
-            auto& logger = TLoggerOperator<TYqlLog>::Log();
-            logger.ResetBackend(THolder(backend.Release()));
-        } else {
-            TLoggerOperator<TYqlLog>::Set(new TYqlLog(logType, levels));
+        for (const auto& cmpLevel: config.GetLevels()) {
+            auto component = ConvertComponent(cmpLevel.GetC());
+            auto level = ConvertLevel(cmpLevel.GetL());
+            levels[EComponentHelpers::ToInt(component)] = level;
+        }
+        TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels));
+
+        std::vector<THolder<TLogBackend>> backends;
+
+        // Set stderr log destination if none was described in config
+        if (config.LogDestSize() == 0) {
+            backends.emplace_back(CreateLogBackend("stderr", LOG_MAX_PRIORITY, false));
+        }
+
+        for (const auto& logDestionation : config.GetLogDest()) {
+            // Generate the backend we need and temporary store it
+            switch (logDestionation.GetType()) {
+                case NProto::TLoggingConfig::STDERR:
+                case NProto::TLoggingConfig::STDOUT:
+                case NProto::TLoggingConfig::CONSOLE: {
+                    if (!startAsDaemon) {
+                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDestionation.GetType()), LOG_MAX_PRIORITY, false));
+                    }
+                    break;
+                }
+                case NProto::TLoggingConfig::FILE: {
+                    backends.emplace_back(CreateLogBackend(logDestionation.GetTarget(), LOG_MAX_PRIORITY, false));
+                    break;
+                }
+                case NProto::TLoggingConfig::SYSLOG: {
+                    backends.emplace_back(MakeHolder<TSysLogBackend>(GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1));
+                    break;
+                }
+            }
+        }
+
+        // Combine created backends and set them for logger
+        auto& logger = TLoggerOperator<TYqlLog>::Log();
+        if (backends.size() == 1) {
+            logger.ResetBackend(std::move(backends[0]));
+        } else if (backends.size() > 1) {
+            THolder<TCompositeLogBackend> compositeBackend = MakeHolder<TCompositeLogBackend>();
+            for (auto& backend : backends) {
+                compositeBackend->AddLogBackend(std::move(backend));
+            }
+            logger.ResetBackend(std::move(compositeBackend));
         }
     }
 }

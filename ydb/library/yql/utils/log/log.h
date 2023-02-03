@@ -85,6 +85,11 @@
 
 
 namespace NYql {
+
+namespace NProto {
+    class TLoggingConfig;
+} // NProto
+
 namespace NLog {
 
 using TComponentLevels =
@@ -148,6 +153,11 @@ inline bool IsYqlLoggerInitialized() {
  * @param startAsDaemon - true if process is demonized
  */
 void InitLogger(const TString& log, bool startAsDaemon = false);
+
+/**
+ * @brief Initialize logger with backends described in config.
+*/
+void InitLogger(const NProto::TLoggingConfig& loggingConfig, bool startAsDaemon = false);
 
 /**
  * @brief Initialize logger with concrete backend.

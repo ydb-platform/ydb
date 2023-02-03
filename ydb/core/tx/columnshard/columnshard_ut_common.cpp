@@ -304,10 +304,8 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
         }
         UNIT_ASSERT(tRule.GetDefaultColumn() == tier.TtlColumn);
         {
-            NColumnShard::NTiers::TTierConfig tConfig;
-            tConfig.SetTierName(tier.Name);
-            tConfig.MutableProtoConfig().SetName(tier.Name);
-            auto& cProto = tConfig.MutableProtoConfig();
+            NKikimrSchemeOp::TStorageTierConfig cProto;
+            cProto.SetName(tier.Name);
             if (tier.S3) {
                 *cProto.MutableObjectStorage() = *tier.S3;
             }
@@ -317,6 +315,7 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
             if (tier.CompressionLevel) {
                 cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
             }
+            NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
             cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
         }
         tRule.AddInterval(tier.Name, TDuration::Seconds((*tier.EvictAfter).Seconds()));

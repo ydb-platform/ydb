@@ -851,6 +851,22 @@ message TYTSettings {
     optional bool UseTypeV3 = 8;
 };
 
+message TSecretId {
+    optional string Id = 1;
+    optional string OwnerId = 2;
+}
+
+message TSecretValue {
+    optional string Data = 1;
+}
+
+message TSecretableVariable {
+    oneof Data {
+        TSecretId SecretId = 1;
+        TSecretValue Value = 2;
+    }
+}
+
 message TS3Settings {
     enum EScheme {
         HTTP = 0;
@@ -869,6 +885,8 @@ message TS3Settings {
     optional uint32 ProxyPort = 10;
     optional EScheme ProxyScheme = 11;
     optional string Region = 12;
+    optional TSecretableVariable SecretableAccessKey = 13;
+    optional TSecretableVariable SecretableSecretKey = 14;
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

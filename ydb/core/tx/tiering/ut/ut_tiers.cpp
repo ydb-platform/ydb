@@ -189,10 +189,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 NJson::TJsonValue jsonData;
                 if (i.first.StartsWith("TIER.")) {
                     auto value = snapshot->GetTierById(i.first.substr(5));
-                    NProtobufJson::Proto2Json(value->GetProtoConfig(), jsonData);
+                    jsonData = value->SerializeConfigToJson();
                 } else if (i.first.StartsWith("TIERING_RULE.")) {
                     auto value = snapshot->GetTierById(i.first.substr(13));
-                    NProtobufJson::Proto2Json(value->GetProtoConfig(), jsonData);
+                    jsonData = value->SerializeConfigToJson();
                 } else {
                     Y_VERIFY(false);
                 }
@@ -420,7 +420,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         ObjectStorage : {
             Endpoint: "fake"
             Bucket: "fake"
-            AccessKey: "USId:root@builtin:secretAccessKey"
+            SecretableAccessKey: {
+                SecretId: {
+                    Id: "secretAccessKey"
+                    OwnerId: "root@builtin"
+                }
+            }
             SecretKey: "SId:secretSecretKey"
         }
     )";

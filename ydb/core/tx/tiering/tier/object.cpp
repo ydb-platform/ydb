@@ -49,10 +49,20 @@ NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
 {
     auto config = ProtoConfig.GetObjectStorage();
     if (secrets) {
-        secrets->PatchString(*config.MutableAccessKey());
-        secrets->PatchString(*config.MutableSecretKey());
+        if (!secrets->GetSecretValue(GetAccessKey(), *config.MutableAccessKey())) {
+            ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot read access key secret for " << GetAccessKey().DebugString();
+        }
+        if (!secrets->GetSecretValue(GetSecretKey(), *config.MutableSecretKey())) {
+            ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot read secret key secret for " << GetSecretKey().DebugString();
+        }
     }
     return config;
+}
+
+NJson::TJsonValue TTierConfig::SerializeConfigToJson() const {
+    NJson::TJsonValue result;
+    NProtobufJson::Proto2Json(ProtoConfig, result);
+    return result;
 }
 
 }

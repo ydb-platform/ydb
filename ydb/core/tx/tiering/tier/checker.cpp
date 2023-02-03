@@ -31,11 +31,11 @@ void TTierPreparationActor::StartChecker() {
                 return;
             }
         }
-        if (!Secrets->CheckSecretAccess(tier.GetProtoConfig().GetObjectStorage().GetAccessKey(), Context.GetUserToken())) {
-            Controller->OnPreparationProblem("no access for secret: " + tier.GetProtoConfig().GetObjectStorage().GetAccessKey());
+        if (!Secrets->CheckSecretAccess(tier.GetAccessKey(), Context.GetUserToken())) {
+            Controller->OnPreparationProblem("no access for secret: " + tier.GetAccessKey().DebugString());
             return;
-        } else if (!Secrets->CheckSecretAccess(tier.GetProtoConfig().GetObjectStorage().GetSecretKey(), Context.GetUserToken())) {
-            Controller->OnPreparationProblem("no access for secret: " + tier.GetProtoConfig().GetObjectStorage().GetSecretKey());
+        } else if (!Secrets->CheckSecretAccess(tier.GetSecretKey(), Context.GetUserToken())) {
+            Controller->OnPreparationProblem("no access for secret: " + tier.GetSecretKey().DebugString());
             return;
         }
     }

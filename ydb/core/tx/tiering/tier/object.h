@@ -5,6 +5,7 @@
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/metadata/secret/secret.h>
 
 #include <library/cpp/json/writer/json_value.h>
 
@@ -18,14 +19,44 @@ class TTierConfig: public NMetadata::NModifications::TObject<TTierConfig> {
 private:
     using TTierProto = NKikimrSchemeOp::TStorageTierConfig;
     YDB_ACCESSOR_DEF(TString, TierName);
-    YDB_ACCESSOR_DEF(TTierProto, ProtoConfig);
+    TTierProto ProtoConfig;
 public:
+
     TTierConfig() = default;
     TTierConfig(const TString& tierName)
+        : TierName(tierName) {
+
+    }
+
+    TTierConfig(const TString& tierName, const TTierProto& config)
         : TierName(tierName)
+        , ProtoConfig(config)
     {
 
     }
+
+    const NKikimrSchemeOp::TCompressionOptions& GetCompression() const {
+        return ProtoConfig.GetCompression();
+    }
+
+    NMetadata::NSecret::TSecretIdOrValue GetAccessKey() const {
+        auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromOptional(ProtoConfig.GetObjectStorage().GetSecretableAccessKey(), ProtoConfig.GetObjectStorage().GetAccessKey());
+        if (!accessKey) {
+            return NMetadata::NSecret::TSecretIdOrValue::BuildEmpty();
+        }
+        return *accessKey;
+    }
+
+    NMetadata::NSecret::TSecretIdOrValue GetSecretKey() const {
+        auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromOptional(ProtoConfig.GetObjectStorage().GetSecretableSecretKey(), ProtoConfig.GetObjectStorage().GetSecretKey());
+        if (!secretKey) {
+            return NMetadata::NSecret::TSecretIdOrValue::BuildEmpty();
+        }
+        return *secretKey;
+    }
+
+    NJson::TJsonValue SerializeConfigToJson() const;
+
 
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     NKikimrSchemeOp::TS3Settings GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const;

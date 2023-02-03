@@ -18,8 +18,9 @@ protected:
     virtual TString DoSerializeToString() const override;
 public:
     using TBase::TBase;
-    bool CheckSecretAccess(const TString& secretableString, const std::optional<NACLib::TUserToken>& userToken) const;
+    bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const std::optional<NACLib::TUserToken>& userToken) const;
     bool PatchString(TString& stringForPath) const;
+    bool GetSecretValue(const TSecretIdOrValue& secretId, TString& result) const;
 };
 
 }

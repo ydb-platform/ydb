@@ -27,30 +27,20 @@ bool TSnapshot::PatchString(TString& stringForPath) const {
     if (!sId) {
         return false;
     }
-    if (sId->GetValue()) {
-        return true;
-    }
-    auto it = Secrets.find(*sId->GetSecretId());
-    if (it == Secrets.end()) {
-        return false;
-    }
-    stringForPath = it->second.GetValue();
-    return true;
+    return GetSecretValue(*sId, stringForPath);
 }
 
-bool TSnapshot::CheckSecretAccess(const TString& secretableString, const std::optional<NACLib::TUserToken>& userToken) const {
-    if (!userToken) {
+bool TSnapshot::CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const std::optional<NACLib::TUserToken>& userToken) const {
+    if (!userToken || !sIdOrValue) {
         return true;
     }
-    std::optional<TSecretIdOrValue> sIdOrValue = TSecretIdOrValue::DeserializeFromString(secretableString);
-    if (!sIdOrValue) {
-        return false;
-    } else if (sIdOrValue->GetValue()) {
+    if (sIdOrValue.GetValue()) {
         return true;
-    } else if (!sIdOrValue->GetSecretId()) {
+    }
+    if (!sIdOrValue.GetSecretId()) {
         return false;
     }
-    const auto sId = *sIdOrValue->GetSecretId();
+    const auto sId = *sIdOrValue.GetSecretId();
     auto it = Secrets.find(sId);
     if (it == Secrets.end()) {
         return false;
@@ -67,6 +57,19 @@ bool TSnapshot::CheckSecretAccess(const TString& secretableString, const std::op
         }
     }
     return false;
+}
+
+bool TSnapshot::GetSecretValue(const TSecretIdOrValue& sId, TString& result) const {
+    if (sId.GetValue()) {
+        result = *sId.GetValue();
+        return true;
+    }
+    auto it = Secrets.find(*sId.GetSecretId());
+    if (it == Secrets.end()) {
+        return false;
+    }
+    result = it->second.GetValue();
+    return true;
 }
 
 }

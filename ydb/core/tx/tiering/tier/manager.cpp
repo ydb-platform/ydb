@@ -21,16 +21,38 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                 if (context.GetUserToken()) {
                     defaultUserId = context.GetUserToken()->GetUserSID();
                 }
-                auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetAccessKey(), defaultUserId);
-                if (!accessKey) {
-                    return "AccessKey is incorrect";
+
+                if (proto.GetObjectStorage().HasSecretableAccessKey()) {
+                    auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(proto.GetObjectStorage().GetSecretableAccessKey(), defaultUserId);
+                    if (!accessKey) {
+                        return "AccessKey description is incorrect";
+                    }
+                    *proto.MutableObjectStorage()->MutableSecretableAccessKey() = accessKey->SerializeToProto();
+                } else if (proto.GetObjectStorage().HasAccessKey()) {
+                    auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetAccessKey(), defaultUserId);
+                    if (!accessKey) {
+                        return "AccessKey is incorrect";
+                    }
+                    *proto.MutableObjectStorage()->MutableAccessKey() = accessKey->SerializeToString();
+                } else {
+                    return "AccessKey not configured";
                 }
-                *proto.MutableObjectStorage()->MutableAccessKey() = accessKey->SerializeToString();
-                auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetSecretKey(), defaultUserId);
-                if (!secretKey) {
-                    return "SecretKey is incorrect";
+
+                if (proto.GetObjectStorage().HasSecretableSecretKey()) {
+                    auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(proto.GetObjectStorage().GetSecretableSecretKey(), defaultUserId);
+                    if (!secretKey) {
+                        return "SecretKey description is incorrect";
+                    }
+                    *proto.MutableObjectStorage()->MutableSecretableSecretKey() = secretKey->SerializeToProto();
+                } else if (proto.GetObjectStorage().HasSecretKey()) {
+                    auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetSecretKey(), defaultUserId);
+                    if (!secretKey) {
+                        return "SecretKey is incorrect";
+                    }
+                    *proto.MutableObjectStorage()->MutableSecretKey() = secretKey->SerializeToString();
+                } else {
+                    return "SecretKey not configured";
                 }
-                *proto.MutableObjectStorage()->MutableSecretKey() = secretKey->SerializeToString();
             }
             result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));
         }

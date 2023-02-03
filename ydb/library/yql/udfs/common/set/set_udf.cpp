@@ -1,4 +1,3 @@
-
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
@@ -457,6 +456,8 @@ public:
                 builder.Args()->Add(valueType).Add<ui32>().Done().Returns(setType);
 
                 if (!typesOnly) {
+                    builder.IsStrict();
+
                     if (isGeneric) {
                         builder.Implementation(new TSetCreate(hash, equate));
                     } else {
@@ -471,6 +472,8 @@ public:
                 builder.Args()->Add(setType).Add(valueType).Done().Returns(setType);
 
                 if (!typesOnly) {
+                    builder.IsStrict();
+
                     if (isGeneric) {
                         builder.Implementation(new TSetAddValue);
                     } else {
@@ -485,6 +488,8 @@ public:
                 builder.Args()->Add(setType).Done().Returns<bool>();
 
                 if (!typesOnly) {
+                    builder.IsStrict();
+
                     if (isGeneric) {
                         builder.Implementation(new TSetWasChanged);
                     } else {
@@ -499,6 +504,8 @@ public:
                 builder.Args()->Add(setType).Add(setType).Done().Returns(setType);
 
                 if (!typesOnly) {
+                    builder.IsStrict();
+
                     if (isGeneric) {
                         builder.Implementation(new TSetMerge(hash, equate));
                     } else {
@@ -513,6 +520,8 @@ public:
                 builder.Args()->Add(setType).Done().Returns(serializedType);
 
                 if (!typesOnly) {
+                    builder.IsStrict();
+
                     if (isGeneric) {
                         builder.Implementation(new TSetSerialize);
                     } else {
@@ -543,6 +552,8 @@ public:
                 builder.Args()->Add(setType).Done().Returns(resultType);
 
                 if (!typesOnly) {
+                    builder.IsStrict();
+
                     if (isGeneric) {
                         builder.Implementation(new TSetGetResult);
                     } else {

@@ -237,9 +237,14 @@ namespace NKikimr::NBlobDepot {
             if (!ResolutionErrors.empty() && ResolutionErrors.contains(key.GetBlobId())) {
                 item.SetErrorReason("item resolution error");
                 item.ClearValueChain();
-            } else if (!item.ValueChainSize()) {
-                STLOG(PRI_WARN, BLOB_DEPOT, BDT48, "empty ValueChain on Resolve", (Id, Self->GetLogId()),
-                    (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
+            } else {
+                if (!item.ValueChainSize()) {
+                    STLOG(PRI_WARN, BLOB_DEPOT, BDT48, "empty ValueChain on Resolve", (Id, Self->GetLogId()),
+                        (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
+                }
+                if (item.GetValueVersion() != value.ValueVersion) {
+                    item.SetValueVersion(value.ValueVersion);
+                }
             }
 
             Result.AddItem(std::move(item), Self->Config);

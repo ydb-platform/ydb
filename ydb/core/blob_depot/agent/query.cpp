@@ -28,7 +28,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (doForward) {
-            TActivationContext::Send(ev->Forward(ProxyId));
+            if (ProxyId) {
+                TActivationContext::Send(ev->Forward(ProxyId));
+            } else {
+                CreateQuery<0>(std::unique_ptr<IEventHandle>(ev.Release()))->EndWithError(NKikimrProto::ERROR, "proxy has vanished");
+            }
             return;
         }
 

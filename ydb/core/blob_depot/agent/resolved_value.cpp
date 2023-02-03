@@ -35,8 +35,9 @@ namespace NKikimr::NBlobDepot {
         } else if (Version < old.Version) {
             return false;
         } else if (Version == old.Version) {
-            Y_VERIFY(Chain == old.Chain && ReliablyWritten == old.ReliablyWritten);
-            return false;
+            Y_VERIFY(Chain == old.Chain);
+            Y_VERIFY(old.ReliablyWritten <= ReliablyWritten); // value may not become 'unreliably written'
+            return old.ReliablyWritten < ReliablyWritten;
         } else {
             Y_VERIFY(old.ReliablyWritten <= ReliablyWritten); // item can't suddenly become unreliably written
             return true;

@@ -248,7 +248,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
                 if (const auto token = request.update_token_request().token()) { // TODO: refresh token here
                     ctx.Send(ctx.SelfID, new TEvPQProxy::TEvAuth(token));
                 }
-                break;
+                return (void)ReadFromStreamOrDie(ctx);
             }
 
             default: {

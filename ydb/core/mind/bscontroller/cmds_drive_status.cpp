@@ -139,6 +139,7 @@ namespace NKikimr::NBsController {
         Y_VERIFY(success);
         driveInfoMutable->PDiskConfig = config;
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED;
+        driveInfoMutable->NodeId = nodeId;
 
         Fit.Boxes.insert(boxId);
 

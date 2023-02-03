@@ -124,8 +124,8 @@ NYql::NLog::EComponent ConvertComponent(NYql::NProto::TLoggingConfig::EComponent
 
 TString ConvertDestinationType(NYql::NProto::TLoggingConfig::ELogTo c) {
     switch (c) {
-    case NYql::NProto::TLoggingConfig::STDOUT: return "stdout";
-    case NYql::NProto::TLoggingConfig::STDERR: return "stderr";
+    case NYql::NProto::TLoggingConfig::STDOUT: return "cout";
+    case NYql::NProto::TLoggingConfig::STDERR: return "cerr";
     case NYql::NProto::TLoggingConfig::CONSOLE: return "console";
     default : {
         ythrow yexception() << "unsupported ELogTo destination in Convert";
@@ -137,9 +137,9 @@ TString ConvertDestinationType(NYql::NProto::TLoggingConfig::ELogTo c) {
 
 NYql::NProto::TLoggingConfig::TLogDestination CreateLogDestination(const TString& c) {
     NYql::NProto::TLoggingConfig::TLogDestination destination;
-    if (c == "stdout") {
+    if (c == "cout") {
         destination.SetType(NYql::NProto::TLoggingConfig::STDOUT);
-    } else if (c == "stderr") {
+    } else if (c == "cerr") {
         destination.SetType(NYql::NProto::TLoggingConfig::STDERR);
     } else if (c == "console") {
         destination.SetType(NYql::NProto::TLoggingConfig::CONSOLE);
@@ -277,7 +277,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
 
         // Set stderr log destination if none was described in config
         if (config.LogDestSize() == 0) {
-            backends.emplace_back(CreateLogBackend("stderr", LOG_MAX_PRIORITY, false));
+            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, false));
         }
 
         for (const auto& logDestionation : config.GetLogDest()) {

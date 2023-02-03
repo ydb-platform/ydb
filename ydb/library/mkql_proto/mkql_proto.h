@@ -22,6 +22,8 @@ TType* ImportTypeFromProto(const NKikimrMiniKQL::TType& type, const TTypeEnviron
 
 std::pair<TType*, NUdf::TUnboxedValue> ImportValueFromProto(const Ydb::Type& type, const Ydb::Value& value,
     const TTypeEnvironment& env, const THolderFactory& factory);
+NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value,
+    const TTypeEnvironment& env, const THolderFactory& factory);
 std::pair<TType*, NUdf::TUnboxedValue> ImportValueFromProto(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
     const TTypeEnvironment& env, const THolderFactory& factory);
 TRuntimeNode ImportValueFromProto(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,

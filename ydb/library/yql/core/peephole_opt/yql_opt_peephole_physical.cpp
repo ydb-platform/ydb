@@ -4061,8 +4061,10 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
 }
 
 template<bool Sort>
-TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx) {
-    return node; // TODO
+TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!types.UseBlocks) {
+        return node; // TODO
+    }
 
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
         TNodeMap<size_t> indexes(input.Tail().Tail().ChildrenSize());
@@ -7141,11 +7143,11 @@ struct TPeepHoleRules {
         {"WideMap", &OptimizeWideMaps},
         {"NarrowMap", &OptimizeWideMaps},
         {"Unordered", &DropUnordered},
-        {"Top", &OptimizeTop<false>},
-        {"TopSort", &OptimizeTop<true>},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {
+        {"Top", &OptimizeTop<false>},
+        {"TopSort", &OptimizeTop<true>},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageNonDetRulesInit = {

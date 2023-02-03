@@ -6,7 +6,6 @@
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
-#include <ydb/core/yq/libs/shared_resources/db_pool.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/yq/libs/signer/signer.h>
 

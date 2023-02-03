@@ -21,6 +21,7 @@
 #include <library/cpp/actors/core/actor.h>
 
 #include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/security/util.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
@@ -43,12 +44,13 @@ class TControlPlaneConfigActor : public NActors::TActorBootstrapped<TControlPlan
     ::NYq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
-    TDbPool::TPtr DbPool;
+    NDbPool::TDbPool::TPtr DbPool;
     ::NMonitoring::TDynamicCounterPtr Counters;
     NConfig::TControlPlaneStorageConfig Config;
     TTenantInfo::TPtr TenantInfo;
     bool LoadInProgress = false;
     TDuration DbReloadPeriod;
+    TString TablePathPrefix;
 
 public:
     TControlPlaneConfigActor(const ::NYq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters)
@@ -67,7 +69,8 @@ public:
         Become(&TControlPlaneConfigActor::StateFunc);
         if (Config.GetUseDbMapping()) {
             YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
-            DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
+            DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN), 10);
+            TablePathPrefix = YdbConnection->TablePathPrefix;
             Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
         } else {
             TenantInfo.reset(new TTenantInfo());
@@ -211,14 +214,14 @@ private:
                         );
                     }
 
-                    Exec(DbPool, executable);
+                    Exec(DbPool, executable, TablePathPrefix);
                 }
 
                 LoadInProgress = false;
             }
         );
 
-        Exec(DbPool, executable);
+        Exec(DbPool, executable, TablePathPrefix);
     }
 
     void ReflectTenantChanges(TTenantInfo::TPtr oldInfo) {

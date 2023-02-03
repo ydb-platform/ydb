@@ -21,6 +21,7 @@
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
+#include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>
 
 #include <ydb/core/base/appdata.h>
@@ -45,6 +46,7 @@ namespace NYq {
 
 using namespace NActors;
 using namespace NConfig;
+using namespace NDbPool;
 using namespace NKikimr;
 using namespace NThreading;
 using namespace NYdb;
@@ -562,6 +564,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
     TInstant QuotasUpdatedAt = TInstant::Zero();
     bool QuotasUpdating = false;
+
+    TString TablePathPrefix;
 
 public:
     TYdbControlPlaneStorageActor(

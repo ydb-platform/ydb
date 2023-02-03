@@ -1,5 +1,6 @@
 #pragma once
-#include <ydb/core/yq/libs/shared_resources/db_pool.h>
+
+#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>

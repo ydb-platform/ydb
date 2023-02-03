@@ -324,6 +324,8 @@ enum EServiceKikimr {
 
     VIEWER = 1166;
 
+    DB_POOL = 1167;
+
     // 1024 - 1099 is reserved for nbs
 
     // Change exchange (async indexes & CDC)

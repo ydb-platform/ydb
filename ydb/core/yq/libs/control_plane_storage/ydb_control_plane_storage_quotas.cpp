@@ -95,7 +95,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
         }
     );
 
-    Exec(DbPool, executable);
+    Exec(DbPool, executable, TablePathPrefix);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {

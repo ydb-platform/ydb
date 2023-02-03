@@ -1,0 +1,14 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NDbPool;
+
+message TConfig {
+    uint32 MaxSessionCount = 1;
+    string Endpoint = 2;
+    string Database = 3;
+    string OAuthFile = 4;
+    bool UseLocalMetadataService = 5;
+    bool UseSsl = 6;
+    string Token = 7;
+}

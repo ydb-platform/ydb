@@ -104,45 +104,6 @@ struct TEvents {
         {}
     };
 
-    struct TEvDbRequest : NActors::TEventLocal<TEvDbRequest, TEventIds::EvDbRequest> {
-        TString Sql;
-        NYdb::TParams Params;
-        bool Idempotent;
-
-        TEvDbRequest(const TString& sql, NYdb::TParams&& params, bool idempotent = true)
-            : Sql(sql)
-            , Params(std::move(params))
-            , Idempotent(idempotent)
-        {}
-    };
-
-    struct TEvDbResponse : NActors::TEventLocal<TEvDbResponse, TEventIds::EvDbResponse> {
-        NYdb::TStatus Status;
-        TVector<NYdb::TResultSet> ResultSets;
-
-        TEvDbResponse(NYdb::TStatus status, const TVector<NYdb::TResultSet>& resultSets)
-            : Status(status)
-            , ResultSets(resultSets)
-        {}
-    };
-
-    struct TEvDbFunctionRequest : NActors::TEventLocal<TEvDbFunctionRequest, TEventIds::EvDbFunctionRequest> {
-        using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
-        TFunction Handler;
-
-        explicit TEvDbFunctionRequest(const TFunction& handler)
-            : Handler(handler)
-        {}
-    };
-
-    struct TEvDbFunctionResponse : NActors::TEventLocal<TEvDbFunctionResponse, TEventIds::EvDbFunctionResponse> {
-        NYdb::TStatus Status;
-
-        explicit TEvDbFunctionResponse(NYdb::TStatus status)
-            : Status(status)
-        {}
-    };
-
     struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
         NYql::TDbResolverResponse DbResolverResponse;
         explicit TEvEndpointResponse(NYql::TDbResolverResponse&& response) noexcept : DbResolverResponse(std::move(response)) {}

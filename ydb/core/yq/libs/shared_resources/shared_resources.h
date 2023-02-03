@@ -1,5 +1,5 @@
 #pragma once
-#include "db_pool.h"
+#include <ydb/library/db_pool/db_pool.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
@@ -21,7 +21,7 @@ struct TYqSharedResources : public IYqSharedResources {
     // For now they are actually point to the same driver, but it can be changed in the future.
     NYdb::TDriver CoreYdbDriver;
     NYdb::TDriver UserSpaceYdbDriver;
-    TDbPoolHolder::TPtr DbPoolHolder;
+    NDbPool::TDbPoolHolder::TPtr DbPoolHolder;
 
 protected:
     explicit TYqSharedResources(NYdb::TDriver driver);

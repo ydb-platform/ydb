@@ -1,9 +1,10 @@
 #pragma once
 
-#include "db_pool.h"
+#include <ydb/library/db_pool/db_pool.h>
 
 #include <ydb/core/yq/libs/common/debug_info.h>
 #include <ydb/core/yq/libs/config/yq_issue.h>
+#include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/exceptions/exceptions.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
@@ -26,11 +27,12 @@ public:
     virtual TAsyncStatus Execute(NYdb::NTable::TSession& session) = 0;
     void Throw(const TString& message);
 
-    TDbPool::TPtr DbPool;
+    NDbPool::TDbPool::TPtr DbPool;
     std::weak_ptr<TDbExecutable> SelfHolder;
     NYql::TIssues Issues;
     NYql::TIssues InternalIssues;
     TDebugInfoPtr DebugInfo;
+    TString TablePathPrefix;
 };
 
 template <typename TProto>
@@ -41,9 +43,11 @@ void ParseProto(TDbExecutable& executable, TProto& proto, TResultSetParser& pars
     }
 }
 
-inline TAsyncStatus Exec(TDbPool::TPtr dbPool, TDbExecutable::TPtr executable) {
+inline TAsyncStatus Exec(NDbPool::TDbPool::TPtr dbPool, TDbExecutable::TPtr executable,
+                                                                    const TString& tablePathPrefix) {
     executable->DbPool = dbPool;
     executable->SelfHolder = executable;
+    executable->TablePathPrefix = tablePathPrefix;
     return ExecDbRequest(dbPool, [=](NYdb::NTable::TSession& session) {
         return executable->Execute(session);
     });
@@ -159,7 +163,7 @@ public:
             }
             return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}});
         } else {
-            TSqlQueryBuilder builder(DbPool->TablePathPrefix, Steps[CurrentStepIndex].Name);
+            TSqlQueryBuilder builder(TablePathPrefix, Steps[CurrentStepIndex].Name);
             SkipStep_ = false;
             Steps[CurrentStepIndex].BuildCallback(*this, builder);
 

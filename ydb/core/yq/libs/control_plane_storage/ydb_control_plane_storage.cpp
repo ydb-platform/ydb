@@ -3,7 +3,7 @@
 #include "ydb_control_plane_storage_impl.h"
 
 #include <ydb/core/yq/libs/ydb/schema.h>
-#include <ydb/core/yq/libs/shared_resources/db_pool.h>
+#include <ydb/library/db_pool/db_pool.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
@@ -37,7 +37,8 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
     YdbConnection = NewYdbConnection(Config->Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
-    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
+    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN), 10);
+    TablePathPrefix = YdbConnection->TablePathPrefix;
     CreateDirectory();
 
     CreateQueriesTable();

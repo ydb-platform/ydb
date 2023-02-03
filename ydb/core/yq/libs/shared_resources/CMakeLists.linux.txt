@@ -27,6 +27,7 @@ target_link_libraries(yq-libs-shared_resources PUBLIC
   yq-libs-exceptions
   libs-quota_manager-events
   libs-shared_resources-interface
+  ydb-library-db_pool
   ydb-library-logger
   ydb-library-security
   cpp-client-ydb_driver
@@ -34,6 +35,5 @@ target_link_libraries(yq-libs-shared_resources PUBLIC
 )
 target_sources(yq-libs-shared_resources PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/shared_resources/db_exec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/shared_resources/db_pool.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/shared_resources/shared_resources.cpp
 )

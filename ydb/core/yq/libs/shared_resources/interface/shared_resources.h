@@ -14,4 +14,8 @@ struct IYqSharedResources : public TThrRefBase {
     virtual void Stop() = 0;
 };
 
+enum class EDbPoolId {
+    MAIN = 0
+};
+
 } // NYq

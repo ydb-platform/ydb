@@ -4,6 +4,7 @@
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
 #include <ydb/core/yq/libs/config/protos/test_connection.pb.h>
+#include <ydb/core/yq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/yq/libs/signer/signer.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>

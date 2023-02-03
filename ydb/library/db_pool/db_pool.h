@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb/core/yq/libs/config/protos/fq_config.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/core/yq/libs/events/events.h>
+#include "events.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+
+#include <ydb/library/db_pool/protos/config.pb.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -13,7 +14,7 @@
 
 #include <util/system/mutex.h>
 
-namespace NYq {
+namespace NDbPool {
 
 class TDbPool: public TThrRefBase {
 public:
@@ -23,12 +24,10 @@ public:
 
     NActors::TActorId GetNextActor();
 
-    TString TablePathPrefix;
-
 private:
     friend class TDbPoolMap;
 
-    TDbPool(ui32 sessionsCount, const NYdb::NTable::TTableClient& tableClient, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& tablePathPrefix);
+    TDbPool(ui32 sessionsCount, const NYdb::NTable::TTableClient& tableClient, const ::NMonitoring::TDynamicCounterPtr& counters);
 
     TMutex Mutex;
     TVector<NActors::TActorId> Actors;
@@ -36,48 +35,47 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
 };
 
-enum class EDbPoolId {
-    MAIN = 0,
-    REFRESH = 1
-};
-
 class TDbPoolMap: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolMap>;
 
-    TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount, const TString& tablePathPrefix);
+    TDbPool::TPtr GetOrCreate(ui32 poolId, ui32 sessionsCount);
 
 private:
     friend class TDbPoolHolder;
 
-    TDbPoolMap(const NYq::NConfig::TDbPoolConfig& config,
+    TDbPoolMap(const NDbPool::TConfig& config,
                NYdb::TDriver driver,
                const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
                const ::NMonitoring::TDynamicCounterPtr& counters);
 
-    void Reset(const NYq::NConfig::TDbPoolConfig& config);
+    void Reset(const NDbPool::TConfig& config);
     TMutex Mutex;
-    NYq::NConfig::TDbPoolConfig Config;
+    NDbPool::TConfig Config;
     NYdb::TDriver Driver;
-    THashMap<EDbPoolId, TDbPool::TPtr> Pools;
+    THashMap<ui32, TDbPool::TPtr> Pools;
+public:
     THolder<NYdb::NTable::TTableClient> TableClient;
+private:
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     const ::NMonitoring::TDynamicCounterPtr Counters;
 };
+
+NYdb::TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler);
 
 class TDbPoolHolder: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolHolder>;
     TDbPoolHolder(
-        const NYq::NConfig::TDbPoolConfig& config,
+        const NDbPool::TConfig& config,
         const NYdb::TDriver& driver,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters);
 
     ~TDbPoolHolder();
 
-    void Reset(const NYq::NConfig::TDbPoolConfig& config);
-    TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount, const TString& tablePathPrefix);
+    void Reset(const NDbPool::TConfig& config);
+    TDbPool::TPtr GetOrCreate(ui32 poolId, ui32 sessionsCount);
     NYdb::TDriver& GetDriver();
     TDbPoolMap::TPtr Get();
 
@@ -85,8 +83,6 @@ public:
     NYdb::TDriver Driver;
     TDbPoolMap::TPtr Pools;
 };
-
-NYdb::TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler);
 
 class TDbRequest: public NActors::TActorBootstrapped<TDbRequest> {
     using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
@@ -108,4 +104,4 @@ public:
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&);
 };
 
-} /* NYq */
+} // namespace NDbPool

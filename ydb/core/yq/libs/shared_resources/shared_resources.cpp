@@ -32,7 +32,20 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig())))
     {
-        CreateDbPoolHolder(config.GetDbPool(), credentialsProviderFactory, counters);
+        CreateDbPoolHolder(PrepareDbPoolConfig(config), credentialsProviderFactory, counters);
+    }
+
+    NDbPool::TConfig PrepareDbPoolConfig(const NYq::NConfig::TConfig& config) {
+        NDbPool::TConfig dbPoolConfig;
+        const auto& storageConfig = config.GetDbPool().GetStorage();
+        dbPoolConfig.SetMaxSessionCount(config.GetDbPool().GetMaxSessionCount());
+        dbPoolConfig.SetEndpoint(storageConfig.GetEndpoint());
+        dbPoolConfig.SetDatabase(storageConfig.GetDatabase());
+        dbPoolConfig.SetOAuthFile(storageConfig.GetOAuthFile());
+        dbPoolConfig.SetUseLocalMetadataService(storageConfig.GetUseLocalMetadataService());
+        dbPoolConfig.SetUseSsl(storageConfig.GetUseSsl());
+        dbPoolConfig.SetToken(storageConfig.GetToken());
+        return dbPoolConfig;
     }
 
     void Init(NActors::TActorSystem* actorSystem) override {
@@ -62,10 +75,10 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     }
 
     void CreateDbPoolHolder(
-        const NYq::NConfig::TDbPoolConfig& config,
+        const NDbPool::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters) {
-        DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, CoreYdbDriver, credentialsProviderFactory, counters);
+        DbPoolHolder = MakeIntrusive<NDbPool::TDbPoolHolder>(config, CoreYdbDriver, credentialsProviderFactory, counters);
     }
 };
 

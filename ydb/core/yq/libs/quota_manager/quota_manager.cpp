@@ -188,7 +188,8 @@ public:
         }
 
         YdbConnection = NewYdbConnection(StorageConfig, CredProviderFactory, YqSharedResources->CoreYdbDriver);
-        DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
+        TablePathPrefix = YdbConnection->TablePathPrefix;
+        DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN), 10);
         Send(NActors::GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
         Become(&TQuotaManagementService::StateFunc);
         LOG_I("STARTED");
@@ -471,7 +472,7 @@ private:
             }
         );
 
-        Exec(DbPool, executable);
+        Exec(DbPool, executable, TablePathPrefix);
     }
 
     void SendQuota(NActors::TActorId receivedId, ui64 cookie, const TString& subjectType, const TString& subjectId, TQuotaCache& cache) {
@@ -632,7 +633,7 @@ private:
             }
         );
 
-        Exec(DbPool, executable);
+        Exec(DbPool, executable, TablePathPrefix);
     }
 
     void UpdateQuota(const TString& subjectType, const TString& subjectId, const TString& metricName, TQuotaUsage& usage) {
@@ -836,7 +837,7 @@ private:
     ::NYq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
-    TDbPool::TPtr DbPool;
+    NDbPool::TDbPool::TPtr DbPool;
     const ::NMonitoring::TDynamicCounterPtr ServiceCounters;
     THashMap<TString /* SubjectType */, THashMap<TString /* MetricName */, TQuotaInfo>> QuotaInfoMap;
     THashMap<TString /* SubjectType */, THashMap<TString /* SubjectId */, TQuotaCache>> QuotaCacheMap;
@@ -845,6 +846,7 @@ private:
     std::vector<ui32> NodeIds;
     NActors::TMon* Monitoring;
     NActors::TActorId HttpMonId;
+    TString TablePathPrefix;
 };
 
 NActors::IActor* CreateQuotaServiceActor(

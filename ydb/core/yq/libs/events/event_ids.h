@@ -30,10 +30,6 @@ struct TEventIds {
 
         // Internal events
         EvAsyncContinue,
-        EvDbRequest,
-        EvDbResponse,
-        EvDbFunctionRequest,
-        EvDbFunctionResponse,
         EvEndpointRequest,
         EvEndpointResponse,
         EvDataStreamsReadRulesCreationResult,

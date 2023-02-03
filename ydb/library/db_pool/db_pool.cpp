@@ -1,37 +1,15 @@
 #include "db_pool.h"
-
-#include <ydb/core/protos/services.pb.h>
+#include "log.h"
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-#include <ydb/core/yq/libs/actors/logging/log.h>
-
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 
-#define LOG_F_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, EMERG, STREAMS, logRecordStream)
-#define LOG_A_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, ALERT, STREAMS, logRecordStream)
-#define LOG_C_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, CRIT, STREAMS, logRecordStream)
-#define LOG_E_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, ERROR, STREAMS, logRecordStream)
-#define LOG_W_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, WARN, STREAMS, logRecordStream)
-#define LOG_N_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, NOTICE, STREAMS, logRecordStream)
-#define LOG_I_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, INFO, STREAMS, logRecordStream)
-#define LOG_D_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, DEBUG, STREAMS, logRecordStream)
-#define LOG_T_AS(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(*actorSystem, TRACE, STREAMS, logRecordStream)
 
-#define LOG_F(logRecordStream) LOG_F_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_A(logRecordStream) LOG_A_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_C(logRecordStream) LOG_C_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_E(logRecordStream) LOG_E_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_W(logRecordStream) LOG_W_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_N(logRecordStream) LOG_N_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_I(logRecordStream) LOG_I_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_D(logRecordStream) LOG_D_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-#define LOG_T(logRecordStream) LOG_T_AS(::NActors::TActivationContext::ActorSystem(), logRecordStream)
-
-namespace NYq {
+namespace NDbPool {
 
 using namespace NActors;
 using namespace NYql;
@@ -206,10 +184,8 @@ private:
 TDbPool::TDbPool(
     ui32 sessionsCount,
     const NYdb::NTable::TTableClient& tableClient,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const TString& tablePathPrefix)
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    TablePathPrefix = tablePathPrefix;
     const auto& ctx = NActors::TActivationContext::AsActorContext();
     auto parentId = ctx.SelfID;
     Actors.reserve(sessionsCount);
@@ -238,9 +214,9 @@ TActorId TDbPool::GetNextActor() {
     return Actors[Index++];
 }
 
-static void PrepareConfig(NYq::NConfig::TDbPoolConfig& config) {
-    if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) {
-        config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll()));
+static void PrepareConfig(NDbPool::TConfig& config) {
+    if (!config.GetToken() && config.GetOAuthFile()) {
+        config.SetToken(StripString(TFileInput(config.GetOAuthFile()).ReadAll()));
     }
 
     if (!config.GetMaxSessionCount()) {
@@ -249,7 +225,7 @@ static void PrepareConfig(NYq::NConfig::TDbPoolConfig& config) {
 }
 
 TDbPoolMap::TDbPoolMap(
-    const NYq::NConfig::TDbPoolConfig& config,
+    const NDbPool::TConfig& config,
     NYdb::TDriver driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters)
@@ -262,7 +238,7 @@ TDbPoolMap::TDbPoolMap(
 }
 
 TDbPoolHolder::TDbPoolHolder(
-    const NYq::NConfig::TDbPoolConfig& config,
+    const NDbPool::TConfig& config,
     const NYdb::TDriver& driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters)
@@ -275,7 +251,7 @@ TDbPoolHolder::~TDbPoolHolder()
     Driver.Stop(true);
 }
 
-void TDbPoolHolder::Reset(const NYq::NConfig::TDbPoolConfig& config) {
+void TDbPoolHolder::Reset(const NDbPool::TConfig& config) {
     Pools->Reset(config);
 }
 
@@ -283,7 +259,7 @@ TDbPoolMap::TPtr TDbPoolHolder::Get() {
     return Pools;
 }
 
-void TDbPoolMap::Reset(const NYq::NConfig::TDbPoolConfig& config) {
+void TDbPoolMap::Reset(const NDbPool::TConfig& config) {
     TGuard<TMutex> lock(Mutex);
     Config = config;
     PrepareConfig(Config);
@@ -291,18 +267,18 @@ void TDbPoolMap::Reset(const NYq::NConfig::TDbPoolConfig& config) {
     TableClient = nullptr;
 }
 
-TDbPool::TPtr TDbPoolHolder::GetOrCreate(EDbPoolId dbPoolId, ui32 sessionsCount, const TString& tablePathPrefix) {
-    return Pools->GetOrCreate(dbPoolId, sessionsCount, tablePathPrefix);
+TDbPool::TPtr TDbPoolHolder::GetOrCreate(ui32 dbPoolId, ui32 sessionsCount) {
+    return Pools->GetOrCreate(dbPoolId, sessionsCount);
 }
 
-TDbPool::TPtr TDbPoolMap::GetOrCreate(EDbPoolId dbPoolId, ui32 sessionsCount, const TString& tablePathPrefix) {
+TDbPool::TPtr TDbPoolMap::GetOrCreate(ui32 dbPoolId, ui32 sessionsCount) {
     TGuard<TMutex> lock(Mutex);
     auto it = Pools.find(dbPoolId);
     if (it != Pools.end()) {
         return it->second;
     }
 
-    if (!Config.GetStorage().GetEndpoint()) {
+    if (!Config.GetEndpoint()) {
         return nullptr;
     }
 
@@ -310,27 +286,33 @@ TDbPool::TPtr TDbPoolMap::GetOrCreate(EDbPoolId dbPoolId, ui32 sessionsCount, co
         auto clientSettings = NYdb::NTable::TClientSettings()
             .UseQueryCache(false)
             .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + Config.GetMaxSessionCount()))
-            .Database(Config.GetStorage().GetDatabase())
-            .DiscoveryEndpoint(Config.GetStorage().GetEndpoint())
+            .Database(Config.GetDatabase())
+            .DiscoveryEndpoint(Config.GetEndpoint())
             .DiscoveryMode(NYdb::EDiscoveryMode::Async);
         NKikimr::TYdbCredentialsSettings credSettings;
-        credSettings.UseLocalMetadata = Config.GetStorage().GetUseLocalMetadataService();
-        credSettings.OAuthToken = Config.GetStorage().GetToken();
+        credSettings.UseLocalMetadata = Config.GetUseLocalMetadataService();
+        credSettings.OAuthToken = Config.GetToken();
 
         clientSettings.CredentialsProviderFactory(CredentialsProviderFactory(credSettings));
 
-        clientSettings.SslCredentials(NYdb::TSslCredentials(Config.GetStorage().GetUseSsl()));
+        clientSettings.SslCredentials(NYdb::TSslCredentials(Config.GetUseSsl()));
 
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, clientSettings);
     }
 
-    TDbPool::TPtr dbPool = new TDbPool(sessionsCount, *TableClient, Counters, tablePathPrefix);
+    TDbPool::TPtr dbPool = new TDbPool(sessionsCount, *TableClient, Counters);
     Pools.emplace(dbPoolId, dbPool);
     return dbPool;
 }
 
 NYdb::TDriver& TDbPoolHolder::GetDriver() {
     return Driver;
+}
+
+NYdb::TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler) {
+    NThreading::TPromise<NYdb::TStatus> promise = NThreading::NewPromise<NYdb::TStatus>();
+    TActivationContext::Register(new TDbRequest(dbPool, promise, handler));
+    return promise.GetFuture();
 }
 
 TDbRequest::TDbRequest(const TDbPool::TPtr& dbPool, const NThreading::TPromise<NYdb::TStatus>& promise, const TFunction& handler)
@@ -356,10 +338,4 @@ void TDbRequest::OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
     Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
 }
 
-NYdb::TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler) {
-    NThreading::TPromise<NYdb::TStatus> promise = NThreading::NewPromise<NYdb::TStatus>();
-    TActivationContext::Register(new TDbRequest(dbPool, promise, handler));
-    return promise.GetFuture();
-}
-
-} /* namespace NYq */
+} // namespace NDbPool

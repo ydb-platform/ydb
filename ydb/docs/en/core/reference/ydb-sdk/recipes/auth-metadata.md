@@ -8,68 +8,68 @@ Below are examples of the code for authentication using environment variables in
 
 - Go (native)
 
-   ```go
-   package main
+  ```go
+  package main
 
-   import (
-     "context"
-     "os"
+  import (
+    "context"
+    "os"
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     yc "github.com/ydb-platform/ydb-go-yc"
-   )
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    yc "github.com/ydb-platform/ydb-go-yc"
+  )
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       yc.WithMetadataCredentials(ctx),
-       yc.WithInternalCA(), // append Yandex Cloud certificates
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     ...
-   }
-   ```
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      yc.WithMetadataCredentials(ctx),
+      yc.WithInternalCA(), // append Yandex Cloud certificates
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx) 
+    ...
+  }
+  ```
 
 - Go (database/sql)
 
-   ```go
-   package main
+  ```go
+  package main
 
-   import (
-     "context"
-     "database/sql"
-     "os"
+  import (
+    "context"
+    "database/sql"
+    "os"
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     yc "github.com/ydb-platform/ydb-go-yc"
-   )
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    yc "github.com/ydb-platform/ydb-go-yc"
+  )
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     nativeDriver, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       yc.WithMetadataCredentials(ctx),
-       yc.WithInternalCA(), // append Yandex Cloud certificates
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer nativeDriver.Close(ctx)
-     connector, err := ydb.Connector(nativeDriver)
-     if err != nil {
-       panic(err)
-     }
-     db := sql.OpenDB(connector)
-     defer db.Close()
-     ...
-   }
-   ```
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      yc.WithMetadataCredentials(ctx),
+      yc.WithInternalCA(), // append Yandex Cloud certificates
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx) 
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    db := sql.OpenDB(connector)
+    defer db.Close()
+    ...
+  }
+  ```
 
 - Java
 

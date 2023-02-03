@@ -28,7 +28,6 @@ Below are examples of the code for authentication using environment variables in
   import (
     "context"
     "os"
-
     environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
@@ -57,7 +56,6 @@ Below are examples of the code for authentication using environment variables in
     "context"
     "database/sql"
     "os"
-
     environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
@@ -104,6 +102,6 @@ Below are examples of the code for authentication using environment variables in
 
 - Node.js
 
-   {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
+  {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
 
 {% endlist %}

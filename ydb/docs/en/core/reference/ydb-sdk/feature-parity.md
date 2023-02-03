@@ -1,6 +1,6 @@
 # Comparison of SDK features
 
-| Feature | C\+\+ | Python | Go | Java | Node.js | C# | Rust | PHP |
+| Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | SSL/TLS support (system certificates) | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | SSL/TLS support (custom certificates) | \+ | \+ | \+ | \+ | \+ | \- |
@@ -22,7 +22,7 @@
 | Load balancing across all nodes of all local DCs | \+ | \+ | \+ | ? | \- | \- | \- |
 | **Credentials providers** |
 | Anonymous (default) | \+ | \+ | \+ | \+ | \+ | ? | \+ |
-| Static (user - password) | \+ | \+ | \+ | \+ | \+ | \- | \- |
+| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \- |
 | Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- |
 | Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ |

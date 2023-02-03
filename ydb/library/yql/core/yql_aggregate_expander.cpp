@@ -1347,7 +1347,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
 {
     auto preprocessLambda = GeneratePreprocessLambda(keyExtractor);
     TExprNode::TPtr postAgg;
-    if (!UsePartitionsByKeys && UseFinalizeByKeys) {
+    if (!UsePartitionsByKeys && UseFinalizeByKeys && !HaveSessionSetting) {
         postAgg = Ctx.Builder(Node->Pos())
             .Callable("ShuffleByKeys")
                 .Add(0, std::move(preAgg))

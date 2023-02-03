@@ -166,7 +166,7 @@ namespace NKikimr::NBsController {
                 auto *data = profiles->Add();
                 data->SetStoragePoolName(storagePoolName);
                 data->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
-                data->SetCount(numPhysicalGroups);
+                data->SetCount(Min<ui32>(250, numPhysicalGroups));
             }
 
             const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());

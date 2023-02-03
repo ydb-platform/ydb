@@ -219,6 +219,7 @@ namespace NKikimr::NBlobDepot {
 #undef FORWARD_STORAGE_PROXY
 
         void PassAway() override {
+            ClearPendingEventQueue("BlobDepot agent destroyed");
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
             TActor::PassAway();
         }

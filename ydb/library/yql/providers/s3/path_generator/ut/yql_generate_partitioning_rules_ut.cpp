@@ -162,8 +162,8 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
         UNIT_ASSERT_VALUES_EQUAL(rules[3].ColumnValues.size(), 2);
     }
 
-    Y_UNIT_TEST(SuccessGenerateDateWithUnixtime) {
-        auto generator = CreatePathGenerator(R"(
+    Y_UNIT_TEST(FailedGenerateDateWithUnixtime) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -176,14 +176,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.unit" : "DAYS",
                 "storage.location.template" : "//${city}/${code}//"
             }
-        )", {"city", "code"});
-
-        auto rules = generator->GetRules();
-        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "MSK/1970-01-03/");
-        UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(rules[1].Path, "SPB/1970-01-03/");
-        UNIT_ASSERT_VALUES_EQUAL(rules[1].ColumnValues.size(), 2);
+        )", {"city", "code"}), yexception, "error in datetime parsing. Input data: 201701");
     }
 
     Y_UNIT_TEST(SuccessGenerateDateWithNow) {
@@ -317,13 +310,13 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.enabled" : "true",
                 "storage.location.template" : "${year}",
                 "projection.year.type" : "date",
-                "projection.year.min" : "1900",
+                "projection.year.min" : "1971-01-01",
                 "projection.year.max" : "NOW",
                 "projection.year.interval" : "1",
                 "projection.year.format" : "%Y",
                 "projection.year.unit" : "DAYS"
             }
-        )", {"year"}), yexception, "Location path 1970/ is composed by different projection value sets { ${year} = 1970-01-01 } and { ${year} = 1970-01-02 }");;
+        )", {"year"}), yexception, "Location path 1971/ is composed by different projection value sets { ${year} = 1971-01-01 } and { ${year} = 1971-01-02 }");;
     }
 }
 

@@ -213,16 +213,6 @@ TInstant AddUnit(TInstant current, int64_t interval, IPathGenerator::EIntervalUn
 }
 
 TInstant ParseDate(const TString& dateStr, const TInstant& now) {
-    try {
-        size_t idx = 0;
-        int64_t unixTime = std::stoll(dateStr, &idx);
-        if (idx == dateStr.Size()) {
-            return TInstant::FromValue(unixTime * 1000 * 1000);
-        }
-    } catch (const std::exception&) {
-        // trying other options
-    }
-
     const std::string pattern = "^\\s*(NOW)\\s*(([\\+\\-])\\s*([0-9]+)\\s*(YEARS?|MONTHS?|WEEKS?|DAYS?|HOURS?|MINUTES?|SECONDS?)\\s*)?$";
     std::regex word_regex(pattern);
     auto wordBegin = std::sregex_iterator(dateStr.begin(), dateStr.end(), word_regex);

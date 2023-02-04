@@ -154,13 +154,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
 }
 )___";
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            std::vector<TType*> tupleElemenTypes;
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
             auto pgmReturn = pgmBuilder.NewVariant(
                 pgmBuilder.NewDataLiteral<ui32>(66),
                 1,
-                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElemenTypes)));
+                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes)));
             return pgmReturn;
         },
         expected);
@@ -374,19 +374,133 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
 
     Y_UNIT_TEST(TestExportVariantYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            std::vector<TType*> tupleElemenTypes;
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
             auto pgmReturn = pgmBuilder.NewVariant(
                 pgmBuilder.NewDataLiteral<ui32>(66),
                 1,
-                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElemenTypes)));
+                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes)));
             return pgmReturn;
         },
         "nested_value {\n"
         "  uint32_value: 66\n"
         "}\n"
         "variant_index: 1\n");
+    }
+
+    Y_UNIT_TEST(TestExportMultipleOptionalVariantNotNullYdb) {
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+
+            auto pgmReturn = pgmBuilder.NewOptional(
+                pgmBuilder.NewOptional(pgmBuilder.NewVariant(
+                    pgmBuilder.NewDataLiteral<ui32>(66),
+                    1,
+                    pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes)))));
+            return pgmReturn;
+        },
+        "nested_value {\n"
+        "  uint32_value: 66\n"
+        "}\n"
+        "variant_index: 1\n");
+    }
+
+    Y_UNIT_TEST(TestExportOptionalVariantOptionalNullYdb) {
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
+
+            auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewVariant(
+                    pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id),
+                    1,
+                    pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes))));
+            return pgmReturn;
+        },
+        "nested_value {\n"
+        "  nested_value {\n"
+        "    null_flag_value: NULL_VALUE\n"
+        "  }\n"
+        "  variant_index: 1\n"
+        "}\n");
+    }
+
+
+    Y_UNIT_TEST(TestExportMultipleOptionalVariantOptionalNullYdb) {
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
+
+            auto pgmReturn = pgmBuilder.NewOptional(
+                pgmBuilder.NewOptional(pgmBuilder.NewVariant(
+                    pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id),
+                    1,
+                    pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes)))));
+            return pgmReturn;
+        },
+        "nested_value {\n"
+        "  nested_value {\n"
+        "    nested_value {\n"
+        "      null_flag_value: NULL_VALUE\n"
+        "    }\n"
+        "    variant_index: 1\n"
+        "  }\n"
+        "}\n");
+    }
+
+    Y_UNIT_TEST(TestExportMultipleOptionalVariantOptionalNotNullYdb) {
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
+
+            auto pgmReturn = pgmBuilder.NewOptional(
+                pgmBuilder.NewOptional(pgmBuilder.NewVariant(
+                    pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<ui64>(66)),
+                    1,
+                    pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes)))));
+            return pgmReturn;
+        },
+        "nested_value {\n"
+        "  uint64_value: 66\n"
+        "}\n"
+        "variant_index: 1\n");
+    }
+
+    Y_UNIT_TEST(TestExportOptionalVariantOptionalYdbType) {
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
+            std::vector<TType*> tupleElementTypes;
+            tupleElementTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+            tupleElementTypes.push_back(pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
+
+            auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewVariant(
+                    pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id),
+                    1,
+                    pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElementTypes))));
+            return pgmReturn;
+        },
+        "optional_type {\n"
+        "  item {\n"
+        "    variant_type {\n"
+        "      tuple_items {\n"
+        "        elements {\n"
+        "          type_id: UINT32\n"
+        "        }\n"
+        "        elements {\n"
+        "          optional_type {\n"
+        "            item {\n"
+        "              type_id: UINT64\n"
+        "            }\n"
+        "          }\n"
+        "        }\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "}\n");
     }
 
     TString DoTestCellsFromTuple(const TConstArrayRef<NScheme::TTypeInfo>& types, TString paramsProto) {

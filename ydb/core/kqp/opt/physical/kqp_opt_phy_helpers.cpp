@@ -103,4 +103,68 @@ bool AllowFuseJoinInputs(TExprBase node) {
     return true;
 }
 
+NYql::NNodes::TDqStage ReplaceStageArg(NYql::NNodes::TDqStage stage, size_t inputIndex,
+    NYql::NNodes::TCoArgument replaceArg, NYql::NNodes::TExprBase bodyExpression, NYql::TExprContext& ctx)
+{
+    auto sourceArg = stage.Program().Args().Arg(inputIndex);
+
+    size_t index = 0;
+    TVector<TCoArgument> args;
+    NYql::TNodeOnNodeOwnedMap bodyReplaces;
+    for (auto arg : stage.Program().Args()) {
+        if (arg.Raw() == sourceArg.Raw()) {
+            args.push_back(replaceArg);
+        } else {
+            TCoArgument replaceArg{ctx.NewArgument(sourceArg.Pos(), TStringBuilder() << "_kqp_source_arg_" << index)};
+            args.push_back(replaceArg);
+            bodyReplaces[arg.Raw()] = replaceArg.Ptr();
+        }
+        index += 1;
+    }
+
+    bodyReplaces[sourceArg.Raw()] = bodyExpression.Ptr();
+
+    return Build<TDqStage>(ctx, stage.Pos())
+        .Settings(stage.Settings())
+        .Inputs(stage.Inputs())
+        .Outputs(stage.Outputs())
+        .Program<TCoLambda>()
+            .Args(args)
+            .Body(TExprBase(ctx.ReplaceNodes(stage.Program().Body().Ptr(), bodyReplaces)))
+            .Build()
+        .Done();
+}
+
+NYql::NNodes::TDqStage ReplaceTableSourceSettings(NYql::NNodes::TDqStage stage, size_t inputIndex,
+    NYql::NNodes::TKqpReadRangesSourceSettings settings, NYql::TExprContext& ctx)
+{
+    auto source = stage.Inputs().Item(inputIndex).Cast<TDqSource>();
+    auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
+    auto sourceArg = stage.Program().Args().Arg(inputIndex);
+
+    TVector<NYql::NNodes::TExprBase> inputs;
+    size_t index = 0;
+    for (auto input : stage.Inputs()) {
+        if (index == inputIndex) {
+            inputs.push_back(
+                Build<TDqSource>(ctx, input.Pos())
+                    .DataSource<TCoDataSource>()
+                        .Category<TCoAtom>().Value(KqpReadRangesSourceName).Build()
+                        .Build()
+                    .Settings(settings)
+                .Done());
+        } else {
+            inputs.push_back(input);
+        }
+        index += 1;
+    }
+
+    return Build<TDqStage>(ctx, stage.Pos())
+        .Settings(stage.Settings())
+        .Inputs().Add(inputs).Build()
+        .Outputs(stage.Outputs())
+        .Program(stage.Program())
+        .Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt

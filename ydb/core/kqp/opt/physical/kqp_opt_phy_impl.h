@@ -22,6 +22,12 @@ NYql::NNodes::TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, 
 NYql::NNodes::TCoAtomList BuildColumnsList(const TVector<TString>& columns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 
+NYql::NNodes::TDqStage ReplaceStageArg(NYql::NNodes::TDqStage stage, size_t inputIndex,
+    NYql::NNodes::TCoArgument replaceArg, NYql::NNodes::TExprBase bodyExpression, NYql::TExprContext& ctx);
+
+NYql::NNodes::TDqStage ReplaceTableSourceSettings(NYql::NNodes::TDqStage stage, size_t inputIndex,
+    NYql::NNodes::TKqpReadRangesSourceSettings settings, NYql::TExprContext& ctx);
+
 } // NKikimr::NKqp::NOpt
 
 

@@ -38,7 +38,6 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
         return node; // already set?
     }
 
-    NYql::TNodeOnNodeOwnedMap replaces;
     auto sourceArg = stage.Program().Args().Arg(*tableSourceIndex);
     TExprNode::TPtr foundTake;
     bool singleConsumer = true;
@@ -105,6 +104,7 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
             .Input(limitValue.Cast())
             .Done().Ptr());
     }
+
     auto newSettings = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
         .Table(readRangesSource.Table())
         .Columns(readRangesSource.Columns())
@@ -112,9 +112,8 @@ TExprBase KqpApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx, cons
         .RangesExpr(readRangesSource.RangesExpr())
         .ExplainPrompt(readRangesSource.ExplainPrompt())
         .Done();
-    replaces[readRangesSource.Raw()] = newSettings.Ptr();
-                              
-    return TExprBase(ctx.ReplaceNodes(node.Ptr(), replaces));
+
+    return ReplaceTableSourceSettings(stage, *tableSourceIndex, newSettings, ctx);
 }                             
                               
 

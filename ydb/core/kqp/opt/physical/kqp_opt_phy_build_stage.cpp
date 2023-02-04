@@ -97,51 +97,29 @@ NYql::NNodes::TExprBase ExpandSkipNullMembersForReadTableSource(NYql::NNodes::TE
         }
     }
 
-    TCoArgument replaceArg{ctx.NewArgument(sourceArg.Pos(), TStringBuilder() << "_kqp_source_arg_0")};
-    NYql::TNodeOnNodeOwnedMap bodyReplaces;
-
-    bodyReplaces[sourceArg.Raw()] =
-        Build<TCoExtractMembers>(ctx, node.Pos())
-            .Members(readRangesSource.Columns())
-            .Input<TCoSkipNullMembers>()
-                .Input(replaceArg)
-                .Members().Add(skipNullColumns).Build()
-            .Build()
-        .Done().Ptr();
-
-    NYql::TNodeOnNodeOwnedMap inputsReplaces;
     settings.SkipNullKeys.clear();
-
-    auto newSource = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
+    auto newSettings = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
         .Table(readRangesSource.Table())
         .Columns().Add(columns).Build()
         .Settings(settings.BuildNode(ctx, source.Settings().Pos()))
         .RangesExpr(readRangesSource.RangesExpr())
         .ExplainPrompt(readRangesSource.ExplainPrompt())
         .Done();
-    inputsReplaces[readRangesSource.Raw()] = newSource.Ptr();
+    TDqStage replacedSettings = ReplaceTableSourceSettings(stage, *tableSourceIndex, newSettings, ctx);
 
-    TVector<TCoArgument> args;
-    for (auto arg : stage.Program().Args()) {
-        if (arg.Raw() == sourceArg.Raw()) {
-            args.push_back(replaceArg);
-        } else {
-            args.push_back(arg);
-        }
-    }
-
-    return Build<TDqStage>(ctx, node.Pos())
-        .Settings(stage.Settings())
-        .Inputs(TExprList(ctx.ReplaceNodes(stage.Inputs().Ptr(), inputsReplaces)))
-        .Outputs(stage.Outputs())
-        .Program<TCoLambda>()
-            .Args(args)
-            .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), bodyReplaces))
+    TCoArgument replaceArg{ctx.NewArgument(sourceArg.Pos(), TStringBuilder() << "_kqp_source_arg_0")};
+    auto replaceExpr =
+        Build<TCoExtractMembers>(ctx, node.Pos())
+            .Members(readRangesSource.Columns())
+            .Input<TCoSkipNullMembers>()
+                .Input(replaceArg)
+                .Members().Add(skipNullColumns).Build()
             .Build()
         .Done();
+
+    return ReplaceStageArg(replacedSettings, *tableSourceIndex, replaceArg, replaceExpr, ctx);
 }
 
-//FIXME: simplify KIKIMR-16987
 TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlReadTable>()) {
         return node;

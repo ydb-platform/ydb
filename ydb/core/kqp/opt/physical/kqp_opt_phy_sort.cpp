@@ -204,8 +204,7 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortByPkOverSource(
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readRangesSource.Table().Path());
 
     TVector<NYql::TKqpReadTableSettings> newSettings;
-    NYql::TNodeOnNodeOwnedMap replaces;
-    auto sourceArg = stage.Program().Args().Arg(*tableSourceIndex);
+    NYql::TNodeOnNodeOwnedMap bodyReplaces;
     VisitExpr(stage.Program().Body().Ptr(),
         [&](const TExprNode::TPtr& exprPtr) -> bool {
             TExprBase expr(exprPtr);
@@ -225,7 +224,7 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortByPkOverSource(
                         return input;
                     });
                 if (newExpr.Ptr() != expr.Ptr()) {
-                    replaces[expr.Raw()] = newExpr.Ptr();
+                    bodyReplaces[expr.Raw()] = newExpr.Ptr();
                 }
             }
             return true;
@@ -238,17 +237,28 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortByPkOverSource(
             }
         }
 
-        auto newSource = Build<TKqpReadRangesSourceSettings>(exprCtx, source.Pos())
-            .Table(readRangesSource.Table())
-            .Columns(readRangesSource.Columns())
-            .Settings(newSettings[0].BuildNode(exprCtx, source.Settings().Pos()))
-            .RangesExpr(readRangesSource.RangesExpr())
-            .ExplainPrompt(readRangesSource.ExplainPrompt())
-            .Done();
-        replaces[readRangesSource.Raw()] = newSource.Ptr();
+        if (settings != newSettings[0]) {
+            auto newSource = Build<TKqpReadRangesSourceSettings>(exprCtx, source.Pos())
+                .Table(readRangesSource.Table())
+                .Columns(readRangesSource.Columns())
+                .Settings(newSettings[0].BuildNode(exprCtx, source.Settings().Pos()))
+                .RangesExpr(readRangesSource.RangesExpr())
+                .ExplainPrompt(readRangesSource.ExplainPrompt())
+                .Done();
+            stage = ReplaceTableSourceSettings(stage, *tableSourceIndex, newSource, exprCtx);
+        }
     }
 
-    return TExprBase(exprCtx.ReplaceNodes(node.Ptr(), replaces));
+    if (bodyReplaces.empty()) {
+        return stage;
+    }
+
+    return Build<TDqStage>(exprCtx, stage.Pos())
+        .Inputs(stage.Inputs())
+        .Outputs(stage.Outputs())
+        .Settings(stage.Settings())
+        .Program(TCoLambda(exprCtx.ReplaceNodes(stage.Program().Ptr(), bodyReplaces)))
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

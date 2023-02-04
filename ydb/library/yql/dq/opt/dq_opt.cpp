@@ -215,7 +215,11 @@ bool IsDqSelfContainedExpr(const TExprBase& node) {
 
             return true;
         },
-        [&knownArguments] (const TExprNode::TPtr& node) {
+        [&selfContained, &knownArguments] (const TExprNode::TPtr& node) {
+            if (!selfContained) {
+                return false;
+            }
+
             if (auto maybeLambda = TMaybeNode<TCoLambda>(node)) {
                 for (const auto& arg : maybeLambda.Cast().Args()) {
                     auto it = knownArguments.find(arg.Raw());

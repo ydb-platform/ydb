@@ -698,6 +698,10 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
         return node;
     }
 
+    if (!IsDqSelfContainedExpr(flatmap.Input())) {
+        return node;
+    }
+
     auto innerConnections = FindDqConnections(flatmap.Lambda());
     if (innerConnections.empty()) {
         return node;
@@ -960,11 +964,11 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         return node;
     }
 
-    if (!CanPushDqExpr(combine.PreMapLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.KeySelectorLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.InitHandlerLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.UpdateHandlerLambda(), dqUnion) ||
-        !CanPushDqExpr(combine.FinishHandlerLambda(), dqUnion))
+    if (!IsDqPureExpr(combine.PreMapLambda()) ||
+        !IsDqPureExpr(combine.KeySelectorLambda()) ||
+        !IsDqPureExpr(combine.InitHandlerLambda()) ||
+        !IsDqPureExpr(combine.UpdateHandlerLambda()) ||
+        !IsDqPureExpr(combine.FinishHandlerLambda()))
     {
         return node;
     }
@@ -997,6 +1001,26 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
                     .Value("Agg")
                 .Build()
             .Build()
+            .Done();
+    }
+
+    if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()) ||
+        IsDqDependsOnStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage()))
+    {
+        return Build<TDqCnUnionAll>(ctx, combine.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(dqUnion)
+                        .Build()
+                    .Program(lambda)
+                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                    .Build()
+                .Index().Build("0")
+                .Build()
             .Done();
     }
 

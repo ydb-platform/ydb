@@ -82,7 +82,15 @@ namespace NKikimr {
                 pdiskInfo->SharedWithOs = disk.SharedWithOs;
                 pdiskInfo->ReadCentric = disk.ReadCentric;
                 pdiskInfo->BoxId = disk.BoxId;
-                pdiskInfo->PDiskConfig = disk.PDiskConfig;
+                if (pdiskInfo->PDiskConfig != disk.PDiskConfig) {
+                    // update PDiskConfig only for nonstatic PDisks
+                    if (!state.FindStaticPDiskByLocation(disk.NodeId, disk.Path)) {
+                        pdiskInfo->PDiskConfig = disk.PDiskConfig;
+                    } else {
+                        throw TExError() << "Skipping PDiskConfig update for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
+                    }
+                }
+                // run ExtractConfig as the very last step
                 pdiskInfo->ExtractConfig(defaultMaxSlots);
             }
         }

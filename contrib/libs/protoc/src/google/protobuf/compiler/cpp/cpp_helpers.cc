@@ -635,7 +635,7 @@ const char* DeclaredTypeMethodName(FieldDescriptor::Type type) {
 }
 
 TProtoStringType Int32ToString(int number) {
-  if (number == std::numeric_limits<int32_t>::min()) {
+  if (number == std::numeric_limits<i32>::min()) {
     // This needs to be special-cased, see explanation here:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52661
     return StrCat(number + 1, " - 1");
@@ -644,8 +644,8 @@ TProtoStringType Int32ToString(int number) {
   }
 }
 
-static TProtoStringType Int64ToString(int64_t number) {
-  if (number == std::numeric_limits<int64_t>::min()) {
+static TProtoStringType Int64ToString(i64 number) {
+  if (number == std::numeric_limits<i64>::min()) {
     // This needs to be special-cased, see explanation here:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52661
     return StrCat("int64_t{", number + 1, "} - 1");
@@ -653,7 +653,7 @@ static TProtoStringType Int64ToString(int64_t number) {
   return StrCat("int64_t{", number, "}");
 }
 
-static TProtoStringType UInt64ToString(uint64_t number) {
+static TProtoStringType UInt64ToString(ui64 number) {
   return StrCat("uint64_t{", number, "u}");
 }
 

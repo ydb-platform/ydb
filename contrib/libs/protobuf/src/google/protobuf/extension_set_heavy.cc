@@ -69,7 +69,7 @@ class MessageSetFieldSkipper : public UnknownFieldSetFieldSkipper {
 };
 bool MessageSetFieldSkipper::SkipMessageSetField(io::CodedInputStream* input,
                                                  int field_number) {
-  uint32_t length;
+  ui32 length;
   if (!input->ReadVarint32(&length)) return false;
   if (unknown_fields_ == nullptr) {
     return input->Skip(length);
@@ -325,7 +325,7 @@ bool DescriptorPoolExtensionFinder::Find(int number, ExtensionInfo* output) {
 }
 
 
-bool ExtensionSet::FindExtension(int wire_type, uint32_t field,
+bool ExtensionSet::FindExtension(int wire_type, ui32 field,
                                  const Message* containing_type,
                                  const internal::ParseContext* ctx,
                                  ExtensionInfo* extension,
@@ -347,7 +347,7 @@ bool ExtensionSet::FindExtension(int wire_type, uint32_t field,
   return true;
 }
 
-const char* ExtensionSet::ParseField(uint64_t tag, const char* ptr,
+const char* ExtensionSet::ParseField(ui64 tag, const char* ptr,
                                      const Message* containing_type,
                                      internal::InternalMetadata* metadata,
                                      internal::ParseContext* ctx) {
@@ -364,7 +364,7 @@ const char* ExtensionSet::ParseField(uint64_t tag, const char* ptr,
 }
 
 const char* ExtensionSet::ParseFieldMaybeLazily(
-    uint64_t tag, const char* ptr, const Message* containing_type,
+    ui64 tag, const char* ptr, const Message* containing_type,
     internal::InternalMetadata* metadata, internal::ParseContext* ctx) {
   return ParseField(tag, ptr, containing_type, metadata, ctx);
 }
@@ -376,7 +376,7 @@ const char* ExtensionSet::ParseMessageSetItem(
                                                            metadata, ctx);
 }
 
-bool ExtensionSet::ParseField(uint32_t tag, io::CodedInputStream* input,
+bool ExtensionSet::ParseField(ui32 tag, io::CodedInputStream* input,
                               const Message* containing_type,
                               UnknownFieldSet* unknown_fields) {
   UnknownFieldSetFieldSkipper skipper(unknown_fields);
@@ -433,10 +433,10 @@ size_t ExtensionSet::Extension::SpaceUsedExcludingSelfLong() const {
                   repeated_##LOWERCASE##_value->SpaceUsedExcludingSelfLong(); \
     break
 
-      HANDLE_TYPE(INT32, int32_t);
-      HANDLE_TYPE(INT64, int64);
-      HANDLE_TYPE(UINT32, uint32_t);
-      HANDLE_TYPE(UINT64, uint64);
+      HANDLE_TYPE(INT32, i32);
+      HANDLE_TYPE(INT64, i64);
+      HANDLE_TYPE(UINT32, ui32);
+      HANDLE_TYPE(UINT64, ui64);
       HANDLE_TYPE(FLOAT, float);
       HANDLE_TYPE(DOUBLE, double);
       HANDLE_TYPE(BOOL, bool);
@@ -498,7 +498,7 @@ bool ExtensionSet::ParseMessageSet(io::CodedInputStream* input,
                                    ExtensionFinder* extension_finder,
                                    MessageSetFieldSkipper* field_skipper) {
   while (true) {
-    const uint32_t tag = input->ReadTag();
+    const ui32 tag = input->ReadTag();
     switch (tag) {
       case 0:
         return true;
@@ -526,7 +526,7 @@ bool ExtensionSet::ParseMessageSetItem(io::CodedInputStream* input,
           extension_finder, field_skipper);
     }
 
-    bool SkipField(uint32_t tag, io::CodedInputStream* input) {
+    bool SkipField(ui32 tag, io::CodedInputStream* input) {
       return field_skipper->SkipField(input, tag);
     }
 

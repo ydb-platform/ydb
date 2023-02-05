@@ -146,13 +146,13 @@ inline typename std::enable_if<(kSize == 0), void>::type memswap(char*, char*) {
 
 PROTO_MEMSWAP_DEF_SIZE(uint8_t, 2)
 PROTO_MEMSWAP_DEF_SIZE(uint16_t, 4)
-PROTO_MEMSWAP_DEF_SIZE(uint32_t, 8)
+PROTO_MEMSWAP_DEF_SIZE(ui32, 8)
 
 #ifdef __SIZEOF_INT128__
-PROTO_MEMSWAP_DEF_SIZE(uint64_t, 16)
+PROTO_MEMSWAP_DEF_SIZE(ui64, 16)
 PROTO_MEMSWAP_DEF_SIZE(__uint128_t, (1u << 31))
 #else
-PROTO_MEMSWAP_DEF_SIZE(uint64_t, (1u << 31))
+PROTO_MEMSWAP_DEF_SIZE(ui64, (1u << 31))
 #endif
 
 #undef PROTO_MEMSWAP_DEF_SIZE
@@ -1383,7 +1383,7 @@ inline void RepeatedField<Element>::Set(int index, const Element& value) {
 
 template <typename Element>
 inline void RepeatedField<Element>::Add(const Element& value) {
-  uint32_t size = current_size_;
+  ui32 size = current_size_;
   if (static_cast<int>(size) == total_size_) {
     // value could reference an element of the array. Reserving new space will
     // invalidate the reference. So we must make a copy first.
@@ -1398,7 +1398,7 @@ inline void RepeatedField<Element>::Add(const Element& value) {
 
 template <typename Element>
 inline Element* RepeatedField<Element>::Add() {
-  uint32_t size = current_size_;
+  ui32 size = current_size_;
   if (static_cast<int>(size) == total_size_) Reserve(total_size_ + 1);
   auto ptr = &elements()[size];
   current_size_ = size + 1;
@@ -1645,7 +1645,7 @@ void RepeatedField<Element>::Reserve(int new_size) {
   // this, since Element is supposed to be POD, but a previous version of this
   // code allocated storage with "new Element[size]" and some code uses
   // RepeatedField with non-POD types, relying on constructor invocation. If
-  // Element has a trivial constructor (e.g., int32_t), gcc (tested with -O2)
+  // Element has a trivial constructor (e.g., i32), gcc (tested with -O2)
   // completely removes this loop because the loop body is empty, so this has no
   // effect unless its side-effects are required for correctness.
   // Note that we do this before MoveArray() below because Element's copy
@@ -2946,10 +2946,10 @@ UnsafeArenaAllocatedRepeatedPtrFieldBackInserter(
 
 // Extern declarations of common instantiations to reduce library bloat.
 extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<bool>;
-extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<int32_t>;
-extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<uint32_t>;
-extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<int64_t>;
-extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<uint64_t>;
+extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<i32>;
+extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<ui32>;
+extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<i64>;
+extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<ui64>;
 extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<float>;
 extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE RepeatedField<double>;
 extern template class PROTOBUF_EXPORT_TEMPLATE_DECLARE

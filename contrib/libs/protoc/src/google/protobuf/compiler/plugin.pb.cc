@@ -67,7 +67,7 @@ constexpr CodeGeneratorResponse::CodeGeneratorResponse(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
   : file_()
   , error_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
-  , supported_features_(uint64_t{0u}){}
+  , supported_features_(ui64{0u}){}
 struct CodeGeneratorResponseDefaultTypeInternal {
   constexpr CodeGeneratorResponseDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -1282,7 +1282,7 @@ CodeGeneratorResponse::CodeGeneratorResponse(const CodeGeneratorResponse& from)
 
 void CodeGeneratorResponse::SharedCtor() {
 error_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-supported_features_ = uint64_t{0u};
+supported_features_ = ui64{0u};
 }
 
 CodeGeneratorResponse::~CodeGeneratorResponse() {
@@ -1318,7 +1318,7 @@ void CodeGeneratorResponse::Clear() {
   if (cached_has_bits & 0x00000001u) {
     error_.ClearNonDefaultToEmpty();
   }
-  supported_features_ = uint64_t{0u};
+  supported_features_ = ui64{0u};
   _has_bits_.Clear();
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }

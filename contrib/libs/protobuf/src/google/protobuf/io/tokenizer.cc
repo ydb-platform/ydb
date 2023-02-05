@@ -860,8 +860,9 @@ bool Tokenizer::NextWithComments(TProtoStringType* prev_trailing_comments,
 // tokenizing.  Also, these can assume that whatever text they
 // are given is text that the tokenizer actually parsed as a token
 // of the given type.
-bool Tokenizer::ParseInteger(const TProtoStringType& text, uint64_t max_value,
-                             uint64* output) {
+
+bool Tokenizer::ParseInteger(const TProtoStringType& text, ui64 max_value,
+                             ui64* output) {
   // Sadly, we can't just use strtoul() since it is only 32-bit and strtoull()
   // is non-standard.  I hate the C standard library.  :(
 
@@ -880,7 +881,7 @@ bool Tokenizer::ParseInteger(const TProtoStringType& text, uint64_t max_value,
     }
   }
 
-  uint64_t result = 0;
+  ui64 result = 0;
   for (; *ptr != '\0'; ptr++) {
     int digit = DigitValue(*ptr);
     if (digit < 0 || digit >= base) {
@@ -888,7 +889,7 @@ bool Tokenizer::ParseInteger(const TProtoStringType& text, uint64_t max_value,
       // token, but Tokenizer still think it's integer.
       return false;
     }
-    if (static_cast<uint64>(digit) > max_value ||
+    if (static_cast<ui64>(digit) > max_value ||
         result > (max_value - digit) / base) {
       // Overflow.
       return false;
@@ -899,47 +900,6 @@ bool Tokenizer::ParseInteger(const TProtoStringType& text, uint64_t max_value,
   *output = result;
   return true;
 }
-#if defined(_64_) && (defined(_darwin_) || defined(_ios_))
-bool Tokenizer::ParseInteger(const TProtoStringType& text, uint64_t max_value,
-                             uint64_t* output) {
-  // Sadly, we can't just use strtoul() since it is only 32-bit and strtoull()
-  // is non-standard.  I hate the C standard library.  :(
-
-  //  return strtoull(text.c_str(), NULL, 0);
-
-  const char* ptr = text.c_str();
-  int base = 10;
-  if (ptr[0] == '0') {
-    if (ptr[1] == 'x' || ptr[1] == 'X') {
-      // This is hex.
-      base = 16;
-      ptr += 2;
-    } else {
-      // This is octal.
-      base = 8;
-    }
-  }
-
-  uint64_t result = 0;
-  for (; *ptr != '\0'; ptr++) {
-    int digit = DigitValue(*ptr);
-    if (digit < 0 || digit >= base) {
-      // The token provided by Tokenizer is invalid. i.e., 099 is an invalid
-      // token, but Tokenizer still think it's integer.
-      return false;
-    }
-    if (static_cast<uint64_t>(digit) > max_value ||
-        result > (max_value - digit) / base) {
-      // Overflow.
-      return false;
-    }
-    result = result * base + digit;
-  }
-
-  *output = result;
-  return true;
-}
-#endif
 
 double Tokenizer::ParseFloat(const TProtoStringType& text) {
   const char* start = text.c_str();
@@ -970,8 +930,8 @@ double Tokenizer::ParseFloat(const TProtoStringType& text) {
 
 // Helper to append a Unicode code point to a string as UTF8, without bringing
 // in any external dependencies.
-static void AppendUTF8(uint32_t code_point, TProtoStringType* output) {
-  uint32_t tmp = 0;
+static void AppendUTF8(ui32 code_point, TProtoStringType* output) {
+  ui32 tmp = 0;
   int len = 0;
   if (code_point <= 0x7f) {
     tmp = code_point;
@@ -1001,7 +961,7 @@ static void AppendUTF8(uint32_t code_point, TProtoStringType* output) {
 
 // Try to read <len> hex digits from ptr, and stuff the numeric result into
 // *result. Returns true if that many digits were successfully consumed.
-static bool ReadHexDigits(const char* ptr, int len, uint32_t* result) {
+static bool ReadHexDigits(const char* ptr, int len, ui32* result) {
   *result = 0;
   if (len == 0) return false;
   for (const char* end = ptr + len; ptr < end; ++ptr) {
@@ -1016,22 +976,22 @@ static bool ReadHexDigits(const char* ptr, int len, uint32_t* result) {
 // surrogate. These numbers are in a reserved range of Unicode code points, so
 // if we encounter such a pair we know how to parse it and convert it into a
 // single code point.
-static const uint32_t kMinHeadSurrogate = 0xd800;
-static const uint32_t kMaxHeadSurrogate = 0xdc00;
-static const uint32_t kMinTrailSurrogate = 0xdc00;
-static const uint32_t kMaxTrailSurrogate = 0xe000;
+static const ui32 kMinHeadSurrogate = 0xd800;
+static const ui32 kMaxHeadSurrogate = 0xdc00;
+static const ui32 kMinTrailSurrogate = 0xdc00;
+static const ui32 kMaxTrailSurrogate = 0xe000;
 
-static inline bool IsHeadSurrogate(uint32_t code_point) {
+static inline bool IsHeadSurrogate(ui32 code_point) {
   return (code_point >= kMinHeadSurrogate) && (code_point < kMaxHeadSurrogate);
 }
 
-static inline bool IsTrailSurrogate(uint32_t code_point) {
+static inline bool IsTrailSurrogate(ui32 code_point) {
   return (code_point >= kMinTrailSurrogate) &&
          (code_point < kMaxTrailSurrogate);
 }
 
 // Combine a head and trail surrogate into a single Unicode code point.
-static uint32_t AssembleUTF16(uint32_t head_surrogate, uint32_t trail_surrogate) {
+static ui32 AssembleUTF16(ui32 head_surrogate, ui32 trail_surrogate) {
   GOOGLE_DCHECK(IsHeadSurrogate(head_surrogate));
   GOOGLE_DCHECK(IsTrailSurrogate(trail_surrogate));
   return 0x10000 + (((head_surrogate - kMinHeadSurrogate) << 10) |
@@ -1049,7 +1009,7 @@ static inline int UnicodeLength(char key) {
 // to parse that sequence. On success, returns a pointer to the first char
 // beyond that sequence, and fills in *code_point. On failure, returns ptr
 // itself.
-static const char* FetchUnicodePoint(const char* ptr, uint32_t* code_point) {
+static const char* FetchUnicodePoint(const char* ptr, ui32* code_point) {
   const char* p = ptr;
   // Fetch the code point.
   const int len = UnicodeLength(*p++);
@@ -1061,7 +1021,7 @@ static const char* FetchUnicodePoint(const char* ptr, uint32_t* code_point) {
   // "trail surrogate," and together they form a UTF-16 pair which decodes into
   // a single Unicode point. Trail surrogates may only use \u, not \U.
   if (IsHeadSurrogate(*code_point) && *p == '\\' && *(p + 1) == 'u') {
-    uint32_t trail_surrogate;
+    ui32 trail_surrogate;
     if (ReadHexDigits(p + 2, 4, &trail_surrogate) &&
         IsTrailSurrogate(trail_surrogate)) {
       *code_point = AssembleUTF16(*code_point, trail_surrogate);
@@ -1133,7 +1093,7 @@ void Tokenizer::ParseStringAppend(const TProtoStringType& text,
         output->push_back(static_cast<char>(code));
 
       } else if (*ptr == 'u' || *ptr == 'U') {
-        uint32_t unicode;
+        ui32 unicode;
         const char* end = FetchUnicodePoint(ptr, &unicode);
         if (end == ptr) {
           // Failure: Just dump out what we saw, don't try to parse it.

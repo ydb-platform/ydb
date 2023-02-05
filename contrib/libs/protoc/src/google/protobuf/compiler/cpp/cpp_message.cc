@@ -83,7 +83,7 @@ static constexpr int kNoHasbit = -1;
 // masks is allowed to be shorter than _has_bits_, but at least one element of
 // masks must be non-zero.
 TProtoStringType ConditionalToCheckBitmasks(
-    const std::vector<uint32_t>& masks, bool return_success = true,
+    const std::vector<ui32>& masks, bool return_success = true,
     StringPiece has_bits_var = "_has_bits_") {
   std::vector<TProtoStringType> parts;
   for (int i = 0; i < masks.size(); i++) {
@@ -422,23 +422,23 @@ std::vector<std::vector<const FieldDescriptor*>> CollectFields(
 // Returns a bit mask based on has_bit index of "fields" that are typically on
 // the same chunk. It is used in a group presence check where _has_bits_ is
 // masked to tell if any thing in "fields" is present.
-uint32_t GenChunkMask(const std::vector<const FieldDescriptor*>& fields,
+ui32 GenChunkMask(const std::vector<const FieldDescriptor*>& fields,
                       const std::vector<int>& has_bit_indices) {
   GOOGLE_CHECK(!fields.empty());
   int first_index_offset = has_bit_indices[fields.front()->index()] / 32;
-  uint32_t chunk_mask = 0;
+  ui32 chunk_mask = 0;
   for (auto field : fields) {
     // "index" defines where in the _has_bits_ the field appears.
     int index = has_bit_indices[field->index()];
     GOOGLE_CHECK_EQ(first_index_offset, index / 32);
-    chunk_mask |= static_cast<uint32_t>(1) << (index % 32);
+    chunk_mask |= static_cast<ui32>(1) << (index % 32);
   }
   GOOGLE_CHECK_NE(0, chunk_mask);
   return chunk_mask;
 }
 
 // Return the number of bits set in n, a non-negative integer.
-static int popcnt(uint32_t n) {
+static int popcnt(ui32 n) {
   int result = 0;
   while (n != 0) {
     result += (n & 1);
@@ -524,7 +524,7 @@ void ColdChunkSkipper::OnStartChunk(int chunk, int cached_has_word_index,
   format("if (PROTOBUF_PREDICT_FALSE(");
   int first_word = HasbitWord(chunk, 0);
   while (chunk < limit_chunk_) {
-    uint32_t mask = 0;
+    ui32 mask = 0;
     int this_word = HasbitWord(chunk, 0);
     // Generate mask for chunks on the same word.
     for (; chunk < limit_chunk_ && HasbitWord(chunk, 0) == this_word; chunk++) {
@@ -2088,7 +2088,7 @@ namespace {
 
 // We need to calculate for each field what function the table driven code
 // should use to serialize it. This returns the index in a lookup table.
-uint32_t CalcFieldNum(const FieldGenerator& generator,
+ui32 CalcFieldNum(const FieldGenerator& generator,
                       const FieldDescriptor* field, const Options& options) {
   bool is_a_map = IsMapEntryMessage(field->containing_type());
   int type = field->type();
@@ -2143,7 +2143,7 @@ int MessageGenerator::GenerateFieldMetadata(io::Printer* printer) {
       const FieldDescriptor* field = sorted[i];
       const FieldGenerator& generator = field_generators_.get(field);
 
-      uint32_t tag = internal::WireFormatLite::MakeTag(
+      ui32 tag = internal::WireFormatLite::MakeTag(
           field->number(), WireFormat::WireTypeForFieldType(field->type()));
 
       std::map<TProtoStringType, TProtoStringType> vars;
@@ -2200,7 +2200,7 @@ int MessageGenerator::GenerateFieldMetadata(io::Printer* printer) {
     if (i == sorted.size()) break;
     const FieldDescriptor* field = sorted[i];
 
-    uint32_t tag = internal::WireFormatLite::MakeTag(
+    ui32 tag = internal::WireFormatLite::MakeTag(
         field->number(), WireFormat::WireTypeForFieldType(field->type()));
     if (field->is_packed()) {
       tag = internal::WireFormatLite::MakeTag(
@@ -2263,7 +2263,7 @@ int MessageGenerator::GenerateFieldMetadata(io::Printer* printer) {
           tag);
     } else if (field->real_containing_oneof()) {
       format.Set("oneofoffset",
-                 sizeof(uint32_t) * field->containing_oneof()->index());
+                 sizeof(ui32) * field->containing_oneof()->index());
       format(
           "{PROTOBUF_FIELD_OFFSET($classtype$, $field_name$_), $1$,"
           " PROTOBUF_FIELD_OFFSET($classtype$, _oneof_case_) + "
@@ -2374,7 +2374,7 @@ void MessageGenerator::GenerateClassMethods(io::Printer* printer) {
     }
   }
   if (num_required_fields_ > 0) {
-    const std::vector<uint32_t> masks_for_has_bits = RequiredFieldsBitMask();
+    const std::vector<ui32> masks_for_has_bits = RequiredFieldsBitMask();
     format(
         "static bool MissingRequiredFields(const HasBits& has_bits) "
         "{\n"
@@ -3285,7 +3285,7 @@ void MessageGenerator::GenerateClear(io::Printer* printer) {
 
     if (have_outer_if) {
       // Emit an if() that will let us skip the whole chunk if none are set.
-      uint32_t chunk_mask = GenChunkMask(chunk, has_bit_indices_);
+      ui32 chunk_mask = GenChunkMask(chunk, has_bit_indices_);
       TProtoStringType chunk_mask_str =
           StrCat(strings::Hex(chunk_mask, strings::ZERO_PAD_8));
 
@@ -3599,7 +3599,7 @@ void MessageGenerator::GenerateClassSpecificMergeFrom(io::Printer* printer) {
 
     if (have_outer_if) {
       // Emit an if() that will let us skip the whole chunk if none are set.
-      uint32_t chunk_mask = GenChunkMask(chunk, has_bit_indices_);
+      ui32 chunk_mask = GenChunkMask(chunk, has_bit_indices_);
       TProtoStringType chunk_mask_str =
           StrCat(strings::Hex(chunk_mask, strings::ZERO_PAD_8));
 
@@ -4220,9 +4220,9 @@ void MessageGenerator::GenerateSerializeWithCachedSizesBodyShuffled(
   format("}\n");
 }
 
-std::vector<uint32_t> MessageGenerator::RequiredFieldsBitMask() const {
+std::vector<ui32> MessageGenerator::RequiredFieldsBitMask() const {
   const int array_size = HasBitsSize();
-  std::vector<uint32_t> masks(array_size, 0);
+  std::vector<ui32> masks(array_size, 0);
 
   for (auto field : FieldRange(descriptor_)) {
     if (!field->is_required()) {
@@ -4230,7 +4230,7 @@ std::vector<uint32_t> MessageGenerator::RequiredFieldsBitMask() const {
     }
 
     const int has_bit_index = has_bit_indices_[field->index()];
-    masks[has_bit_index / 32] |= static_cast<uint32_t>(1)
+    masks[has_bit_index / 32] |= static_cast<ui32>(1)
                                  << (has_bit_index % 32);
   }
   return masks;
@@ -4315,7 +4315,7 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
   // present then the fast path executes; otherwise the slow path executes.
   if (num_required_fields_ > 1) {
     // The fast path works if all required fields are present.
-    const std::vector<uint32_t> masks_for_has_bits = RequiredFieldsBitMask();
+    const std::vector<ui32> masks_for_has_bits = RequiredFieldsBitMask();
     format("if ($1$) {  // All required fields are present.\n",
            ConditionalToCheckBitmasks(masks_for_has_bits));
     format.Indent();
@@ -4371,7 +4371,7 @@ void MessageGenerator::GenerateByteSize(io::Printer* printer) {
 
     if (have_outer_if) {
       // Emit an if() that will let us skip the whole chunk if none are set.
-      uint32_t chunk_mask = GenChunkMask(chunk, has_bit_indices_);
+      ui32 chunk_mask = GenChunkMask(chunk, has_bit_indices_);
       TProtoStringType chunk_mask_str =
           StrCat(strings::Hex(chunk_mask, strings::ZERO_PAD_8));
 

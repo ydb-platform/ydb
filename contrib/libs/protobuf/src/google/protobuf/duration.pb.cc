@@ -19,7 +19,7 @@ PROTOBUF_PRAGMA_INIT_SEG
 PROTOBUF_NAMESPACE_OPEN
 constexpr Duration::Duration(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : seconds_(int64_t{0})
+  : seconds_(i64{0})
   , nanos_(0){}
 struct DurationDefaultTypeInternal {
   constexpr DurationDefaultTypeInternal()

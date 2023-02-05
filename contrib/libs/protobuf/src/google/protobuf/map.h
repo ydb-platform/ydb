@@ -1023,12 +1023,12 @@ class Map {
     size_type BucketNumber(const K& k) const {
       // We xor the hash value against the random seed so that we effectively
       // have a random hash function.
-      uint64_t h = hash_function()(k) ^ seed_;
+      ui64 h = hash_function()(k) ^ seed_;
 
       // We use the multiplication method to determine the bucket number from
       // the hash value. The constant kPhi (suggested by Knuth) is roughly
       // (sqrt(5) - 1) / 2 * 2^64.
-      constexpr uint64_t kPhi = uint64_t{0x9e3779b97f4a7c15};
+      constexpr ui64 kPhi = ui64{0x9e3779b97f4a7c15};
       return ((kPhi * h) >> 32) & (num_buckets_ - 1);
     }
 
@@ -1082,9 +1082,9 @@ class Map {
       size_type s = reinterpret_cast<uintptr_t>(this) >> 4;
 #if defined(__x86_64__) && defined(__GNUC__) && \
     !defined(GOOGLE_PROTOBUF_NO_RDTSC)
-      uint32_t hi, lo;
+      ui32 hi, lo;
       asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-      s += ((static_cast<uint64_t>(hi) << 32) | lo);
+      s += ((static_cast<ui64>(hi) << 32) | lo);
 #endif
       return s;
     }

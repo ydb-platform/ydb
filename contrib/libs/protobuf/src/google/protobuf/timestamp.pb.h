@@ -230,7 +230,7 @@ class PROTOBUF_EXPORT Timestamp final :
 
 // int64 seconds = 1;
 inline void Timestamp::clear_seconds() {
-  seconds_ = int64_t{0};
+  seconds_ = i64{0};
 }
 inline ::PROTOBUF_NAMESPACE_ID::int64 Timestamp::_internal_seconds() const {
   return seconds_;

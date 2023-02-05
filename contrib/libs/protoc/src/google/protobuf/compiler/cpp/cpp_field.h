@@ -183,8 +183,8 @@ class FieldGenerator {
 
   virtual bool IsInlined() const { return false; }
 
-  void SetHasBitIndex(int32_t has_bit_index);
-  void SetInlinedStringIndex(int32_t inlined_string_index);
+  void SetHasBitIndex(i32 has_bit_index);
+  void SetInlinedStringIndex(i32 inlined_string_index);
 
  protected:
   const FieldDescriptor* descriptor_;

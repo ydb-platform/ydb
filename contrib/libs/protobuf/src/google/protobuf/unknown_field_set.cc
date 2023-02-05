@@ -132,7 +132,7 @@ size_t UnknownFieldSet::SpaceUsedLong() const {
   return sizeof(*this) + SpaceUsedExcludingSelf();
 }
 
-void UnknownFieldSet::AddVarint(int number, uint64_t value) {
+void UnknownFieldSet::AddVarint(int number, ui64 value) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_VARINT);
@@ -140,7 +140,7 @@ void UnknownFieldSet::AddVarint(int number, uint64_t value) {
   fields_.push_back(field);
 }
 
-void UnknownFieldSet::AddFixed32(int number, uint32_t value) {
+void UnknownFieldSet::AddFixed32(int number, ui32 value) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_FIXED32);
@@ -148,7 +148,7 @@ void UnknownFieldSet::AddFixed32(int number, uint32_t value) {
   fields_.push_back(field);
 }
 
-void UnknownFieldSet::AddFixed64(int number, uint64_t value) {
+void UnknownFieldSet::AddFixed64(int number, ui64 value) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_FIXED64);
@@ -285,24 +285,24 @@ class UnknownFieldParserHelper {
   explicit UnknownFieldParserHelper(UnknownFieldSet* unknown)
       : unknown_(unknown) {}
 
-  void AddVarint(uint32_t num, uint64_t value) {
+  void AddVarint(ui32 num, ui64 value) {
     unknown_->AddVarint(num, value);
   }
-  void AddFixed64(uint32_t num, uint64_t value) {
+  void AddFixed64(ui32 num, ui64 value) {
     unknown_->AddFixed64(num, value);
   }
-  const char* ParseLengthDelimited(uint32_t num, const char* ptr,
+  const char* ParseLengthDelimited(ui32 num, const char* ptr,
                                    ParseContext* ctx) {
     TProtoStringType* s = unknown_->AddLengthDelimited(num);
     int size = ReadSize(&ptr);
     GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
     return ctx->ReadString(ptr, size, s);
   }
-  const char* ParseGroup(uint32_t num, const char* ptr, ParseContext* ctx) {
+  const char* ParseGroup(ui32 num, const char* ptr, ParseContext* ctx) {
     UnknownFieldParserHelper child(unknown_->AddGroup(num));
     return ctx->ParseGroup(&child, ptr, num * 8 + 3);
   }
-  void AddFixed32(uint32_t num, uint32_t value) {
+  void AddFixed32(ui32 num, ui32 value) {
     unknown_->AddFixed32(num, value);
   }
 
@@ -320,7 +320,7 @@ const char* UnknownGroupParse(UnknownFieldSet* unknown, const char* ptr,
   return WireFormatParser(field_parser, ptr, ctx);
 }
 
-const char* UnknownFieldParse(uint64_t tag, UnknownFieldSet* unknown,
+const char* UnknownFieldParse(ui64 tag, UnknownFieldSet* unknown,
                               const char* ptr, ParseContext* ctx) {
   UnknownFieldParserHelper field_parser(unknown);
   return FieldParser(tag, field_parser, ptr, ctx);

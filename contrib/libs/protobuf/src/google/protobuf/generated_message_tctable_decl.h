@@ -52,8 +52,8 @@ namespace internal {
 struct TcFieldData {
   constexpr TcFieldData() : data(0) {}
   constexpr TcFieldData(uint16_t coded_tag, uint8_t hasbit_idx, uint16_t offset)
-      : data(static_cast<uint64_t>(offset) << 48 |
-             static_cast<uint64_t>(hasbit_idx) << 16 | coded_tag) {}
+      : data(static_cast<ui64>(offset) << 48 |
+             static_cast<ui64>(hasbit_idx) << 16 | coded_tag) {}
 
   template <typename TagType = uint16_t>
   TagType coded_tag() const {
@@ -62,7 +62,7 @@ struct TcFieldData {
   uint8_t hasbit_idx() const { return static_cast<uint8_t>(data >> 16); }
   uint16_t offset() const { return static_cast<uint16_t>(data >> 48); }
 
-  uint64_t data;
+  ui64 data;
 };
 
 struct TailCallParseTableBase;
@@ -77,12 +77,12 @@ typedef const char* (*TailCallParseFunc)(PROTOBUF_TC_PARAM_DECL);
 #endif
 
 // Base class for message-level table with info for the tail-call parser.
-struct alignas(uint64_t) TailCallParseTableBase {
+struct alignas(ui64) TailCallParseTableBase {
   // Common attributes for message layout:
   uint16_t has_bits_offset;
   uint16_t extension_offset;
-  uint32_t extension_range_low;
-  uint32_t extension_range_high;
+  ui32 extension_range_low;
+  ui32 extension_range_high;
   const MessageLite* default_instance;
 
   // Handler for fields which are not handled by table dispatch.

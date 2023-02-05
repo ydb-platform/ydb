@@ -144,10 +144,10 @@ typedef ui64 uint64;
 
 static const int32 kint32max = 0x7FFFFFFF;
 static const int32 kint32min = -kint32max - 1;
-static const int64 kint64max = int64_t{0x7FFFFFFFFFFFFFFF};
+static const int64 kint64max = i64{0x7FFFFFFFFFFFFFFF};
 static const int64 kint64min = -kint64max - 1;
 static const uint32 kuint32max = 0xFFFFFFFFu;
-static const uint64 kuint64max = uint64_t{0xFFFFFFFFFFFFFFFFu};
+static const uint64 kuint64max = ui64{0xFFFFFFFFFFFFFFFFu};
 
 #if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) ||\
     defined(MEMORY_SANITIZER)
@@ -156,11 +156,11 @@ static const uint64 kuint64max = uint64_t{0xFFFFFFFFFFFFFFFFu};
 extern "C" {
 #endif  // __cplusplus
 uint16_t __sanitizer_unaligned_load16(const void *p);
-uint32_t __sanitizer_unaligned_load32(const void *p);
-uint64_t __sanitizer_unaligned_load64(const void *p);
+ui32 __sanitizer_unaligned_load32(const void *p);
+ui64 __sanitizer_unaligned_load64(const void *p);
 void __sanitizer_unaligned_store16(void *p, uint16_t v);
-void __sanitizer_unaligned_store32(void *p, uint32_t v);
-void __sanitizer_unaligned_store64(void *p, uint64_t v);
+void __sanitizer_unaligned_store32(void *p, ui32 v);
+void __sanitizer_unaligned_store64(void *p, ui64 v);
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
@@ -271,14 +271,14 @@ static inline uint32 bswap_32(uint32 x) {
 
 #ifndef bswap_64
 static inline uint64 bswap_64(uint64 x) {
-  return (((x & uint64_t{0xFFu}) << 56) |
-          ((x & uint64_t{0xFF00u}) << 40) |
-          ((x & uint64_t{0xFF0000u}) << 24) |
-          ((x & uint64_t{0xFF000000u}) << 8) |
-          ((x & uint64_t{0xFF00000000u}) >> 8) |
-          ((x & uint64_t{0xFF0000000000u}) >> 24) |
-          ((x & uint64_t{0xFF000000000000u}) >> 40) |
-          ((x & uint64_t{0xFF00000000000000u}) >> 56));
+  return (((x & ui64{0xFFu}) << 56) |
+          ((x & ui64{0xFF00u}) << 40) |
+          ((x & ui64{0xFF0000u}) << 24) |
+          ((x & ui64{0xFF000000u}) << 8) |
+          ((x & ui64{0xFF00000000u}) >> 8) |
+          ((x & ui64{0xFF0000000000u}) >> 24) |
+          ((x & ui64{0xFF000000000000u}) >> 40) |
+          ((x & ui64{0xFF00000000000000u}) >> 56));
 }
 #define bswap_64(x) bswap_64(x)
 #endif

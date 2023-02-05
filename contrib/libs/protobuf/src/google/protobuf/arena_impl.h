@@ -56,7 +56,7 @@ inline constexpr size_t AlignUpTo8(size_t n) {
   return (n + 7) & static_cast<size_t>(-8);
 }
 
-using LifecycleIdAtomic = uint64_t;
+using LifecycleIdAtomic = ui64;
 
 // MetricsCollector collects stats for a particular arena.
 class PROTOBUF_EXPORT ArenaMetricsCollector {
@@ -66,11 +66,11 @@ class PROTOBUF_EXPORT ArenaMetricsCollector {
   // Invoked when the arena is about to be destroyed. This method will
   // typically finalize any metric collection and delete the collector.
   // space_allocated is the space used by the arena.
-  virtual void OnDestroy(uint64_t space_allocated) = 0;
+  virtual void OnDestroy(ui64 space_allocated) = 0;
 
   // OnReset() is called when the associated arena is reset.
   // space_allocated is the space used by the arena just before the reset.
-  virtual void OnReset(uint64_t space_allocated) = 0;
+  virtual void OnReset(ui64 space_allocated) = 0;
 
   // OnAlloc is called when an allocation happens.
   // type_info is promised to be static - its lifetime extends to
@@ -79,7 +79,7 @@ class PROTOBUF_EXPORT ArenaMetricsCollector {
   // intentionally want to avoid monitoring an allocation. (i.e. internal
   // allocations for managing the arena)
   virtual void OnAlloc(const std::type_info* allocated_type,
-                       uint64_t alloc_size) = 0;
+                       ui64 alloc_size) = 0;
 
   // Does OnAlloc() need to be called?  If false, metric collection overhead
   // will be reduced since we will not do extra work per allocation.
@@ -141,10 +141,10 @@ class PROTOBUF_EXPORT SerialArena {
   Memory Free(Deallocator deallocator);
 
   void CleanupList();
-  uint64_t SpaceAllocated() const {
+  ui64 SpaceAllocated() const {
     return space_allocated_.load(std::memory_order_relaxed);
   }
-  uint64_t SpaceUsed() const;
+  ui64 SpaceUsed() const;
 
   bool HasSpace(size_t n) { return n <= static_cast<size_t>(limit_ - ptr_); }
 
@@ -287,10 +287,10 @@ class PROTOBUF_EXPORT ThreadSafeArena {
   // if it was passed in.
   ~ThreadSafeArena();
 
-  uint64_t Reset();
+  ui64 Reset();
 
-  uint64_t SpaceAllocated() const;
-  uint64_t SpaceUsed() const;
+  ui64 SpaceAllocated() const;
+  ui64 SpaceUsed() const;
 
   void* AllocateAligned(size_t n, const std::type_info* type) {
     SerialArena* arena;
@@ -322,7 +322,7 @@ class PROTOBUF_EXPORT ThreadSafeArena {
 
  private:
   // Unique for each arena. Changes on Reset().
-  uint64_t tag_and_id_;
+  ui64 tag_and_id_;
   // The LSB of tag_and_id_ indicates if allocs in this arena are recorded.
   enum { kRecordAllocs = 1 };
 
@@ -353,7 +353,7 @@ class PROTOBUF_EXPORT ThreadSafeArena {
 
   inline bool ShouldRecordAlloc() const { return tag_and_id_ & kRecordAllocs; }
 
-  inline uint64_t LifeCycleId() const {
+  inline ui64 LifeCycleId() const {
     return tag_and_id_ & (-kRecordAllocs - 1);
   }
 
@@ -372,7 +372,7 @@ class PROTOBUF_EXPORT ThreadSafeArena {
     hint_.store(serial, std::memory_order_release);
   }
 
-  PROTOBUF_NDEBUG_INLINE bool GetSerialArenaFast(uint64_t lifecycle_id,
+  PROTOBUF_NDEBUG_INLINE bool GetSerialArenaFast(ui64 lifecycle_id,
                                                  SerialArena** arena) {
     if (GetSerialArenaFromThreadCache(lifecycle_id, arena)) return true;
     if (lifecycle_id & kRecordAllocs) return false;
@@ -389,7 +389,7 @@ class PROTOBUF_EXPORT ThreadSafeArena {
   }
 
   PROTOBUF_NDEBUG_INLINE bool GetSerialArenaFromThreadCache(
-      uint64_t lifecycle_id, SerialArena** arena) {
+      ui64 lifecycle_id, SerialArena** arena) {
     // If this thread already owns a block in this arena then try to use that.
     // This fast path optimizes the case where multiple threads allocate from
     // the same arena.
@@ -437,10 +437,10 @@ class PROTOBUF_EXPORT ThreadSafeArena {
     static constexpr size_t kPerThreadIds = 256;
     // Next lifecycle ID available to this thread. We need to reserve a new
     // batch, if `next_lifecycle_id & (kPerThreadIds - 1) == 0`.
-    uint64_t next_lifecycle_id;
+    ui64 next_lifecycle_id;
     // The ThreadCache is considered valid as long as this matches the
     // lifecycle_id of the arena being used.
-    uint64_t last_lifecycle_id_seen;
+    ui64 last_lifecycle_id_seen;
     SerialArena* last_serial_arena;
   };
 

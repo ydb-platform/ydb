@@ -59,7 +59,7 @@ class PROTOBUF_EXPORT FieldMaskUtil {
   // Populates the FieldMask with the paths corresponding to the fields with the
   // given numbers, after checking that all field numbers are valid.
   template <typename T>
-  static void FromFieldNumbers(const std::vector<int64_t>& field_numbers,
+  static void FromFieldNumbers(const std::vector<i64>& field_numbers,
                                FieldMask* out) {
     for (const auto field_number : field_numbers) {
       const FieldDescriptor* field_desc =

@@ -51,9 +51,9 @@ class ZipWriter {
  private:
   struct FileInfo {
     TProtoStringType name;
-    uint32_t offset;
-    uint32_t size;
-    uint32_t crc32;
+    ui32 offset;
+    ui32 size;
+    ui32 crc32;
   };
 
   io::ZeroCopyOutputStream* raw_output_;

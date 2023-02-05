@@ -66,7 +66,7 @@ bool HasInternalAccessors(const FieldOptions::CType ctype) {
   return ctype == FieldOptions::STRING || ctype == FieldOptions::CORD;
 }
 
-int TagSize(uint32_t field_number) {
+int TagSize(ui32 field_number) {
   if (field_number < 16) return 1;
   GOOGLE_CHECK_LT(field_number, (1 << 14))
       << "coded tag for " << field_number << " too big for uint16_t";
@@ -109,7 +109,7 @@ TProtoStringType MessageTcParseFunctionName(const FieldDescriptor* field,
 
 TProtoStringType FieldParseFunctionName(const FieldDescriptor* field,
                                    const Options& options,
-                                   uint32_t table_size_log2);
+                                   ui32 table_size_log2);
 
 }  // namespace
 
@@ -152,7 +152,7 @@ TailCallTableInfo::TailCallTableInfo(const Descriptor* descriptor,
     //   byte 0   byte 1
     //   1nnnnttt 0nnnnnnn
     //    ^^^^^^^  ^^^^^^^
-    uint32_t tag = WireFormat::MakeTag(field);
+    ui32 tag = WireFormat::MakeTag(field);
     if (tag >= 1 << 14) {
       continue;
     } else if (tag >= 1 << 7) {
@@ -167,7 +167,7 @@ TailCallTableInfo::TailCallTableInfo(const Descriptor* descriptor,
     //   ^^^^^
     // This means that any field number that does not fit in the lower 4 bits
     // will always have the top bit of its table index asserted:
-    uint32_t idx = (tag >> 3) & (table_size - 1);
+    ui32 idx = (tag >> 3) & (table_size - 1);
     // If this entry in the table is already used, then this field will be
     // handled by the generated fallback function.
     if (!fast_path_fields[idx].func_name.empty()) continue;
@@ -834,7 +834,7 @@ void ParseFunctionGenerator::GenerateFieldBody(
         {{"put_field", StrCat("set_", FieldName(field))},
          {"mutable_field", StrCat("mutable_", FieldName(field))}});
   }
-  uint32_t tag = WireFormatLite::MakeTag(field->number(), wiretype);
+  ui32 tag = WireFormatLite::MakeTag(field->number(), wiretype);
   switch (wiretype) {
     case WireFormatLite::WIRETYPE_VARINT: {
       TProtoStringType type = PrimitiveTypeName(options_, field->cpp_type());
@@ -925,15 +925,15 @@ void ParseFunctionGenerator::GenerateFieldBody(
 
 // Returns the tag for this field and in case of repeated packable fields,
 // sets a fallback tag in fallback_tag_ptr.
-static uint32_t ExpectedTag(const FieldDescriptor* field,
-                            uint32_t* fallback_tag_ptr) {
-  uint32_t expected_tag;
+static ui32 ExpectedTag(const FieldDescriptor* field,
+                            ui32* fallback_tag_ptr) {
+  ui32 expected_tag;
   if (field->is_packable()) {
     auto expected_wiretype = WireFormat::WireTypeForFieldType(field->type());
     expected_tag = WireFormatLite::MakeTag(field->number(), expected_wiretype);
     GOOGLE_CHECK(expected_wiretype != WireFormatLite::WIRETYPE_LENGTH_DELIMITED);
     auto fallback_wiretype = WireFormatLite::WIRETYPE_LENGTH_DELIMITED;
-    uint32_t fallback_tag =
+    ui32 fallback_tag =
         WireFormatLite::MakeTag(field->number(), fallback_wiretype);
 
     if (field->is_packed()) std::swap(expected_tag, fallback_tag);
@@ -996,9 +996,9 @@ void ParseFunctionGenerator::GenerateParseIterationBody(
             descriptor->extension_range(i);
         if (i > 0) format(" ||\n    ");
 
-        uint32_t start_tag = WireFormatLite::MakeTag(
+        ui32 start_tag = WireFormatLite::MakeTag(
             range->start, static_cast<WireFormatLite::WireType>(0));
-        uint32_t end_tag = WireFormatLite::MakeTag(
+        ui32 end_tag = WireFormatLite::MakeTag(
             range->end, static_cast<WireFormatLite::WireType>(0));
 
         if (range->end > FieldDescriptor::kMaxNumber) {
@@ -1035,13 +1035,13 @@ void ParseFunctionGenerator::GenerateFieldSwitch(
     PrintFieldComment(format, field);
     format("case $1$:\n", field->number());
     format.Indent();
-    uint32_t fallback_tag = 0;
-    uint32_t expected_tag = ExpectedTag(field, &fallback_tag);
+    ui32 fallback_tag = 0;
+    ui32 expected_tag = ExpectedTag(field, &fallback_tag);
     format("if (PROTOBUF_PREDICT_TRUE(static_cast<$uint8$>(tag) == $1$)) {\n",
            expected_tag & 0xFF);
     format.Indent();
     auto wiretype = WireFormatLite::GetTagWireType(expected_tag);
-    uint32_t tag = WireFormatLite::MakeTag(field->number(), wiretype);
+    ui32 tag = WireFormatLite::MakeTag(field->number(), wiretype);
     int tag_size = io::CodedOutputStream::VarintSize32(tag);
     bool is_repeat = ShouldRepeat(field, wiretype);
     if (is_repeat) {
@@ -1087,7 +1087,7 @@ namespace {
 
 TProtoStringType FieldParseFunctionName(const FieldDescriptor* field,
                                    const Options& options,
-                                   uint32_t table_size_log2) {
+                                   ui32 table_size_log2) {
   ParseCardinality card =  //
       field->is_packed()               ? ParseCardinality::kPacked
       : field->is_repeated()           ? ParseCardinality::kRepeated

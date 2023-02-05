@@ -2353,7 +2353,7 @@ void CleanStringLineEndings(TProtoStringType *str, bool auto_end_last_line) {
 
   for (ptrdiff_t input_pos = 0; input_pos < len;) {
     if (!r_seen && input_pos + 8 < len) {
-      uint64_t v = GOOGLE_UNALIGNED_LOAD64(p + input_pos);
+      ui64 v = GOOGLE_UNALIGNED_LOAD64(p + input_pos);
       // Loop over groups of 8 bytes at a time until we come across
       // a word that has a byte whose value is less than or equal to
       // '\r' (i.e. could contain a \n (0x0a) or a \r (0x0d) ).

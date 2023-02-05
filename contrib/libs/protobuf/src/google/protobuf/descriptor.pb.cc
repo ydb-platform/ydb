@@ -378,8 +378,8 @@ constexpr UninterpretedOption::UninterpretedOption(
   , identifier_value_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
   , string_value_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
   , aggregate_value_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
-  , positive_int_value_(uint64_t{0u})
-  , negative_int_value_(int64_t{0})
+  , positive_int_value_(ui64{0u})
+  , negative_int_value_(i64{0})
   , double_value_(0){}
 struct UninterpretedOptionDefaultTypeInternal {
   constexpr UninterpretedOptionDefaultTypeInternal()

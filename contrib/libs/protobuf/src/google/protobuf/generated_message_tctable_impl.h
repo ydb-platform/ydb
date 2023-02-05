@@ -118,7 +118,7 @@ class TcParserBase {
       return table->fallback(PROTOBUF_TC_PARAM_PASS);
     }
     ptr += sizeof(TagType);
-    hasbits |= (uint64_t{1} << data.hasbit_idx());
+    hasbits |= (ui64{1} << data.hasbit_idx());
     auto& field = RefAt<FieldType*>(msg, data.offset());
     if (field == nullptr) {
       auto arena = ctx->data().arena;
@@ -175,12 +175,12 @@ class TcParserBase {
   }
 
   static inline PROTOBUF_ALWAYS_INLINE void SyncHasbits(
-      MessageLite* msg, uint64_t hasbits, const TailCallParseTableBase* table) {
-    const uint32_t has_bits_offset = table->has_bits_offset;
+      MessageLite* msg, ui64 hasbits, const TailCallParseTableBase* table) {
+    const ui32 has_bits_offset = table->has_bits_offset;
     if (has_bits_offset) {
       // Only the first 32 has-bits are updated. Nothing above those is stored,
       // but e.g. messages without has-bits update the upper bits.
-      RefAt<uint32_t>(msg, has_bits_offset) = static_cast<uint32_t>(hasbits);
+      RefAt<ui32>(msg, has_bits_offset) = static_cast<ui32>(hasbits);
     }
   }
 
@@ -217,14 +217,14 @@ class TcParserBase {
   if (PROTOBUF_PREDICT_FALSE(!(x))) return nullptr /* NOLINT */
 
     SyncHasbits(msg, hasbits, table);
-    uint32 tag;
+    ui32 tag;
     ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
     CHK_(ptr);
     if ((tag & 7) == WireFormatLite::WIRETYPE_END_GROUP || tag == 0) {
       ctx->SetLastTag(tag);
       return ptr;
     }
-    uint32_t num = tag >> 3;
+    ui32 num = tag >> 3;
     if (table->extension_range_low <= num &&
         num <= table->extension_range_high) {
       return RefAt<ExtensionSet>(msg, table->extension_offset)
@@ -244,7 +244,7 @@ class TcParserBase {
 // This is templated on lg2(table size), since dispatching depends upon the size
 // of the table. The template parameter avoids runtime overhead for computing
 // the table entry index.
-template <uint32_t kPowerOf2>
+template <ui32 kPowerOf2>
 struct TcParser final : TcParserBase {
   // Dispatch to the designated parse function
   inline PROTOBUF_ALWAYS_INLINE static const char* TagDispatch(
@@ -274,10 +274,10 @@ struct TcParser final : TcParserBase {
                                ParseContext* ctx,
                                const TailCallParseTableBase* table) {
     ScopedArenaSwap saved(msg, ctx);
-    const uint32_t has_bits_offset = table->has_bits_offset;
+    const ui32 has_bits_offset = table->has_bits_offset;
     while (!ctx->Done(&ptr)) {
-      uint64_t hasbits = 0;
-      if (has_bits_offset) hasbits = RefAt<uint32_t>(msg, has_bits_offset);
+      ui64 hasbits = 0;
+      if (has_bits_offset) hasbits = RefAt<ui32>(msg, has_bits_offset);
       ptr = TagDispatch(msg, ptr, ctx, table, hasbits, {});
       if (ptr == nullptr) break;
       if (ctx->LastTag() != 1) break;  // Ended on terminating tag

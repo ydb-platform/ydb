@@ -58,8 +58,8 @@ void** RepeatedPtrFieldBase::InternalExtend(int extend_amount) {
   Arena* arena = GetArena();
   new_size = std::max(internal::kRepeatedFieldLowerClampLimit,
                       std::max(total_size_ * 2, new_size));
-  GOOGLE_CHECK_LE(static_cast<int64_t>(new_size),
-           static_cast<int64_t>(
+  GOOGLE_CHECK_LE(static_cast<i64>(new_size),
+           static_cast<i64>(
                (std::numeric_limits<size_t>::max() - kRepHeaderSize) /
                sizeof(old_rep->elements[0])))
       << "Requested size is too large to fit into size_t.";
@@ -135,10 +135,10 @@ MessageLite* RepeatedPtrFieldBase::AddWeak(const MessageLite* prototype) {
 
 
 template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<bool>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<int32_t>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<uint32_t>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<int64_t>;
-template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<uint64_t>;
+template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<i32>;
+template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<ui32>;
+template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<i64>;
+template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<ui64>;
 template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<float>;
 template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedField<double>;
 template class PROTOBUF_EXPORT_TEMPLATE_DEFINE RepeatedPtrField<TProtoStringType>;

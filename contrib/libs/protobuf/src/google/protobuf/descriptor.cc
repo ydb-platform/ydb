@@ -664,8 +664,8 @@ bool AllowedExtendeeInProto3(const TProtoStringType& name) {
 class TableArena {
  public:
   // Allocate a block on `n` bytes, with no destructor information saved.
-  void* AllocateMemory(uint32_t n) {
-    uint32_t tag = SizeToRawTag(n) + kFirstRawTag;
+  void* AllocateMemory(ui32 n) {
+    ui32 tag = SizeToRawTag(n) + kFirstRawTag;
     if (tag > 255) {
       // We can't fit the size, use an OutOfLineAlloc.
       return Create<OutOfLineAlloc>(OutOfLineAlloc{::operator new(n), n})->ptr;
@@ -709,7 +709,7 @@ class TableArena {
   // inspect the usage of the arena.
   void PrintUsageInfo() const {
     const auto print_histogram = [](Block* b, int size) {
-      std::map<uint32_t, uint32_t> unused_space_count;
+      std::map<ui32, ui32> unused_space_count;
       int count = 0;
       for (; b != nullptr; b = b->next) {
         ++unused_space_count[b->space_left()];
@@ -787,7 +787,7 @@ class TableArena {
 
   using Tag = unsigned char;
 
-  void* AllocRawInternal(uint32_t size, Tag tag) {
+  void* AllocRawInternal(ui32 size, Tag tag) {
     GOOGLE_DCHECK_GT(size, 0);
     size = RoundUp(size);
 
@@ -840,7 +840,7 @@ class TableArena {
 
   struct OutOfLineAlloc {
     void* ptr;
-    uint32_t size;
+    ui32 size;
   };
 
   template <typename... T>
@@ -910,11 +910,11 @@ class TableArena {
     void operator()(OutOfLineAlloc* p) { OperatorDelete(p->ptr, p->size); }
   };
 
-  static uint32_t SizeToRawTag(size_t n) { return (RoundUp(n) / 8) - 1; }
+  static ui32 SizeToRawTag(size_t n) { return (RoundUp(n) / 8) - 1; }
 
-  static uint32_t TagToSize(Tag tag) {
+  static ui32 TagToSize(Tag tag) {
     GOOGLE_DCHECK_GE(tag, kFirstRawTag);
-    return static_cast<uint32_t>(tag - kFirstRawTag + 1) * 8;
+    return static_cast<ui32>(tag - kFirstRawTag + 1) * 8;
   }
 
   struct Block {
@@ -926,7 +926,7 @@ class TableArena {
     // `allocated_size` is the total size of the memory block allocated.
     // The `Block` structure is constructed at the start and the rest of the
     // memory is used as the payload of the `Block`.
-    explicit Block(uint32_t allocated_size) {
+    explicit Block(ui32 allocated_size) {
       start_offset = 0;
       end_offset = capacity =
           reinterpret_cast<char*>(this) + allocated_size - data();
@@ -937,12 +937,12 @@ class TableArena {
       return reinterpret_cast<char*>(this) + RoundUp(sizeof(Block));
     }
 
-    uint32_t memory_used() {
+    ui32 memory_used() {
       return data() + capacity - reinterpret_cast<char*>(this);
     }
-    uint32_t space_left() const { return end_offset - start_offset; }
+    ui32 space_left() const { return end_offset - start_offset; }
 
-    void* Allocate(uint32_t n, Tag tag) {
+    void* Allocate(ui32 n, Tag tag) {
       GOOGLE_DCHECK_LE(n + 1, space_left());
       void* p = data() + start_offset;
       start_offset += n;
@@ -2471,16 +2471,16 @@ TProtoStringType FieldDescriptor::DefaultValueAsString(
   GOOGLE_CHECK(has_default_value()) << "No default value";
   switch (cpp_type()) {
     case CPPTYPE_INT32:
-      return StrCat(default_value_int32_t());
+      return StrCat(default_value_i32());
       break;
     case CPPTYPE_INT64:
-      return StrCat(default_value_int64_t());
+      return StrCat(default_value_i64());
       break;
     case CPPTYPE_UINT32:
-      return StrCat(default_value_uint32_t());
+      return StrCat(default_value_ui32());
       break;
     case CPPTYPE_UINT64:
-      return StrCat(default_value_uint64_t());
+      return StrCat(default_value_ui64());
       break;
     case CPPTYPE_FLOAT:
       return SimpleFtoa(default_value_float());
@@ -3458,7 +3458,7 @@ bool FileDescriptor::GetSourceLocation(const std::vector<int>& path,
   if (source_code_info_) {
     if (const SourceCodeInfo_Location* loc =
             tables_->GetSourceLocation(path, source_code_info_)) {
-      const RepeatedField<int32_t>& span = loc->span();
+      const RepeatedField<i32>& span = loc->span();
       if (span.size() == 3 || span.size() == 4) {
         out_location->start_line = span.Get(0);
         out_location->start_column = span.Get(1);
@@ -3924,13 +3924,13 @@ class DescriptorBuilder {
 
     // Convenience functions to set an int field the right way, depending on
     // its wire type (a single int CppType can represent multiple wire types).
-    void SetInt32(int number, int32_t value, FieldDescriptor::Type type,
+    void SetInt32(int number, i32 value, FieldDescriptor::Type type,
                   UnknownFieldSet* unknown_fields);
-    void SetInt64(int number, int64_t value, FieldDescriptor::Type type,
+    void SetInt64(int number, i64 value, FieldDescriptor::Type type,
                   UnknownFieldSet* unknown_fields);
-    void SetUInt32(int number, uint32_t value, FieldDescriptor::Type type,
+    void SetUInt32(int number, ui32 value, FieldDescriptor::Type type,
                    UnknownFieldSet* unknown_fields);
-    void SetUInt64(int number, uint64_t value, FieldDescriptor::Type type,
+    void SetUInt64(int number, ui64 value, FieldDescriptor::Type type,
                    UnknownFieldSet* unknown_fields);
 
     // A helper function that adds an error at the specified location of the
@@ -5298,19 +5298,19 @@ void DescriptorBuilder::BuildFieldOrExtension(const FieldDescriptorProto& proto,
       char* end_pos = nullptr;
       switch (result->cpp_type()) {
         case FieldDescriptor::CPPTYPE_INT32:
-          result->default_value_int32_t_ =
+          result->default_value_i32_ =
               strtol(proto.default_value().c_str(), &end_pos, 0);
           break;
         case FieldDescriptor::CPPTYPE_INT64:
-          result->default_value_int64_t_ =
+          result->default_value_i64_ =
               strto64(proto.default_value().c_str(), &end_pos, 0);
           break;
         case FieldDescriptor::CPPTYPE_UINT32:
-          result->default_value_uint32_t_ =
+          result->default_value_ui32_ =
               strtoul(proto.default_value().c_str(), &end_pos, 0);
           break;
         case FieldDescriptor::CPPTYPE_UINT64:
-          result->default_value_uint64_t_ =
+          result->default_value_ui64_ =
               strtou64(proto.default_value().c_str(), &end_pos, 0);
           break;
         case FieldDescriptor::CPPTYPE_FLOAT:
@@ -5391,16 +5391,16 @@ void DescriptorBuilder::BuildFieldOrExtension(const FieldDescriptorProto& proto,
       // No explicit default value
       switch (result->cpp_type()) {
         case FieldDescriptor::CPPTYPE_INT32:
-          result->default_value_int32_t_ = 0;
+          result->default_value_i32_ = 0;
           break;
         case FieldDescriptor::CPPTYPE_INT64:
-          result->default_value_int64_t_ = 0;
+          result->default_value_i64_ = 0;
           break;
         case FieldDescriptor::CPPTYPE_UINT32:
-          result->default_value_uint32_t_ = 0;
+          result->default_value_ui32_ = 0;
           break;
         case FieldDescriptor::CPPTYPE_UINT64:
-          result->default_value_uint64_t_ = 0;
+          result->default_value_ui64_ = 0;
           break;
         case FieldDescriptor::CPPTYPE_FLOAT:
           result->default_value_float_ = 0.0f;
@@ -6525,8 +6525,8 @@ void DescriptorBuilder::ValidateMessageOptions(Descriptor* message,
   VALIDATE_OPTIONS_FROM_ARRAY(message, enum_type, Enum);
   VALIDATE_OPTIONS_FROM_ARRAY(message, extension, Field);
 
-  const int64_t max_extension_range =
-      static_cast<int64_t>(message->options().message_set_wire_format()
+  const i64 max_extension_range =
+      static_cast<i64>(message->options().message_set_wire_format()
                                ? kint32max
                                : FieldDescriptor::kMaxNumber);
   for (int i = 0; i < message->extension_range_count(); ++i) {
@@ -7174,7 +7174,7 @@ void DescriptorBuilder::OptionInterpreter::UpdateSourceCodeInfo(
     if (matched) {
       // see if this location is in the range to remove
       bool loc_matches = true;
-      if (loc->path_size() < static_cast<int64_t>(pathv.size())) {
+      if (loc->path_size() < static_cast<i64>(pathv.size())) {
         loc_matches = false;
       } else {
         for (size_t j = 0; j < pathv.size(); j++) {
@@ -7317,7 +7317,7 @@ bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
     case FieldDescriptor::CPPTYPE_INT32:
       if (uninterpreted_option_->has_positive_int_value()) {
         if (uninterpreted_option_->positive_int_value() >
-            static_cast<uint64_t>(kint32max)) {
+            static_cast<ui64>(kint32max)) {
           return AddValueError("Value out of range for int32 option \"" +
                                option_field->full_name() + "\".");
         } else {
@@ -7327,7 +7327,7 @@ bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
         }
       } else if (uninterpreted_option_->has_negative_int_value()) {
         if (uninterpreted_option_->negative_int_value() <
-            static_cast<int64_t>(kint32min)) {
+            static_cast<i64>(kint32min)) {
           return AddValueError("Value out of range for int32 option \"" +
                                option_field->full_name() + "\".");
         } else {
@@ -7344,7 +7344,7 @@ bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
     case FieldDescriptor::CPPTYPE_INT64:
       if (uninterpreted_option_->has_positive_int_value()) {
         if (uninterpreted_option_->positive_int_value() >
-            static_cast<uint64_t>(kint64max)) {
+            static_cast<ui64>(kint64max)) {
           return AddValueError("Value out of range for int64 option \"" +
                                option_field->full_name() + "\".");
         } else {
@@ -7428,7 +7428,7 @@ bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
     }
 
     case FieldDescriptor::CPPTYPE_BOOL:
-      uint64_t value;
+      ui64 value;
       if (!uninterpreted_option_->has_identifier_value()) {
         return AddValueError(
             "Value must be identifier for boolean option "
@@ -7498,11 +7498,11 @@ bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
                              "option \"" +
                              option_field->full_name() + "\".");
       } else {
-        // Sign-extension is not a problem, since we cast directly from int32_t
-        // to uint64_t, without first going through uint32_t.
+        // Sign-extension is not a problem, since we cast directly from i32
+        // to ui64, without first going through ui32.
         unknown_fields->AddVarint(
             option_field->number(),
-            static_cast<uint64_t>(static_cast<int64_t>(enum_value->number())));
+            static_cast<ui64>(static_cast<i64>(enum_value->number())));
       }
       break;
     }
@@ -7644,16 +7644,16 @@ bool DescriptorBuilder::OptionInterpreter::SetAggregateOption(
 }
 
 void DescriptorBuilder::OptionInterpreter::SetInt32(
-    int number, int32_t value, FieldDescriptor::Type type,
+    int number, i32 value, FieldDescriptor::Type type,
     UnknownFieldSet* unknown_fields) {
   switch (type) {
     case FieldDescriptor::TYPE_INT32:
       unknown_fields->AddVarint(
-          number, static_cast<uint64_t>(static_cast<int64_t>(value)));
+          number, static_cast<ui64>(static_cast<i64>(value)));
       break;
 
     case FieldDescriptor::TYPE_SFIXED32:
-      unknown_fields->AddFixed32(number, static_cast<uint32_t>(value));
+      unknown_fields->AddFixed32(number, static_cast<ui32>(value));
       break;
 
     case FieldDescriptor::TYPE_SINT32:
@@ -7668,15 +7668,15 @@ void DescriptorBuilder::OptionInterpreter::SetInt32(
 }
 
 void DescriptorBuilder::OptionInterpreter::SetInt64(
-    int number, int64_t value, FieldDescriptor::Type type,
+    int number, i64 value, FieldDescriptor::Type type,
     UnknownFieldSet* unknown_fields) {
   switch (type) {
     case FieldDescriptor::TYPE_INT64:
-      unknown_fields->AddVarint(number, static_cast<uint64_t>(value));
+      unknown_fields->AddVarint(number, static_cast<ui64>(value));
       break;
 
     case FieldDescriptor::TYPE_SFIXED64:
-      unknown_fields->AddFixed64(number, static_cast<uint64_t>(value));
+      unknown_fields->AddFixed64(number, static_cast<ui64>(value));
       break;
 
     case FieldDescriptor::TYPE_SINT64:
@@ -7691,15 +7691,15 @@ void DescriptorBuilder::OptionInterpreter::SetInt64(
 }
 
 void DescriptorBuilder::OptionInterpreter::SetUInt32(
-    int number, uint32_t value, FieldDescriptor::Type type,
+    int number, ui32 value, FieldDescriptor::Type type,
     UnknownFieldSet* unknown_fields) {
   switch (type) {
     case FieldDescriptor::TYPE_UINT32:
-      unknown_fields->AddVarint(number, static_cast<uint64_t>(value));
+      unknown_fields->AddVarint(number, static_cast<ui64>(value));
       break;
 
     case FieldDescriptor::TYPE_FIXED32:
-      unknown_fields->AddFixed32(number, static_cast<uint32_t>(value));
+      unknown_fields->AddFixed32(number, static_cast<ui32>(value));
       break;
 
     default:
@@ -7709,7 +7709,7 @@ void DescriptorBuilder::OptionInterpreter::SetUInt32(
 }
 
 void DescriptorBuilder::OptionInterpreter::SetUInt64(
-    int number, uint64_t value, FieldDescriptor::Type type,
+    int number, ui64 value, FieldDescriptor::Type type,
     UnknownFieldSet* unknown_fields) {
   switch (type) {
     case FieldDescriptor::TYPE_UINT64:

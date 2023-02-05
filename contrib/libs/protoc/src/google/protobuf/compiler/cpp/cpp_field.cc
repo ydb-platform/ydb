@@ -269,7 +269,7 @@ void SetCommonFieldVariables(const FieldDescriptor* descriptor,
   (*variables)["}"] = "";
 }
 
-void FieldGenerator::SetHasBitIndex(int32_t has_bit_index) {
+void FieldGenerator::SetHasBitIndex(i32 has_bit_index) {
   if (!HasHasbit(descriptor_)) {
     GOOGLE_CHECK_EQ(has_bit_index, -1);
     return;
@@ -282,7 +282,7 @@ void FieldGenerator::SetHasBitIndex(int32_t has_bit_index) {
       strings::Hex(1u << (has_bit_index % 32), strings::ZERO_PAD_8), "u;");
 }
 
-void FieldGenerator::SetInlinedStringIndex(int32_t inlined_string_index) {
+void FieldGenerator::SetInlinedStringIndex(i32 inlined_string_index) {
   if (!IsStringInlined(descriptor_, options_)) {
     GOOGLE_CHECK_EQ(inlined_string_index, -1);
     return;

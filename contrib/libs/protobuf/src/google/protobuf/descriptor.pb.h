@@ -13488,7 +13488,7 @@ inline bool UninterpretedOption::has_positive_int_value() const {
   return _internal_has_positive_int_value();
 }
 inline void UninterpretedOption::clear_positive_int_value() {
-  positive_int_value_ = uint64_t{0u};
+  positive_int_value_ = ui64{0u};
   _has_bits_[0] &= ~0x00000008u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::uint64 UninterpretedOption::_internal_positive_int_value() const {
@@ -13516,7 +13516,7 @@ inline bool UninterpretedOption::has_negative_int_value() const {
   return _internal_has_negative_int_value();
 }
 inline void UninterpretedOption::clear_negative_int_value() {
-  negative_int_value_ = int64_t{0};
+  negative_int_value_ = i64{0};
   _has_bits_[0] &= ~0x00000010u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::int64 UninterpretedOption::_internal_negative_int_value() const {

@@ -55,7 +55,7 @@ bool ParseEndsInSlopRegion(const char* begin, int overrun, int depth) {
   auto ptr = begin + overrun;
   auto end = begin + kSlopBytes;
   while (ptr < end) {
-    uint32_t tag;
+    ui32 tag;
     ptr = ReadTag(ptr, &tag);
     if (ptr == nullptr || ptr > end) return false;
     // ending on 0 tag is allowed and is the major reason for the necessity of
@@ -63,7 +63,7 @@ bool ParseEndsInSlopRegion(const char* begin, int overrun, int depth) {
     if (tag == 0) return true;
     switch (tag & 7) {
       case 0: {  // Varint
-        uint64_t val;
+        ui64 val;
         ptr = VarintParse(ptr, &val);
         if (ptr == nullptr) return false;
         break;
@@ -73,7 +73,7 @@ bool ParseEndsInSlopRegion(const char* begin, int overrun, int depth) {
         break;
       }
       case 2: {  // len delim
-        int32_t size = ReadSize(&ptr);
+        i32 size = ReadSize(&ptr);
         if (ptr == nullptr || size > end - ptr) return false;
         ptr += size;
         break;
@@ -240,11 +240,11 @@ template <>
 void byteswap<1>(void* p) {}
 template <>
 void byteswap<4>(void* p) {
-  *static_cast<uint32_t*>(p) = bswap_32(*static_cast<uint32_t*>(p));
+  *static_cast<ui32*>(p) = bswap_32(*static_cast<ui32*>(p));
 }
 template <>
 void byteswap<8>(void* p) {
-  *static_cast<uint64_t*>(p) = bswap_64(*static_cast<uint64_t*>(p));
+  *static_cast<ui64*>(p) = bswap_64(*static_cast<ui64*>(p));
 }
 
 const char* EpsCopyInputStream::InitFrom(io::ZeroCopyInputStream* zcis) {
@@ -297,7 +297,7 @@ const char* ParseContext::ParseMessage(MessageLite* msg, const char* ptr) {
   return ptr;
 }
 
-inline void WriteVarint(uint64_t val, TProtoStringType* s) {
+inline void WriteVarint(ui64 val, TProtoStringType* s) {
   while (val >= 128) {
     uint8_t c = val | 0x80;
     s->push_back(c);
@@ -306,29 +306,29 @@ inline void WriteVarint(uint64_t val, TProtoStringType* s) {
   s->push_back(val);
 }
 
-void WriteVarint(uint32_t num, uint64_t val, TProtoStringType* s) {
+void WriteVarint(ui32 num, ui64 val, TProtoStringType* s) {
   WriteVarint(num << 3, s);
   WriteVarint(val, s);
 }
 
-void WriteLengthDelimited(uint32_t num, StringPiece val, TProtoStringType* s) {
+void WriteLengthDelimited(ui32 num, StringPiece val, TProtoStringType* s) {
   WriteVarint((num << 3) + 2, s);
   WriteVarint(val.size(), s);
   s->append(val.data(), val.size());
 }
 
-std::pair<const char*, uint32_t> VarintParseSlow32(const char* p,
-                                                   uint32_t res) {
-  for (std::uint32_t i = 2; i < 5; i++) {
-    uint32_t byte = static_cast<uint8_t>(p[i]);
+std::pair<const char*, ui32> VarintParseSlow32(const char* p,
+                                                   ui32 res) {
+  for (ui32 i = 2; i < 5; i++) {
+    ui32 byte = static_cast<uint8_t>(p[i]);
     res += (byte - 1) << (7 * i);
     if (PROTOBUF_PREDICT_TRUE(byte < 128)) {
       return {p + i + 1, res};
     }
   }
   // Accept >5 bytes
-  for (std::uint32_t i = 5; i < 10; i++) {
-    uint32_t byte = static_cast<uint8_t>(p[i]);
+  for (ui32 i = 5; i < 10; i++) {
+    ui32 byte = static_cast<uint8_t>(p[i]);
     if (PROTOBUF_PREDICT_TRUE(byte < 128)) {
       return {p + i + 1, res};
     }
@@ -336,11 +336,11 @@ std::pair<const char*, uint32_t> VarintParseSlow32(const char* p,
   return {nullptr, 0};
 }
 
-std::pair<const char*, uint64_t> VarintParseSlow64(const char* p,
-                                                   uint32_t res32) {
-  uint64_t res = res32;
-  for (std::uint32_t i = 2; i < 10; i++) {
-    uint64_t byte = static_cast<uint8_t>(p[i]);
+std::pair<const char*, ui64> VarintParseSlow64(const char* p,
+                                                   ui32 res32) {
+  ui64 res = res32;
+  for (ui32 i = 2; i < 10; i++) {
+    ui64 byte = static_cast<uint8_t>(p[i]);
     res += (byte - 1) << (7 * i);
     if (PROTOBUF_PREDICT_TRUE(byte < 128)) {
       return {p + i + 1, res};
@@ -349,9 +349,9 @@ std::pair<const char*, uint64_t> VarintParseSlow64(const char* p,
   return {nullptr, 0};
 }
 
-std::pair<const char*, uint32_t> ReadTagFallback(const char* p, uint32_t res) {
-  for (std::uint32_t i = 2; i < 5; i++) {
-    uint32_t byte = static_cast<uint8_t>(p[i]);
+std::pair<const char*, ui32> ReadTagFallback(const char* p, ui32 res) {
+  for (ui32 i = 2; i < 5; i++) {
+    ui32 byte = static_cast<uint8_t>(p[i]);
     res += (byte - 1) << (7 * i);
     if (PROTOBUF_PREDICT_TRUE(byte < 128)) {
       return {p + i + 1, res};
@@ -360,15 +360,15 @@ std::pair<const char*, uint32_t> ReadTagFallback(const char* p, uint32_t res) {
   return {nullptr, 0};
 }
 
-std::pair<const char*, int32_t> ReadSizeFallback(const char* p, uint32_t res) {
-  for (std::uint32_t i = 1; i < 4; i++) {
-    uint32_t byte = static_cast<uint8_t>(p[i]);
+std::pair<const char*, i32> ReadSizeFallback(const char* p, ui32 res) {
+  for (ui32 i = 1; i < 4; i++) {
+    ui32 byte = static_cast<uint8_t>(p[i]);
     res += (byte - 1) << (7 * i);
     if (PROTOBUF_PREDICT_TRUE(byte < 128)) {
       return {p + i + 1, res};
     }
   }
-  std::uint32_t byte = static_cast<uint8_t>(p[4]);
+  ui32 byte = static_cast<uint8_t>(p[4]);
   if (PROTOBUF_PREDICT_FALSE(byte >= 8)) return {nullptr, 0};  // size >= 2gb
   res += (byte - 1) << 28;
   // Protect against sign integer overflow in PushLimit. Limits are relative
@@ -409,7 +409,7 @@ const char* InlineGreedyStringParser(TProtoStringType* s, const char* ptr,
 
 template <typename T, bool sign>
 const char* VarintParser(void* object, const char* ptr, ParseContext* ctx) {
-  return ctx->ReadPackedVarint(ptr, [object](uint64_t varint) {
+  return ctx->ReadPackedVarint(ptr, [object](ui64 varint) {
     T val;
     if (sign) {
       if (sizeof(T) == 8) {
@@ -426,27 +426,27 @@ const char* VarintParser(void* object, const char* ptr, ParseContext* ctx) {
 
 const char* PackedInt32Parser(void* object, const char* ptr,
                               ParseContext* ctx) {
-  return VarintParser<int32_t, false>(object, ptr, ctx);
+  return VarintParser<i32, false>(object, ptr, ctx);
 }
 const char* PackedUInt32Parser(void* object, const char* ptr,
                                ParseContext* ctx) {
-  return VarintParser<uint32_t, false>(object, ptr, ctx);
+  return VarintParser<ui32, false>(object, ptr, ctx);
 }
 const char* PackedInt64Parser(void* object, const char* ptr,
                               ParseContext* ctx) {
-  return VarintParser<int64_t, false>(object, ptr, ctx);
+  return VarintParser<i64, false>(object, ptr, ctx);
 }
 const char* PackedUInt64Parser(void* object, const char* ptr,
                                ParseContext* ctx) {
-  return VarintParser<uint64_t, false>(object, ptr, ctx);
+  return VarintParser<ui64, false>(object, ptr, ctx);
 }
 const char* PackedSInt32Parser(void* object, const char* ptr,
                                ParseContext* ctx) {
-  return VarintParser<int32_t, true>(object, ptr, ctx);
+  return VarintParser<i32, true>(object, ptr, ctx);
 }
 const char* PackedSInt64Parser(void* object, const char* ptr,
                                ParseContext* ctx) {
-  return VarintParser<int64_t, true>(object, ptr, ctx);
+  return VarintParser<i64, true>(object, ptr, ctx);
 }
 
 const char* PackedEnumParser(void* object, const char* ptr, ParseContext* ctx) {
@@ -467,19 +467,19 @@ const char* FixedParser(void* object, const char* ptr, ParseContext* ctx) {
 
 const char* PackedFixed32Parser(void* object, const char* ptr,
                                 ParseContext* ctx) {
-  return FixedParser<uint32_t>(object, ptr, ctx);
+  return FixedParser<ui32>(object, ptr, ctx);
 }
 const char* PackedSFixed32Parser(void* object, const char* ptr,
                                  ParseContext* ctx) {
-  return FixedParser<int32_t>(object, ptr, ctx);
+  return FixedParser<i32>(object, ptr, ctx);
 }
 const char* PackedFixed64Parser(void* object, const char* ptr,
                                 ParseContext* ctx) {
-  return FixedParser<uint64_t>(object, ptr, ctx);
+  return FixedParser<ui64>(object, ptr, ctx);
 }
 const char* PackedSFixed64Parser(void* object, const char* ptr,
                                  ParseContext* ctx) {
-  return FixedParser<int64_t>(object, ptr, ctx);
+  return FixedParser<i64>(object, ptr, ctx);
 }
 const char* PackedFloatParser(void* object, const char* ptr,
                               ParseContext* ctx) {
@@ -495,12 +495,12 @@ class UnknownFieldLiteParserHelper {
   explicit UnknownFieldLiteParserHelper(TProtoStringType* unknown)
       : unknown_(unknown) {}
 
-  void AddVarint(uint32_t num, uint64_t value) {
+  void AddVarint(ui32 num, ui64 value) {
     if (unknown_ == nullptr) return;
     WriteVarint(num * 8, unknown_);
     WriteVarint(value, unknown_);
   }
-  void AddFixed64(uint32_t num, uint64_t value) {
+  void AddFixed64(ui32 num, ui64 value) {
     if (unknown_ == nullptr) return;
     WriteVarint(num * 8 + 1, unknown_);
     char buffer[8];
@@ -508,7 +508,7 @@ class UnknownFieldLiteParserHelper {
         value, reinterpret_cast<uint8_t*>(buffer));
     unknown_->append(buffer, 8);
   }
-  const char* ParseLengthDelimited(uint32_t num, const char* ptr,
+  const char* ParseLengthDelimited(ui32 num, const char* ptr,
                                    ParseContext* ctx) {
     int size = ReadSize(&ptr);
     GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
@@ -517,14 +517,14 @@ class UnknownFieldLiteParserHelper {
     WriteVarint(size, unknown_);
     return ctx->AppendString(ptr, size, unknown_);
   }
-  const char* ParseGroup(uint32_t num, const char* ptr, ParseContext* ctx) {
+  const char* ParseGroup(ui32 num, const char* ptr, ParseContext* ctx) {
     if (unknown_) WriteVarint(num * 8 + 3, unknown_);
     ptr = ctx->ParseGroup(this, ptr, num * 8 + 3);
     GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
     if (unknown_) WriteVarint(num * 8 + 4, unknown_);
     return ptr;
   }
-  void AddFixed32(uint32_t num, uint32_t value) {
+  void AddFixed32(ui32 num, ui32 value) {
     if (unknown_ == nullptr) return;
     WriteVarint(num * 8 + 5, unknown_);
     char buffer[4];
@@ -547,7 +547,7 @@ const char* UnknownGroupLiteParse(TProtoStringType* unknown, const char* ptr,
   return WireFormatParser(field_parser, ptr, ctx);
 }
 
-const char* UnknownFieldParse(uint32_t tag, TProtoStringType* unknown,
+const char* UnknownFieldParse(ui32 tag, TProtoStringType* unknown,
                               const char* ptr, ParseContext* ctx) {
   UnknownFieldLiteParserHelper field_parser(unknown);
   return FieldParser(tag, field_parser, ptr, ctx);

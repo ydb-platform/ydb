@@ -2335,16 +2335,16 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
 }
 
     // EGetHandleClass defines BlobStorage queue to a request to
-    static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EGetHandleClass cls) {
+    static inline RawSerializer::EVDiskQueueId HandleClassToQueueId(RawSerializer::EGetHandleClass cls) {
         switch (cls) {
-            case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
-                return NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead;
-            case NKikimrBlobStorage::EGetHandleClass::FastRead:
-                return NKikimrBlobStorage::EVDiskQueueId::GetFastRead;
-            case NKikimrBlobStorage::EGetHandleClass::Discover:
-                return NKikimrBlobStorage::EVDiskQueueId::GetDiscover;
-            case NKikimrBlobStorage::EGetHandleClass::LowRead:
-                return NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
+            case RawSerializer::EGetHandleClass::AsyncRead:
+                return RawSerializer::EVDiskQueueId::GetAsyncRead;
+            case RawSerializer::EGetHandleClass::FastRead:
+                return RawSerializer::EVDiskQueueId::GetFastRead;
+            case RawSerializer::EGetHandleClass::Discover:
+                return RawSerializer::EVDiskQueueId::GetDiscover;
+            case RawSerializer::EGetHandleClass::LowRead:
+                return RawSerializer::EVDiskQueueId::GetLowRead;
             default:
                 Y_FAIL("Unexpected case");
         }

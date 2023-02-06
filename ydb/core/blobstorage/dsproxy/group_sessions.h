@@ -44,7 +44,7 @@ namespace NKikimr {
                     Y_VERIFY(event.Record.HasMsgQoS());
                     auto &msgQoS = event.Record.GetMsgQoS();
                     Y_VERIFY(msgQoS.HasExtQueueId());
-                    NKikimrBlobStorage::EVDiskQueueId queueId = msgQoS.GetExtQueueId();
+                    auto queueId = msgQoS.GetExtQueueId();
                     Y_VERIFY(queueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
                     return queueId;
                 }

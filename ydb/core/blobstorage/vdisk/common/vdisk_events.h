@@ -3713,7 +3713,7 @@ namespace NKikimr {
     private:
         TEvVGet(const TVDiskID &vdisk,
                 TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass cls,
+                RawSerializer::EGetHandleClass cls,
                 bool notifyIfNotReady,
                 bool showInternals,
                 TMaybe<ui64> requestCookie,

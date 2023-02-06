@@ -218,10 +218,6 @@ static void PrepareConfig(NDbPool::TConfig& config) {
     if (!config.GetToken() && config.GetOAuthFile()) {
         config.SetToken(StripString(TFileInput(config.GetOAuthFile()).ReadAll()));
     }
-
-    if (!config.GetMaxSessionCount()) {
-        config.SetMaxSessionCount(10);
-    }
 }
 
 TDbPoolMap::TDbPoolMap(
@@ -267,15 +263,20 @@ void TDbPoolMap::Reset(const NDbPool::TConfig& config) {
     TableClient = nullptr;
 }
 
-TDbPool::TPtr TDbPoolHolder::GetOrCreate(ui32 dbPoolId, ui32 sessionsCount) {
-    return Pools->GetOrCreate(dbPoolId, sessionsCount);
+TDbPool::TPtr TDbPoolHolder::GetOrCreate(ui32 dbPoolId) {
+    return Pools->GetOrCreate(dbPoolId);
 }
 
-TDbPool::TPtr TDbPoolMap::GetOrCreate(ui32 dbPoolId, ui32 sessionsCount) {
+TDbPool::TPtr TDbPoolMap::GetOrCreate(ui32 dbPoolId) {
     TGuard<TMutex> lock(Mutex);
     auto it = Pools.find(dbPoolId);
     if (it != Pools.end()) {
         return it->second;
+    }
+
+    auto it_pool = Config.GetPools().find(dbPoolId);
+    if (it_pool == Config.GetPools().end()) {
+        return nullptr;
     }
 
     if (!Config.GetEndpoint()) {
@@ -283,9 +284,14 @@ TDbPool::TPtr TDbPoolMap::GetOrCreate(ui32 dbPoolId, ui32 sessionsCount) {
     }
 
     if (!TableClient) {
+        auto maxSessionCount = 0;
+        for (const auto& pool : Config.GetPools())
+        {
+            maxSessionCount += pool.second;
+        }
         auto clientSettings = NYdb::NTable::TClientSettings()
             .UseQueryCache(false)
-            .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + Config.GetMaxSessionCount()))
+            .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + maxSessionCount))
             .Database(Config.GetDatabase())
             .DiscoveryEndpoint(Config.GetEndpoint())
             .DiscoveryMode(NYdb::EDiscoveryMode::Async);
@@ -300,7 +306,7 @@ TDbPool::TPtr TDbPoolMap::GetOrCreate(ui32 dbPoolId, ui32 sessionsCount) {
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, clientSettings);
     }
 
-    TDbPool::TPtr dbPool = new TDbPool(sessionsCount, *TableClient, Counters);
+    TDbPool::TPtr dbPool = new TDbPool(it_pool->second, *TableClient, Counters);
     Pools.emplace(dbPoolId, dbPool);
     return dbPool;
 }

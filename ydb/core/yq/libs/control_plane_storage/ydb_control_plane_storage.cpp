@@ -37,7 +37,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
     YdbConnection = NewYdbConnection(Config->Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
-    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN), 10);
+    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN));
     TablePathPrefix = YdbConnection->TablePathPrefix;
     CreateDirectory();
 

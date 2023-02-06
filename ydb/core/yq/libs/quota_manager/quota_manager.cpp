@@ -189,7 +189,7 @@ public:
 
         YdbConnection = NewYdbConnection(StorageConfig, CredProviderFactory, YqSharedResources->CoreYdbDriver);
         TablePathPrefix = YdbConnection->TablePathPrefix;
-        DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN), 10);
+        DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN));
         Send(NActors::GetNameserviceActorId(), new NActors::TEvInterconnect::TEvListNodes());
         Become(&TQuotaManagementService::StateFunc);
         LOG_I("STARTED");

@@ -39,7 +39,7 @@ class TDbPoolMap: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolMap>;
 
-    TDbPool::TPtr GetOrCreate(ui32 poolId, ui32 sessionsCount);
+    TDbPool::TPtr GetOrCreate(ui32 poolId);
 
 private:
     friend class TDbPoolHolder;
@@ -75,7 +75,7 @@ public:
     ~TDbPoolHolder();
 
     void Reset(const NDbPool::TConfig& config);
-    TDbPool::TPtr GetOrCreate(ui32 poolId, ui32 sessionsCount);
+    TDbPool::TPtr GetOrCreate(ui32 poolId);
     NYdb::TDriver& GetDriver();
     TDbPoolMap::TPtr Get();
 

@@ -69,7 +69,7 @@ public:
         Become(&TControlPlaneConfigActor::StateFunc);
         if (Config.GetUseDbMapping()) {
             YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
-            DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN), 10);
+            DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(static_cast<ui32>(EDbPoolId::MAIN));
             TablePathPrefix = YdbConnection->TablePathPrefix;
             Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
         } else {

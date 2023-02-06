@@ -38,7 +38,8 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     NDbPool::TConfig PrepareDbPoolConfig(const NYq::NConfig::TConfig& config) {
         NDbPool::TConfig dbPoolConfig;
         const auto& storageConfig = config.GetDbPool().GetStorage();
-        dbPoolConfig.SetMaxSessionCount(config.GetDbPool().GetMaxSessionCount());
+        auto maxSessionCount = config.GetDbPool().GetMaxSessionCount();
+        (*dbPoolConfig.MutablePools())[0] = maxSessionCount ? maxSessionCount : 10;
         dbPoolConfig.SetEndpoint(storageConfig.GetEndpoint());
         dbPoolConfig.SetDatabase(storageConfig.GetDatabase());
         dbPoolConfig.SetOAuthFile(storageConfig.GetOAuthFile());

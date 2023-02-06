@@ -1142,12 +1142,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t));
 
             }
 
@@ -1275,12 +1271,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
 
@@ -1361,12 +1353,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t));
 
             }
 
@@ -1575,12 +1563,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
 
@@ -1744,12 +1728,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId));
+                output->WriteAliasedRaw(this, sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId));
 
             }
 
@@ -1957,12 +1937,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t));
 
             }
 
@@ -2360,12 +2336,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId));
+                output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId));
 
             }
 
@@ -2520,12 +2492,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
 
             }
 
@@ -2626,12 +2594,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
 
@@ -2759,12 +2723,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t));
 
             }
 
@@ -2892,12 +2852,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
 
@@ -2971,12 +2927,8 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint32_t));
 
             }
 
@@ -3445,13 +3397,9 @@ namespace NKikimr {
                 *this = other;
             }
 
-            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
-                return output->Next(&data, &size);
-            }
-
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
-                serializeHelper(output, this, sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString));
-                serializeHelper(output, ExtremeQueries.data(), sizeof(TExtremeQuery) * ExtremeQueries.size());
+                output->WriteAliasedRaw(this, sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString));
+                output->WriteAliasedRaw(ExtremeQueries.data(), sizeof(TExtremeQuery) * ExtremeQueries.size());
 
             }
 

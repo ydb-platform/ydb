@@ -3652,7 +3652,7 @@ namespace NKikimr {
         static TString ToString(const RawSerializer::TEvVGet &record) {
             TStringStream str;
             if (record.HasRangeQuery()) {
-                const NKikimrBlobStorage::TRangeQuery &query = record.GetRangeQuery();
+                const RawSerializer::TRangeQuery &query = record.GetRangeQuery();
                 str << "{RangeQuery# ";
                 TLogoBlobID from = LogoBlobIDFromLogoBlobID(query.GetFrom());
                 TLogoBlobID to = LogoBlobIDFromLogoBlobID(query.GetTo());

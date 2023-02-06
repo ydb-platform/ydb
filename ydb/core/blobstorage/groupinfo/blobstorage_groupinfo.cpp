@@ -922,6 +922,18 @@ void VDiskIDFromVDiskID(const TVDiskID &id, RawSerializer::TVDiskID *proto) {
     proto->SetVDisk(id.VDisk);
 }
 
+TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
+    return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
+}
+
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
+    proto->SetGroupID(id.GroupID);
+    proto->SetGroupGeneration(id.GroupGeneration);
+    proto->SetRing(id.FailRealm);
+    proto->SetDomain(id.FailDomain);
+    proto->SetVDisk(id.VDisk);
+}
+
 TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet) {
     if (str[0] != '[' || str.back() != ']') {
         return TVDiskID::InvalidId;

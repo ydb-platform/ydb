@@ -656,7 +656,7 @@ namespace NKikimr {
             }
             if (qos.HasCostSettings()) {
                 str << " CostSettings# {";
-                const NKikimrBlobStorage::TVDiskCostSettings &costSettings = qos.GetCostSettings();
+                const auto &costSettings = qos.GetCostSettings();
                 if (costSettings.HasSeekTimeUs()) {
                     str << " SeekTimeUs# " << costSettings.GetSeekTimeUs();
                 }

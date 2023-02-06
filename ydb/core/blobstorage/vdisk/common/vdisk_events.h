@@ -636,7 +636,8 @@ namespace NKikimr {
             return ToString(Record);
         }
 
-        static void OutMsgQos(const NKikimrBlobStorage::TMsgQoS &qos, TStringStream &str) {
+        template <typename Serializer>
+        static void OutMsgQos(const Serializer &qos, TStringStream &str) {
             str << "{MsgQoS";
             if (qos.HasDeadlineSeconds()) {
                 str << " DeadlineSeconds# " << qos.GetDeadlineSeconds();

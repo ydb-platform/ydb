@@ -906,7 +906,7 @@ struct TEvBlobStorage {
             }
         };
 
-        const TLogoBlobID Id;
+        const NKikimr::TLogoBlobID Id;
         const TRcBuf Buffer; //FIXME(innokentii) const members prevent usage of move-semantics elsewhere
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
@@ -915,7 +915,7 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
 
-        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+        TEvPut(const NKikimr::TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
             : Id(id)
@@ -938,14 +938,14 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
-        TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
+        TEvPut(const NKikimr::TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
             : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic)
         {}
 
 
-        TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
+        TEvPut(const NKikimr::TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
             : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic)
@@ -979,7 +979,7 @@ struct TEvBlobStorage {
 
     struct TEvPutResult : public TEventLocal<TEvPutResult, EvPutResult> {
         NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Id;
+        const NKikimr::TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
         const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
@@ -987,7 +987,7 @@ struct TEvBlobStorage {
         bool WrittenBeyondBarrier = false; // was this blob written beyond the barrier?
         mutable NLWTrace::TOrbit Orbit;
 
-        TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
+        TEvPutResult(NKikimrProto::EReplyStatus status, const NKikimr::TLogoBlobID &id, const TStorageStatusFlags statusFlags,
                 ui32 groupId, float approximateFreeSpaceShare)
             : Status(status)
             , Id(id)
@@ -1017,7 +1017,7 @@ struct TEvBlobStorage {
 
     struct TEvGet : public TEventLocal<TEvGet, EvGet> {
         struct TQuery {
-            TLogoBlobID Id;
+            NKikimr::TLogoBlobID Id;
             ui32 Shift;
             ui32 Size;
 
@@ -1026,7 +1026,7 @@ struct TEvBlobStorage {
                 , Size(0)
             {}
 
-            void Set(const TLogoBlobID &id, ui32 sh = 0, ui32 sz = 0) {
+            void Set(const NKikimr::TLogoBlobID &id, ui32 sh = 0, ui32 sz = 0) {
                 Id = id;
                 Shift = sh;
                 Size = sz;
@@ -1101,7 +1101,7 @@ struct TEvBlobStorage {
             VerifySameTabletId();
         }
 
-        TEvGet(const TLogoBlobID &id, ui32 shift, ui32 size, TInstant deadline,
+        TEvGet(const NKikimr::TLogoBlobID &id, ui32 shift, ui32 size, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass getHandleClass,
                 bool mustRestoreFirst = false, bool isIndexOnly = false,
                 std::optional<TForceBlockTabletData> forceBlockTabletData = {})
@@ -1186,7 +1186,7 @@ struct TEvBlobStorage {
         struct TResponse {
             NKikimrProto::EReplyStatus Status;
 
-            TLogoBlobID Id;
+            NKikimr::TLogoBlobID Id;
             ui32 Shift;
             ui32 RequestedSize;
             TString Buffer;
@@ -1373,8 +1373,8 @@ struct TEvBlobStorage {
         };
 
         const ui32 OriginalGroupId;
-        const TLogoBlobID OriginalId;
-        const TLogoBlobID PatchedId;
+        const NKikimr::TLogoBlobID OriginalId;
+        const NKikimr::TLogoBlobID PatchedId;
         const ui32 MaskForCookieBruteForcing = 0;
 
         TArrayHolder<TDiff> Diffs;
@@ -1383,7 +1383,7 @@ struct TEvBlobStorage {
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
 
-        TEvPatch(ui32 originalGroupId, const TLogoBlobID &originalId, const TLogoBlobID &patchedId,
+        TEvPatch(ui32 originalGroupId, const NKikimr::TLogoBlobID &originalId, const NKikimr::TLogoBlobID &patchedId,
                 ui32 maskForCookieBruteForcing, TArrayHolder<TDiff> &&diffs, ui64 diffCount, TInstant deadline)
             : OriginalGroupId(originalGroupId)
             , OriginalId(originalId)
@@ -1396,7 +1396,7 @@ struct TEvBlobStorage {
             CheckContructorArgs(originalId, patchedId, Diffs, DiffCount);
         }
 
-        static void CheckContructorArgs(const TLogoBlobID &originalId, const TLogoBlobID &patchedId,
+        static void CheckContructorArgs(const NKikimr::TLogoBlobID &originalId, const NKikimr::TLogoBlobID &patchedId,
                 const TArrayHolder<TDiff> &diffs, ui64 diffCount)
         {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&originalId, sizeof(originalId));
@@ -1438,7 +1438,7 @@ struct TEvBlobStorage {
             }
         }
 
-        static bool GetBlobIdWithSamePlacement(const TLogoBlobID &originalId, TLogoBlobID *patchedId,
+        static bool GetBlobIdWithSamePlacement(const NKikimr::TLogoBlobID &originalId, NKikimr::TLogoBlobID *patchedId,
                 ui32 bitsForBruteForce, ui32 originalGroupId, ui32 currentGroupId)
         {
             if (originalGroupId != currentGroupId) {
@@ -1451,16 +1451,16 @@ struct TEvBlobStorage {
                 return true;
             }
 
-            Y_VERIFY(bitsForBruteForce <= TLogoBlobID::MaxCookie);
+            Y_VERIFY(bitsForBruteForce <= NKikimr::TLogoBlobID::MaxCookie);
             ui32 baseCookie = ~bitsForBruteForce & patchedId->Cookie();
-            ui32 extraCookie = TLogoBlobID::MaxCookie + 1;
+            ui32 extraCookie = NKikimr::TLogoBlobID::MaxCookie + 1;
             ui32 steps = 0;
             do {
                 extraCookie = (extraCookie - 1) & bitsForBruteForce;
                 ui32 cookie = baseCookie | (extraCookie ^ bitsForBruteForce);
                 steps++;
 
-                TLogoBlobID id(patchedId->TabletID(), patchedId->Generation(), patchedId->Step(), patchedId->Channel(),
+                NKikimr::TLogoBlobID id(patchedId->TabletID(), patchedId->Generation(), patchedId->Step(), patchedId->Channel(),
                         patchedId->BlobSize(), cookie, 0, patchedId->CrcMode());
                 if (id.Hash() % BaseDomainsCount == expectedValue) {
                     *patchedId = id;
@@ -1502,14 +1502,14 @@ struct TEvBlobStorage {
 
     struct TEvPatchResult : public TEventLocal<TEvPatchResult, EvPatchResult> {
         NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Id;
+        const NKikimr::TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
         const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
 
-        TEvPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags,
+        TEvPatchResult(NKikimrProto::EReplyStatus status, const NKikimr::TLogoBlobID &id, TStorageStatusFlags statusFlags,
                 ui32 groupId, float approximateFreeSpaceShare)
             : Status(status)
             , Id(id)
@@ -1542,8 +1542,8 @@ struct TEvBlobStorage {
     struct TEvInplacePatch : public TEventLocal<TEvInplacePatch, EvInplacePatch> {
         using TDiff = TEvPatch::TDiff;
 
-        const TLogoBlobID OriginalId;
-        const TLogoBlobID PatchedId;
+        const NKikimr::TLogoBlobID OriginalId;
+        const NKikimr::TLogoBlobID PatchedId;
 
         TArrayHolder<TDiff> Diffs;
         const ui64 DiffCount;
@@ -1551,7 +1551,7 @@ struct TEvBlobStorage {
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
 
-        TEvInplacePatch(const TLogoBlobID &originalId, const TLogoBlobID &patchedId, TArrayHolder<TDiff> &&diffs,
+        TEvInplacePatch(const NKikimr::TLogoBlobID &originalId, const NKikimr::TLogoBlobID &patchedId, TArrayHolder<TDiff> &&diffs,
                 ui64 diffCount, TInstant deadline)
             : OriginalId(originalId)
             , PatchedId(patchedId)
@@ -1591,13 +1591,13 @@ struct TEvBlobStorage {
 
     struct TEvInplacePatchResult : public TEventLocal<TEvInplacePatchResult, EvInplacePatchResult> {
         NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Id;
+        const NKikimr::TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
 
-        TEvInplacePatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags,
+        TEvInplacePatchResult(NKikimrProto::EReplyStatus status, const NKikimr::TLogoBlobID &id, TStorageStatusFlags statusFlags,
                 float approximateFreeSpaceShare)
             : Status(status)
             , Id(id)
@@ -1678,7 +1678,7 @@ struct TEvBlobStorage {
     struct TEvDiscoverResult : public TEventLocal<TEvDiscoverResult, EvDiscoverResult> {
         NKikimrProto::EReplyStatus Status;
 
-        TLogoBlobID Id;
+        NKikimr::TLogoBlobID Id;
         ui32 MinGeneration;
         TString Buffer;
         ui32 BlockedGeneration;
@@ -1692,7 +1692,7 @@ struct TEvBlobStorage {
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
         }
 
-        TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
+        TEvDiscoverResult(const NKikimr::TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
             : Status(NKikimrProto::OK)
             , Id(id)
             , MinGeneration(minGeneration)
@@ -1700,7 +1700,7 @@ struct TEvBlobStorage {
             , BlockedGeneration(0)
         {}
 
-        TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration)
+        TEvDiscoverResult(const NKikimr::TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration)
             : Status(NKikimrProto::OK)
             , Id(id)
             , MinGeneration(minGeneration)
@@ -1732,8 +1732,8 @@ struct TEvBlobStorage {
 
     struct TEvRange : public TEventLocal<TEvRange, EvRange> {
         ui64 TabletId;
-        TLogoBlobID From;
-        TLogoBlobID To;
+        NKikimr::TLogoBlobID From;
+        NKikimr::TLogoBlobID To;
         const TInstant Deadline;
         bool MustRestoreFirst;
         bool IsIndexOnly;
@@ -1741,7 +1741,7 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         bool Decommission = false;
 
-        TEvRange(ui64 tabletId, const TLogoBlobID &from, const TLogoBlobID &to, const bool mustRestoreFirst,
+        TEvRange(ui64 tabletId, const NKikimr::TLogoBlobID &from, const NKikimr::TLogoBlobID &to, const bool mustRestoreFirst,
                 TInstant deadline, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0)
             : TabletId(tabletId)
             , From(from)
@@ -1780,7 +1780,7 @@ struct TEvBlobStorage {
 
     struct TEvRangeResult : public TEventLocal<TEvRangeResult, EvRangeResult> {
         struct TResponse {
-            TLogoBlobID Id;
+            NKikimr::TLogoBlobID Id;
             TString Buffer;
             bool Keep = false;
             bool DoNotKeep = false;
@@ -1788,7 +1788,7 @@ struct TEvBlobStorage {
             TResponse()
             {}
 
-            TResponse(const TLogoBlobID &id, const TString &x, bool keep = false, bool doNotKeep = false)
+            TResponse(const NKikimr::TLogoBlobID &id, const TString &x, bool keep = false, bool doNotKeep = false)
                 : Id(id)
                 , Buffer(x)
                 , Keep(keep)
@@ -1797,14 +1797,14 @@ struct TEvBlobStorage {
         };
 
         NKikimrProto::EReplyStatus Status;
-        TLogoBlobID From;
-        TLogoBlobID To;
+        NKikimr::TLogoBlobID From;
+        NKikimr::TLogoBlobID To;
 
         TVector<TResponse> Responses;
         const ui32 GroupId;
         TString ErrorReason;
 
-        TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
+        TEvRangeResult(NKikimrProto::EReplyStatus status, const NKikimr::TLogoBlobID &from, const NKikimr::TLogoBlobID &to, ui32 groupId)
             : Status(status)
             , From(from)
             , To(to)
@@ -1844,8 +1844,8 @@ struct TEvBlobStorage {
         ui32 PerGenerationCounter; // monotone increasing cmd counter for RecordGeneration
         ui32 Channel;
 
-        THolder<TVector<TLogoBlobID> > Keep;
-        THolder<TVector<TLogoBlobID> > DoNotKeep;
+        THolder<TVector<NKikimr::TLogoBlobID> > Keep;
+        THolder<TVector<NKikimr::TLogoBlobID> > DoNotKeep;
         TInstant Deadline;
 
         ui32 CollectGeneration;
@@ -1866,7 +1866,7 @@ struct TEvBlobStorage {
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
                 bool collect, ui32 collectGeneration,
-                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
+                ui32 collectStep, TVector<NKikimr::TLogoBlobID> *keep, TVector<NKikimr::TLogoBlobID> *doNotKeep, TInstant deadline,
                 bool isMultiCollectAllowed, bool hard = false)
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
@@ -1883,7 +1883,7 @@ struct TEvBlobStorage {
         {}
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,
-                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline)
+                ui32 collectStep, TVector<NKikimr::TLogoBlobID> *keep, TVector<NKikimr::TLogoBlobID> *doNotKeep, TInstant deadline)
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(0)
@@ -1943,7 +1943,7 @@ struct TEvBlobStorage {
             return Print(false);
         }
 
-        static ui64 PerGenerationCounterStepSize(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep) {
+        static ui64 PerGenerationCounterStepSize(TVector<NKikimr::TLogoBlobID> *keep, TVector<NKikimr::TLogoBlobID> *doNotKeep) {
             ui64 keepCount = keep ? keep->size() : 0;
             ui64 doNotKeepCount = doNotKeep ? doNotKeep->size() : 0;
             ui64 totalFlags = keepCount + doNotKeepCount;
@@ -1957,7 +1957,7 @@ struct TEvBlobStorage {
         }
 
         ui32 CalculateSize() const {
-            return sizeof(*this) + ((Keep ? Keep->size() : 0) + (DoNotKeep ? DoNotKeep->size() : 0)) * sizeof(TLogoBlobID);
+            return sizeof(*this) + ((Keep ? Keep->size() : 0) + (DoNotKeep ? DoNotKeep->size() : 0)) * sizeof(NKikimr::TLogoBlobID);
         }
 
         std::unique_ptr<TEvCollectGarbageResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
@@ -2062,11 +2062,11 @@ struct TEvBlobStorage {
     struct TEvAssimilate : TEventLocal<TEvAssimilate, EvAssimilate> {
         std::optional<ui64> SkipBlocksUpTo;
         std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
-        std::optional<TLogoBlobID> SkipBlobsUpTo;
+        std::optional<NKikimr::TLogoBlobID> SkipBlobsUpTo;
         ui32 RestartCounter = 0;
 
         TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
-                std::optional<TLogoBlobID> skipBlobsUpTo)
+                std::optional<NKikimr::TLogoBlobID> skipBlobsUpTo)
             : SkipBlocksUpTo(skipBlocksUpTo)
             , SkipBarriersUpTo(skipBarriersUpTo)
             , SkipBlobsUpTo(skipBlobsUpTo)
@@ -2155,7 +2155,7 @@ struct TEvBlobStorage {
         };
 
         struct TBlob {
-            TLogoBlobID Id;
+            NKikimr::TLogoBlobID Id;
             bool Keep = false;
             bool DoNotKeep = false;
 
@@ -2354,7 +2354,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
 inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
         THolder<TEvBlobStorage::TEvPut> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     auto checkGroupId = [&] {
-        const TLogoBlobID &id = event->Id;
+        const NKikimr::TLogoBlobID &id = event->Id;
         const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());
         return id.TabletID() == storage->TabletID && expectedGroupId != Max<ui32>() && groupId == expectedGroupId;
     };

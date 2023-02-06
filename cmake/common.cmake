@@ -166,8 +166,8 @@ function(resources Tgt Output)
   endforeach()
   add_custom_command(
     OUTPUT ${Output}
-    COMMAND rescompiler ${Output} ${ResourcesList}
-    DEPENDS ${RESOURCE_ARGS_INPUTS}
+    COMMAND ${TOOLS_ROOT}/tools/rescompiler/bin/rescompiler ${Output} ${ResourcesList}
+    DEPENDS ${RESOURCE_ARGS_INPUTS} ${TOOLS_ROOT}/tools/rescompiler/bin/rescompiler
   )
 endfunction()
 

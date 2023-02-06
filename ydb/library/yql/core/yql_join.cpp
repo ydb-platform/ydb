@@ -272,6 +272,16 @@ namespace {
 
         std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
         bool forceSortedMerge = false;
+        bool unusedKeysOption = false;
+        THashSet<TStringBuf> unusedKeys;
+        THashSet<TString> leftKeySet;
+        for (auto& [table, column] : leftKeys) {
+            leftKeySet.insert(FullColumnName(table, column));
+        }
+        THashSet<TString> rightKeySet;
+        for (auto& [table, column] : rightKeys) {
+            rightKeySet.insert(FullColumnName(table, column));
+        }
         for (auto child : linkOptions->Children()) {
             if (!EnsureTupleMinSize(*child, 1, ctx)) {
                 return IGraphTransformer::TStatus::Error;
@@ -320,6 +330,39 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
                 forceSortedMerge = true;
+            }
+            else if (option.IsAtom("unusedKeys")) {
+                if (unusedKeysOption) {
+                    ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                        "Duplicate " << option.Content() << " link option"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                unusedKeysOption = true;
+                if (cross) {
+                    ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                        "Link option " << option.Content() << " can not be used with CROSS JOIN"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                for (ui32 i = 1; i < child->ChildrenSize(); ++i) {
+                    bool isKey = false;
+                    TStringBuf unusedKey = child->Child(i)->Content();
+                    if (singleSide) {
+                        const auto& ks = leftSide ? leftKeySet : rightKeySet;
+                        isKey = ks.contains(unusedKey);
+                    } else {
+                        isKey = leftKeySet.contains(unusedKey) || rightKeySet.contains(unusedKey);
+                    }
+                    if (!isKey) {
+                        ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                            "Invalid key `" << unusedKey << "` for link option " << option.Content() << ", join type " << joinType.Content()));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!unusedKeys.insert(unusedKey).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                            "Duplicate key `" << unusedKey << "` for link option " << option.Content() ));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
             }
             else {
                 ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
@@ -1338,6 +1381,11 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
+    if (auto unusedKeys = GetSetting(linkSettings, "unusedKeys")) {
+        for (ui32 i = 1; i < unusedKeys->ChildrenSize(); ++i) {
+            result.UnusedKeyColumns.insert(ToString(unusedKeys->Child(i)->Content()));
+        }
+    }
     return result;
 }
 
@@ -1369,6 +1417,15 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
 
     if (linkSettings.RightHints) {
         settings.push_back(builder("right"));
+    }
+
+    if (!linkSettings.UnusedKeyColumns.empty()) {
+        TExprNodeList settingItems;
+        settingItems.push_back(ctx.NewAtom(linkSettings.Pos, "unusedKeys", TNodeFlags::Default));
+        for (auto& key : linkSettings.UnusedKeyColumns) {
+            settingItems.push_back(ctx.NewAtom(linkSettings.Pos, key));
+        }
+        settings.push_back(ctx.NewList(linkSettings.Pos, std::move(settingItems)));
     }
 
     return ctx.NewList(linkSettings.Pos, std::move(settings));

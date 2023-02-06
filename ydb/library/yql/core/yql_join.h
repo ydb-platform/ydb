@@ -142,6 +142,9 @@ struct TEquiJoinLinkSettings {
     TSet<TString> RightHints;
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = true;
+    // key columns that are unused after current JOIN - implementation may remove it immediately,
+    // otherwise they will be removed on top level
+    TSet<TString> UnusedKeyColumns;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

@@ -405,7 +405,13 @@ TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name,
 }
 
 TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) {
+    auto newSetting = value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) });
+    return ReplaceSetting(settings, newSetting, ctx);
+}
+
+TExprNode::TPtr ReplaceSetting(const TExprNode& settings, const TExprNode::TPtr& newSetting, TExprContext& ctx) {
     TExprNode::TListType newChildren;
+    const TStringBuf name = newSetting->Head().Content();
     for (auto setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) {
             continue;
@@ -414,20 +420,24 @@ TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, c
         newChildren.push_back(setting);
     }
 
-    newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) }));
+    newChildren.push_back(newSetting);
 
     auto ret = ctx.NewList(settings.Pos(), std::move(newChildren));
     return ret;
 }
 
 TExprNode::TPtr AddSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) {
+    auto newSetting = value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) });
+    return AddSetting(settings, newSetting, ctx);
+}
+
+TExprNode::TPtr AddSetting(const TExprNode& settings, const TExprNode::TPtr& newSetting, TExprContext& ctx) {
     auto newChildren = settings.ChildrenList();
-    newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) }));
+    newChildren.push_back(newSetting);
 
     auto ret = ctx.NewList(settings.Pos(), std::move(newChildren));
     return ret;
 }
-
 
 TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& settings2, TExprContext& ctx) {
     auto newChildren = settings1.ChildrenList();

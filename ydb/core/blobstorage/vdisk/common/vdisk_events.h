@@ -3669,7 +3669,7 @@ namespace NKikimr {
             }
             size_t size = record.ExtremeQueriesSize();
             for (unsigned i = 0; i < size; i++) {
-                const NKikimrBlobStorage::TExtremeQuery &query = record.GetExtremeQueries(i);
+                const RawSerializer::TExtremeQuery &query = record.GetExtremeQueries(i);
                 str << "{ExtrQuery# ";
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
                 str << id.ToString();

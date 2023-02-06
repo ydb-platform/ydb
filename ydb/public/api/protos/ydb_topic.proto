@@ -540,8 +540,40 @@ message AddOffsetsToTransactionResponse {
 message AddOffsetsToTransactionResult {
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// CommitOffset
+
+
+// Commit offset request sent from client to server.
+message CommitOffsetRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Topic path of partition.
+    string path = 2;
+    // Partition identifier.
+    int64 partition_id = 3;
+    // Path of consumer.
+    string consumer = 4;
+
+    // Processed offset.
+    int64 offset = 5;
+}
+
+// Commit offset response sent from server to client.
+message CommitOffsetResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Commit offset result message inside CommitOffsetResponse.operation.
+message CommitOffsetResult {
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Control messages
+
 
 // message representing statistics by seleveral windows
 message MultipleWindowsStat {
@@ -768,7 +800,7 @@ message DescribeTopicResult {
 
         // Minimum of timestamps of last write among all partitions.
         google.protobuf.Timestamp min_last_write_time = 2;
-        // Maximum of differences between write timestamp and create timestamp for all messages, written during last minute. 
+        // Maximum of differences between write timestamp and create timestamp for all messages, written during last minute.
         google.protobuf.Duration max_write_time_lag = 3;
         // How much bytes were written statistics.
         MultipleWindowsStat bytes_written = 4;
@@ -855,7 +887,7 @@ message PartitionStats {
     int64 store_size_bytes = 2;
     // Timestamp of last write.
     google.protobuf.Timestamp last_write_time = 3;
-    // Maximum of differences between write timestamp and create timestamp for all messages, written during last minute. 
+    // Maximum of differences between write timestamp and create timestamp for all messages, written during last minute.
     google.protobuf.Duration max_write_time_lag = 4;
     // How much bytes were written during several windows in this partition.
     MultipleWindowsStat bytes_written = 5;

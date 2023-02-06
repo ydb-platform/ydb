@@ -3723,7 +3723,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
         return i->second;
     } else {
         return 0;
-    }    
+    }
 }
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
@@ -4083,7 +4083,7 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
             return;
         }
 
-        TUserInfo& userInfo = GetOrCreatePendingUser(user, ctx); 
+        TUserInfo& userInfo = GetOrCreatePendingUser(user, ctx);
 
         if (operation.GetBegin() > operation.GetEnd()) {
             ScheduleReplyPropose(tx,
@@ -4128,6 +4128,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
     Y_VERIFY(!UsersInfoWriteInProgress);
 
     const TString& user = act.ClientId;
+    const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
 
     if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
         switch (act.Type) {
@@ -4187,6 +4188,16 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         return;
     }
 
+    if (strictCommitOffset && act.Offset < StartOffset) {
+        // strict commit to past, reply error
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        ScheduleReplyError(act.Cookie,
+                           NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << StartOffset);
+
+        return;
+    }
+
     //request in correct session - make it
 
     ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
@@ -4205,7 +4216,15 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
     Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
     if (offset > EndOffset) {
-        LOG_ERROR_S(
+        if (strictCommitOffset) {
+            TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+            ScheduleReplyError(act.Cookie,
+                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
+                            TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << EndOffset);
+
+            return;
+        }
+        LOG_WARN_S(
                 ctx, NKikimrServices::PERSQUEUE,
                 "commit to future - topic " << TopicConverter->GetClientsideName() << " partition " << Partition
                     << " client " << act.ClientId << " EndOffset " << EndOffset << " offset " << offset
@@ -4237,6 +4256,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
     bool setSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
     bool dropSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION;
+    bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.SessionId.empty());
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         userInfo.ReadRuleGeneration = 0;
@@ -4283,7 +4303,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Session = session;
             userInfo.Generation = generation;
             userInfo.Step = step;
-        } else if (dropSession) {
+        } else if (dropSession || strictCommitOffset) {
             userInfo.Session = "";
             userInfo.Generation = 0;
             userInfo.Step = 0;

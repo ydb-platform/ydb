@@ -179,7 +179,7 @@ private:
                 if (rr->GetSeqNo() != res.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != res.GetResult(i).GetPartNo()) {
                     LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Handle TEvRead tablet: " << Tablet
                                     << " last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
-                                    << res.GetResult(i).GetSeqNo() << ", " << res.GetResult(i).GetPartNo() 
+                                    << res.GetResult(i).GetSeqNo() << ", " << res.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
                 }
                 Y_VERIFY(rr->GetSeqNo() == res.GetResult(i).GetSeqNo());
@@ -1538,7 +1538,8 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
                                                                 cmd.GetOffset(),
-                                                                cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0);
+                                                                cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0,
+                                                                TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict());
         ctx.Send(partActor, event.Release());
     }
 }

@@ -55,6 +55,7 @@ protected:
     void Handle(TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx);

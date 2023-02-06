@@ -20,6 +20,7 @@ struct TTopicInitInfo {
     bool IsServerless = false;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
+    THashMap<ui32, ui64> PartitionIdToTabletId;
 };
 
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
@@ -40,6 +41,8 @@ struct TTopicHolder {
 
     TVector<ui32> Groups;
     TMap<ui64, ui64> Partitions;
+    THashMap<ui32, ui64> PartitionIdToTabletId;
+
 
     inline static TTopicHolder FromTopicInfo(const TTopicInitInfo& info) {
         return TTopicHolder{
@@ -52,6 +55,7 @@ struct TTopicHolder {
             .FolderId = info.FolderId,
             .MeteringMode = info.MeteringMode,
             .FullConverter = info.TopicNameConverter,
+            .PartitionIdToTabletId = info.PartitionIdToTabletId,
         };
     }
 };

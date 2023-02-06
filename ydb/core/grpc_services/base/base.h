@@ -105,6 +105,7 @@ struct TRpcServices {
         EvStreamTopicWrite,
         EvStreamTopicRead,
         EvPQReadInfo,
+        EvTopicCommitOffset,
         EvListOperations,
         EvExportToYt,
         EvDiscoverPQClusters,

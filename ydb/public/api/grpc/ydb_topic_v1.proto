@@ -65,6 +65,8 @@ service TopicService {
     //        <----------------
     rpc StreamRead(stream StreamReadMessage.FromClient) returns (stream StreamReadMessage.FromServer);
 
+    // Single commit offset request.
+    rpc CommitOffset(CommitOffsetRequest) returns (CommitOffsetResponse);
 
     // Create topic command.
     rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);

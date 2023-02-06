@@ -440,7 +440,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     if (ev->Get()->Record.HasErrorCode() && ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         const auto errorCode = ev->Get()->Record.GetErrorCode();
-        if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE || errorCode == NPersQueue::NErrorCode::BAD_REQUEST) {
+        if (errorCode == NPersQueue::NErrorCode::WRONG_COOKIE
+            || errorCode == NPersQueue::NErrorCode::BAD_REQUEST
+            || errorCode == NPersQueue::NErrorCode::READ_ERROR_NO_SESSION) {
             Counters.Errors.Inc();
             ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + ev->Get()->Record.GetErrorReason(), ConvertOldCode(ev->Get()->Record.GetErrorCode())));
         } else {
@@ -925,6 +927,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     auto read = request.MutablePartitionRequest()->MutableCmdRead();
     read->SetClientId(ClientId);
     read->SetClientDC(ClientDC);
+    read->SetSessionId(Session);
     if (req->MaxCount) {
         read->SetCount(req->MaxCount);
     }

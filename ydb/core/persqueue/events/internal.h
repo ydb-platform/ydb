@@ -253,7 +253,8 @@ struct TEvPQ {
         };
 
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId,
-                            const ui32 generation, const ui32 step, ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0)
+                            const ui32 generation, const ui32 step, ESetClientInfoType type = ESCI_OFFSET,
+                            ui64 readRuleGeneration = 0, bool strict = false)
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -262,6 +263,7 @@ struct TEvPQ {
         , Step(step)
         , Type(type)
         , ReadRuleGeneration(readRuleGeneration)
+        , Strict(strict)
         {
         }
 
@@ -273,6 +275,7 @@ struct TEvPQ {
         ui32 Step;
         ESetClientInfoType Type;
         ui64 ReadRuleGeneration;
+        bool Strict;
     };
 
     struct TEvGetClientOffset : public TEventLocal<TEvGetClientOffset, EvGetClientOffset> {
@@ -630,12 +633,12 @@ struct TEvPQ {
         TEvInitCredentials()
         {}
     };
-    
+
     struct TEvCredentialsCreated : public TEventLocal<TEvCredentialsCreated, EvCredentialsCreated> {
         TEvCredentialsCreated(const TString& error)
             : Error(error)
         {}
-        
+
         TEvCredentialsCreated(std::shared_ptr<NYdb::ICredentialsProviderFactory> credentials)
             : Credentials(credentials)
         {}

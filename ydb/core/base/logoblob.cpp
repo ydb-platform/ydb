@@ -1,7 +1,6 @@
 #include "logoblob.h"
 #include <ydb/core/protos/base.pb.h>
 #include <util/string/printf.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 
 namespace NKikimr {
@@ -96,6 +95,10 @@ bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExpl
 }
 
 TLogoBlobID LogoBlobIDFromLogoBlobID(const RawSerializer::TLogoBlobID &proto) {
+    return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
+}
+
+TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto) {
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
 

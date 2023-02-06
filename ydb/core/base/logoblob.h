@@ -1,5 +1,7 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+
 
 namespace NKikimrProto {
     class TLogoBlobID;
@@ -303,8 +305,9 @@ namespace NKikimr {
         {}
     };
 
+    TLogoBlobID LogoBlobIDFromLogoBlobID(const RawSerializer::TLogoBlobID &proto);
     TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, RawSerializer::TLogoBlobID *proto);
     void LogoBlobIDVectorFromLogoBlobIDRepeated(
                 TVector<TLogoBlobID> *to,
                 const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto);

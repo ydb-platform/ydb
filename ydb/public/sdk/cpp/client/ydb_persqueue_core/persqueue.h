@@ -717,7 +717,7 @@ struct TReadSessionEvent {
 
     //! Server request for creating partition stream.
     struct TCreatePartitionStreamEvent {
-        explicit TCreatePartitionStreamEvent(TPartitionStream::TPtr, ui64 committedOffset, ui64 endOffset);
+        TCreatePartitionStreamEvent(TPartitionStream::TPtr, ui64 committedOffset, ui64 endOffset);
 
         const TPartitionStream::TPtr& GetPartitionStream() const {
             return PartitionStream;

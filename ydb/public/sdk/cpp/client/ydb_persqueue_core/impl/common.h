@@ -374,6 +374,7 @@ protected:
 
     TWaiter PopWaiterImpl() { // Assumes that we're under lock.
         TWaiter waiter(Waiter.ExtractPromise(), this);
+        WaiterWillBeSignaled = true;
         return std::move(waiter);
     }
 
@@ -384,8 +385,9 @@ protected:
     }
 
     void RenewWaiterImpl() {
-        if (Events.empty() && Waiter.GetFuture().HasValue()) {
+        if (Events.empty() && WaiterWillBeSignaled) {
             Waiter = TWaiter(NThreading::NewPromise<void>(), this);
+            WaiterWillBeSignaled = false;
         }
     }
 
@@ -405,6 +407,7 @@ public:
 protected:
     const TSettings& Settings;
     TWaiter Waiter;
+    bool WaiterWillBeSignaled = false;
     std::queue<TEventInfo> Events;
     TCondVar CondVar;
     TMutex Mutex;

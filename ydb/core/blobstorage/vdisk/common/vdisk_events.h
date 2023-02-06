@@ -1142,10 +1142,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t));
 
             }
+
+
 
         };
 
@@ -1271,10 +1277,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
+
+
 
         };
 
@@ -1353,10 +1365,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t));
 
             }
+
+
 
         };
 
@@ -1563,10 +1581,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
+
+
 
         };
 
@@ -1728,10 +1752,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId));
 
             }
+
+
 
         };
 
@@ -1937,10 +1967,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t));
 
             }
+
+
 
         };
 
@@ -2336,10 +2372,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId));
 
             }
+
+
 
         };
 
@@ -2492,10 +2534,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
 
             }
+
+
 
         };
 
@@ -2594,10 +2642,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
+
+
 
         };
 
@@ -2723,10 +2777,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t));
 
             }
+
+
 
         };
 
@@ -2852,10 +2912,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
 
             }
+
+
 
         };
 
@@ -2927,10 +2993,16 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint32_t));
 
             }
+
+
 
         };
 
@@ -3379,7 +3451,7 @@ namespace NKikimr {
                 return &ExtremeQueries.back();
             }
 
-            size_t ExtremeQueriesSize() {
+            size_t ExtremeQueriesSize() const {
                 return ExtremeQueries.size();
             }
 
@@ -3397,13 +3469,21 @@ namespace NKikimr {
                 *this = other;
             }
 
+            std::string ShortDebugString() const {
+                return "short debug string";
+            }
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 output->WriteAliasedRaw(this, sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString));
                 output->WriteAliasedRaw(ExtremeQueries.data(), sizeof(TExtremeQuery) * ExtremeQueries.size());
 
             }
 
+
+
         };
+
+
     }
 
     struct TEvBlobStorage::TEvVGet

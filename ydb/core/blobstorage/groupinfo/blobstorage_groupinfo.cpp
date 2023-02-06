@@ -908,13 +908,11 @@ TString TBlobStorageGroupInfo::ToString() const {
     return str.Str();
 }
 
-template <typename TLogoBlobIDSerializationClass>
-TVDiskID VDiskIDFromVDiskID(const TLogoBlobIDSerializationClass &x) {
+TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
     return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
 }
 
-template <typename TLogoBlobIDSerializationClass>
-void VDiskIDFromVDiskID(const TVDiskID &id, TLogoBlobIDSerializationClass *proto) {
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
     proto->SetGroupID(id.GroupID);
     proto->SetGroupGeneration(id.GroupGeneration);
     proto->SetRing(id.FailRealm);

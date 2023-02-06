@@ -99,7 +99,7 @@ TLogoBlobID LogoBlobIDFromLogoBlobID(const RawSerializer::TLogoBlobID &proto) {
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
 
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, RawSerializer::TLogoBlobID *proto) {
+void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto) {
     const ui64* raw = id.GetRaw();
     proto->SetRawX1(raw[0]);
     proto->SetRawX2(raw[1]);

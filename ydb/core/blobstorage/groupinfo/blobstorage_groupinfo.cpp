@@ -910,12 +910,11 @@ TString TBlobStorageGroupInfo::ToString() const {
 }
 
 
-
 TVDiskID VDiskIDFromVDiskID(const RawSerializer::TVDiskID &x) {
     return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
 }
 
-void VDiskIDFromVDiskID(const TVDiskID &id, RawSerializer::TVDiskID *proto) {
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
     proto->SetGroupID(id.GroupID);
     proto->SetGroupGeneration(id.GroupGeneration);
     proto->SetRing(id.FailRealm);

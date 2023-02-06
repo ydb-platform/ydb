@@ -1152,7 +1152,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -1288,7 +1290,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -1377,7 +1381,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -1594,7 +1600,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -1766,7 +1774,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -1982,7 +1992,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -2388,7 +2400,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -2551,7 +2565,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -2660,7 +2676,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -2796,7 +2814,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -2932,7 +2952,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -3014,7 +3036,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
 
@@ -3492,7 +3516,9 @@ namespace NKikimr {
 
             }
 
-
+            void ParseFromString(TString) {
+                *this = {};
+            }
 
         };
     }

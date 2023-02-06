@@ -45,6 +45,10 @@ public:
         InitPQLib();
     }
 
+    ~TPQv1CompatTestBase() {
+        Server->ShutdownServer();
+    }
+
     void InitPQLib() {
         TDriverConfig driverConfig(TStringBuilder() << "localhost:" << Server->GrpcPort);
         driverConfig.SetDatabase("/Root/");
@@ -184,4 +188,3 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
 }
 
 } // namespace NKikimr::NPersQueueTests
-

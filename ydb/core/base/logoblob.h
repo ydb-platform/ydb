@@ -305,11 +305,11 @@ namespace NKikimr {
         {}
     };
 
-    TLogoBlobID LogoBlobIDFromLogoBlobID(const RawSerializer::TLogoBlobID &proto);
-    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
+    template <typename TLogoBlobIDSerializationClass>
+    TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto);
 
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, RawSerializer::TLogoBlobID *proto);
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
+    template <typename TLogoBlobIDSerializationClass>
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TLogoBlobIDSerializationClass *proto);
 
 
     void LogoBlobIDVectorFromLogoBlobIDRepeated(

@@ -922,11 +922,13 @@ void VDiskIDFromVDiskID(const TVDiskID &id, RawSerializer::TVDiskID *proto) {
     proto->SetVDisk(id.VDisk);
 }
 
-TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
+template <typename TLogoBlobIDSerializationClass>
+TVDiskID VDiskIDFromVDiskID(const TLogoBlobIDSerializationClass &x) {
     return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
 }
 
-void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
+template <typename TLogoBlobIDSerializationClass>
+void VDiskIDFromVDiskID(const TVDiskID &id, TLogoBlobIDSerializationClass *proto) {
     proto->SetGroupID(id.GroupID);
     proto->SetGroupGeneration(id.GroupGeneration);
     proto->SetRing(id.FailRealm);

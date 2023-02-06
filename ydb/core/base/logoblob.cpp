@@ -94,22 +94,14 @@ bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExpl
     return true;
 }
 
-TLogoBlobID LogoBlobIDFromLogoBlobID(const RawSerializer::TLogoBlobID &proto) {
+template <typename TLogoBlobIDSerializationClass>
+TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto) {
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
 
-TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto) {
-    return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
-}
 
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, RawSerializer::TLogoBlobID *proto) {
-    const ui64* raw = id.GetRaw();
-    proto->SetRawX1(raw[0]);
-    proto->SetRawX2(raw[1]);
-    proto->SetRawX3(raw[2]);
-}
-
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto) {
+template <typename TLogoBlobIDSerializationClass>
+void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TLogoBlobIDSerializationClass *proto) {
     const ui64* raw = id.GetRaw();
     proto->SetRawX1(raw[0]);
     proto->SetRawX2(raw[1]);

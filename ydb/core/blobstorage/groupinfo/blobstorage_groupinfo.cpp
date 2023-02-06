@@ -5,7 +5,6 @@
 #include "blobstorage_groupinfo_partlayout.h"
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 
@@ -907,19 +906,6 @@ TString TBlobStorageGroupInfo::ToString() const {
     }
     str << "}}";
     return str.Str();
-}
-
-
-TVDiskID VDiskIDFromVDiskID(const RawSerializer::TVDiskID &x) {
-    return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
-}
-
-void VDiskIDFromVDiskID(const TVDiskID &id, RawSerializer::TVDiskID *proto) {
-    proto->SetGroupID(id.GroupID);
-    proto->SetGroupGeneration(id.GroupGeneration);
-    proto->SetRing(id.FailRealm);
-    proto->SetDomain(id.FailDomain);
-    proto->SetVDisk(id.VDisk);
 }
 
 template <typename TLogoBlobIDSerializationClass>

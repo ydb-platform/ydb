@@ -1,14 +1,11 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-
 
 namespace NKikimrProto {
     class TLogoBlobID;
 }
 
 namespace NKikimr {
-
     struct TLogoBlobID {
         static const ui32 MaxChannel = 255ul;
         static const ui32 MaxBlobSize = 67108863ul;

@@ -107,7 +107,13 @@ namespace NKikimr::NBsController {
             if (!group) {
                 throw TExError() << "group not found" << TErrorParams::GroupId(groupId);
             } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
-                throw TExError() << "group is already being decommitted" << TErrorParams::GroupId(groupId);
+                if (group->HiveId != cmd.GetHiveId()) {
+                    throw TExError() << "different hive specified for decommitting group" << TErrorParams::GroupId(groupId);
+                }
+                // group is already being decommitted -- make this operation idempotent
+                continue;
+            } else if (group->VirtualGroupState) {
+                throw TExError() << "group is already virtual" << TErrorParams::GroupId(groupId);
             }
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;

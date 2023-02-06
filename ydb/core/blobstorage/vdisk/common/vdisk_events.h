@@ -3555,7 +3555,8 @@ namespace NKikimr {
         static std::unique_ptr<TEvVGet> CreateExtremeIndexQuery(const TVDiskID &vdisk, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            RawSerializer::EGetHandleClass clsRaw = static_cast<RawSerializer::EGetHandleClass>(cls);
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, clsRaw, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, true, forceBlockTabletData));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
@@ -3566,7 +3567,8 @@ namespace NKikimr {
         static std::unique_ptr<TEvVGet> CreateExtremeDataQuery(const TVDiskID &vdisk, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            RawSerializer::EGetHandleClass clsRaw = static_cast<RawSerializer::EGetHandleClass>(cls);
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, clsRaw, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, false, true, forceBlockTabletData));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
@@ -3578,7 +3580,8 @@ namespace NKikimr {
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags, TMaybe<ui64> requestCookie,
                 const TLogoBlobID &fromId, const TLogoBlobID &toId, ui32 maxResults = 0, const ui64 *cookie = nullptr,
                 std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, cls, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            RawSerializer::EGetHandleClass clsRaw = static_cast<RawSerializer::EGetHandleClass>(cls);
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, clsRaw, bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockTabletData));
             NKikimr::RawSerializer::TRangeQuery *q = res->Record.MutableRangeQuery();
             LogoBlobIDFromLogoBlobID(fromId, q->MutableFrom());

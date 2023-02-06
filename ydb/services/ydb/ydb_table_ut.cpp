@@ -2938,7 +2938,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         for (bool returnStats : {false, true}) {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             if (returnStats) {
-                execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+                execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             }
             {
                 auto query = "UPSERT INTO `/Root/Foo` (Key, Value) VALUES (0, 'aa');";

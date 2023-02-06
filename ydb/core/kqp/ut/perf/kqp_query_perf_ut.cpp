@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         .Build();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $key AS Uint64;
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         .Build();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $key AS Uint64;
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto params = db.GetParamsBuilder()
             .AddParam("$key").Int32(3).Build()
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto params = db.GetParamsBuilder()
             .AddParam("$key").Int32(3).Build()

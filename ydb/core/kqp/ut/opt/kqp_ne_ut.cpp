@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(query,
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
@@ -1109,7 +1109,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/EightShard` WHERE Key = 101 OR Key = 301
@@ -1142,7 +1142,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(R"(
             DECLARE $key AS Uint64;
@@ -1347,7 +1347,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(R"(
 
@@ -1742,7 +1742,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .Build();
 
         auto settings = TExecDataQuerySettings()
-            .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            .CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto it = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), std::move(params), settings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2622,7 +2622,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto params = TParamsBuilder()
             .AddParam("$group").Uint32(1).Build()
@@ -3020,7 +3020,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1

@@ -509,7 +509,7 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
     const TString& expectedYson)
 {
     NYdb::NTable::TExecDataQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
     TDataQueryResult result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings)
             .ExtractValueSync();

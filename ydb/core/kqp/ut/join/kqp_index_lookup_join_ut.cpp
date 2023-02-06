@@ -90,7 +90,7 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads) {
     PrepareTables(session);
 
     TExecDataQuerySettings execSettings;
-    execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+    execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
     auto result = session.ExecuteDataQuery(Q_(query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

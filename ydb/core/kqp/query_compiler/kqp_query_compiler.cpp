@@ -942,16 +942,20 @@ private:
                 streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
             }
 
-            for (const auto& column : streamLookup.Columns()) {
-                YQL_ENSURE(tableMeta->Columns.FindPtr(column), "Unknown column: " << TString(column));
-                streamLookupProto.AddColumns(TString(column));
-            }
-
             const auto resultType = streamLookup.Ref().GetTypeAnn();
             YQL_ENSURE(resultType, "Empty stream lookup result type");
             YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected stream lookup result type");
             const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
             streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
+
+            YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
+            const auto& resultColumns = resultItemType->Cast<TStructExprType>()->GetItems();
+            for (const auto column : resultColumns) {
+                const auto& systemColumns = GetSystemColumns();
+                YQL_ENSURE(tableMeta->Columns.FindPtr(column->GetName()) || systemColumns.find(column->GetName()) != systemColumns.end(),
+                    "Unknown column: " << column->GetName());
+                streamLookupProto.AddColumns(TString(column->GetName()));
+            }
 
             return;
         }

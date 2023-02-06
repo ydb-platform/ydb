@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CreateSampleTables(session);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
             PRAGMA DisableSimpleColumns;
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CreateSampleTables(session);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
             PRAGMA DisableSimpleColumns;

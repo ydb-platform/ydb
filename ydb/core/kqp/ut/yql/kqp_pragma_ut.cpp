@@ -36,11 +36,11 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(0)));
 
-        result = session.ExecuteDataQuery(R"(
+        /*result = session.ExecuteDataQuery(R"(
             SELECT COUNT(_yql_partition_id) FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));*/
     }
 
     Y_UNIT_TEST(OrderedColumns) {

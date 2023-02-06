@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             )"));
 
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(
                                  query1,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             )");
 
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(
                                  query1,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             )");
 
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(
                                  query2,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             )");
 
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(
                                  query2,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             )");
 
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(
                                  query2,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),

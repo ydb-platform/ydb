@@ -641,7 +641,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
         {
             NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT(result.IsSuccess());
@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         CreateSampleTables(session);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Value FROM `/Root/TestDate`
             WHERE Key = Date("2019-07-01")
@@ -1034,7 +1034,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         )");
 
         NYdb::NTable::TExecDataQuerySettings settings;
-        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1065,7 +1065,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         CreateSampleTables(session);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/EightShard`
             WHERE Key = 101 OR Key = 302 OR Key = 403 OR Key = 705

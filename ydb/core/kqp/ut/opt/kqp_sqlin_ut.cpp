@@ -994,7 +994,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             .Build();
 
         NYdb::NTable::TExecDataQuerySettings settings;
-        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $keys AS List<Uint64>;

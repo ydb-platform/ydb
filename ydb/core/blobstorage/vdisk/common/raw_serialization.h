@@ -9,7 +9,7 @@ namespace NKikimr {
             uint64_t SequenceId;
             bool hasSequenceId;
 
-            void SetSequenceId(const uint64_t &value) {
+            void SetSequenceId(const uint64_t& value) {
                 SequenceId = value;
                 hasSequenceId = true;
             }
@@ -18,7 +18,7 @@ namespace NKikimr {
                 return hasSequenceId;
             }
 
-            const uint64_t &GetSequenceId() const {
+            const uint64_t& GetSequenceId() const {
                 return SequenceId;
             }
 
@@ -27,7 +27,7 @@ namespace NKikimr {
                 hasSequenceId = false;
             }
 
-            uint64_t *MutableSequenceId() {
+            uint64_t* MutableSequenceId() {
                 return &SequenceId;
             }
 
@@ -36,7 +36,7 @@ namespace NKikimr {
             uint64_t MsgId;
             bool hasMsgId;
 
-            void SetMsgId(const uint64_t &value) {
+            void SetMsgId(const uint64_t& value) {
                 MsgId = value;
                 hasMsgId = true;
             }
@@ -45,7 +45,7 @@ namespace NKikimr {
                 return hasMsgId;
             }
 
-            const uint64_t &GetMsgId() const {
+            const uint64_t& GetMsgId() const {
                 return MsgId;
             }
 
@@ -54,7 +54,7 @@ namespace NKikimr {
                 hasMsgId = false;
             }
 
-            uint64_t *MutableMsgId() {
+            uint64_t* MutableMsgId() {
                 return &MsgId;
             }
 
@@ -68,7 +68,7 @@ namespace NKikimr {
                 return sizeof(uint64_t) + sizeof(uint64_t);
             }
 
-            void CopyFrom(const TMessageId &other) {
+            void CopyFrom(const TMessageId& other) {
                 *this = other;
             }
 
@@ -82,8 +82,9 @@ namespace NKikimr {
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -93,7 +94,7 @@ namespace NKikimr {
             uint64_t SentByDSProxyUs = 0;
             bool hasSentByDSProxyUs;
 
-            void SetSentByDSProxyUs(const uint64_t &value) {
+            void SetSentByDSProxyUs(const uint64_t& value) {
                 SentByDSProxyUs = value;
                 hasSentByDSProxyUs = true;
             }
@@ -102,7 +103,7 @@ namespace NKikimr {
                 return hasSentByDSProxyUs;
             }
 
-            const uint64_t &GetSentByDSProxyUs() const {
+            const uint64_t& GetSentByDSProxyUs() const {
                 return SentByDSProxyUs;
             }
 
@@ -111,7 +112,7 @@ namespace NKikimr {
                 hasSentByDSProxyUs = false;
             }
 
-            uint64_t *MutableSentByDSProxyUs() {
+            uint64_t* MutableSentByDSProxyUs() {
                 return &SentByDSProxyUs;
             }
 
@@ -120,7 +121,7 @@ namespace NKikimr {
             uint64_t ReceivedByVDiskUs = 0;
             bool hasReceivedByVDiskUs;
 
-            void SetReceivedByVDiskUs(const uint64_t &value) {
+            void SetReceivedByVDiskUs(const uint64_t& value) {
                 ReceivedByVDiskUs = value;
                 hasReceivedByVDiskUs = true;
             }
@@ -129,7 +130,7 @@ namespace NKikimr {
                 return hasReceivedByVDiskUs;
             }
 
-            const uint64_t &GetReceivedByVDiskUs() const {
+            const uint64_t& GetReceivedByVDiskUs() const {
                 return ReceivedByVDiskUs;
             }
 
@@ -138,7 +139,7 @@ namespace NKikimr {
                 hasReceivedByVDiskUs = false;
             }
 
-            uint64_t *MutableReceivedByVDiskUs() {
+            uint64_t* MutableReceivedByVDiskUs() {
                 return &ReceivedByVDiskUs;
             }
 
@@ -147,7 +148,7 @@ namespace NKikimr {
             uint64_t SentByVDiskUs = 0;
             bool hasSentByVDiskUs;
 
-            void SetSentByVDiskUs(const uint64_t &value) {
+            void SetSentByVDiskUs(const uint64_t& value) {
                 SentByVDiskUs = value;
                 hasSentByVDiskUs = true;
             }
@@ -156,7 +157,7 @@ namespace NKikimr {
                 return hasSentByVDiskUs;
             }
 
-            const uint64_t &GetSentByVDiskUs() const {
+            const uint64_t& GetSentByVDiskUs() const {
                 return SentByVDiskUs;
             }
 
@@ -165,7 +166,7 @@ namespace NKikimr {
                 hasSentByVDiskUs = false;
             }
 
-            uint64_t *MutableSentByVDiskUs() {
+            uint64_t* MutableSentByVDiskUs() {
                 return &SentByVDiskUs;
             }
 
@@ -174,7 +175,7 @@ namespace NKikimr {
             uint64_t ReceivedByDSProxyUs = 0;
             bool hasReceivedByDSProxyUs;
 
-            void SetReceivedByDSProxyUs(const uint64_t &value) {
+            void SetReceivedByDSProxyUs(const uint64_t& value) {
                 ReceivedByDSProxyUs = value;
                 hasReceivedByDSProxyUs = true;
             }
@@ -183,7 +184,7 @@ namespace NKikimr {
                 return hasReceivedByDSProxyUs;
             }
 
-            const uint64_t &GetReceivedByDSProxyUs() const {
+            const uint64_t& GetReceivedByDSProxyUs() const {
                 return ReceivedByDSProxyUs;
             }
 
@@ -192,7 +193,7 @@ namespace NKikimr {
                 hasReceivedByDSProxyUs = false;
             }
 
-            uint64_t *MutableReceivedByDSProxyUs() {
+            uint64_t* MutableReceivedByDSProxyUs() {
                 return &ReceivedByDSProxyUs;
             }
 
@@ -206,7 +207,7 @@ namespace NKikimr {
                 return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
 
-            void CopyFrom(const TTimestamps &other) {
+            void CopyFrom(const TTimestamps& other) {
                 *this = other;
             }
 
@@ -215,14 +216,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this,
-                                        sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -239,7 +240,7 @@ namespace NKikimr {
             uint64_t RawX1;
             bool hasRawX1;
 
-            void SetRawX1(const uint64_t &value) {
+            void SetRawX1(const uint64_t& value) {
                 RawX1 = value;
                 hasRawX1 = true;
             }
@@ -248,7 +249,7 @@ namespace NKikimr {
                 return hasRawX1;
             }
 
-            const uint64_t &GetRawX1() const {
+            const uint64_t& GetRawX1() const {
                 return RawX1;
             }
 
@@ -257,7 +258,7 @@ namespace NKikimr {
                 hasRawX1 = false;
             }
 
-            uint64_t *MutableRawX1() {
+            uint64_t* MutableRawX1() {
                 return &RawX1;
             }
 
@@ -266,7 +267,7 @@ namespace NKikimr {
             uint64_t RawX2;
             bool hasRawX2;
 
-            void SetRawX2(const uint64_t &value) {
+            void SetRawX2(const uint64_t& value) {
                 RawX2 = value;
                 hasRawX2 = true;
             }
@@ -275,7 +276,7 @@ namespace NKikimr {
                 return hasRawX2;
             }
 
-            const uint64_t &GetRawX2() const {
+            const uint64_t& GetRawX2() const {
                 return RawX2;
             }
 
@@ -284,7 +285,7 @@ namespace NKikimr {
                 hasRawX2 = false;
             }
 
-            uint64_t *MutableRawX2() {
+            uint64_t* MutableRawX2() {
                 return &RawX2;
             }
 
@@ -298,7 +299,7 @@ namespace NKikimr {
                 return sizeof(uint64_t) + sizeof(uint64_t);
             }
 
-            void CopyFrom(const TActorId &other) {
+            void CopyFrom(const TActorId& other) {
                 *this = other;
             }
 
@@ -312,8 +313,9 @@ namespace NKikimr {
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -323,7 +325,7 @@ namespace NKikimr {
             uint64_t SubmitTimestamp;
             bool hasSubmitTimestamp;
 
-            void SetSubmitTimestamp(const uint64_t &value) {
+            void SetSubmitTimestamp(const uint64_t& value) {
                 SubmitTimestamp = value;
                 hasSubmitTimestamp = true;
             }
@@ -332,7 +334,7 @@ namespace NKikimr {
                 return hasSubmitTimestamp;
             }
 
-            const uint64_t &GetSubmitTimestamp() const {
+            const uint64_t& GetSubmitTimestamp() const {
                 return SubmitTimestamp;
             }
 
@@ -341,7 +343,7 @@ namespace NKikimr {
                 hasSubmitTimestamp = false;
             }
 
-            uint64_t *MutableSubmitTimestamp() {
+            uint64_t* MutableSubmitTimestamp() {
                 return &SubmitTimestamp;
             }
 
@@ -350,7 +352,7 @@ namespace NKikimr {
             uint64_t InSenderQueue;
             bool hasInSenderQueue;
 
-            void SetInSenderQueue(const uint64_t &value) {
+            void SetInSenderQueue(const uint64_t& value) {
                 InSenderQueue = value;
                 hasInSenderQueue = true;
             }
@@ -359,7 +361,7 @@ namespace NKikimr {
                 return hasInSenderQueue;
             }
 
-            const uint64_t &GetInSenderQueue() const {
+            const uint64_t& GetInSenderQueue() const {
                 return InSenderQueue;
             }
 
@@ -368,7 +370,7 @@ namespace NKikimr {
                 hasInSenderQueue = false;
             }
 
-            uint64_t *MutableInSenderQueue() {
+            uint64_t* MutableInSenderQueue() {
                 return &InSenderQueue;
             }
 
@@ -377,7 +379,7 @@ namespace NKikimr {
             uint64_t ReceivedTimestamp;
             bool hasReceivedTimestamp;
 
-            void SetReceivedTimestamp(const uint64_t &value) {
+            void SetReceivedTimestamp(const uint64_t& value) {
                 ReceivedTimestamp = value;
                 hasReceivedTimestamp = true;
             }
@@ -386,7 +388,7 @@ namespace NKikimr {
                 return hasReceivedTimestamp;
             }
 
-            const uint64_t &GetReceivedTimestamp() const {
+            const uint64_t& GetReceivedTimestamp() const {
                 return ReceivedTimestamp;
             }
 
@@ -395,7 +397,7 @@ namespace NKikimr {
                 hasReceivedTimestamp = false;
             }
 
-            uint64_t *MutableReceivedTimestamp() {
+            uint64_t* MutableReceivedTimestamp() {
                 return &ReceivedTimestamp;
             }
 
@@ -404,7 +406,7 @@ namespace NKikimr {
             uint64_t Total;
             bool hasTotal;
 
-            void SetTotal(const uint64_t &value) {
+            void SetTotal(const uint64_t& value) {
                 Total = value;
                 hasTotal = true;
             }
@@ -413,7 +415,7 @@ namespace NKikimr {
                 return hasTotal;
             }
 
-            const uint64_t &GetTotal() const {
+            const uint64_t& GetTotal() const {
                 return Total;
             }
 
@@ -422,7 +424,7 @@ namespace NKikimr {
                 hasTotal = false;
             }
 
-            uint64_t *MutableTotal() {
+            uint64_t* MutableTotal() {
                 return &Total;
             }
 
@@ -431,7 +433,7 @@ namespace NKikimr {
             uint64_t InQueue;
             bool hasInQueue;
 
-            void SetInQueue(const uint64_t &value) {
+            void SetInQueue(const uint64_t& value) {
                 InQueue = value;
                 hasInQueue = true;
             }
@@ -440,7 +442,7 @@ namespace NKikimr {
                 return hasInQueue;
             }
 
-            const uint64_t &GetInQueue() const {
+            const uint64_t& GetInQueue() const {
                 return InQueue;
             }
 
@@ -449,7 +451,7 @@ namespace NKikimr {
                 hasInQueue = false;
             }
 
-            uint64_t *MutableInQueue() {
+            uint64_t* MutableInQueue() {
                 return &InQueue;
             }
 
@@ -458,7 +460,7 @@ namespace NKikimr {
             uint64_t Execution;
             bool hasExecution;
 
-            void SetExecution(const uint64_t &value) {
+            void SetExecution(const uint64_t& value) {
                 Execution = value;
                 hasExecution = true;
             }
@@ -467,7 +469,7 @@ namespace NKikimr {
                 return hasExecution;
             }
 
-            const uint64_t &GetExecution() const {
+            const uint64_t& GetExecution() const {
                 return Execution;
             }
 
@@ -476,7 +478,7 @@ namespace NKikimr {
                 hasExecution = false;
             }
 
-            uint64_t *MutableExecution() {
+            uint64_t* MutableExecution() {
                 return &Execution;
             }
 
@@ -485,7 +487,7 @@ namespace NKikimr {
             uint64_t HugeWriteTime;
             bool hasHugeWriteTime;
 
-            void SetHugeWriteTime(const uint64_t &value) {
+            void SetHugeWriteTime(const uint64_t& value) {
                 HugeWriteTime = value;
                 hasHugeWriteTime = true;
             }
@@ -494,7 +496,7 @@ namespace NKikimr {
                 return hasHugeWriteTime;
             }
 
-            const uint64_t &GetHugeWriteTime() const {
+            const uint64_t& GetHugeWriteTime() const {
                 return HugeWriteTime;
             }
 
@@ -503,7 +505,7 @@ namespace NKikimr {
                 hasHugeWriteTime = false;
             }
 
-            uint64_t *MutableHugeWriteTime() {
+            uint64_t* MutableHugeWriteTime() {
                 return &HugeWriteTime;
             }
 
@@ -514,11 +516,10 @@ namespace NKikimr {
             }
 
             int ByteSize() const {
-                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
-                       sizeof(uint64_t) + sizeof(uint64_t);
+                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
 
-            void CopyFrom(const TExecTimeStats &other) {
+            void CopyFrom(const TExecTimeStats& other) {
                 *this = other;
             }
 
@@ -527,15 +528,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this,
-                                        sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
-                                        sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -554,7 +554,7 @@ namespace NKikimr {
             EStatus Status;
             bool hasStatus;
 
-            void SetStatus(const EStatus &value) {
+            void SetStatus(const EStatus& value) {
                 Status = value;
                 hasStatus = true;
             }
@@ -563,7 +563,7 @@ namespace NKikimr {
                 return hasStatus;
             }
 
-            const EStatus &GetStatus() const {
+            const EStatus& GetStatus() const {
                 return Status;
             }
 
@@ -572,7 +572,7 @@ namespace NKikimr {
                 hasStatus = false;
             }
 
-            EStatus *MutableStatus() {
+            EStatus* MutableStatus() {
                 return &Status;
             }
 
@@ -581,7 +581,7 @@ namespace NKikimr {
             uint64_t ActualWindowSize;
             bool hasActualWindowSize;
 
-            void SetActualWindowSize(const uint64_t &value) {
+            void SetActualWindowSize(const uint64_t& value) {
                 ActualWindowSize = value;
                 hasActualWindowSize = true;
             }
@@ -590,7 +590,7 @@ namespace NKikimr {
                 return hasActualWindowSize;
             }
 
-            const uint64_t &GetActualWindowSize() const {
+            const uint64_t& GetActualWindowSize() const {
                 return ActualWindowSize;
             }
 
@@ -599,7 +599,7 @@ namespace NKikimr {
                 hasActualWindowSize = false;
             }
 
-            uint64_t *MutableActualWindowSize() {
+            uint64_t* MutableActualWindowSize() {
                 return &ActualWindowSize;
             }
 
@@ -608,7 +608,7 @@ namespace NKikimr {
             uint64_t MaxWindowSize;
             bool hasMaxWindowSize;
 
-            void SetMaxWindowSize(const uint64_t &value) {
+            void SetMaxWindowSize(const uint64_t& value) {
                 MaxWindowSize = value;
                 hasMaxWindowSize = true;
             }
@@ -617,7 +617,7 @@ namespace NKikimr {
                 return hasMaxWindowSize;
             }
 
-            const uint64_t &GetMaxWindowSize() const {
+            const uint64_t& GetMaxWindowSize() const {
                 return MaxWindowSize;
             }
 
@@ -626,7 +626,7 @@ namespace NKikimr {
                 hasMaxWindowSize = false;
             }
 
-            uint64_t *MutableMaxWindowSize() {
+            uint64_t* MutableMaxWindowSize() {
                 return &MaxWindowSize;
             }
 
@@ -635,7 +635,7 @@ namespace NKikimr {
             TMessageId ExpectedMsgId;
             bool hasExpectedMsgId;
 
-            void SetExpectedMsgId(const TMessageId &value) {
+            void SetExpectedMsgId(const TMessageId& value) {
                 ExpectedMsgId = value;
                 hasExpectedMsgId = true;
             }
@@ -644,7 +644,7 @@ namespace NKikimr {
                 return hasExpectedMsgId;
             }
 
-            const TMessageId &GetExpectedMsgId() const {
+            const TMessageId& GetExpectedMsgId() const {
                 return ExpectedMsgId;
             }
 
@@ -653,7 +653,7 @@ namespace NKikimr {
                 hasExpectedMsgId = false;
             }
 
-            TMessageId *MutableExpectedMsgId() {
+            TMessageId* MutableExpectedMsgId() {
                 return &ExpectedMsgId;
             }
 
@@ -662,7 +662,7 @@ namespace NKikimr {
             TMessageId FailedMsgId;
             bool hasFailedMsgId;
 
-            void SetFailedMsgId(const TMessageId &value) {
+            void SetFailedMsgId(const TMessageId& value) {
                 FailedMsgId = value;
                 hasFailedMsgId = true;
             }
@@ -671,7 +671,7 @@ namespace NKikimr {
                 return hasFailedMsgId;
             }
 
-            const TMessageId &GetFailedMsgId() const {
+            const TMessageId& GetFailedMsgId() const {
                 return FailedMsgId;
             }
 
@@ -680,7 +680,7 @@ namespace NKikimr {
                 hasFailedMsgId = false;
             }
 
-            TMessageId *MutableFailedMsgId() {
+            TMessageId* MutableFailedMsgId() {
                 return &FailedMsgId;
             }
 
@@ -694,7 +694,7 @@ namespace NKikimr {
                 return sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId);
             }
 
-            void CopyFrom(const TWindowFeedback &other) {
+            void CopyFrom(const TWindowFeedback& other) {
                 *this = other;
             }
 
@@ -703,15 +703,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this,
-                                        sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) +
-                                        sizeof(TMessageId));
+                output->WriteAliasedRaw(this, sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -747,7 +746,7 @@ namespace NKikimr {
             uint64_t SeekTimeUs;
             bool hasSeekTimeUs;
 
-            void SetSeekTimeUs(const uint64_t &value) {
+            void SetSeekTimeUs(const uint64_t& value) {
                 SeekTimeUs = value;
                 hasSeekTimeUs = true;
             }
@@ -756,7 +755,7 @@ namespace NKikimr {
                 return hasSeekTimeUs;
             }
 
-            const uint64_t &GetSeekTimeUs() const {
+            const uint64_t& GetSeekTimeUs() const {
                 return SeekTimeUs;
             }
 
@@ -765,7 +764,7 @@ namespace NKikimr {
                 hasSeekTimeUs = false;
             }
 
-            uint64_t *MutableSeekTimeUs() {
+            uint64_t* MutableSeekTimeUs() {
                 return &SeekTimeUs;
             }
 
@@ -774,7 +773,7 @@ namespace NKikimr {
             uint64_t ReadSpeedBps;
             bool hasReadSpeedBps;
 
-            void SetReadSpeedBps(const uint64_t &value) {
+            void SetReadSpeedBps(const uint64_t& value) {
                 ReadSpeedBps = value;
                 hasReadSpeedBps = true;
             }
@@ -783,7 +782,7 @@ namespace NKikimr {
                 return hasReadSpeedBps;
             }
 
-            const uint64_t &GetReadSpeedBps() const {
+            const uint64_t& GetReadSpeedBps() const {
                 return ReadSpeedBps;
             }
 
@@ -792,7 +791,7 @@ namespace NKikimr {
                 hasReadSpeedBps = false;
             }
 
-            uint64_t *MutableReadSpeedBps() {
+            uint64_t* MutableReadSpeedBps() {
                 return &ReadSpeedBps;
             }
 
@@ -801,7 +800,7 @@ namespace NKikimr {
             uint64_t WriteSpeedBps;
             bool hasWriteSpeedBps;
 
-            void SetWriteSpeedBps(const uint64_t &value) {
+            void SetWriteSpeedBps(const uint64_t& value) {
                 WriteSpeedBps = value;
                 hasWriteSpeedBps = true;
             }
@@ -810,7 +809,7 @@ namespace NKikimr {
                 return hasWriteSpeedBps;
             }
 
-            const uint64_t &GetWriteSpeedBps() const {
+            const uint64_t& GetWriteSpeedBps() const {
                 return WriteSpeedBps;
             }
 
@@ -819,7 +818,7 @@ namespace NKikimr {
                 hasWriteSpeedBps = false;
             }
 
-            uint64_t *MutableWriteSpeedBps() {
+            uint64_t* MutableWriteSpeedBps() {
                 return &WriteSpeedBps;
             }
 
@@ -828,7 +827,7 @@ namespace NKikimr {
             uint64_t ReadBlockSize;
             bool hasReadBlockSize;
 
-            void SetReadBlockSize(const uint64_t &value) {
+            void SetReadBlockSize(const uint64_t& value) {
                 ReadBlockSize = value;
                 hasReadBlockSize = true;
             }
@@ -837,7 +836,7 @@ namespace NKikimr {
                 return hasReadBlockSize;
             }
 
-            const uint64_t &GetReadBlockSize() const {
+            const uint64_t& GetReadBlockSize() const {
                 return ReadBlockSize;
             }
 
@@ -846,7 +845,7 @@ namespace NKikimr {
                 hasReadBlockSize = false;
             }
 
-            uint64_t *MutableReadBlockSize() {
+            uint64_t* MutableReadBlockSize() {
                 return &ReadBlockSize;
             }
 
@@ -855,7 +854,7 @@ namespace NKikimr {
             uint64_t WriteBlockSize;
             bool hasWriteBlockSize;
 
-            void SetWriteBlockSize(const uint64_t &value) {
+            void SetWriteBlockSize(const uint64_t& value) {
                 WriteBlockSize = value;
                 hasWriteBlockSize = true;
             }
@@ -864,7 +863,7 @@ namespace NKikimr {
                 return hasWriteBlockSize;
             }
 
-            const uint64_t &GetWriteBlockSize() const {
+            const uint64_t& GetWriteBlockSize() const {
                 return WriteBlockSize;
             }
 
@@ -873,7 +872,7 @@ namespace NKikimr {
                 hasWriteBlockSize = false;
             }
 
-            uint64_t *MutableWriteBlockSize() {
+            uint64_t* MutableWriteBlockSize() {
                 return &WriteBlockSize;
             }
 
@@ -882,7 +881,7 @@ namespace NKikimr {
             uint32_t MinREALHugeBlobInBytes;
             bool hasMinREALHugeBlobInBytes;
 
-            void SetMinREALHugeBlobInBytes(const uint32_t &value) {
+            void SetMinREALHugeBlobInBytes(const uint32_t& value) {
                 MinREALHugeBlobInBytes = value;
                 hasMinREALHugeBlobInBytes = true;
             }
@@ -891,7 +890,7 @@ namespace NKikimr {
                 return hasMinREALHugeBlobInBytes;
             }
 
-            const uint32_t &GetMinREALHugeBlobInBytes() const {
+            const uint32_t& GetMinREALHugeBlobInBytes() const {
                 return MinREALHugeBlobInBytes;
             }
 
@@ -900,7 +899,7 @@ namespace NKikimr {
                 hasMinREALHugeBlobInBytes = false;
             }
 
-            uint32_t *MutableMinREALHugeBlobInBytes() {
+            uint32_t* MutableMinREALHugeBlobInBytes() {
                 return &MinREALHugeBlobInBytes;
             }
 
@@ -911,11 +910,10 @@ namespace NKikimr {
             }
 
             int ByteSize() const {
-                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
-                       sizeof(uint32_t);
+                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t);
             }
 
-            void CopyFrom(const TVDiskCostSettings &other) {
+            void CopyFrom(const TVDiskCostSettings& other) {
                 *this = other;
             }
 
@@ -924,15 +922,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this,
-                                        sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
-                                        sizeof(uint64_t) + sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -942,7 +939,7 @@ namespace NKikimr {
             uint32_t DeadlineSeconds;
             bool hasDeadlineSeconds;
 
-            void SetDeadlineSeconds(const uint32_t &value) {
+            void SetDeadlineSeconds(const uint32_t& value) {
                 DeadlineSeconds = value;
                 hasDeadlineSeconds = true;
             }
@@ -951,7 +948,7 @@ namespace NKikimr {
                 return hasDeadlineSeconds;
             }
 
-            const uint32_t &GetDeadlineSeconds() const {
+            const uint32_t& GetDeadlineSeconds() const {
                 return DeadlineSeconds;
             }
 
@@ -960,7 +957,7 @@ namespace NKikimr {
                 hasDeadlineSeconds = false;
             }
 
-            uint32_t *MutableDeadlineSeconds() {
+            uint32_t* MutableDeadlineSeconds() {
                 return &DeadlineSeconds;
             }
 
@@ -969,7 +966,7 @@ namespace NKikimr {
             TMessageId MsgId;
             bool hasMsgId;
 
-            void SetMsgId(const TMessageId &value) {
+            void SetMsgId(const TMessageId& value) {
                 MsgId = value;
                 hasMsgId = true;
             }
@@ -978,7 +975,7 @@ namespace NKikimr {
                 return hasMsgId;
             }
 
-            const TMessageId &GetMsgId() const {
+            const TMessageId& GetMsgId() const {
                 return MsgId;
             }
 
@@ -987,7 +984,7 @@ namespace NKikimr {
                 hasMsgId = false;
             }
 
-            TMessageId *MutableMsgId() {
+            TMessageId* MutableMsgId() {
                 return &MsgId;
             }
 
@@ -996,7 +993,7 @@ namespace NKikimr {
             uint64_t Cost;
             bool hasCost;
 
-            void SetCost(const uint64_t &value) {
+            void SetCost(const uint64_t& value) {
                 Cost = value;
                 hasCost = true;
             }
@@ -1005,7 +1002,7 @@ namespace NKikimr {
                 return hasCost;
             }
 
-            const uint64_t &GetCost() const {
+            const uint64_t& GetCost() const {
                 return Cost;
             }
 
@@ -1014,7 +1011,7 @@ namespace NKikimr {
                 hasCost = false;
             }
 
-            uint64_t *MutableCost() {
+            uint64_t* MutableCost() {
                 return &Cost;
             }
 
@@ -1023,7 +1020,7 @@ namespace NKikimr {
             EVDiskQueueId ExtQueueId;
             bool hasExtQueueId;
 
-            void SetExtQueueId(const EVDiskQueueId &value) {
+            void SetExtQueueId(const EVDiskQueueId& value) {
                 ExtQueueId = value;
                 hasExtQueueId = true;
             }
@@ -1032,7 +1029,7 @@ namespace NKikimr {
                 return hasExtQueueId;
             }
 
-            const EVDiskQueueId &GetExtQueueId() const {
+            const EVDiskQueueId& GetExtQueueId() const {
                 return ExtQueueId;
             }
 
@@ -1041,7 +1038,7 @@ namespace NKikimr {
                 hasExtQueueId = false;
             }
 
-            EVDiskQueueId *MutableExtQueueId() {
+            EVDiskQueueId* MutableExtQueueId() {
                 return &ExtQueueId;
             }
 
@@ -1050,7 +1047,7 @@ namespace NKikimr {
             EVDiskInternalQueueId IntQueueId;
             bool hasIntQueueId;
 
-            void SetIntQueueId(const EVDiskInternalQueueId &value) {
+            void SetIntQueueId(const EVDiskInternalQueueId& value) {
                 IntQueueId = value;
                 hasIntQueueId = true;
             }
@@ -1059,7 +1056,7 @@ namespace NKikimr {
                 return hasIntQueueId;
             }
 
-            const EVDiskInternalQueueId &GetIntQueueId() const {
+            const EVDiskInternalQueueId& GetIntQueueId() const {
                 return IntQueueId;
             }
 
@@ -1068,7 +1065,7 @@ namespace NKikimr {
                 hasIntQueueId = false;
             }
 
-            EVDiskInternalQueueId *MutableIntQueueId() {
+            EVDiskInternalQueueId* MutableIntQueueId() {
                 return &IntQueueId;
             }
 
@@ -1077,7 +1074,7 @@ namespace NKikimr {
             TVDiskCostSettings CostSettings;
             bool hasCostSettings;
 
-            void SetCostSettings(const TVDiskCostSettings &value) {
+            void SetCostSettings(const TVDiskCostSettings& value) {
                 CostSettings = value;
                 hasCostSettings = true;
             }
@@ -1086,7 +1083,7 @@ namespace NKikimr {
                 return hasCostSettings;
             }
 
-            const TVDiskCostSettings &GetCostSettings() const {
+            const TVDiskCostSettings& GetCostSettings() const {
                 return CostSettings;
             }
 
@@ -1095,7 +1092,7 @@ namespace NKikimr {
                 hasCostSettings = false;
             }
 
-            TVDiskCostSettings *MutableCostSettings() {
+            TVDiskCostSettings* MutableCostSettings() {
                 return &CostSettings;
             }
 
@@ -1104,7 +1101,7 @@ namespace NKikimr {
             bool SendMeCostSettings;
             bool hasSendMeCostSettings;
 
-            void SetSendMeCostSettings(const bool &value) {
+            void SetSendMeCostSettings(const bool& value) {
                 SendMeCostSettings = value;
                 hasSendMeCostSettings = true;
             }
@@ -1113,7 +1110,7 @@ namespace NKikimr {
                 return hasSendMeCostSettings;
             }
 
-            const bool &GetSendMeCostSettings() const {
+            const bool& GetSendMeCostSettings() const {
                 return SendMeCostSettings;
             }
 
@@ -1122,7 +1119,7 @@ namespace NKikimr {
                 hasSendMeCostSettings = false;
             }
 
-            bool *MutableSendMeCostSettings() {
+            bool* MutableSendMeCostSettings() {
                 return &SendMeCostSettings;
             }
 
@@ -1131,7 +1128,7 @@ namespace NKikimr {
             TWindowFeedback Window;
             bool hasWindow;
 
-            void SetWindow(const TWindowFeedback &value) {
+            void SetWindow(const TWindowFeedback& value) {
                 Window = value;
                 hasWindow = true;
             }
@@ -1140,7 +1137,7 @@ namespace NKikimr {
                 return hasWindow;
             }
 
-            const TWindowFeedback &GetWindow() const {
+            const TWindowFeedback& GetWindow() const {
                 return Window;
             }
 
@@ -1149,7 +1146,7 @@ namespace NKikimr {
                 hasWindow = false;
             }
 
-            TWindowFeedback *MutableWindow() {
+            TWindowFeedback* MutableWindow() {
                 return &Window;
             }
 
@@ -1158,7 +1155,7 @@ namespace NKikimr {
             uint32_t ProxyNodeId = 10;
             bool hasProxyNodeId;
 
-            void SetProxyNodeId(const uint32_t &value) {
+            void SetProxyNodeId(const uint32_t& value) {
                 ProxyNodeId = value;
                 hasProxyNodeId = true;
             }
@@ -1167,7 +1164,7 @@ namespace NKikimr {
                 return hasProxyNodeId;
             }
 
-            const uint32_t &GetProxyNodeId() const {
+            const uint32_t& GetProxyNodeId() const {
                 return ProxyNodeId;
             }
 
@@ -1176,7 +1173,7 @@ namespace NKikimr {
                 hasProxyNodeId = false;
             }
 
-            uint32_t *MutableProxyNodeId() {
+            uint32_t* MutableProxyNodeId() {
                 return &ProxyNodeId;
             }
 
@@ -1185,7 +1182,7 @@ namespace NKikimr {
             uint32_t ReplVDiskId = 11;
             bool hasReplVDiskId;
 
-            void SetReplVDiskId(const uint32_t &value) {
+            void SetReplVDiskId(const uint32_t& value) {
                 ReplVDiskId = value;
                 hasReplVDiskId = true;
             }
@@ -1194,7 +1191,7 @@ namespace NKikimr {
                 return hasReplVDiskId;
             }
 
-            const uint32_t &GetReplVDiskId() const {
+            const uint32_t& GetReplVDiskId() const {
                 return ReplVDiskId;
             }
 
@@ -1203,7 +1200,7 @@ namespace NKikimr {
                 hasReplVDiskId = false;
             }
 
-            uint32_t *MutableReplVDiskId() {
+            uint32_t* MutableReplVDiskId() {
                 return &ReplVDiskId;
             }
 
@@ -1212,7 +1209,7 @@ namespace NKikimr {
             uint64_t VDiskLoadId = 13;
             bool hasVDiskLoadId;
 
-            void SetVDiskLoadId(const uint64_t &value) {
+            void SetVDiskLoadId(const uint64_t& value) {
                 VDiskLoadId = value;
                 hasVDiskLoadId = true;
             }
@@ -1221,7 +1218,7 @@ namespace NKikimr {
                 return hasVDiskLoadId;
             }
 
-            const uint64_t &GetVDiskLoadId() const {
+            const uint64_t& GetVDiskLoadId() const {
                 return VDiskLoadId;
             }
 
@@ -1230,7 +1227,7 @@ namespace NKikimr {
                 hasVDiskLoadId = false;
             }
 
-            uint64_t *MutableVDiskLoadId() {
+            uint64_t* MutableVDiskLoadId() {
                 return &VDiskLoadId;
             }
 
@@ -1239,7 +1236,7 @@ namespace NKikimr {
             uint32_t VPatchVDiskId = 14;
             bool hasVPatchVDiskId;
 
-            void SetVPatchVDiskId(const uint32_t &value) {
+            void SetVPatchVDiskId(const uint32_t& value) {
                 VPatchVDiskId = value;
                 hasVPatchVDiskId = true;
             }
@@ -1248,7 +1245,7 @@ namespace NKikimr {
                 return hasVPatchVDiskId;
             }
 
-            const uint32_t &GetVPatchVDiskId() const {
+            const uint32_t& GetVPatchVDiskId() const {
                 return VPatchVDiskId;
             }
 
@@ -1257,7 +1254,7 @@ namespace NKikimr {
                 hasVPatchVDiskId = false;
             }
 
-            uint32_t *MutableVPatchVDiskId() {
+            uint32_t* MutableVPatchVDiskId() {
                 return &VPatchVDiskId;
             }
 
@@ -1266,7 +1263,7 @@ namespace NKikimr {
             TExecTimeStats ExecTimeStats;
             bool hasExecTimeStats;
 
-            void SetExecTimeStats(const TExecTimeStats &value) {
+            void SetExecTimeStats(const TExecTimeStats& value) {
                 ExecTimeStats = value;
                 hasExecTimeStats = true;
             }
@@ -1275,7 +1272,7 @@ namespace NKikimr {
                 return hasExecTimeStats;
             }
 
-            const TExecTimeStats &GetExecTimeStats() const {
+            const TExecTimeStats& GetExecTimeStats() const {
                 return ExecTimeStats;
             }
 
@@ -1284,7 +1281,7 @@ namespace NKikimr {
                 hasExecTimeStats = false;
             }
 
-            TExecTimeStats *MutableExecTimeStats() {
+            TExecTimeStats* MutableExecTimeStats() {
                 return &ExecTimeStats;
             }
 
@@ -1293,7 +1290,7 @@ namespace NKikimr {
             TActorId SenderActorId;
             bool hasSenderActorId;
 
-            void SetSenderActorId(const TActorId &value) {
+            void SetSenderActorId(const TActorId& value) {
                 SenderActorId = value;
                 hasSenderActorId = true;
             }
@@ -1302,7 +1299,7 @@ namespace NKikimr {
                 return hasSenderActorId;
             }
 
-            const TActorId &GetSenderActorId() const {
+            const TActorId& GetSenderActorId() const {
                 return SenderActorId;
             }
 
@@ -1311,7 +1308,7 @@ namespace NKikimr {
                 hasSenderActorId = false;
             }
 
-            TActorId *MutableSenderActorId() {
+            TActorId* MutableSenderActorId() {
                 return &SenderActorId;
             }
 
@@ -1322,13 +1319,10 @@ namespace NKikimr {
             }
 
             int ByteSize() const {
-                return sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) +
-                       sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) +
-                       sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) +
-                       sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId);
+                return sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId);
             }
 
-            void CopyFrom(const TMsgQoS &other) {
+            void CopyFrom(const TMsgQoS& other) {
                 *this = other;
             }
 
@@ -1337,17 +1331,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) +
-                                              sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) +
-                                              sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) +
-                                              sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) +
-                                              sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId));
+                output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -1357,7 +1348,7 @@ namespace NKikimr {
             uint32_t GroupID;
             bool hasGroupID;
 
-            void SetGroupID(const uint32_t &value) {
+            void SetGroupID(const uint32_t& value) {
                 GroupID = value;
                 hasGroupID = true;
             }
@@ -1366,7 +1357,7 @@ namespace NKikimr {
                 return hasGroupID;
             }
 
-            const uint32_t &GetGroupID() const {
+            const uint32_t& GetGroupID() const {
                 return GroupID;
             }
 
@@ -1375,7 +1366,7 @@ namespace NKikimr {
                 hasGroupID = false;
             }
 
-            uint32_t *MutableGroupID() {
+            uint32_t* MutableGroupID() {
                 return &GroupID;
             }
 
@@ -1384,7 +1375,7 @@ namespace NKikimr {
             uint32_t GroupGeneration;
             bool hasGroupGeneration;
 
-            void SetGroupGeneration(const uint32_t &value) {
+            void SetGroupGeneration(const uint32_t& value) {
                 GroupGeneration = value;
                 hasGroupGeneration = true;
             }
@@ -1393,7 +1384,7 @@ namespace NKikimr {
                 return hasGroupGeneration;
             }
 
-            const uint32_t &GetGroupGeneration() const {
+            const uint32_t& GetGroupGeneration() const {
                 return GroupGeneration;
             }
 
@@ -1402,7 +1393,7 @@ namespace NKikimr {
                 hasGroupGeneration = false;
             }
 
-            uint32_t *MutableGroupGeneration() {
+            uint32_t* MutableGroupGeneration() {
                 return &GroupGeneration;
             }
 
@@ -1411,7 +1402,7 @@ namespace NKikimr {
             uint32_t Ring;
             bool hasRing;
 
-            void SetRing(const uint32_t &value) {
+            void SetRing(const uint32_t& value) {
                 Ring = value;
                 hasRing = true;
             }
@@ -1420,7 +1411,7 @@ namespace NKikimr {
                 return hasRing;
             }
 
-            const uint32_t &GetRing() const {
+            const uint32_t& GetRing() const {
                 return Ring;
             }
 
@@ -1429,7 +1420,7 @@ namespace NKikimr {
                 hasRing = false;
             }
 
-            uint32_t *MutableRing() {
+            uint32_t* MutableRing() {
                 return &Ring;
             }
 
@@ -1438,7 +1429,7 @@ namespace NKikimr {
             uint32_t Domain;
             bool hasDomain;
 
-            void SetDomain(const uint32_t &value) {
+            void SetDomain(const uint32_t& value) {
                 Domain = value;
                 hasDomain = true;
             }
@@ -1447,7 +1438,7 @@ namespace NKikimr {
                 return hasDomain;
             }
 
-            const uint32_t &GetDomain() const {
+            const uint32_t& GetDomain() const {
                 return Domain;
             }
 
@@ -1456,7 +1447,7 @@ namespace NKikimr {
                 hasDomain = false;
             }
 
-            uint32_t *MutableDomain() {
+            uint32_t* MutableDomain() {
                 return &Domain;
             }
 
@@ -1465,7 +1456,7 @@ namespace NKikimr {
             uint32_t VDisk;
             bool hasVDisk;
 
-            void SetVDisk(const uint32_t &value) {
+            void SetVDisk(const uint32_t& value) {
                 VDisk = value;
                 hasVDisk = true;
             }
@@ -1474,7 +1465,7 @@ namespace NKikimr {
                 return hasVDisk;
             }
 
-            const uint32_t &GetVDisk() const {
+            const uint32_t& GetVDisk() const {
                 return VDisk;
             }
 
@@ -1483,7 +1474,7 @@ namespace NKikimr {
                 hasVDisk = false;
             }
 
-            uint32_t *MutableVDisk() {
+            uint32_t* MutableVDisk() {
                 return &VDisk;
             }
 
@@ -1497,7 +1488,7 @@ namespace NKikimr {
                 return sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
             }
 
-            void CopyFrom(const TVDiskID &other) {
+            void CopyFrom(const TVDiskID& other) {
                 *this = other;
             }
 
@@ -1506,15 +1497,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this,
-                                        sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                        sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -1524,7 +1514,7 @@ namespace NKikimr {
             uint64_t RawX1;
             bool hasRawX1;
 
-            void SetRawX1(const uint64_t &value) {
+            void SetRawX1(const uint64_t& value) {
                 RawX1 = value;
                 hasRawX1 = true;
             }
@@ -1533,7 +1523,7 @@ namespace NKikimr {
                 return hasRawX1;
             }
 
-            const uint64_t &GetRawX1() const {
+            const uint64_t& GetRawX1() const {
                 return RawX1;
             }
 
@@ -1542,7 +1532,7 @@ namespace NKikimr {
                 hasRawX1 = false;
             }
 
-            uint64_t *MutableRawX1() {
+            uint64_t* MutableRawX1() {
                 return &RawX1;
             }
 
@@ -1551,7 +1541,7 @@ namespace NKikimr {
             uint64_t RawX2;
             bool hasRawX2;
 
-            void SetRawX2(const uint64_t &value) {
+            void SetRawX2(const uint64_t& value) {
                 RawX2 = value;
                 hasRawX2 = true;
             }
@@ -1560,7 +1550,7 @@ namespace NKikimr {
                 return hasRawX2;
             }
 
-            const uint64_t &GetRawX2() const {
+            const uint64_t& GetRawX2() const {
                 return RawX2;
             }
 
@@ -1569,7 +1559,7 @@ namespace NKikimr {
                 hasRawX2 = false;
             }
 
-            uint64_t *MutableRawX2() {
+            uint64_t* MutableRawX2() {
                 return &RawX2;
             }
 
@@ -1578,7 +1568,7 @@ namespace NKikimr {
             uint64_t RawX3;
             bool hasRawX3;
 
-            void SetRawX3(const uint64_t &value) {
+            void SetRawX3(const uint64_t& value) {
                 RawX3 = value;
                 hasRawX3 = true;
             }
@@ -1587,7 +1577,7 @@ namespace NKikimr {
                 return hasRawX3;
             }
 
-            const uint64_t &GetRawX3() const {
+            const uint64_t& GetRawX3() const {
                 return RawX3;
             }
 
@@ -1596,7 +1586,7 @@ namespace NKikimr {
                 hasRawX3 = false;
             }
 
-            uint64_t *MutableRawX3() {
+            uint64_t* MutableRawX3() {
                 return &RawX3;
             }
 
@@ -1610,7 +1600,7 @@ namespace NKikimr {
                 return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
 
-            void CopyFrom(const TLogoBlobID &other) {
+            void CopyFrom(const TLogoBlobID& other) {
                 *this = other;
             }
 
@@ -1624,8 +1614,9 @@ namespace NKikimr {
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -1635,7 +1626,7 @@ namespace NKikimr {
             TLogoBlobID From;
             bool hasFrom;
 
-            void SetFrom(const TLogoBlobID &value) {
+            void SetFrom(const TLogoBlobID& value) {
                 From = value;
                 hasFrom = true;
             }
@@ -1644,7 +1635,7 @@ namespace NKikimr {
                 return hasFrom;
             }
 
-            const TLogoBlobID &GetFrom() const {
+            const TLogoBlobID& GetFrom() const {
                 return From;
             }
 
@@ -1653,7 +1644,7 @@ namespace NKikimr {
                 hasFrom = false;
             }
 
-            TLogoBlobID *MutableFrom() {
+            TLogoBlobID* MutableFrom() {
                 return &From;
             }
 
@@ -1662,7 +1653,7 @@ namespace NKikimr {
             TLogoBlobID To;
             bool hasTo;
 
-            void SetTo(const TLogoBlobID &value) {
+            void SetTo(const TLogoBlobID& value) {
                 To = value;
                 hasTo = true;
             }
@@ -1671,7 +1662,7 @@ namespace NKikimr {
                 return hasTo;
             }
 
-            const TLogoBlobID &GetTo() const {
+            const TLogoBlobID& GetTo() const {
                 return To;
             }
 
@@ -1680,7 +1671,7 @@ namespace NKikimr {
                 hasTo = false;
             }
 
-            TLogoBlobID *MutableTo() {
+            TLogoBlobID* MutableTo() {
                 return &To;
             }
 
@@ -1689,7 +1680,7 @@ namespace NKikimr {
             uint64_t Cookie;
             bool hasCookie;
 
-            void SetCookie(const uint64_t &value) {
+            void SetCookie(const uint64_t& value) {
                 Cookie = value;
                 hasCookie = true;
             }
@@ -1698,7 +1689,7 @@ namespace NKikimr {
                 return hasCookie;
             }
 
-            const uint64_t &GetCookie() const {
+            const uint64_t& GetCookie() const {
                 return Cookie;
             }
 
@@ -1707,7 +1698,7 @@ namespace NKikimr {
                 hasCookie = false;
             }
 
-            uint64_t *MutableCookie() {
+            uint64_t* MutableCookie() {
                 return &Cookie;
             }
 
@@ -1716,7 +1707,7 @@ namespace NKikimr {
             uint32_t MaxResults;
             bool hasMaxResults;
 
-            void SetMaxResults(const uint32_t &value) {
+            void SetMaxResults(const uint32_t& value) {
                 MaxResults = value;
                 hasMaxResults = true;
             }
@@ -1725,7 +1716,7 @@ namespace NKikimr {
                 return hasMaxResults;
             }
 
-            const uint32_t &GetMaxResults() const {
+            const uint32_t& GetMaxResults() const {
                 return MaxResults;
             }
 
@@ -1734,7 +1725,7 @@ namespace NKikimr {
                 hasMaxResults = false;
             }
 
-            uint32_t *MutableMaxResults() {
+            uint32_t* MutableMaxResults() {
                 return &MaxResults;
             }
 
@@ -1748,7 +1739,7 @@ namespace NKikimr {
                 return sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t);
             }
 
-            void CopyFrom(const TRangeQuery &other) {
+            void CopyFrom(const TRangeQuery& other) {
                 *this = other;
             }
 
@@ -1757,14 +1748,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) +
-                                              sizeof(uint32_t));
+                output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -1774,7 +1765,7 @@ namespace NKikimr {
             TLogoBlobID Id;
             bool hasId;
 
-            void SetId(const TLogoBlobID &value) {
+            void SetId(const TLogoBlobID& value) {
                 Id = value;
                 hasId = true;
             }
@@ -1783,7 +1774,7 @@ namespace NKikimr {
                 return hasId;
             }
 
-            const TLogoBlobID &GetId() const {
+            const TLogoBlobID& GetId() const {
                 return Id;
             }
 
@@ -1792,7 +1783,7 @@ namespace NKikimr {
                 hasId = false;
             }
 
-            TLogoBlobID *MutableId() {
+            TLogoBlobID* MutableId() {
                 return &Id;
             }
 
@@ -1801,7 +1792,7 @@ namespace NKikimr {
             uint64_t Shift;
             bool hasShift;
 
-            void SetShift(const uint64_t &value) {
+            void SetShift(const uint64_t& value) {
                 Shift = value;
                 hasShift = true;
             }
@@ -1810,7 +1801,7 @@ namespace NKikimr {
                 return hasShift;
             }
 
-            const uint64_t &GetShift() const {
+            const uint64_t& GetShift() const {
                 return Shift;
             }
 
@@ -1819,7 +1810,7 @@ namespace NKikimr {
                 hasShift = false;
             }
 
-            uint64_t *MutableShift() {
+            uint64_t* MutableShift() {
                 return &Shift;
             }
 
@@ -1828,7 +1819,7 @@ namespace NKikimr {
             uint64_t Size;
             bool hasSize;
 
-            void SetSize(const uint64_t &value) {
+            void SetSize(const uint64_t& value) {
                 Size = value;
                 hasSize = true;
             }
@@ -1837,7 +1828,7 @@ namespace NKikimr {
                 return hasSize;
             }
 
-            const uint64_t &GetSize() const {
+            const uint64_t& GetSize() const {
                 return Size;
             }
 
@@ -1846,7 +1837,7 @@ namespace NKikimr {
                 hasSize = false;
             }
 
-            uint64_t *MutableSize() {
+            uint64_t* MutableSize() {
                 return &Size;
             }
 
@@ -1855,7 +1846,7 @@ namespace NKikimr {
             uint64_t Cookie;
             bool hasCookie;
 
-            void SetCookie(const uint64_t &value) {
+            void SetCookie(const uint64_t& value) {
                 Cookie = value;
                 hasCookie = true;
             }
@@ -1864,7 +1855,7 @@ namespace NKikimr {
                 return hasCookie;
             }
 
-            const uint64_t &GetCookie() const {
+            const uint64_t& GetCookie() const {
                 return Cookie;
             }
 
@@ -1873,7 +1864,7 @@ namespace NKikimr {
                 hasCookie = false;
             }
 
-            uint64_t *MutableCookie() {
+            uint64_t* MutableCookie() {
                 return &Cookie;
             }
 
@@ -1887,7 +1878,7 @@ namespace NKikimr {
                 return sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
 
-            void CopyFrom(const TExtremeQuery &other) {
+            void CopyFrom(const TExtremeQuery& other) {
                 *this = other;
             }
 
@@ -1896,14 +1887,14 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this,
-                                        sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+                output->WriteAliasedRaw(this, sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -1913,7 +1904,7 @@ namespace NKikimr {
             uint64_t Id;
             bool hasId;
 
-            void SetId(const uint64_t &value) {
+            void SetId(const uint64_t& value) {
                 Id = value;
                 hasId = true;
             }
@@ -1922,7 +1913,7 @@ namespace NKikimr {
                 return hasId;
             }
 
-            const uint64_t &GetId() const {
+            const uint64_t& GetId() const {
                 return Id;
             }
 
@@ -1931,7 +1922,7 @@ namespace NKikimr {
                 hasId = false;
             }
 
-            uint64_t *MutableId() {
+            uint64_t* MutableId() {
                 return &Id;
             }
 
@@ -1940,7 +1931,7 @@ namespace NKikimr {
             uint32_t Generation;
             bool hasGeneration;
 
-            void SetGeneration(const uint32_t &value) {
+            void SetGeneration(const uint32_t& value) {
                 Generation = value;
                 hasGeneration = true;
             }
@@ -1949,7 +1940,7 @@ namespace NKikimr {
                 return hasGeneration;
             }
 
-            const uint32_t &GetGeneration() const {
+            const uint32_t& GetGeneration() const {
                 return Generation;
             }
 
@@ -1958,7 +1949,7 @@ namespace NKikimr {
                 hasGeneration = false;
             }
 
-            uint32_t *MutableGeneration() {
+            uint32_t* MutableGeneration() {
                 return &Generation;
             }
 
@@ -1972,7 +1963,7 @@ namespace NKikimr {
                 return sizeof(uint64_t) + sizeof(uint32_t);
             }
 
-            void CopyFrom(const TTabletData &other) {
+            void CopyFrom(const TTabletData& other) {
                 *this = other;
             }
 
@@ -1986,8 +1977,9 @@ namespace NKikimr {
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };
@@ -1997,7 +1989,7 @@ namespace NKikimr {
             TRangeQuery RangeQuery;
             bool hasRangeQuery;
 
-            void SetRangeQuery(const TRangeQuery &value) {
+            void SetRangeQuery(const TRangeQuery& value) {
                 RangeQuery = value;
                 hasRangeQuery = true;
             }
@@ -2006,7 +1998,7 @@ namespace NKikimr {
                 return hasRangeQuery;
             }
 
-            const TRangeQuery &GetRangeQuery() const {
+            const TRangeQuery& GetRangeQuery() const {
                 return RangeQuery;
             }
 
@@ -2015,7 +2007,7 @@ namespace NKikimr {
                 hasRangeQuery = false;
             }
 
-            TRangeQuery *MutableRangeQuery() {
+            TRangeQuery* MutableRangeQuery() {
                 return &RangeQuery;
             }
 
@@ -2024,7 +2016,7 @@ namespace NKikimr {
             TVDiskID VDiskID;
             bool hasVDiskID;
 
-            void SetVDiskID(const TVDiskID &value) {
+            void SetVDiskID(const TVDiskID& value) {
                 VDiskID = value;
                 hasVDiskID = true;
             }
@@ -2033,7 +2025,7 @@ namespace NKikimr {
                 return hasVDiskID;
             }
 
-            const TVDiskID &GetVDiskID() const {
+            const TVDiskID& GetVDiskID() const {
                 return VDiskID;
             }
 
@@ -2042,7 +2034,7 @@ namespace NKikimr {
                 hasVDiskID = false;
             }
 
-            TVDiskID *MutableVDiskID() {
+            TVDiskID* MutableVDiskID() {
                 return &VDiskID;
             }
 
@@ -2051,7 +2043,7 @@ namespace NKikimr {
             bool NotifyIfNotReady;
             bool hasNotifyIfNotReady;
 
-            void SetNotifyIfNotReady(const bool &value) {
+            void SetNotifyIfNotReady(const bool& value) {
                 NotifyIfNotReady = value;
                 hasNotifyIfNotReady = true;
             }
@@ -2060,7 +2052,7 @@ namespace NKikimr {
                 return hasNotifyIfNotReady;
             }
 
-            const bool &GetNotifyIfNotReady() const {
+            const bool& GetNotifyIfNotReady() const {
                 return NotifyIfNotReady;
             }
 
@@ -2069,7 +2061,7 @@ namespace NKikimr {
                 hasNotifyIfNotReady = false;
             }
 
-            bool *MutableNotifyIfNotReady() {
+            bool* MutableNotifyIfNotReady() {
                 return &NotifyIfNotReady;
             }
 
@@ -2078,7 +2070,7 @@ namespace NKikimr {
             bool ShowInternals;
             bool hasShowInternals;
 
-            void SetShowInternals(const bool &value) {
+            void SetShowInternals(const bool& value) {
                 ShowInternals = value;
                 hasShowInternals = true;
             }
@@ -2087,7 +2079,7 @@ namespace NKikimr {
                 return hasShowInternals;
             }
 
-            const bool &GetShowInternals() const {
+            const bool& GetShowInternals() const {
                 return ShowInternals;
             }
 
@@ -2096,7 +2088,7 @@ namespace NKikimr {
                 hasShowInternals = false;
             }
 
-            bool *MutableShowInternals() {
+            bool* MutableShowInternals() {
                 return &ShowInternals;
             }
 
@@ -2105,7 +2097,7 @@ namespace NKikimr {
             uint64_t Cookie;
             bool hasCookie;
 
-            void SetCookie(const uint64_t &value) {
+            void SetCookie(const uint64_t& value) {
                 Cookie = value;
                 hasCookie = true;
             }
@@ -2114,7 +2106,7 @@ namespace NKikimr {
                 return hasCookie;
             }
 
-            const uint64_t &GetCookie() const {
+            const uint64_t& GetCookie() const {
                 return Cookie;
             }
 
@@ -2123,7 +2115,7 @@ namespace NKikimr {
                 hasCookie = false;
             }
 
-            uint64_t *MutableCookie() {
+            uint64_t* MutableCookie() {
                 return &Cookie;
             }
 
@@ -2132,7 +2124,7 @@ namespace NKikimr {
             TMsgQoS MsgQoS;
             bool hasMsgQoS;
 
-            void SetMsgQoS(const TMsgQoS &value) {
+            void SetMsgQoS(const TMsgQoS& value) {
                 MsgQoS = value;
                 hasMsgQoS = true;
             }
@@ -2141,7 +2133,7 @@ namespace NKikimr {
                 return hasMsgQoS;
             }
 
-            const TMsgQoS &GetMsgQoS() const {
+            const TMsgQoS& GetMsgQoS() const {
                 return MsgQoS;
             }
 
@@ -2150,7 +2142,7 @@ namespace NKikimr {
                 hasMsgQoS = false;
             }
 
-            TMsgQoS *MutableMsgQoS() {
+            TMsgQoS* MutableMsgQoS() {
                 return &MsgQoS;
             }
 
@@ -2159,7 +2151,7 @@ namespace NKikimr {
             bool IndexOnly = false;
             bool hasIndexOnly;
 
-            void SetIndexOnly(const bool &value) {
+            void SetIndexOnly(const bool& value) {
                 IndexOnly = value;
                 hasIndexOnly = true;
             }
@@ -2168,7 +2160,7 @@ namespace NKikimr {
                 return hasIndexOnly;
             }
 
-            const bool &GetIndexOnly() const {
+            const bool& GetIndexOnly() const {
                 return IndexOnly;
             }
 
@@ -2177,7 +2169,7 @@ namespace NKikimr {
                 hasIndexOnly = false;
             }
 
-            bool *MutableIndexOnly() {
+            bool* MutableIndexOnly() {
                 return &IndexOnly;
             }
 
@@ -2186,7 +2178,7 @@ namespace NKikimr {
             EGetHandleClass HandleClass;
             bool hasHandleClass;
 
-            void SetHandleClass(const EGetHandleClass &value) {
+            void SetHandleClass(const EGetHandleClass& value) {
                 HandleClass = value;
                 hasHandleClass = true;
             }
@@ -2195,7 +2187,7 @@ namespace NKikimr {
                 return hasHandleClass;
             }
 
-            const EGetHandleClass &GetHandleClass() const {
+            const EGetHandleClass& GetHandleClass() const {
                 return HandleClass;
             }
 
@@ -2204,7 +2196,7 @@ namespace NKikimr {
                 hasHandleClass = false;
             }
 
-            EGetHandleClass *MutableHandleClass() {
+            EGetHandleClass* MutableHandleClass() {
                 return &HandleClass;
             }
 
@@ -2213,7 +2205,7 @@ namespace NKikimr {
             bool SuppressBarrierCheck = false;
             bool hasSuppressBarrierCheck;
 
-            void SetSuppressBarrierCheck(const bool &value) {
+            void SetSuppressBarrierCheck(const bool& value) {
                 SuppressBarrierCheck = value;
                 hasSuppressBarrierCheck = true;
             }
@@ -2222,7 +2214,7 @@ namespace NKikimr {
                 return hasSuppressBarrierCheck;
             }
 
-            const bool &GetSuppressBarrierCheck() const {
+            const bool& GetSuppressBarrierCheck() const {
                 return SuppressBarrierCheck;
             }
 
@@ -2231,7 +2223,7 @@ namespace NKikimr {
                 hasSuppressBarrierCheck = false;
             }
 
-            bool *MutableSuppressBarrierCheck() {
+            bool* MutableSuppressBarrierCheck() {
                 return &SuppressBarrierCheck;
             }
 
@@ -2240,7 +2232,7 @@ namespace NKikimr {
             uint64_t TabletId = 0;
             bool hasTabletId;
 
-            void SetTabletId(const uint64_t &value) {
+            void SetTabletId(const uint64_t& value) {
                 TabletId = value;
                 hasTabletId = true;
             }
@@ -2249,7 +2241,7 @@ namespace NKikimr {
                 return hasTabletId;
             }
 
-            const uint64_t &GetTabletId() const {
+            const uint64_t& GetTabletId() const {
                 return TabletId;
             }
 
@@ -2258,7 +2250,7 @@ namespace NKikimr {
                 hasTabletId = false;
             }
 
-            uint64_t *MutableTabletId() {
+            uint64_t* MutableTabletId() {
                 return &TabletId;
             }
 
@@ -2267,7 +2259,7 @@ namespace NKikimr {
             bool AcquireBlockedGeneration = false;
             bool hasAcquireBlockedGeneration;
 
-            void SetAcquireBlockedGeneration(const bool &value) {
+            void SetAcquireBlockedGeneration(const bool& value) {
                 AcquireBlockedGeneration = value;
                 hasAcquireBlockedGeneration = true;
             }
@@ -2276,7 +2268,7 @@ namespace NKikimr {
                 return hasAcquireBlockedGeneration;
             }
 
-            const bool &GetAcquireBlockedGeneration() const {
+            const bool& GetAcquireBlockedGeneration() const {
                 return AcquireBlockedGeneration;
             }
 
@@ -2285,7 +2277,7 @@ namespace NKikimr {
                 hasAcquireBlockedGeneration = false;
             }
 
-            bool *MutableAcquireBlockedGeneration() {
+            bool* MutableAcquireBlockedGeneration() {
                 return &AcquireBlockedGeneration;
             }
 
@@ -2294,7 +2286,7 @@ namespace NKikimr {
             TTimestamps Timestamps;
             bool hasTimestamps;
 
-            void SetTimestamps(const TTimestamps &value) {
+            void SetTimestamps(const TTimestamps& value) {
                 Timestamps = value;
                 hasTimestamps = true;
             }
@@ -2303,7 +2295,7 @@ namespace NKikimr {
                 return hasTimestamps;
             }
 
-            const TTimestamps &GetTimestamps() const {
+            const TTimestamps& GetTimestamps() const {
                 return Timestamps;
             }
 
@@ -2312,7 +2304,7 @@ namespace NKikimr {
                 hasTimestamps = false;
             }
 
-            TTimestamps *MutableTimestamps() {
+            TTimestamps* MutableTimestamps() {
                 return &Timestamps;
             }
 
@@ -2321,7 +2313,7 @@ namespace NKikimr {
             uint32_t ForceBlockedGeneration = 0;
             bool hasForceBlockedGeneration;
 
-            void SetForceBlockedGeneration(const uint32_t &value) {
+            void SetForceBlockedGeneration(const uint32_t& value) {
                 ForceBlockedGeneration = value;
                 hasForceBlockedGeneration = true;
             }
@@ -2330,7 +2322,7 @@ namespace NKikimr {
                 return hasForceBlockedGeneration;
             }
 
-            const uint32_t &GetForceBlockedGeneration() const {
+            const uint32_t& GetForceBlockedGeneration() const {
                 return ForceBlockedGeneration;
             }
 
@@ -2339,7 +2331,7 @@ namespace NKikimr {
                 hasForceBlockedGeneration = false;
             }
 
-            uint32_t *MutableForceBlockedGeneration() {
+            uint32_t* MutableForceBlockedGeneration() {
                 return &ForceBlockedGeneration;
             }
 
@@ -2348,7 +2340,7 @@ namespace NKikimr {
             TTabletData ReaderTabletData;
             bool hasReaderTabletData;
 
-            void SetReaderTabletData(const TTabletData &value) {
+            void SetReaderTabletData(const TTabletData& value) {
                 ReaderTabletData = value;
                 hasReaderTabletData = true;
             }
@@ -2357,7 +2349,7 @@ namespace NKikimr {
                 return hasReaderTabletData;
             }
 
-            const TTabletData &GetReaderTabletData() const {
+            const TTabletData& GetReaderTabletData() const {
                 return ReaderTabletData;
             }
 
@@ -2366,7 +2358,7 @@ namespace NKikimr {
                 hasReaderTabletData = false;
             }
 
-            TTabletData *MutableReaderTabletData() {
+            TTabletData* MutableReaderTabletData() {
                 return &ReaderTabletData;
             }
 
@@ -2375,7 +2367,7 @@ namespace NKikimr {
             TTabletData ForceBlockTabletData;
             bool hasForceBlockTabletData;
 
-            void SetForceBlockTabletData(const TTabletData &value) {
+            void SetForceBlockTabletData(const TTabletData& value) {
                 ForceBlockTabletData = value;
                 hasForceBlockTabletData = true;
             }
@@ -2384,7 +2376,7 @@ namespace NKikimr {
                 return hasForceBlockTabletData;
             }
 
-            const TTabletData &GetForceBlockTabletData() const {
+            const TTabletData& GetForceBlockTabletData() const {
                 return ForceBlockTabletData;
             }
 
@@ -2393,7 +2385,7 @@ namespace NKikimr {
                 hasForceBlockTabletData = false;
             }
 
-            TTabletData *MutableForceBlockTabletData() {
+            TTabletData* MutableForceBlockTabletData() {
                 return &ForceBlockTabletData;
             }
 
@@ -2402,7 +2394,7 @@ namespace NKikimr {
             TString SnapshotId;
             bool hasSnapshotId;
 
-            void SetSnapshotId(const TString &value) {
+            void SetSnapshotId(const TString& value) {
                 SnapshotId = value;
                 hasSnapshotId = true;
             }
@@ -2411,7 +2403,7 @@ namespace NKikimr {
                 return hasSnapshotId;
             }
 
-            const TString &GetSnapshotId() const {
+            const TString& GetSnapshotId() const {
                 return SnapshotId;
             }
 
@@ -2420,7 +2412,7 @@ namespace NKikimr {
                 hasSnapshotId = false;
             }
 
-            TString *MutableSnapshotId() {
+            TString* MutableSnapshotId() {
                 return &SnapshotId;
             }
 
@@ -2428,15 +2420,15 @@ namespace NKikimr {
             /// TExtremeQuery ExtremeQueries <repeated>
             std::vector<TExtremeQuery> ExtremeQueries;
 
-            const std::vector<TExtremeQuery> &GetExtremeQueries() const {
+            const std::vector<TExtremeQuery>& GetExtremeQueries() const {
                 return ExtremeQueries;
             }
 
-            const TExtremeQuery &GetExtremeQueries(int i) const {
+            const TExtremeQuery& GetExtremeQueries(int i) const {
                 return ExtremeQueries[i];
             }
 
-            TExtremeQuery *AddExtremeQueries() {
+            TExtremeQuery* AddExtremeQueries() {
                 ExtremeQueries.push_back({});
                 return &ExtremeQueries.back();
             }
@@ -2452,13 +2444,10 @@ namespace NKikimr {
             }
 
             int ByteSize() const {
-                return sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) +
-                       sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) +
-                       sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) +
-                       sizeof(TTabletData) + sizeof(TString) + sizeof(TExtremeQuery) * ExtremeQueries.size();
+                return sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString) + sizeof(TExtremeQuery) * ExtremeQueries.size();
             }
 
-            void CopyFrom(const TEvVGet &other) {
+            void CopyFrom(const TEvVGet& other) {
                 *this = other;
             }
 
@@ -2467,18 +2456,15 @@ namespace NKikimr {
             }
 
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
-                output->WriteAliasedRaw(this, sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) +
-                                              sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) +
-                                              sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) +
-                                              sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) +
-                                              sizeof(TTabletData) + sizeof(TString));
+                output->WriteAliasedRaw(this, sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString));
                 output->WriteAliasedRaw(ExtremeQueries.data(), sizeof(TExtremeQuery) * ExtremeQueries.size());
                 return true;
 
             }
 
-            void ParseFromString(TString) {
+            bool ParseFromString(TString) {
                 *this = {};
+                return true;
             }
 
         };

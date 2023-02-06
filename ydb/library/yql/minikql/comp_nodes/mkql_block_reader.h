@@ -19,6 +19,7 @@ public:
     virtual ~IBlockItemConverter() = default;
 
     virtual NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const = 0;
+    virtual TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const = 0;
 };
 
 using NYql::NUdf::MakeBlockReader;

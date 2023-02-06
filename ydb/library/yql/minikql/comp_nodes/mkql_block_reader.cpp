@@ -14,36 +14,71 @@ namespace NMiniKQL {
 
 namespace {
 
-template <typename T>
+template <typename T, bool Nullable>
 class TFixedSizeBlockItemConverter : public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
         Y_UNUSED(holderFactory);
-        return item ? NUdf::TUnboxedValuePod(item.As<T>()) : NUdf::TUnboxedValuePod{};
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        return NUdf::TUnboxedValuePod(item.As<T>());
+    }
+
+    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        return TBlockItem(value.Get<T>());
     }
 };
 
-template<typename TStringType>
+template<typename TStringType, bool Nullable>
 class TStringBlockItemConverter : public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
         Y_UNUSED(holderFactory);
-        if (!item) {
-            return {};
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
         }
+
         return MakeString(item.AsStringRef());
+    }
+
+    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        return TBlockItem(value.AsStringRef());
     }
 };
 
+template <bool Nullable>
 class TTupleBlockItemConverter : public IBlockItemConverter {
 public:
     TTupleBlockItemConverter(TVector<std::unique_ptr<IBlockItemConverter>>&& children)
         : Children(std::move(children))
-    {}
+    {
+        Items.resize(Children.size());
+        Unboxed.resize(Children.size());
+    }
 
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
-        if (!item) {
-            return {};
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
         }
 
         NUdf::TUnboxedValue* values;
@@ -56,9 +91,34 @@ public:
         return result;
     }
 
+    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        auto elements = value.GetElements();
+        if (!elements) {
+            for (ui32 i = 0; i < Children.size(); ++i) {
+                Unboxed[i] = value.GetElement(i);
+            }
+
+            elements = Unboxed.data();
+        }
+
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            Items[i] = Children[i]->MakeItem(elements[i]);
+        }
+
+        return TBlockItem{ Items.data() };
+    }
+
 private:
     const TVector<std::unique_ptr<IBlockItemConverter>> Children;
     mutable TPlainContainerCache Cache;
+    mutable TVector<NUdf::TUnboxedValue> Unboxed;
+    mutable TVector<TBlockItem> Items;
 };
 
 class TExternalOptionalBlockItemConverter : public IBlockItemConverter {
@@ -74,17 +134,26 @@ public:
         return Inner->MakeValue(item.GetOptionalValue(), holderFactory).MakeOptional();
     }
 
+    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+        if (!value) {
+            return {};
+        }
+
+        return Inner->MakeItem(value.GetOptionalValue()).MakeOptional();
+    }
+
 private:
     const std::unique_ptr<IBlockItemConverter> Inner;
 };
 
 struct TConverterTraits {
     using TResult = IBlockItemConverter;
-    using TTuple = TTupleBlockItemConverter;
-    template <typename T>
-    using TFixedSize = TFixedSizeBlockItemConverter<T>;
-    template <typename TStringType>
-    using TStrings = TStringBlockItemConverter<TStringType>;
+    template <bool Nullable>
+    using TTuple = TTupleBlockItemConverter<Nullable>;
+    template <typename T, bool Nullable>
+    using TFixedSize = TFixedSizeBlockItemConverter<T, Nullable>;
+    template <typename TStringType, bool Nullable>
+    using TStrings = TStringBlockItemConverter<TStringType, Nullable>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
 };
 

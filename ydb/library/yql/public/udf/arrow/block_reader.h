@@ -17,35 +17,41 @@ public:
     virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
 };
 
-template <typename T>
+template <typename T, bool Nullable>
 class TFixedSizeBlockReader : public IBlockReader {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
-        if (IsNull(data, index)) {
-            return {};
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return {};
+            }
         }
 
         return TBlockItem(data.GetValues<T>(1)[index]);
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
-        if (!scalar.is_valid) {
-            return {};
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return {};
+            }
         }
 
         return TBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
     }
 };
 
-template<typename TStringType>
+template<typename TStringType, bool Nullable>
 class TStringBlockReader : public IBlockReader {
 public:
     using TOffset = typename TStringType::offset_type;
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         Y_VERIFY_DEBUG(data.buffers.size() == 3);
-        if (IsNull(data, index)) {
-            return {};
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return {};
+            }
         }
 
         const TOffset* offsets = data.GetValues<TOffset>(1);
@@ -56,8 +62,10 @@ public:
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
-        if (!scalar.is_valid) {
-            return {};
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return {};
+            }
         }
 
         auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
@@ -66,6 +74,7 @@ public:
     }
 };
 
+template <bool Nullable>
 class TTupleBlockReader : public IBlockReader {
 public:
     TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
@@ -74,8 +83,10 @@ public:
     {}
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
-        if (IsNull(data, index)) {
-            return {};
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return {};
+            }
         }
 
         for (ui32 i = 0; i < Children.size(); ++i) {
@@ -86,8 +97,10 @@ public:
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
-        if (!scalar.is_valid) {
-            return {};
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return {};
+            }
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
@@ -133,20 +146,50 @@ private:
 
 struct TReaderTraits {
     using TResult = IBlockReader;
-    using TTuple = TTupleBlockReader;
-    template <typename T>
-    using TFixedSize = TFixedSizeBlockReader<T>;
-    template <typename TStringType>
-    using TStrings = TStringBlockReader<TStringType>;
+    template <bool Nullable>
+    using TTuple = TTupleBlockReader<Nullable>;
+    template <typename T, bool Nullable>
+    using TFixedSize = TFixedSizeBlockReader<T, Nullable>;
+    template <typename TStringType, bool Nullable>
+    using TStrings = TStringBlockReader<TStringType, Nullable>;
     using TExtOptional = TExternalOptionalBlockReader;
 };
+
+template <typename TTraits>
+std::unique_ptr<typename TTraits::TResult> MakeTupleBlockReaderImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children) {
+    if (isOptional) {
+        return std::make_unique<typename TTraits::template TTuple<true>>(std::move(children));
+    } else {
+        return std::make_unique<typename TTraits::template TTuple<false>>(std::move(children));
+    }
+}
+
+template <typename TTraits, typename T>
+std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isOptional) {
+    if (isOptional) {
+        return std::make_unique<typename TTraits::template TFixedSize<T, true>>();
+    } else {
+        return std::make_unique<typename TTraits::template TFixedSize<T, false>>();
+    }
+}
+
+template <typename TTraits, typename T>
+std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
+    if (isOptional) {
+        return std::make_unique<typename TTraits::template TStrings<T, true>>();
+    } else {
+        return std::make_unique<typename TTraits::template TStrings<T, false>>();
+    }
+}
 
 template <typename TTraits>
 std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
     const TType* unpacked = type;
     TOptionalTypeInspector typeOpt(typeInfoHelper, type);
+    bool isOptional = false;
     if (typeOpt) {
         unpacked = typeOpt.GetItemType();
+        isOptional = true;
     }
 
     TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
@@ -184,7 +227,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             children.emplace_back(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeTuple.GetElementType(i)));
         }
 
-        return std::make_unique<typename TTraits::TTuple>(std::move(children));
+        return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(children));
     }
 
     TDataTypeInspector typeData(typeInfoHelper, type);
@@ -192,34 +235,34 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         auto typeId = typeData.GetTypeId();
         switch (GetDataSlot(typeId)) {
         case NUdf::EDataSlot::Int8:
-            return std::make_unique<typename TTraits::template TFixedSize<i8>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, i8>(isOptional);
         case NUdf::EDataSlot::Bool:
         case NUdf::EDataSlot::Uint8:
-            return std::make_unique<typename TTraits::template TFixedSize<ui8>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui8>(isOptional);
         case NUdf::EDataSlot::Int16:
-            return std::make_unique<typename TTraits::template TFixedSize<i16>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, i16>(isOptional);
         case NUdf::EDataSlot::Uint16:
         case NUdf::EDataSlot::Date:
-            return std::make_unique<typename TTraits::template TFixedSize<ui16>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui16>(isOptional);
         case NUdf::EDataSlot::Int32:
-            return std::make_unique<typename TTraits::template TFixedSize<i32>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, i32>(isOptional);
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
-            return std::make_unique<typename TTraits::template TFixedSize<ui32>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui32>(isOptional);
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
-            return std::make_unique<typename TTraits::template TFixedSize<i64>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, i64>(isOptional);
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
-            return std::make_unique<typename TTraits::template TFixedSize<ui64>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui64>(isOptional);
         case NUdf::EDataSlot::Float:
-            return std::make_unique<typename TTraits::template TFixedSize<float>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, float>(isOptional);
         case NUdf::EDataSlot::Double:
-            return std::make_unique<typename TTraits::template TFixedSize<double>>();
+            return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
         case NUdf::EDataSlot::String:
-            return std::make_unique<typename TTraits::template TStrings<arrow::BinaryType>>();
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType>(isOptional);
         case NUdf::EDataSlot::Utf8:
-            return std::make_unique<typename TTraits::template TStrings<arrow::StringType>>();
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType>(isOptional);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }

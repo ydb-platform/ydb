@@ -201,7 +201,7 @@ bool GetProtocAbsolutePath(TProtoStringType* path) {
   int len = 0;
 
   char dirtybuffer[PATH_MAX];
-  ui32 size = sizeof(dirtybuffer);
+  arc_ui32 size = sizeof(dirtybuffer);
   if (_NSGetExecutablePath(dirtybuffer, &size) == 0) {
     realpath(dirtybuffer, buffer);
     len = strlen(buffer);
@@ -2149,7 +2149,7 @@ Parse PROTO_FILES and generate output based on the options given:
 }
 
 bool CommandLineInterface::EnforceProto3OptionalSupport(
-    const TProtoStringType& codegen_name, ui64 supported_features,
+    const TProtoStringType& codegen_name, arc_ui64 supported_features,
     const std::vector<const FileDescriptor*>& parsed_files) const {
   bool supports_proto3_optional =
       supported_features & CodeGenerator::FEATURE_PROTO3_OPTIONAL;

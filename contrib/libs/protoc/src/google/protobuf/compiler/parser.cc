@@ -242,9 +242,9 @@ bool Parser::ConsumeIdentifier(TProtoStringType* output, const char* error) {
 
 bool Parser::ConsumeInteger(int* output, const char* error) {
   if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
-    ui64 value = 0;
+    arc_ui64 value = 0;
     if (!io::Tokenizer::ParseInteger(input_->current().text,
-                                     std::numeric_limits<i32>::max(),
+                                     std::numeric_limits<arc_i32>::max(),
                                      &value)) {
       AddError("Integer out of range.");
       // We still return true because we did, in fact, parse an integer.
@@ -260,19 +260,19 @@ bool Parser::ConsumeInteger(int* output, const char* error) {
 
 bool Parser::ConsumeSignedInteger(int* output, const char* error) {
   bool is_negative = false;
-  ui64 max_value = std::numeric_limits<i32>::max();
+  arc_ui64 max_value = std::numeric_limits<arc_i32>::max();
   if (TryConsume("-")) {
     is_negative = true;
     max_value += 1;
   }
-  ui64 value = 0;
+  arc_ui64 value = 0;
   DO(ConsumeInteger64(max_value, &value, error));
   if (is_negative) value *= -1;
   *output = value;
   return true;
 }
 
-bool Parser::ConsumeInteger64(ui64 max_value, ui64* output,
+bool Parser::ConsumeInteger64(arc_ui64 max_value, arc_ui64* output,
                               const char* error) {
   if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
     if (!io::Tokenizer::ParseInteger(input_->current().text, max_value,
@@ -296,9 +296,9 @@ bool Parser::ConsumeNumber(double* output, const char* error) {
     return true;
   } else if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
     // Also accept integers.
-    ui64 value = 0;
+    arc_ui64 value = 0;
     if (!io::Tokenizer::ParseInteger(input_->current().text,
-                                     std::numeric_limits<ui64>::max(),
+                                     std::numeric_limits<arc_ui64>::max(),
                                      &value)) {
       AddError("Integer out of range.");
       // We still return true because we did, in fact, parse a number.
@@ -827,7 +827,7 @@ bool IsMessageSetWireFormatMessage(const DescriptorProto& message) {
 void AdjustExtensionRangesWithMaxEndNumber(DescriptorProto* message) {
   const bool is_message_set = IsMessageSetWireFormatMessage(*message);
   const int max_extension_number = is_message_set
-                                       ? std::numeric_limits<i32>::max()
+                                       ? std::numeric_limits<arc_i32>::max()
                                        : FieldDescriptor::kMaxNumber + 1;
   for (int i = 0; i < message->extension_range_size(); ++i) {
     if (message->extension_range(i).end() == kMaxRangeSentinel) {
@@ -842,7 +842,7 @@ void AdjustExtensionRangesWithMaxEndNumber(DescriptorProto* message) {
 void AdjustReservedRangesWithMaxEndNumber(DescriptorProto* message) {
   const bool is_message_set = IsMessageSetWireFormatMessage(*message);
   const int max_field_number = is_message_set
-                                   ? std::numeric_limits<i32>::max()
+                                   ? std::numeric_limits<arc_i32>::max()
                                    : FieldDescriptor::kMaxNumber + 1;
   for (int i = 0; i < message->reserved_range_size(); ++i) {
     if (message->reserved_range(i).end() == kMaxRangeSentinel) {
@@ -1259,11 +1259,11 @@ bool Parser::ParseDefaultAssignment(
     case FieldDescriptorProto::TYPE_SINT64:
     case FieldDescriptorProto::TYPE_SFIXED32:
     case FieldDescriptorProto::TYPE_SFIXED64: {
-      ui64 max_value = std::numeric_limits<i64>::max();
+      arc_ui64 max_value = std::numeric_limits<arc_i64>::max();
       if (field->type() == FieldDescriptorProto::TYPE_INT32 ||
           field->type() == FieldDescriptorProto::TYPE_SINT32 ||
           field->type() == FieldDescriptorProto::TYPE_SFIXED32) {
-        max_value = std::numeric_limits<i32>::max();
+        max_value = std::numeric_limits<arc_i32>::max();
       }
 
       // These types can be negative.
@@ -1273,7 +1273,7 @@ bool Parser::ParseDefaultAssignment(
         ++max_value;
       }
       // Parse the integer to verify that it is not out-of-range.
-      ui64 value;
+      arc_ui64 value;
       DO(ConsumeInteger64(max_value, &value,
                           "Expected integer for field default value."));
       // And stringify it again.
@@ -1285,10 +1285,10 @@ bool Parser::ParseDefaultAssignment(
     case FieldDescriptorProto::TYPE_UINT64:
     case FieldDescriptorProto::TYPE_FIXED32:
     case FieldDescriptorProto::TYPE_FIXED64: {
-      ui64 max_value = std::numeric_limits<ui64>::max();
+      arc_ui64 max_value = std::numeric_limits<arc_ui64>::max();
       if (field->type() == FieldDescriptorProto::TYPE_UINT32 ||
           field->type() == FieldDescriptorProto::TYPE_FIXED32) {
-        max_value = std::numeric_limits<ui32>::max();
+        max_value = std::numeric_limits<arc_ui32>::max();
       }
 
       // Numeric, not negative.
@@ -1296,7 +1296,7 @@ bool Parser::ParseDefaultAssignment(
         AddError("Unsigned field can't have negative default value.");
       }
       // Parse the integer to verify that it is not out-of-range.
-      ui64 value;
+      arc_ui64 value;
       DO(ConsumeInteger64(max_value, &value,
                           "Expected integer for field default value."));
       // And stringify it again.
@@ -1528,17 +1528,17 @@ bool Parser::ParseOption(Message* options,
       }
 
       case io::Tokenizer::TYPE_INTEGER: {
-        ui64 value;
-        ui64 max_value =
+        arc_ui64 value;
+        arc_ui64 max_value =
             is_negative
-                ? static_cast<ui64>(std::numeric_limits<i64>::max()) + 1
-                : std::numeric_limits<ui64>::max();
+                ? static_cast<arc_ui64>(std::numeric_limits<arc_i64>::max()) + 1
+                : std::numeric_limits<arc_ui64>::max();
         DO(ConsumeInteger64(max_value, &value, "Expected integer."));
         if (is_negative) {
           value_location.AddPath(
               UninterpretedOption::kNegativeIntValueFieldNumber);
           uninterpreted_option->set_negative_int_value(
-              static_cast<i64>(-value));
+              static_cast<arc_i64>(-value));
         } else {
           value_location.AddPath(
               UninterpretedOption::kPositiveIntValueFieldNumber);
@@ -2338,8 +2338,8 @@ bool Parser::ParsePackage(FileDescriptorProto* file,
 }
 
 bool Parser::ParseImport(RepeatedPtrField<TProtoStringType>* dependency,
-                         RepeatedField<i32>* public_dependency,
-                         RepeatedField<i32>* weak_dependency,
+                         RepeatedField<arc_i32>* public_dependency,
+                         RepeatedField<arc_i32>* weak_dependency,
                          const LocationRecorder& root_location,
                          const FileDescriptorProto* containing_file) {
   LocationRecorder location(root_location,

@@ -1741,7 +1741,7 @@ inline bool CodeGeneratorResponse::has_supported_features() const {
   return _internal_has_supported_features();
 }
 inline void CodeGeneratorResponse::clear_supported_features() {
-  supported_features_ = ui64{0u};
+  supported_features_ = arc_ui64{0u};
   _has_bits_[0] &= ~0x00000002u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::uint64 CodeGeneratorResponse::_internal_supported_features() const {

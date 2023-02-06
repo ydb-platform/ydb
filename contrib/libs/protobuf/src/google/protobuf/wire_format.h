@@ -148,7 +148,7 @@ class PROTOBUF_EXPORT WireFormat {
   // Skips a field value of the given WireType.  The input should start
   // positioned immediately after the tag.  If unknown_fields is non-NULL,
   // the contents of the field will be added to it.
-  static bool SkipField(io::CodedInputStream* input, ui32 tag,
+  static bool SkipField(io::CodedInputStream* input, arc_ui32 tag,
                         UnknownFieldSet* unknown_fields);
 
   // Reads and ignores a message from the input.  If unknown_fields is
@@ -160,7 +160,7 @@ class PROTOBUF_EXPORT WireFormat {
   // for which is_valid(value) returns false are appended to
   // unknown_fields_stream.
   static bool ReadPackedEnumPreserveUnknowns(io::CodedInputStream* input,
-                                             ui32 field_number,
+                                             arc_ui32 field_number,
                                              bool (*is_valid)(int),
                                              UnknownFieldSet* unknown_fields,
                                              RepeatedField<int>* values);
@@ -219,12 +219,12 @@ class PROTOBUF_EXPORT WireFormat {
   //
   // This is different from MakeTag(field->number(), field->type()) in the
   // case of packed repeated fields.
-  static ui32 MakeTag(const FieldDescriptor* field);
+  static arc_ui32 MakeTag(const FieldDescriptor* field);
 
   // Parse a single field.  The input should start out positioned immediately
   // after the tag.
   static bool ParseAndMergeField(
-      ui32 tag,
+      arc_ui32 tag,
       const FieldDescriptor* field,  // May be NULL for unknown
       Message* message, io::CodedInputStream* input);
 
@@ -287,18 +287,18 @@ class PROTOBUF_EXPORT WireFormat {
   struct MessageSetParser;
   // Skip a MessageSet field.
   static bool SkipMessageSetField(io::CodedInputStream* input,
-                                  ui32 field_number,
+                                  arc_ui32 field_number,
                                   UnknownFieldSet* unknown_fields);
 
   // Parse a MessageSet field.
-  static bool ParseAndMergeMessageSetField(ui32 field_number,
+  static bool ParseAndMergeMessageSetField(arc_ui32 field_number,
                                            const FieldDescriptor* field,
                                            Message* message,
                                            io::CodedInputStream* input);
   // Parses the value from the wire that belongs to tag.
   static const char* _InternalParseAndMergeField(Message* msg, const char* ptr,
                                                  internal::ParseContext* ctx,
-                                                 ui64 tag,
+                                                 arc_ui64 tag,
                                                  const Reflection* reflection,
                                                  const FieldDescriptor* field);
 
@@ -313,7 +313,7 @@ class PROTOBUF_EXPORT UnknownFieldSetFieldSkipper : public FieldSkipper {
   ~UnknownFieldSetFieldSkipper() override {}
 
   // implements FieldSkipper -----------------------------------------
-  bool SkipField(io::CodedInputStream* input, ui32 tag) override;
+  bool SkipField(io::CodedInputStream* input, arc_ui32 tag) override;
   bool SkipMessage(io::CodedInputStream* input) override;
   void SkipUnknownEnum(int field_number, int value) override;
 
@@ -340,7 +340,7 @@ inline WireFormatLite::WireType WireFormat::WireTypeForFieldType(
       static_cast<WireFormatLite::FieldType>(implicit_cast<int>(type)));
 }
 
-inline ui32 WireFormat::MakeTag(const FieldDescriptor* field) {
+inline arc_ui32 WireFormat::MakeTag(const FieldDescriptor* field) {
   return WireFormatLite::MakeTag(field->number(), WireTypeForField(field));
 }
 

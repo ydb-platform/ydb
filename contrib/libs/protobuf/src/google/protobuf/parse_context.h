@@ -60,12 +60,12 @@ class MessageFactory;
 namespace internal {
 
 // Template code below needs to know about the existence of these functions.
-PROTOBUF_EXPORT void WriteVarint(ui32 num, ui64 val, TProtoStringType* s);
-PROTOBUF_EXPORT void WriteLengthDelimited(ui32 num, StringPiece val,
+PROTOBUF_EXPORT void WriteVarint(arc_ui32 num, arc_ui64 val, TProtoStringType* s);
+PROTOBUF_EXPORT void WriteLengthDelimited(arc_ui32 num, StringPiece val,
                                           TProtoStringType* s);
 // Inline because it is just forwarding to s->WriteVarint
-inline void WriteVarint(ui32 num, ui64 val, UnknownFieldSet* s);
-inline void WriteLengthDelimited(ui32 num, StringPiece val,
+inline void WriteVarint(arc_ui32 num, arc_ui64 val, UnknownFieldSet* s);
+inline void WriteLengthDelimited(arc_ui32 num, StringPiece val,
                                  UnknownFieldSet* s);
 
 
@@ -185,15 +185,15 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
   PROTOBUF_MUST_USE_RESULT const char* ReadPackedVarint(const char* ptr,
                                                         Add add);
 
-  ui32 LastTag() const { return last_tag_minus_1_ + 1; }
-  bool ConsumeEndGroup(ui32 start_tag) {
+  arc_ui32 LastTag() const { return last_tag_minus_1_ + 1; }
+  bool ConsumeEndGroup(arc_ui32 start_tag) {
     bool res = last_tag_minus_1_ == start_tag;
     last_tag_minus_1_ = 0;
     return res;
   }
   bool EndedAtLimit() const { return last_tag_minus_1_ == 0; }
   bool EndedAtEndOfStream() const { return last_tag_minus_1_ == 1; }
-  void SetLastTag(ui32 tag) { last_tag_minus_1_ = tag - 1; }
+  void SetLastTag(arc_ui32 tag) { last_tag_minus_1_ = tag - 1; }
   void SetEndOfStream() { last_tag_minus_1_ = 1; }
   bool IsExceedingLimit(const char* ptr) {
     return ptr > limit_end_ &&
@@ -282,7 +282,7 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
   // This var doesn't really belong in EpsCopyInputStream and should be part of
   // the ParseContext, but case 2 is most easily and optimally implemented in
   // DoneFallback.
-  ui32 last_tag_minus_1_ = 0;
+  arc_ui32 last_tag_minus_1_ = 0;
   int overall_limit_ = INT_MAX;  // Overall limit independent of pushed limits.
   // Pretty random large number that seems like a safe allocation on most
   // systems. TODO(gerbens) do we need to set this as build flag?
@@ -411,7 +411,7 @@ class PROTOBUF_EXPORT ParseContext : public EpsCopyInputStream {
 
   template <typename T>
   PROTOBUF_MUST_USE_RESULT PROTOBUF_NDEBUG_INLINE const char* ParseGroup(
-      T* msg, const char* ptr, ui32 tag) {
+      T* msg, const char* ptr, arc_ui32 tag) {
     if (--depth_ < 0) return nullptr;
     group_depth_++;
     ptr = msg->_InternalParse(ptr, this);
@@ -445,7 +445,7 @@ class PROTOBUF_EXPORT ParseContext : public EpsCopyInputStream {
   Data data_;
 };
 
-template <ui32 tag>
+template <arc_ui32 tag>
 bool ExpectTag(const char* ptr) {
   if (tag < 128) {
     return *ptr == static_cast<char>(tag);
@@ -478,8 +478,8 @@ struct EndianHelper<2> {
 
 template <>
 struct EndianHelper<4> {
-  static ui32 Load(const void* p) {
-    ui32 tmp;
+  static arc_ui32 Load(const void* p) {
+    arc_ui32 tmp;
     std::memcpy(&tmp, p, 4);
 #ifndef PROTOBUF_LITTLE_ENDIAN
     tmp = bswap_32(tmp);
@@ -490,8 +490,8 @@ struct EndianHelper<4> {
 
 template <>
 struct EndianHelper<8> {
-  static ui64 Load(const void* p) {
-    ui64 tmp;
+  static arc_ui64 Load(const void* p) {
+    arc_ui64 tmp;
     std::memcpy(&tmp, p, 8);
 #ifndef PROTOBUF_LITTLE_ENDIAN
     tmp = bswap_64(tmp);
@@ -509,17 +509,17 @@ T UnalignedLoad(const char* p) {
 }
 
 PROTOBUF_EXPORT
-std::pair<const char*, ui32> VarintParseSlow32(const char* p, ui32 res);
+std::pair<const char*, arc_ui32> VarintParseSlow32(const char* p, arc_ui32 res);
 PROTOBUF_EXPORT
-std::pair<const char*, ui64> VarintParseSlow64(const char* p, ui32 res);
+std::pair<const char*, arc_ui64> VarintParseSlow64(const char* p, arc_ui32 res);
 
-inline const char* VarintParseSlow(const char* p, ui32 res, ui32* out) {
+inline const char* VarintParseSlow(const char* p, arc_ui32 res, arc_ui32* out) {
   auto tmp = VarintParseSlow32(p, res);
   *out = tmp.second;
   return tmp.first;
 }
 
-inline const char* VarintParseSlow(const char* p, ui32 res, ui64* out) {
+inline const char* VarintParseSlow(const char* p, arc_ui32 res, arc_ui64* out) {
   auto tmp = VarintParseSlow64(p, res);
   *out = tmp.second;
   return tmp.first;
@@ -528,12 +528,12 @@ inline const char* VarintParseSlow(const char* p, ui32 res, ui64* out) {
 template <typename T>
 PROTOBUF_MUST_USE_RESULT const char* VarintParse(const char* p, T* out) {
   auto ptr = reinterpret_cast<const uint8_t*>(p);
-  ui32 res = ptr[0];
+  arc_ui32 res = ptr[0];
   if (!(res & 0x80)) {
     *out = res;
     return p + 1;
   }
-  ui32 byte = ptr[1];
+  arc_ui32 byte = ptr[1];
   res += (byte - 1) << 7;
   if (!(byte & 0x80)) {
     *out = res;
@@ -546,17 +546,17 @@ PROTOBUF_MUST_USE_RESULT const char* VarintParse(const char* p, T* out) {
 // Caller must ensure its safe to call.
 
 PROTOBUF_EXPORT
-std::pair<const char*, ui32> ReadTagFallback(const char* p, ui32 res);
+std::pair<const char*, arc_ui32> ReadTagFallback(const char* p, arc_ui32 res);
 
 // Same as ParseVarint but only accept 5 bytes at most.
-inline const char* ReadTag(const char* p, ui32* out,
-                           ui32 /*max_tag*/ = 0) {
-  ui32 res = static_cast<uint8_t>(p[0]);
+inline const char* ReadTag(const char* p, arc_ui32* out,
+                           arc_ui32 /*max_tag*/ = 0) {
+  arc_ui32 res = static_cast<uint8_t>(p[0]);
   if (res < 128) {
     *out = res;
     return p + 1;
   }
-  ui32 second = static_cast<uint8_t>(p[1]);
+  arc_ui32 second = static_cast<uint8_t>(p[1]);
   res += (second - 1) << 7;
   if (second < 128) {
     *out = res;
@@ -577,10 +577,10 @@ inline const char* ReadTag(const char* p, ui32* out,
 // adc [rsi], 1
 // add eax, eax
 // and eax, edi
-inline ui32 DecodeTwoBytes(const char** ptr) {
-  ui32 value = UnalignedLoad<uint16_t>(*ptr);
+inline arc_ui32 DecodeTwoBytes(const char** ptr) {
+  arc_ui32 value = UnalignedLoad<uint16_t>(*ptr);
   // Sign extend the low byte continuation bit
-  ui32 x = static_cast<int8_t>(value);
+  arc_ui32 x = static_cast<int8_t>(value);
   // This add is an amazing operation, it cancels the low byte continuation bit
   // from y transferring it to the carry. Simultaneously it also shifts the 7
   // LSB left by one tightly against high byte varint bits. Hence value now
@@ -592,18 +592,18 @@ inline ui32 DecodeTwoBytes(const char** ptr) {
 }
 
 // More efficient varint parsing for big varints
-inline const char* ParseBigVarint(const char* p, ui64* out) {
+inline const char* ParseBigVarint(const char* p, arc_ui64* out) {
   auto pnew = p;
   auto tmp = DecodeTwoBytes(&pnew);
-  ui64 res = tmp >> 1;
+  arc_ui64 res = tmp >> 1;
   if (PROTOBUF_PREDICT_TRUE(static_cast<std::int16_t>(tmp) >= 0)) {
     *out = res;
     return pnew;
   }
-  for (ui32 i = 1; i < 5; i++) {
+  for (arc_ui32 i = 1; i < 5; i++) {
     pnew = p + 2 * i;
     tmp = DecodeTwoBytes(&pnew);
-    res += (static_cast<ui64>(tmp) - 2) << (14 * i - 1);
+    res += (static_cast<arc_ui64>(tmp) - 2) << (14 * i - 1);
     if (PROTOBUF_PREDICT_TRUE(static_cast<std::int16_t>(tmp) >= 0)) {
       *out = res;
       return pnew;
@@ -613,13 +613,13 @@ inline const char* ParseBigVarint(const char* p, ui64* out) {
 }
 
 PROTOBUF_EXPORT
-std::pair<const char*, i32> ReadSizeFallback(const char* p, ui32 first);
+std::pair<const char*, arc_i32> ReadSizeFallback(const char* p, arc_ui32 first);
 // Used for tags, could read up to 5 bytes which must be available. Additionally
-// it makes sure the unsigned value fits a i32, otherwise returns nullptr.
+// it makes sure the unsigned value fits a arc_i32, otherwise returns nullptr.
 // Caller must ensure its safe to call.
-inline ui32 ReadSize(const char** pp) {
+inline arc_ui32 ReadSize(const char** pp) {
   auto p = *pp;
-  ui32 res = static_cast<uint8_t>(p[0]);
+  arc_ui32 res = static_cast<uint8_t>(p[0]);
   if (res < 128) {
     *pp = p + 1;
     return res;
@@ -634,28 +634,28 @@ inline ui32 ReadSize(const char** pp) {
 // function composition. We rely on the compiler to inline this.
 // Also in debug compiles having local scoped variables tend to generated
 // stack frames that scale as O(num fields).
-inline ui64 ReadVarint64(const char** p) {
-  ui64 tmp;
+inline arc_ui64 ReadVarint64(const char** p) {
+  arc_ui64 tmp;
   *p = VarintParse(*p, &tmp);
   return tmp;
 }
 
-inline ui32 ReadVarint32(const char** p) {
-  ui32 tmp;
+inline arc_ui32 ReadVarint32(const char** p) {
+  arc_ui32 tmp;
   *p = VarintParse(*p, &tmp);
   return tmp;
 }
 
-inline i64 ReadVarintZigZag64(const char** p) {
-  ui64 tmp;
+inline arc_i64 ReadVarintZigZag64(const char** p) {
+  arc_ui64 tmp;
   *p = VarintParse(*p, &tmp);
   return WireFormatLite::ZigZagDecode64(tmp);
 }
 
-inline i32 ReadVarintZigZag32(const char** p) {
-  ui64 tmp;
+inline arc_i32 ReadVarintZigZag32(const char** p) {
+  arc_ui64 tmp;
   *p = VarintParse(*p, &tmp);
-  return WireFormatLite::ZigZagDecode32(static_cast<ui32>(tmp));
+  return WireFormatLite::ZigZagDecode32(static_cast<arc_ui32>(tmp));
 }
 
 template <typename T, typename std::enable_if<
@@ -723,7 +723,7 @@ const char* EpsCopyInputStream::ReadPackedFixed(const char* ptr, int size,
 template <typename Add>
 const char* ReadPackedVarintArray(const char* ptr, const char* end, Add add) {
   while (ptr < end) {
-    ui64 varint;
+    arc_ui64 varint;
     ptr = VarintParse(ptr, &varint);
     if (ptr == nullptr) return nullptr;
     add(varint);
@@ -793,22 +793,22 @@ PROTOBUF_EXPORT PROTOBUF_MUST_USE_RESULT const char* InlineGreedyStringParser(
   GOOGLE_PROTOBUF_ASSERT_RETURN(predicate, nullptr)
 
 template <typename T>
-PROTOBUF_MUST_USE_RESULT const char* FieldParser(ui64 tag, T& field_parser,
+PROTOBUF_MUST_USE_RESULT const char* FieldParser(arc_ui64 tag, T& field_parser,
                                                  const char* ptr,
                                                  ParseContext* ctx) {
-  ui32 number = tag >> 3;
+  arc_ui32 number = tag >> 3;
   GOOGLE_PROTOBUF_PARSER_ASSERT(number != 0);
   using WireType = internal::WireFormatLite::WireType;
   switch (tag & 7) {
     case WireType::WIRETYPE_VARINT: {
-      ui64 value;
+      arc_ui64 value;
       ptr = VarintParse(ptr, &value);
       GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
       field_parser.AddVarint(number, value);
       break;
     }
     case WireType::WIRETYPE_FIXED64: {
-      ui64 value = UnalignedLoad<ui64>(ptr);
+      arc_ui64 value = UnalignedLoad<arc_ui64>(ptr);
       ptr += 8;
       field_parser.AddFixed64(number, value);
       break;
@@ -828,7 +828,7 @@ PROTOBUF_MUST_USE_RESULT const char* FieldParser(ui64 tag, T& field_parser,
       break;
     }
     case WireType::WIRETYPE_FIXED32: {
-      ui32 value = UnalignedLoad<ui32>(ptr);
+      arc_ui32 value = UnalignedLoad<arc_ui32>(ptr);
       ptr += 4;
       field_parser.AddFixed32(number, value);
       break;
@@ -844,7 +844,7 @@ PROTOBUF_MUST_USE_RESULT const char* WireFormatParser(T& field_parser,
                                                       const char* ptr,
                                                       ParseContext* ctx) {
   while (!ctx->Done(&ptr)) {
-    ui32 tag;
+    arc_ui32 tag;
     ptr = ReadTag(ptr, &tag);
     GOOGLE_PROTOBUF_PARSER_ASSERT(ptr != nullptr);
     if (tag == 0 || (tag & 7) == 4) {
@@ -881,7 +881,7 @@ PROTOBUF_MUST_USE_RESULT const char* PackedEnumParser(
     void* object, const char* ptr, ParseContext* ctx, bool (*is_valid)(int),
     InternalMetadata* metadata, int field_num) {
   return ctx->ReadPackedVarint(
-      ptr, [object, is_valid, metadata, field_num](ui64 val) {
+      ptr, [object, is_valid, metadata, field_num](arc_ui64 val) {
         if (is_valid(val)) {
           static_cast<RepeatedField<int>*>(object)->Add(val);
         } else {
@@ -896,7 +896,7 @@ PROTOBUF_MUST_USE_RESULT const char* PackedEnumParserArg(
     bool (*is_valid)(const void*, int), const void* data,
     InternalMetadata* metadata, int field_num) {
   return ctx->ReadPackedVarint(
-      ptr, [object, is_valid, data, metadata, field_num](ui64 val) {
+      ptr, [object, is_valid, data, metadata, field_num](arc_ui64 val) {
         if (is_valid(data, val)) {
           static_cast<RepeatedField<int>*>(object)->Add(val);
         } else {
@@ -927,7 +927,7 @@ PROTOBUF_EXPORT PROTOBUF_MUST_USE_RESULT const char* UnknownGroupLiteParse(
 // useful in the generated code. It uses overload on TProtoStringType* vs
 // UnknownFieldSet* to make the generated code isomorphic between full and lite.
 PROTOBUF_EXPORT PROTOBUF_MUST_USE_RESULT const char* UnknownFieldParse(
-    ui32 tag, TProtoStringType* unknown, const char* ptr, ParseContext* ctx);
+    arc_ui32 tag, TProtoStringType* unknown, const char* ptr, ParseContext* ctx);
 
 }  // namespace internal
 }  // namespace protobuf

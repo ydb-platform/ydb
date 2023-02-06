@@ -74,7 +74,7 @@ void SetPrimitiveVariables(const FieldDescriptor* descriptor,
       "= " + ImmutableDefaultValue(descriptor, name_resolver);
   (*variables)["capitalized_type"] = "java.lang.String";
   (*variables)["tag"] =
-      StrCat(static_cast<i32>(WireFormat::MakeTag(descriptor)));
+      StrCat(static_cast<arc_i32>(WireFormat::MakeTag(descriptor)));
   (*variables)["tag_size"] = StrCat(
       WireFormat::TagSize(descriptor->number(), GetType(descriptor)));
   // We use `x.getClass()` as a null check because it generates less bytecode

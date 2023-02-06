@@ -76,13 +76,13 @@ class PROTOBUF_EXPORT DataPiece {
   };
 
   // Constructors and Destructor
-  explicit DataPiece(const i32 value)
+  explicit DataPiece(const arc_i32 value)
       : type_(TYPE_INT32), i32_(value), use_strict_base64_decoding_(false) {}
-  explicit DataPiece(const i64 value)
+  explicit DataPiece(const arc_i64 value)
       : type_(TYPE_INT64), i64_(value), use_strict_base64_decoding_(false) {}
-  explicit DataPiece(const ui32 value)
+  explicit DataPiece(const arc_ui32 value)
       : type_(TYPE_UINT32), u32_(value), use_strict_base64_decoding_(false) {}
-  explicit DataPiece(const ui64 value)
+  explicit DataPiece(const arc_ui64 value)
       : type_(TYPE_UINT64), u64_(value), use_strict_base64_decoding_(false) {}
   explicit DataPiece(const double value)
       : type_(TYPE_DOUBLE),
@@ -126,16 +126,16 @@ class PROTOBUF_EXPORT DataPiece {
 
 
   // Parses, casts or converts the value stored in the DataPiece into an int32.
-  util::StatusOr<i32> ToInt32() const;
+  util::StatusOr<arc_i32> ToInt32() const;
 
   // Parses, casts or converts the value stored in the DataPiece into a uint32.
-  util::StatusOr<ui32> ToUint32() const;
+  util::StatusOr<arc_ui32> ToUint32() const;
 
   // Parses, casts or converts the value stored in the DataPiece into an int64.
-  util::StatusOr<i64> ToInt64() const;
+  util::StatusOr<arc_i64> ToInt64() const;
 
   // Parses, casts or converts the value stored in the DataPiece into a uint64.
-  util::StatusOr<ui64> ToUint64() const;
+  util::StatusOr<arc_ui64> ToUint64() const;
 
   // Parses, casts or converts the value stored in the DataPiece into a double.
   util::StatusOr<double> ToDouble() const;
@@ -162,7 +162,7 @@ class PROTOBUF_EXPORT DataPiece {
   DataPiece();
 
   // Helper to create NULL or ENUM types.
-  DataPiece(Type type, i32 val)
+  DataPiece(Type type, arc_i32 val)
       : type_(type), i32_(val), use_strict_base64_decoding_(false) {}
 
   // Same as the ToEnum() method above but with additional flag to ignore
@@ -194,10 +194,10 @@ class PROTOBUF_EXPORT DataPiece {
 
   // Stored piece of data.
   union {
-    i32 i32_;
-    i64 i64_;
-    ui32 u32_;
-    ui64 u64_;
+    arc_i32 i32_;
+    arc_i64 i64_;
+    arc_ui32 u32_;
+    arc_ui64 u64_;
     double double_;
     float float_;
     bool bool_;

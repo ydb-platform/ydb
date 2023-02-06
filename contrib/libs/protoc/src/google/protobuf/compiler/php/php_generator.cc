@@ -1896,7 +1896,7 @@ void GenerateCEnum(const EnumDescriptor* desc, io::Printer* printer) {
       "  const upb_enumdef *e = upb_symtab_lookupenum(symtab, \"$name$\");\n"
       "  char *name = NULL;\n"
       "  size_t name_len;\n"
-      "  int32_t num;\n"
+      "  arc_i32 num;\n"
       "  if (zend_parse_parameters(ZEND_NUM_ARGS(), \"s\", &name,\n"
       "                            &name_len) == FAILURE) {\n"
       "    return;\n"

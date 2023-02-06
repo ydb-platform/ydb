@@ -1222,11 +1222,11 @@ void ImmutableMessageGenerator::GenerateParsingConstructor(
 
   for (int i = 0; i < descriptor_->field_count(); i++) {
     const FieldDescriptor* field = sorted_fields[i];
-    ui32 tag = WireFormatLite::MakeTag(
+    arc_ui32 tag = WireFormatLite::MakeTag(
         field->number(), WireFormat::WireTypeForFieldType(field->type()));
 
     printer->Print("case $tag$: {\n", "tag",
-                   StrCat(static_cast<i32>(tag)));
+                   StrCat(static_cast<arc_i32>(tag)));
     printer->Indent();
 
     field_generators_.get(field).GenerateParsingCode(printer);
@@ -1239,10 +1239,10 @@ void ImmutableMessageGenerator::GenerateParsingConstructor(
     if (field->is_packable()) {
       // To make packed = true wire compatible, we generate parsing code from a
       // packed version of this field regardless of field->options().packed().
-      ui32 packed_tag = WireFormatLite::MakeTag(
+      arc_ui32 packed_tag = WireFormatLite::MakeTag(
           field->number(), WireFormatLite::WIRETYPE_LENGTH_DELIMITED);
       printer->Print("case $tag$: {\n", "tag",
-                     StrCat(static_cast<i32>(packed_tag)));
+                     StrCat(static_cast<arc_i32>(packed_tag)));
       printer->Indent();
 
       field_generators_.get(field).GenerateParsingCodeFromPacked(printer);

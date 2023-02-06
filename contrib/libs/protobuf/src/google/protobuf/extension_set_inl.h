@@ -83,7 +83,7 @@ const char* ExtensionSet::ParseFieldWithExtensionInfo(
     switch (extension.type) {
 #define HANDLE_VARINT_TYPE(UPPERCASE, CPP_CAMELCASE)                        \
   case WireFormatLite::TYPE_##UPPERCASE: {                                  \
-    ui64 value;                                                         \
+    arc_ui64 value;                                                         \
     ptr = VarintParse(ptr, &value);                                         \
     GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);                                    \
     if (extension.is_repeated) {                                            \
@@ -103,7 +103,7 @@ const char* ExtensionSet::ParseFieldWithExtensionInfo(
 #undef HANDLE_VARINT_TYPE
 #define HANDLE_SVARINT_TYPE(UPPERCASE, CPP_CAMELCASE, SIZE)                 \
   case WireFormatLite::TYPE_##UPPERCASE: {                                  \
-    ui64 val;                                                           \
+    arc_ui64 val;                                                           \
     ptr = VarintParse(ptr, &val);                                           \
     GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);                                    \
     auto value = WireFormatLite::ZigZagDecode##SIZE(val);                   \
@@ -132,16 +132,16 @@ const char* ExtensionSet::ParseFieldWithExtensionInfo(
     }                                                                       \
   } break
 
-      HANDLE_FIXED_TYPE(FIXED32, UInt32, ui32);
-      HANDLE_FIXED_TYPE(FIXED64, UInt64, ui64);
-      HANDLE_FIXED_TYPE(SFIXED32, Int32, i32);
-      HANDLE_FIXED_TYPE(SFIXED64, Int64, i64);
+      HANDLE_FIXED_TYPE(FIXED32, UInt32, arc_ui32);
+      HANDLE_FIXED_TYPE(FIXED64, UInt64, arc_ui64);
+      HANDLE_FIXED_TYPE(SFIXED32, Int32, arc_i32);
+      HANDLE_FIXED_TYPE(SFIXED64, Int64, arc_i64);
       HANDLE_FIXED_TYPE(FLOAT, Float, float);
       HANDLE_FIXED_TYPE(DOUBLE, Double, double);
 #undef HANDLE_FIXED_TYPE
 
       case WireFormatLite::TYPE_ENUM: {
-        ui64 val;
+        arc_ui64 val;
         ptr = VarintParse(ptr, &val);
         GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
         int value = val;
@@ -181,7 +181,7 @@ const char* ExtensionSet::ParseFieldWithExtensionInfo(
                 : MutableMessage(number, WireFormatLite::TYPE_GROUP,
                                  *extension.message_info.prototype,
                                  extension.descriptor);
-        ui32 tag = (number << 3) + WireFormatLite::WIRETYPE_START_GROUP;
+        arc_ui32 tag = (number << 3) + WireFormatLite::WIRETYPE_START_GROUP;
         return ctx->ParseGroup(value, ptr, tag);
       }
 
@@ -206,14 +206,14 @@ const char* ExtensionSet::ParseMessageSetItemTmpl(
     const char* ptr, const Msg* extendee, internal::InternalMetadata* metadata,
     internal::ParseContext* ctx) {
   TProtoStringType payload;
-  ui32 type_id;
+  arc_ui32 type_id;
   enum class State { kNoTag, kHasType, kHasPayload, kDone };
   State state = State::kNoTag;
 
   while (!ctx->Done(&ptr)) {
-    ui32 tag = static_cast<uint8_t>(*ptr++);
+    arc_ui32 tag = static_cast<uint8_t>(*ptr++);
     if (tag == WireFormatLite::kMessageSetTypeIdTag) {
-      ui64 tmp;
+      arc_ui64 tmp;
       ptr = ParseBigVarint(ptr, &tmp);
       GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
       if (state == State::kNoTag) {
@@ -250,13 +250,13 @@ const char* ExtensionSet::ParseMessageSetItemTmpl(
       }
     } else if (tag == WireFormatLite::kMessageSetMessageTag) {
       if (state == State::kHasType) {
-        ptr = ParseFieldMaybeLazily(static_cast<ui64>(type_id) * 8 + 2, ptr,
+        ptr = ParseFieldMaybeLazily(static_cast<arc_ui64>(type_id) * 8 + 2, ptr,
                                     extendee, metadata, ctx);
         GOOGLE_PROTOBUF_PARSER_ASSERT(ptr != nullptr);
         state = State::kDone;
       } else {
         TProtoStringType tmp;
-        i32 size = ReadSize(&ptr);
+        arc_i32 size = ReadSize(&ptr);
         GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
         ptr = ctx->ReadString(ptr, size, &tmp);
         GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);

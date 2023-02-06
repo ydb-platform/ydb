@@ -763,20 +763,20 @@ class PROTOBUF_EXPORT FieldDescriptor : private internal::SymbolBase {
 
   // Get the field default value if cpp_type() == CPPTYPE_INT32.  If no
   // explicit default was defined, the default is 0.
-  i32 default_value_i32() const;
-  i32 default_value_int32() const { return default_value_i32(); }
+  arc_i32 default_value_arc_i32() const;
+  arc_i32 default_value_int32() const { return default_value_arc_i32(); }
   // Get the field default value if cpp_type() == CPPTYPE_INT64.  If no
   // explicit default was defined, the default is 0.
-  i64 default_value_i64() const;
-  i64 default_value_int64() const { return default_value_i64(); }
+  arc_i64 default_value_arc_i64() const;
+  arc_i64 default_value_int64() const { return default_value_arc_i64(); }
   // Get the field default value if cpp_type() == CPPTYPE_UINT32.  If no
   // explicit default was defined, the default is 0.
-  ui32 default_value_ui32() const;
-  ui32 default_value_uint32() const { return default_value_ui32(); }
+  arc_ui32 default_value_arc_ui32() const;
+  arc_ui32 default_value_uint32() const { return default_value_arc_ui32(); }
   // Get the field default value if cpp_type() == CPPTYPE_UINT64.  If no
   // explicit default was defined, the default is 0.
-  ui64 default_value_ui64() const;
-  ui64 default_value_uint64() const { return default_value_ui64(); }
+  arc_ui64 default_value_arc_ui64() const;
+  arc_ui64 default_value_uint64() const { return default_value_arc_ui64(); }
   // Get the field default value if cpp_type() == CPPTYPE_FLOAT.  If no
   // explicit default was defined, the default is 0.0.
   float default_value_float() const;
@@ -952,10 +952,10 @@ class PROTOBUF_EXPORT FieldDescriptor : private internal::SymbolBase {
   // descriptor.cc and update them to initialize the field.
 
   union {
-    i32 default_value_i32_;
-    i64 default_value_i64_;
-    ui32 default_value_ui32_;
-    ui64 default_value_ui64_;
+    arc_i32 default_value_arc_i32_;
+    arc_i64 default_value_arc_i64_;
+    arc_ui32 default_value_arc_ui32_;
+    arc_ui64 default_value_arc_ui64_;
     float default_value_float_;
     double default_value_double_;
     bool default_value_bool_;
@@ -2100,10 +2100,10 @@ PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, index_in_oneof, int)
 PROTOBUF_DEFINE_OPTIONS_ACCESSOR(FieldDescriptor, FieldOptions)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, has_default_value, bool)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, has_json_name, bool)
-PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_i32, i32)
-PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_i64, i64)
-PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_ui32, ui32)
-PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_ui64, ui64)
+PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_arc_i32, arc_i32)
+PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_arc_i64, arc_i64)
+PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_arc_ui32, arc_ui32)
+PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_arc_ui64, arc_ui64)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_float, float)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_double, double)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_bool, bool)

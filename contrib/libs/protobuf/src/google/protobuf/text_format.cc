@@ -165,7 +165,7 @@ TextFormat::ParseLocationRange TextFormat::ParseInfoTree::GetLocationRange(
   const std::vector<TextFormat::ParseLocationRange>* locations =
       FindOrNull(locations_, field);
   if (locations == nullptr ||
-      index >= static_cast<i64>(locations->size())) {
+      index >= static_cast<arc_i64>(locations->size())) {
     return TextFormat::ParseLocationRange();
   }
 
@@ -180,7 +180,7 @@ TextFormat::ParseInfoTree* TextFormat::ParseInfoTree::GetTreeForNested(
   }
 
   auto it = nested_.find(field);
-  if (it == nested_.end() || index >= static_cast<i64>(it->second.size())) {
+  if (it == nested_.end() || index >= static_cast<arc_i64>(it->second.size())) {
     return nullptr;
   }
 
@@ -459,7 +459,7 @@ class TextFormat::Parser::ParserImpl {
     } else {
       DO(ConsumeIdentifier(&field_name));
 
-      i32 field_number;
+      arc_i32 field_number;
       if (allow_field_number_ && safe_strto32(field_name, &field_number)) {
         if (descriptor->IsExtensionNumber(field_number)) {
           field = finder_
@@ -726,28 +726,28 @@ class TextFormat::Parser::ParserImpl {
 
     switch (field->cpp_type()) {
       case FieldDescriptor::CPPTYPE_INT32: {
-        i64 value;
+        arc_i64 value;
         DO(ConsumeSignedInteger(&value, kint32max));
-        SET_FIELD(Int32, static_cast<i32>(value));
+        SET_FIELD(Int32, static_cast<arc_i32>(value));
         break;
       }
 
       case FieldDescriptor::CPPTYPE_UINT32: {
-        ui64 value;
+        arc_ui64 value;
         DO(ConsumeUnsignedInteger(&value, kuint32max));
-        SET_FIELD(UInt32, static_cast<ui32>(value));
+        SET_FIELD(UInt32, static_cast<arc_ui32>(value));
         break;
       }
 
       case FieldDescriptor::CPPTYPE_INT64: {
-        i64 value;
+        arc_i64 value;
         DO(ConsumeSignedInteger(&value, kint64max));
         SET_FIELD(Int64, value);
         break;
       }
 
       case FieldDescriptor::CPPTYPE_UINT64: {
-        ui64 value;
+        arc_ui64 value;
         DO(ConsumeUnsignedInteger(&value, kuint64max));
         SET_FIELD(UInt64, value);
         break;
@@ -776,7 +776,7 @@ class TextFormat::Parser::ParserImpl {
 
       case FieldDescriptor::CPPTYPE_BOOL: {
         if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
-          ui64 value;
+          arc_ui64 value;
           DO(ConsumeUnsignedInteger(&value, 1));
           SET_FIELD(Bool, value);
         } else {
@@ -797,7 +797,7 @@ class TextFormat::Parser::ParserImpl {
 
       case FieldDescriptor::CPPTYPE_ENUM: {
         TProtoStringType value;
-        i64 int_value = kint64max;
+        arc_i64 int_value = kint64max;
         const EnumDescriptor* enum_type = field->enum_type();
         const EnumValueDescriptor* enum_value = nullptr;
 
@@ -1006,9 +1006,9 @@ class TextFormat::Parser::ParserImpl {
     return true;
   }
 
-  // Consumes a ui64 and saves its value in the value parameter.
+  // Consumes a arc_ui64 and saves its value in the value parameter.
   // Returns false if the token is not of type INTEGER.
-  bool ConsumeUnsignedInteger(ui64* value, ui64 max_value) {
+  bool ConsumeUnsignedInteger(arc_ui64* value, arc_ui64 max_value) {
     if (!LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
       ReportError("Expected integer, got: " + tokenizer_.current().text);
       return false;
@@ -1024,12 +1024,12 @@ class TextFormat::Parser::ParserImpl {
     return true;
   }
 
-  // Consumes an i64 and saves its value in the value parameter.
+  // Consumes an arc_i64 and saves its value in the value parameter.
   // Note that since the tokenizer does not support negative numbers,
   // we actually may consume an additional token (for the minus sign) in this
   // method. Returns false if the token is not an integer
   // (signed or otherwise).
-  bool ConsumeSignedInteger(i64* value, ui64 max_value) {
+  bool ConsumeSignedInteger(arc_i64* value, arc_ui64 max_value) {
     bool negative = false;
 
     if (TryConsume("-")) {
@@ -1039,18 +1039,18 @@ class TextFormat::Parser::ParserImpl {
       ++max_value;
     }
 
-    ui64 unsigned_value;
+    arc_ui64 unsigned_value;
 
     DO(ConsumeUnsignedInteger(&unsigned_value, max_value));
 
     if (negative) {
-      if ((static_cast<ui64>(kint64max) + 1) == unsigned_value) {
+      if ((static_cast<arc_ui64>(kint64max) + 1) == unsigned_value) {
         *value = kint64min;
       } else {
-        *value = -static_cast<i64>(unsigned_value);
+        *value = -static_cast<arc_i64>(unsigned_value);
       }
     } else {
-      *value = static_cast<i64>(unsigned_value);
+      *value = static_cast<arc_i64>(unsigned_value);
     }
 
     return true;
@@ -1058,7 +1058,7 @@ class TextFormat::Parser::ParserImpl {
 
   // Consumes a double and saves its value in the value parameter.
   // Accepts decimal numbers only, rejects hex or oct numbers.
-  bool ConsumeUnsignedDecimalAsDouble(double* value, ui64 max_value) {
+  bool ConsumeUnsignedDecimalAsDouble(double* value, arc_ui64 max_value) {
     if (!LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
       ReportError("Expected integer, got: " + tokenizer_.current().text);
       return false;
@@ -1070,7 +1070,7 @@ class TextFormat::Parser::ParserImpl {
       return false;
     }
 
-    ui64 uint64_value;
+    arc_ui64 uint64_value;
     if (io::Tokenizer::ParseInteger(text, max_value, &uint64_value)) {
       *value = static_cast<double>(uint64_value);
     } else {
@@ -1362,7 +1362,7 @@ class TextFormat::Printer::TextGenerator
       if (failed_) return;
     }
 
-    while (static_cast<i64>(size) > buffer_size_) {
+    while (static_cast<arc_i64>(size) > buffer_size_) {
       // Data exceeds space in the buffer.  Copy what we can and request a
       // new buffer.
       if (buffer_size_ > 0) {
@@ -1520,7 +1520,7 @@ bool CheckParseInputSize(StringPiece input,
     error_collector->AddError(
         -1, 0,
         StrCat(
-            "Input size too large: ", static_cast<int64_t>(input.size()),
+            "Input size too large: ", static_cast<arc_i64>(input.size()),
             " bytes", " > ", INT_MAX, " bytes."));
     return false;
   }
@@ -1672,16 +1672,16 @@ TextFormat::FieldValuePrinter::~FieldValuePrinter() {}
 TProtoStringType TextFormat::FieldValuePrinter::PrintBool(bool val) const {
   FORWARD_IMPL(PrintBool, val);
 }
-TProtoStringType TextFormat::FieldValuePrinter::PrintInt32(i32 val) const {
+TProtoStringType TextFormat::FieldValuePrinter::PrintInt32(arc_i32 val) const {
   FORWARD_IMPL(PrintInt32, val);
 }
-TProtoStringType TextFormat::FieldValuePrinter::PrintUInt32(ui32 val) const {
+TProtoStringType TextFormat::FieldValuePrinter::PrintUInt32(arc_ui32 val) const {
   FORWARD_IMPL(PrintUInt32, val);
 }
-TProtoStringType TextFormat::FieldValuePrinter::PrintInt64(i64 val) const {
+TProtoStringType TextFormat::FieldValuePrinter::PrintInt64(arc_i64 val) const {
   FORWARD_IMPL(PrintInt64, val);
 }
-TProtoStringType TextFormat::FieldValuePrinter::PrintUInt64(ui64 val) const {
+TProtoStringType TextFormat::FieldValuePrinter::PrintUInt64(arc_ui64 val) const {
   FORWARD_IMPL(PrintUInt64, val);
 }
 TProtoStringType TextFormat::FieldValuePrinter::PrintFloat(float val) const {
@@ -1699,7 +1699,7 @@ TProtoStringType TextFormat::FieldValuePrinter::PrintBytes(
   return PrintString(val);
 }
 TProtoStringType TextFormat::FieldValuePrinter::PrintEnum(
-    i32 val, const TProtoStringType& name) const {
+    arc_i32 val, const TProtoStringType& name) const {
   FORWARD_IMPL(PrintEnum, val, name);
 }
 TProtoStringType TextFormat::FieldValuePrinter::PrintFieldName(
@@ -1732,19 +1732,19 @@ void TextFormat::FastFieldValuePrinter::PrintBool(
   }
 }
 void TextFormat::FastFieldValuePrinter::PrintInt32(
-    i32 val, BaseTextGenerator* generator) const {
+    arc_i32 val, BaseTextGenerator* generator) const {
   generator->PrintString(StrCat(val));
 }
 void TextFormat::FastFieldValuePrinter::PrintUInt32(
-    ui32 val, BaseTextGenerator* generator) const {
+    arc_ui32 val, BaseTextGenerator* generator) const {
   generator->PrintString(StrCat(val));
 }
 void TextFormat::FastFieldValuePrinter::PrintInt64(
-    i64 val, BaseTextGenerator* generator) const {
+    arc_i64 val, BaseTextGenerator* generator) const {
   generator->PrintString(StrCat(val));
 }
 void TextFormat::FastFieldValuePrinter::PrintUInt64(
-    ui64 val, BaseTextGenerator* generator) const {
+    arc_ui64 val, BaseTextGenerator* generator) const {
   generator->PrintString(StrCat(val));
 }
 void TextFormat::FastFieldValuePrinter::PrintFloat(
@@ -1756,7 +1756,7 @@ void TextFormat::FastFieldValuePrinter::PrintDouble(
   generator->PrintString(!std::isnan(val) ? SimpleDtoa(val) : "nan");
 }
 void TextFormat::FastFieldValuePrinter::PrintEnum(
-    i32 val, const TProtoStringType& name, BaseTextGenerator* generator) const {
+    arc_i32 val, const TProtoStringType& name, BaseTextGenerator* generator) const {
   generator->PrintString(name);
 }
 
@@ -1831,19 +1831,19 @@ class FieldValuePrinterWrapper : public TextFormat::FastFieldValuePrinter {
                  TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintBool(val));
   }
-  void PrintInt32(i32 val,
+  void PrintInt32(arc_i32 val,
                   TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintInt32(val));
   }
-  void PrintUInt32(ui32 val,
+  void PrintUInt32(arc_ui32 val,
                    TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintUInt32(val));
   }
-  void PrintInt64(i64 val,
+  void PrintInt64(arc_i64 val,
                   TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintInt64(val));
   }
-  void PrintUInt64(ui64 val,
+  void PrintUInt64(arc_ui64 val,
                    TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintUInt64(val));
   }
@@ -1863,7 +1863,7 @@ class FieldValuePrinterWrapper : public TextFormat::FastFieldValuePrinter {
                   TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintBytes(val));
   }
-  void PrintEnum(i32 val, const TProtoStringType& name,
+  void PrintEnum(arc_i32 val, const TProtoStringType& name,
                  TextFormat::BaseTextGenerator* generator) const override {
     generator->PrintString(delegate_->PrintEnum(val, name));
   }
@@ -2166,23 +2166,23 @@ class MapEntryMessageComparator {
         return first < second;
       }
       case FieldDescriptor::CPPTYPE_INT32: {
-        i32 first = reflection->GetInt32(*a, field_);
-        i32 second = reflection->GetInt32(*b, field_);
+        arc_i32 first = reflection->GetInt32(*a, field_);
+        arc_i32 second = reflection->GetInt32(*b, field_);
         return first < second;
       }
       case FieldDescriptor::CPPTYPE_INT64: {
-        i64 first = reflection->GetInt64(*a, field_);
-        i64 second = reflection->GetInt64(*b, field_);
+        arc_i64 first = reflection->GetInt64(*a, field_);
+        arc_i64 second = reflection->GetInt64(*b, field_);
         return first < second;
       }
       case FieldDescriptor::CPPTYPE_UINT32: {
-        ui32 first = reflection->GetUInt32(*a, field_);
-        ui32 second = reflection->GetUInt32(*b, field_);
+        arc_ui32 first = reflection->GetUInt32(*a, field_);
+        arc_ui32 second = reflection->GetUInt32(*b, field_);
         return first < second;
       }
       case FieldDescriptor::CPPTYPE_UINT64: {
-        ui64 first = reflection->GetUInt64(*a, field_);
-        ui64 second = reflection->GetUInt64(*b, field_);
+        arc_ui64 first = reflection->GetUInt64(*a, field_);
+        arc_ui64 second = reflection->GetUInt64(*b, field_);
         return first < second;
       }
       case FieldDescriptor::CPPTYPE_STRING: {

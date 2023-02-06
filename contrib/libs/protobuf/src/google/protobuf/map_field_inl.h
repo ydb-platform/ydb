@@ -49,19 +49,19 @@ namespace internal {
 template <typename T>
 T UnwrapMapKey(const MapKey& map_key);
 template <>
-inline i32 UnwrapMapKey<i32>(const MapKey& map_key) {
+inline arc_i32 UnwrapMapKey<arc_i32>(const MapKey& map_key) {
   return map_key.GetInt32Value();
 }
 template <>
-inline ui32 UnwrapMapKey<ui32>(const MapKey& map_key) {
+inline arc_ui32 UnwrapMapKey<arc_ui32>(const MapKey& map_key) {
   return map_key.GetUInt32Value();
 }
 template <>
-inline i64 UnwrapMapKey<i64>(const MapKey& map_key) {
+inline arc_i64 UnwrapMapKey<arc_i64>(const MapKey& map_key) {
   return map_key.GetInt64Value();
 }
 template <>
-inline ui64 UnwrapMapKey<ui64>(const MapKey& map_key) {
+inline arc_ui64 UnwrapMapKey<arc_ui64>(const MapKey& map_key) {
   return map_key.GetUInt64Value();
 }
 template <>
@@ -77,19 +77,19 @@ inline TProtoStringType UnwrapMapKey<TProtoStringType>(const MapKey& map_key) {
 template <typename T>
 inline void SetMapKey(MapKey* map_key, const T& value);
 template <>
-inline void SetMapKey<i32>(MapKey* map_key, const i32& value) {
+inline void SetMapKey<arc_i32>(MapKey* map_key, const arc_i32& value) {
   map_key->SetInt32Value(value);
 }
 template <>
-inline void SetMapKey<ui32>(MapKey* map_key, const ui32& value) {
+inline void SetMapKey<arc_ui32>(MapKey* map_key, const arc_ui32& value) {
   map_key->SetUInt32Value(value);
 }
 template <>
-inline void SetMapKey<i64>(MapKey* map_key, const i64& value) {
+inline void SetMapKey<arc_i64>(MapKey* map_key, const arc_i64& value) {
   map_key->SetInt64Value(value);
 }
 template <>
-inline void SetMapKey<ui64>(MapKey* map_key, const ui64& value) {
+inline void SetMapKey<arc_ui64>(MapKey* map_key, const arc_ui64& value) {
   map_key->SetUInt64Value(value);
 }
 template <>

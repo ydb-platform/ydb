@@ -635,7 +635,7 @@ const char* DeclaredTypeMethodName(FieldDescriptor::Type type) {
 }
 
 TProtoStringType Int32ToString(int number) {
-  if (number == std::numeric_limits<i32>::min()) {
+  if (number == std::numeric_limits<arc_i32>::min()) {
     // This needs to be special-cased, see explanation here:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52661
     return StrCat(number + 1, " - 1");
@@ -644,17 +644,17 @@ TProtoStringType Int32ToString(int number) {
   }
 }
 
-static TProtoStringType Int64ToString(i64 number) {
-  if (number == std::numeric_limits<i64>::min()) {
+static TProtoStringType Int64ToString(arc_i64 number) {
+  if (number == std::numeric_limits<arc_i64>::min()) {
     // This needs to be special-cased, see explanation here:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52661
-    return StrCat("int64_t{", number + 1, "} - 1");
+    return StrCat("arc_i64{", number + 1, "} - 1");
   }
-  return StrCat("int64_t{", number, "}");
+  return StrCat("arc_i64{", number, "}");
 }
 
-static TProtoStringType UInt64ToString(ui64 number) {
-  return StrCat("uint64_t{", number, "u}");
+static TProtoStringType UInt64ToString(arc_ui64 number) {
+  return StrCat("arc_ui64{", number, "u}");
 }
 
 TProtoStringType DefaultValue(const FieldDescriptor* field) {

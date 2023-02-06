@@ -1453,7 +1453,7 @@ inline void FloatValue::set_value(float value) {
 
 // int64 value = 1;
 inline void Int64Value::clear_value() {
-  value_ = i64{0};
+  value_ = arc_i64{0};
 }
 inline ::PROTOBUF_NAMESPACE_ID::int64 Int64Value::_internal_value() const {
   return value_;
@@ -1477,7 +1477,7 @@ inline void Int64Value::set_value(::PROTOBUF_NAMESPACE_ID::int64 value) {
 
 // uint64 value = 1;
 inline void UInt64Value::clear_value() {
-  value_ = ui64{0u};
+  value_ = arc_ui64{0u};
 }
 inline ::PROTOBUF_NAMESPACE_ID::uint64 UInt64Value::_internal_value() const {
   return value_;

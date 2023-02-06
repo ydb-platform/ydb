@@ -96,16 +96,16 @@ class PROTOBUF_EXPORT DefaultValueObjectWriter : public ObjectWriter {
                                        bool value) override;
 
   DefaultValueObjectWriter* RenderInt32(StringPiece name,
-                                        i32 value) override;
+                                        arc_i32 value) override;
 
   DefaultValueObjectWriter* RenderUint32(StringPiece name,
-                                         ui32 value) override;
+                                         arc_ui32 value) override;
 
   DefaultValueObjectWriter* RenderInt64(StringPiece name,
-                                        i64 value) override;
+                                        arc_i64 value) override;
 
   DefaultValueObjectWriter* RenderUint64(StringPiece name,
-                                         ui64 value) override;
+                                         arc_ui64 value) override;
 
   DefaultValueObjectWriter* RenderDouble(StringPiece name,
                                          double value) override;

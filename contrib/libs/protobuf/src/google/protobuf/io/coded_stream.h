@@ -75,7 +75,7 @@
 //     return;
 //   }
 //
-//   ui32 size;
+//   arc_ui32 size;
 //   coded_input->ReadVarint32(&size);
 //
 //   char* text = new char[size + 1];
@@ -233,25 +233,25 @@ class PROTOBUF_EXPORT CodedInputStream {
 
 
   // Read a 32-bit little-endian integer.
-  bool ReadLittleEndian32(ui32* value);
+  bool ReadLittleEndian32(arc_ui32* value);
   // Read a 64-bit little-endian integer.
-  bool ReadLittleEndian64(ui64* value);
+  bool ReadLittleEndian64(arc_ui64* value);
 
   // These methods read from an externally provided buffer. The caller is
   // responsible for ensuring that the buffer has sufficient space.
   // Read a 32-bit little-endian integer.
   static const uint8_t* ReadLittleEndian32FromArray(const uint8_t* buffer,
-                                                  ui32* value);
+                                                  arc_ui32* value);
   // Read a 64-bit little-endian integer.
   static const uint8_t* ReadLittleEndian64FromArray(const uint8_t* buffer,
-                                                  ui64* value);
+                                                  arc_ui64* value);
 
   // Read an unsigned integer with Varint encoding, truncating to 32 bits.
   // Reading a 32-bit value is equivalent to reading a 64-bit one and casting
-  // it to ui32, but may be more efficient.
-  bool ReadVarint32(ui32* value);
+  // it to arc_ui32, but may be more efficient.
+  bool ReadVarint32(arc_ui32* value);
   // Read an unsigned integer with Varint encoding.
-  bool ReadVarint64(ui64* value);
+  bool ReadVarint64(arc_ui64* value);
 
   // Reads a varint off the wire into an "int". This should be used for reading
   // sizes off the wire (sizes of strings, submessages, bytes fields, etc).
@@ -272,11 +272,11 @@ class PROTOBUF_EXPORT CodedInputStream {
   // Always inline because this is only called in one place per parse loop
   // but it is called for every iteration of said loop, so it should be fast.
   // GCC doesn't want to inline this by default.
-  PROTOBUF_ALWAYS_INLINE ui32 ReadTag() {
+  PROTOBUF_ALWAYS_INLINE arc_ui32 ReadTag() {
     return last_tag_ = ReadTagNoLastTag();
   }
 
-  PROTOBUF_ALWAYS_INLINE ui32 ReadTagNoLastTag();
+  PROTOBUF_ALWAYS_INLINE arc_ui32 ReadTagNoLastTag();
 
   // This usually a faster alternative to ReadTag() when cutoff is a manifest
   // constant.  It does particularly well for cutoff >= 127.  The first part
@@ -287,14 +287,14 @@ class PROTOBUF_EXPORT CodedInputStream {
   // because that can arise in several ways, and for best performance we want
   // to avoid an extra "is tag == 0?" check here.)
   PROTOBUF_ALWAYS_INLINE
-  std::pair<ui32, bool> ReadTagWithCutoff(ui32 cutoff) {
-    std::pair<ui32, bool> result = ReadTagWithCutoffNoLastTag(cutoff);
+  std::pair<arc_ui32, bool> ReadTagWithCutoff(arc_ui32 cutoff) {
+    std::pair<arc_ui32, bool> result = ReadTagWithCutoffNoLastTag(cutoff);
     last_tag_ = result.first;
     return result;
   }
 
   PROTOBUF_ALWAYS_INLINE
-  std::pair<ui32, bool> ReadTagWithCutoffNoLastTag(ui32 cutoff);
+  std::pair<arc_ui32, bool> ReadTagWithCutoffNoLastTag(arc_ui32 cutoff);
 
   // Usually returns true if calling ReadVarint32() now would produce the given
   // value.  Will always return false if ReadVarint32() would not return the
@@ -303,7 +303,7 @@ class PROTOBUF_EXPORT CodedInputStream {
   // parameter.
   // Always inline because this collapses to a small number of instructions
   // when given a constant parameter, but GCC doesn't want to inline by default.
-  PROTOBUF_ALWAYS_INLINE bool ExpectTag(ui32 expected);
+  PROTOBUF_ALWAYS_INLINE bool ExpectTag(arc_ui32 expected);
 
   // Like above, except this reads from the specified buffer. The caller is
   // responsible for ensuring that the buffer is large enough to read a varint
@@ -314,7 +314,7 @@ class PROTOBUF_EXPORT CodedInputStream {
   // was not.
   PROTOBUF_ALWAYS_INLINE
   static const uint8_t* ExpectTagFromArray(const uint8_t* buffer,
-                                         ui32 expected);
+                                         arc_ui32 expected);
 
   // Usually returns true if no more bytes can be read.  Always returns false
   // if more bytes can be read.  If ExpectAtEnd() returns true, a subsequent
@@ -333,8 +333,8 @@ class PROTOBUF_EXPORT CodedInputStream {
   // of the enclosing message.  The enclosing message would like to check that
   // tag to make sure it had the right number, so it calls LastTagWas() on
   // return from the embedded parser to check.
-  bool LastTagWas(ui32 expected);
-  void SetLastTag(ui32 tag) { last_tag_ = tag; }
+  bool LastTagWas(arc_ui32 expected);
+  void SetLastTag(arc_ui32 tag) { last_tag_ = tag; }
 
   // When parsing message (but NOT a group), this method must be called
   // immediately after MergeFromCodedStream() returns (if it returns true)
@@ -548,7 +548,7 @@ class PROTOBUF_EXPORT CodedInputStream {
   int overflow_bytes_;
 
   // LastTagWas() stuff.
-  ui32 last_tag_;  // result of last ReadTag() or ReadTagWithCutoff().
+  arc_ui32 last_tag_;  // result of last ReadTag() or ReadTagWithCutoff().
 
   // This is set true by ReadTag{Fallback/Slow}() if it is called when exactly
   // at EOF, or by ExpectAtEnd() when it returns true.  This happens when we
@@ -616,22 +616,22 @@ class PROTOBUF_EXPORT CodedInputStream {
   // message crosses multiple buffers.  Note: ReadVarint32Fallback() and
   // ReadVarint64Fallback() are called frequently and generally not inlined, so
   // they have been optimized to avoid "out" parameters.  The former returns -1
-  // if it fails and the ui32 it read otherwise.  The latter has a bool
+  // if it fails and the arc_ui32 it read otherwise.  The latter has a bool
   // indicating success or failure as part of its return type.
-  i64 ReadVarint32Fallback(ui32 first_byte_or_zero);
+  arc_i64 ReadVarint32Fallback(arc_ui32 first_byte_or_zero);
   int ReadVarintSizeAsIntFallback();
-  std::pair<ui64, bool> ReadVarint64Fallback();
-  bool ReadVarint32Slow(ui32* value);
-  bool ReadVarint64Slow(ui64* value);
+  std::pair<arc_ui64, bool> ReadVarint64Fallback();
+  bool ReadVarint32Slow(arc_ui32* value);
+  bool ReadVarint64Slow(arc_ui64* value);
   int ReadVarintSizeAsIntSlow();
-  bool ReadLittleEndian32Fallback(ui32* value);
-  bool ReadLittleEndian64Fallback(ui64* value);
+  bool ReadLittleEndian32Fallback(arc_ui32* value);
+  bool ReadLittleEndian64Fallback(arc_ui64* value);
 
   // Fallback/slow methods for reading tags. These do not update last_tag_,
   // but will set legitimate_message_end_ if we are at the end of the input
   // stream.
-  ui32 ReadTagFallback(ui32 first_byte_or_zero);
-  ui32 ReadTagSlow();
+  arc_ui32 ReadTagFallback(arc_ui32 first_byte_or_zero);
+  arc_ui32 ReadTagSlow();
   bool ReadStringFallback(TProtoStringType* buffer, int size);
 
   // Return the size of the buffer.
@@ -714,7 +714,7 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
   }
 
 
-  uint8_t* WriteStringMaybeAliased(ui32 num, const TProtoStringType& s, uint8_t* ptr) {
+  uint8_t* WriteStringMaybeAliased(arc_ui32 num, const TProtoStringType& s, uint8_t* ptr) {
     std::ptrdiff_t size = s.size();
     if (PROTOBUF_PREDICT_FALSE(
             size >= 128 || end_ - ptr + 16 - TagSize(num << 3) - 1 < size)) {
@@ -725,12 +725,12 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
     std::memcpy(ptr, s.data(), size);
     return ptr + size;
   }
-  uint8_t* WriteBytesMaybeAliased(ui32 num, const TProtoStringType& s, uint8_t* ptr) {
+  uint8_t* WriteBytesMaybeAliased(arc_ui32 num, const TProtoStringType& s, uint8_t* ptr) {
     return WriteStringMaybeAliased(num, s, ptr);
   }
 
   template <typename T>
-  PROTOBUF_ALWAYS_INLINE uint8_t* WriteString(ui32 num, const T& s,
+  PROTOBUF_ALWAYS_INLINE uint8_t* WriteString(arc_ui32 num, const T& s,
                                             uint8_t* ptr) {
     std::ptrdiff_t size = s.size();
     if (PROTOBUF_PREDICT_FALSE(
@@ -743,7 +743,7 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
     return ptr + size;
   }
   template <typename T>
-  uint8_t* WriteBytes(ui32 num, const T& s, uint8_t* ptr) {
+  uint8_t* WriteBytes(arc_ui32 num, const T& s, uint8_t* ptr) {
     return WriteString(num, s, ptr);
   }
 
@@ -848,7 +848,7 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
     return buffer_;
   }
 
-  static constexpr int TagSize(ui32 tag) {
+  static constexpr int TagSize(arc_ui32 tag) {
     return (tag < (1 << 7))    ? 1
            : (tag < (1 << 14)) ? 2
            : (tag < (1 << 21)) ? 3
@@ -856,12 +856,12 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
                                : 5;
   }
 
-  PROTOBUF_ALWAYS_INLINE uint8_t* WriteTag(ui32 num, ui32 wt, uint8_t* ptr) {
+  PROTOBUF_ALWAYS_INLINE uint8_t* WriteTag(arc_ui32 num, arc_ui32 wt, uint8_t* ptr) {
     GOOGLE_DCHECK(ptr < end_);  // NOLINT
     return UnsafeVarint((num << 3) | wt, ptr);
   }
 
-  PROTOBUF_ALWAYS_INLINE uint8_t* WriteLengthDelim(int num, ui32 size,
+  PROTOBUF_ALWAYS_INLINE uint8_t* WriteLengthDelim(int num, arc_ui32 size,
                                                  uint8_t* ptr) {
     ptr = WriteTag(num, 2, ptr);
     return UnsafeWriteSize(size, ptr);
@@ -871,9 +871,9 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
 
   uint8_t* WriteAliasedRaw(const void* data, int size, uint8_t* ptr);
 
-  uint8_t* WriteStringMaybeAliasedOutline(ui32 num, const TProtoStringType& s,
+  uint8_t* WriteStringMaybeAliasedOutline(arc_ui32 num, const TProtoStringType& s,
                                         uint8_t* ptr);
-  uint8_t* WriteStringOutline(ui32 num, const TProtoStringType& s, uint8_t* ptr);
+  uint8_t* WriteStringOutline(arc_ui32 num, const TProtoStringType& s, uint8_t* ptr);
 
   template <typename T, typename E>
   PROTOBUF_ALWAYS_INLINE uint8_t* WriteVarintPacked(int num, const T& r, int size,
@@ -889,13 +889,13 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
     return ptr;
   }
 
-  static ui32 Encode32(ui32 v) { return v; }
-  static ui64 Encode64(ui64 v) { return v; }
-  static ui32 ZigZagEncode32(i32 v) {
-    return (static_cast<ui32>(v) << 1) ^ static_cast<ui32>(v >> 31);
+  static arc_ui32 Encode32(arc_ui32 v) { return v; }
+  static arc_ui64 Encode64(arc_ui64 v) { return v; }
+  static arc_ui32 ZigZagEncode32(arc_i32 v) {
+    return (static_cast<arc_ui32>(v) << 1) ^ static_cast<arc_ui32>(v >> 31);
   }
-  static ui64 ZigZagEncode64(i64 v) {
-    return (static_cast<ui64>(v) << 1) ^ static_cast<ui64>(v >> 63);
+  static arc_ui64 ZigZagEncode64(arc_i64 v) {
+    return (static_cast<arc_ui64>(v) << 1) ^ static_cast<arc_ui64>(v >> 63);
   }
 
   template <typename T>
@@ -924,7 +924,7 @@ class PROTOBUF_EXPORT EpsCopyOutputStream {
     return ptr;
   }
 
-  PROTOBUF_ALWAYS_INLINE static uint8_t* UnsafeWriteSize(ui32 value,
+  PROTOBUF_ALWAYS_INLINE static uint8_t* UnsafeWriteSize(arc_ui32 value,
                                                        uint8_t* ptr) {
     while (PROTOBUF_PREDICT_FALSE(value >= 0x80)) {
       *ptr = static_cast<uint8_t>(value | 0x80);
@@ -1129,65 +1129,65 @@ class PROTOBUF_EXPORT CodedOutputStream {
 
 
   // Write a 32-bit little-endian integer.
-  void WriteLittleEndian32(ui32 value) {
+  void WriteLittleEndian32(arc_ui32 value) {
     cur_ = impl_.EnsureSpace(cur_);
     SetCur(WriteLittleEndian32ToArray(value, Cur()));
   }
   // Like WriteLittleEndian32()  but writing directly to the target array.
-  static uint8_t* WriteLittleEndian32ToArray(ui32 value, uint8_t* target);
+  static uint8_t* WriteLittleEndian32ToArray(arc_ui32 value, uint8_t* target);
   // Write a 64-bit little-endian integer.
-  void WriteLittleEndian64(ui64 value) {
+  void WriteLittleEndian64(arc_ui64 value) {
     cur_ = impl_.EnsureSpace(cur_);
     SetCur(WriteLittleEndian64ToArray(value, Cur()));
   }
   // Like WriteLittleEndian64()  but writing directly to the target array.
-  static uint8_t* WriteLittleEndian64ToArray(ui64 value, uint8_t* target);
+  static uint8_t* WriteLittleEndian64ToArray(arc_ui64 value, uint8_t* target);
 
   // Write an unsigned integer with Varint encoding.  Writing a 32-bit value
-  // is equivalent to casting it to ui64 and writing it as a 64-bit value,
+  // is equivalent to casting it to arc_ui64 and writing it as a 64-bit value,
   // but may be more efficient.
-  void WriteVarint32(ui32 value);
+  void WriteVarint32(arc_ui32 value);
   // Like WriteVarint32()  but writing directly to the target array.
-  static uint8_t* WriteVarint32ToArray(ui32 value, uint8_t* target);
+  static uint8_t* WriteVarint32ToArray(arc_ui32 value, uint8_t* target);
   // Like WriteVarint32()  but writing directly to the target array, and with the
   // less common-case paths being out of line rather than inlined.
-  static uint8_t* WriteVarint32ToArrayOutOfLine(ui32 value, uint8_t* target);
+  static uint8_t* WriteVarint32ToArrayOutOfLine(arc_ui32 value, uint8_t* target);
   // Write an unsigned integer with Varint encoding.
-  void WriteVarint64(ui64 value);
+  void WriteVarint64(arc_ui64 value);
   // Like WriteVarint64()  but writing directly to the target array.
-  static uint8_t* WriteVarint64ToArray(ui64 value, uint8_t* target);
+  static uint8_t* WriteVarint64ToArray(arc_ui64 value, uint8_t* target);
 
   // Equivalent to WriteVarint32() except when the value is negative,
   // in which case it must be sign-extended to a full 10 bytes.
-  void WriteVarint32SignExtended(i32 value);
+  void WriteVarint32SignExtended(arc_i32 value);
   // Like WriteVarint32SignExtended()  but writing directly to the target array.
-  static uint8_t* WriteVarint32SignExtendedToArray(i32 value, uint8_t* target);
+  static uint8_t* WriteVarint32SignExtendedToArray(arc_i32 value, uint8_t* target);
 
   // This is identical to WriteVarint32(), but optimized for writing tags.
   // In particular, if the input is a compile-time constant, this method
   // compiles down to a couple instructions.
   // Always inline because otherwise the aforementioned optimization can't work,
   // but GCC by default doesn't want to inline this.
-  void WriteTag(ui32 value);
+  void WriteTag(arc_ui32 value);
   // Like WriteTag()  but writing directly to the target array.
   PROTOBUF_ALWAYS_INLINE
-  static uint8_t* WriteTagToArray(ui32 value, uint8_t* target);
+  static uint8_t* WriteTagToArray(arc_ui32 value, uint8_t* target);
 
   // Returns the number of bytes needed to encode the given value as a varint.
-  static size_t VarintSize32(ui32 value);
+  static size_t VarintSize32(arc_ui32 value);
   // Returns the number of bytes needed to encode the given value as a varint.
-  static size_t VarintSize64(ui64 value);
+  static size_t VarintSize64(arc_ui64 value);
 
   // If negative, 10 bytes.  Otherwise, same as VarintSize32().
-  static size_t VarintSize32SignExtended(i32 value);
+  static size_t VarintSize32SignExtended(arc_i32 value);
 
   // Same as above, plus one.  The additional one comes at no compute cost.
-  static size_t VarintSize32PlusOne(ui32 value);
-  static size_t VarintSize64PlusOne(ui64 value);
-  static size_t VarintSize32SignExtendedPlusOne(i32 value);
+  static size_t VarintSize32PlusOne(arc_ui32 value);
+  static size_t VarintSize64PlusOne(arc_ui64 value);
+  static size_t VarintSize32SignExtendedPlusOne(arc_i32 value);
 
   // Compile-time equivalent of VarintSize32().
-  template <ui32 Value>
+  template <arc_ui32 Value>
   struct StaticVarintSize32 {
     static const size_t value = (Value < (1 << 7))    ? 1
                                 : (Value < (1 << 14)) ? 2
@@ -1257,7 +1257,7 @@ class PROTOBUF_EXPORT CodedOutputStream {
  private:
   EpsCopyOutputStream impl_;
   uint8_t* cur_;
-  i64 start_count_;
+  arc_i64 start_count_;
   static std::atomic<bool> default_serialization_deterministic_;
 
   // See above.  Other projects may use "friend" to allow them to call this.
@@ -1272,7 +1272,7 @@ class PROTOBUF_EXPORT CodedOutputStream {
     default_serialization_deterministic_.store(true, std::memory_order_relaxed);
   }
   // REQUIRES: value >= 0x80, and that (value & 7f) has been written to *target.
-  static uint8_t* WriteVarint32ToArrayOutOfLineHelper(ui32 value, uint8_t* target);
+  static uint8_t* WriteVarint32ToArrayOutOfLineHelper(arc_ui32 value, uint8_t* target);
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(CodedOutputStream);
 };
 
@@ -1280,8 +1280,8 @@ class PROTOBUF_EXPORT CodedOutputStream {
 // The vast majority of varints are only one byte.  These inline
 // methods optimize for that case.
 
-inline bool CodedInputStream::ReadVarint32(ui32* value) {
-  ui32 v = 0;
+inline bool CodedInputStream::ReadVarint32(arc_ui32* value) {
+  arc_ui32 v = 0;
   if (PROTOBUF_PREDICT_TRUE(buffer_ < buffer_end_)) {
     v = *buffer_;
     if (v < 0x80) {
@@ -1290,18 +1290,18 @@ inline bool CodedInputStream::ReadVarint32(ui32* value) {
       return true;
     }
   }
-  i64 result = ReadVarint32Fallback(v);
-  *value = static_cast<ui32>(result);
+  arc_i64 result = ReadVarint32Fallback(v);
+  *value = static_cast<arc_ui32>(result);
   return result >= 0;
 }
 
-inline bool CodedInputStream::ReadVarint64(ui64* value) {
+inline bool CodedInputStream::ReadVarint64(arc_ui64* value) {
   if (PROTOBUF_PREDICT_TRUE(buffer_ < buffer_end_) && *buffer_ < 0x80) {
     *value = *buffer_;
     Advance(1);
     return true;
   }
-  std::pair<ui64, bool> p = ReadVarint64Fallback();
+  std::pair<arc_ui64, bool> p = ReadVarint64Fallback();
   *value = p.first;
   return p.second;
 }
@@ -1321,39 +1321,39 @@ inline bool CodedInputStream::ReadVarintSizeAsInt(int* value) {
 
 // static
 inline const uint8_t* CodedInputStream::ReadLittleEndian32FromArray(
-    const uint8_t* buffer, ui32* value) {
+    const uint8_t* buffer, arc_ui32* value) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   memcpy(value, buffer, sizeof(*value));
   return buffer + sizeof(*value);
 #else
-  *value = (static_cast<ui32>(buffer[0])) |
-           (static_cast<ui32>(buffer[1]) << 8) |
-           (static_cast<ui32>(buffer[2]) << 16) |
-           (static_cast<ui32>(buffer[3]) << 24);
+  *value = (static_cast<arc_ui32>(buffer[0])) |
+           (static_cast<arc_ui32>(buffer[1]) << 8) |
+           (static_cast<arc_ui32>(buffer[2]) << 16) |
+           (static_cast<arc_ui32>(buffer[3]) << 24);
   return buffer + sizeof(*value);
 #endif
 }
 // static
 inline const uint8_t* CodedInputStream::ReadLittleEndian64FromArray(
-    const uint8_t* buffer, ui64* value) {
+    const uint8_t* buffer, arc_ui64* value) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   memcpy(value, buffer, sizeof(*value));
   return buffer + sizeof(*value);
 #else
-  ui32 part0 = (static_cast<ui32>(buffer[0])) |
-                 (static_cast<ui32>(buffer[1]) << 8) |
-                 (static_cast<ui32>(buffer[2]) << 16) |
-                 (static_cast<ui32>(buffer[3]) << 24);
-  ui32 part1 = (static_cast<ui32>(buffer[4])) |
-                 (static_cast<ui32>(buffer[5]) << 8) |
-                 (static_cast<ui32>(buffer[6]) << 16) |
-                 (static_cast<ui32>(buffer[7]) << 24);
-  *value = static_cast<ui64>(part0) | (static_cast<ui64>(part1) << 32);
+  arc_ui32 part0 = (static_cast<arc_ui32>(buffer[0])) |
+                 (static_cast<arc_ui32>(buffer[1]) << 8) |
+                 (static_cast<arc_ui32>(buffer[2]) << 16) |
+                 (static_cast<arc_ui32>(buffer[3]) << 24);
+  arc_ui32 part1 = (static_cast<arc_ui32>(buffer[4])) |
+                 (static_cast<arc_ui32>(buffer[5]) << 8) |
+                 (static_cast<arc_ui32>(buffer[6]) << 16) |
+                 (static_cast<arc_ui32>(buffer[7]) << 24);
+  *value = static_cast<arc_ui64>(part0) | (static_cast<arc_ui64>(part1) << 32);
   return buffer + sizeof(*value);
 #endif
 }
 
-inline bool CodedInputStream::ReadLittleEndian32(ui32* value) {
+inline bool CodedInputStream::ReadLittleEndian32(arc_ui32* value) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   if (PROTOBUF_PREDICT_TRUE(BufferSize() >= static_cast<int>(sizeof(*value)))) {
     buffer_ = ReadLittleEndian32FromArray(buffer_, value);
@@ -1366,7 +1366,7 @@ inline bool CodedInputStream::ReadLittleEndian32(ui32* value) {
 #endif
 }
 
-inline bool CodedInputStream::ReadLittleEndian64(ui64* value) {
+inline bool CodedInputStream::ReadLittleEndian64(arc_ui64* value) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   if (PROTOBUF_PREDICT_TRUE(BufferSize() >= static_cast<int>(sizeof(*value)))) {
     buffer_ = ReadLittleEndian64FromArray(buffer_, value);
@@ -1379,8 +1379,8 @@ inline bool CodedInputStream::ReadLittleEndian64(ui64* value) {
 #endif
 }
 
-inline ui32 CodedInputStream::ReadTagNoLastTag() {
-  ui32 v = 0;
+inline arc_ui32 CodedInputStream::ReadTagNoLastTag() {
+  arc_ui32 v = 0;
   if (PROTOBUF_PREDICT_TRUE(buffer_ < buffer_end_)) {
     v = *buffer_;
     if (v < 0x80) {
@@ -1392,20 +1392,20 @@ inline ui32 CodedInputStream::ReadTagNoLastTag() {
   return v;
 }
 
-inline std::pair<ui32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
-    ui32 cutoff) {
+inline std::pair<arc_ui32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
+    arc_ui32 cutoff) {
   // In performance-sensitive code we can expect cutoff to be a compile-time
   // constant, and things like "cutoff >= kMax1ByteVarint" to be evaluated at
   // compile time.
-  ui32 first_byte_or_zero = 0;
+  arc_ui32 first_byte_or_zero = 0;
   if (PROTOBUF_PREDICT_TRUE(buffer_ < buffer_end_)) {
     // Hot case: buffer_ non_empty, buffer_[0] in [1, 128).
     // TODO(gpike): Is it worth rearranging this? E.g., if the number of fields
     // is large enough then is it better to check for the two-byte case first?
     first_byte_or_zero = buffer_[0];
     if (static_cast<int8_t>(buffer_[0]) > 0) {
-      const ui32 kMax1ByteVarint = 0x7f;
-      ui32 tag = buffer_[0];
+      const arc_ui32 kMax1ByteVarint = 0x7f;
+      arc_ui32 tag = buffer_[0];
       Advance(1);
       return std::make_pair(tag, cutoff >= kMax1ByteVarint || tag <= cutoff);
     }
@@ -1414,8 +1414,8 @@ inline std::pair<ui32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
     // first byte and the second byte.
     if (cutoff >= 0x80 && PROTOBUF_PREDICT_TRUE(buffer_ + 1 < buffer_end_) &&
         PROTOBUF_PREDICT_TRUE((buffer_[0] & ~buffer_[1]) >= 0x80)) {
-      const ui32 kMax2ByteVarint = (0x7f << 7) + 0x7f;
-      ui32 tag = (1u << 7) * buffer_[1] + (buffer_[0] - 0x80);
+      const arc_ui32 kMax2ByteVarint = (0x7f << 7) + 0x7f;
+      arc_ui32 tag = (1u << 7) * buffer_[1] + (buffer_[0] - 0x80);
       Advance(2);
       // It might make sense to test for tag == 0 now, but it is so rare that
       // that we don't bother.  A varint-encoded 0 should be one byte unless
@@ -1428,11 +1428,11 @@ inline std::pair<ui32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
     }
   }
   // Slow path
-  const ui32 tag = ReadTagFallback(first_byte_or_zero);
-  return std::make_pair(tag, static_cast<ui32>(tag - 1) < cutoff);
+  const arc_ui32 tag = ReadTagFallback(first_byte_or_zero);
+  return std::make_pair(tag, static_cast<arc_ui32>(tag - 1) < cutoff);
 }
 
-inline bool CodedInputStream::LastTagWas(ui32 expected) {
+inline bool CodedInputStream::LastTagWas(arc_ui32 expected) {
   return last_tag_ == expected;
 }
 
@@ -1440,7 +1440,7 @@ inline bool CodedInputStream::ConsumedEntireMessage() {
   return legitimate_message_end_;
 }
 
-inline bool CodedInputStream::ExpectTag(ui32 expected) {
+inline bool CodedInputStream::ExpectTag(arc_ui32 expected) {
   if (expected < (1 << 7)) {
     if (PROTOBUF_PREDICT_TRUE(buffer_ < buffer_end_) &&
         buffer_[0] == expected) {
@@ -1465,7 +1465,7 @@ inline bool CodedInputStream::ExpectTag(ui32 expected) {
 }
 
 inline const uint8_t* CodedInputStream::ExpectTagFromArray(const uint8_t* buffer,
-                                                         ui32 expected) {
+                                                         arc_ui32 expected) {
   if (expected < (1 << 7)) {
     if (buffer[0] == expected) {
       return buffer + 1;
@@ -1598,13 +1598,13 @@ inline bool CodedInputStream::Skip(int count) {
   return SkipFallback(count, original_buffer_size);
 }
 
-inline uint8_t* CodedOutputStream::WriteVarint32ToArray(ui32 value,
+inline uint8_t* CodedOutputStream::WriteVarint32ToArray(arc_ui32 value,
                                                       uint8_t* target) {
   return EpsCopyOutputStream::UnsafeVarint(value, target);
 }
 
 inline uint8_t* CodedOutputStream::WriteVarint32ToArrayOutOfLine(
-    ui32 value, uint8_t* target) {
+    arc_ui32 value, uint8_t* target) {
   target[0] = static_cast<uint8_t>(value);
   if (value < 0x80) {
     return target + 1;
@@ -1613,21 +1613,21 @@ inline uint8_t* CodedOutputStream::WriteVarint32ToArrayOutOfLine(
   }
 }
 
-inline uint8_t* CodedOutputStream::WriteVarint64ToArray(ui64 value,
+inline uint8_t* CodedOutputStream::WriteVarint64ToArray(arc_ui64 value,
                                                       uint8_t* target) {
   return EpsCopyOutputStream::UnsafeVarint(value, target);
 }
 
-inline void CodedOutputStream::WriteVarint32SignExtended(i32 value) {
-  WriteVarint64(static_cast<ui64>(value));
+inline void CodedOutputStream::WriteVarint32SignExtended(arc_i32 value) {
+  WriteVarint64(static_cast<arc_ui64>(value));
 }
 
 inline uint8_t* CodedOutputStream::WriteVarint32SignExtendedToArray(
-    i32 value, uint8_t* target) {
-  return WriteVarint64ToArray(static_cast<ui64>(value), target);
+    arc_i32 value, uint8_t* target) {
+  return WriteVarint64ToArray(static_cast<arc_ui64>(value), target);
 }
 
-inline uint8_t* CodedOutputStream::WriteLittleEndian32ToArray(ui32 value,
+inline uint8_t* CodedOutputStream::WriteLittleEndian32ToArray(arc_ui32 value,
                                                             uint8_t* target) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   memcpy(target, &value, sizeof(value));
@@ -1640,13 +1640,13 @@ inline uint8_t* CodedOutputStream::WriteLittleEndian32ToArray(ui32 value,
   return target + sizeof(value);
 }
 
-inline uint8_t* CodedOutputStream::WriteLittleEndian64ToArray(ui64 value,
+inline uint8_t* CodedOutputStream::WriteLittleEndian64ToArray(arc_ui64 value,
                                                             uint8_t* target) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   memcpy(target, &value, sizeof(value));
 #else
-  ui32 part0 = static_cast<ui32>(value);
-  ui32 part1 = static_cast<ui32>(value >> 32);
+  arc_ui32 part0 = static_cast<arc_ui32>(value);
+  arc_ui32 part1 = static_cast<arc_ui32>(value >> 32);
 
   target[0] = static_cast<uint8_t>(part0);
   target[1] = static_cast<uint8_t>(part0 >> 8);
@@ -1660,63 +1660,63 @@ inline uint8_t* CodedOutputStream::WriteLittleEndian64ToArray(ui64 value,
   return target + sizeof(value);
 }
 
-inline void CodedOutputStream::WriteVarint32(ui32 value) {
+inline void CodedOutputStream::WriteVarint32(arc_ui32 value) {
   cur_ = impl_.EnsureSpace(cur_);
   SetCur(WriteVarint32ToArray(value, Cur()));
 }
 
-inline void CodedOutputStream::WriteVarint64(ui64 value) {
+inline void CodedOutputStream::WriteVarint64(arc_ui64 value) {
   cur_ = impl_.EnsureSpace(cur_);
   SetCur(WriteVarint64ToArray(value, Cur()));
 }
 
-inline void CodedOutputStream::WriteTag(ui32 value) {
+inline void CodedOutputStream::WriteTag(arc_ui32 value) {
   WriteVarint32(value);
 }
 
-inline uint8_t* CodedOutputStream::WriteTagToArray(ui32 value,
+inline uint8_t* CodedOutputStream::WriteTagToArray(arc_ui32 value,
                                                    uint8_t* target) {
   return WriteVarint32ToArray(value, target);
 }
 
-inline size_t CodedOutputStream::VarintSize32(ui32 value) {
+inline size_t CodedOutputStream::VarintSize32(arc_ui32 value) {
   // This computes value == 0 ? 1 : floor(log2(value)) / 7 + 1
   // Use an explicit multiplication to implement the divide of
   // a number in the 1..31 range.
   // Explicit OR 0x1 to avoid calling Bits::Log2FloorNonZero(0), which is
   // undefined.
-  ui32 log2value = Bits::Log2FloorNonZero(value | 0x1);
+  arc_ui32 log2value = Bits::Log2FloorNonZero(value | 0x1);
   return static_cast<size_t>((log2value * 9 + 73) / 64);
 }
 
-inline size_t CodedOutputStream::VarintSize32PlusOne(ui32 value) {
+inline size_t CodedOutputStream::VarintSize32PlusOne(arc_ui32 value) {
   // Same as above, but one more.
-  ui32 log2value = Bits::Log2FloorNonZero(value | 0x1);
+  arc_ui32 log2value = Bits::Log2FloorNonZero(value | 0x1);
   return static_cast<size_t>((log2value * 9 + 73 + 64) / 64);
 }
 
-inline size_t CodedOutputStream::VarintSize64(ui64 value) {
+inline size_t CodedOutputStream::VarintSize64(arc_ui64 value) {
   // This computes value == 0 ? 1 : floor(log2(value)) / 7 + 1
   // Use an explicit multiplication to implement the divide of
   // a number in the 1..63 range.
   // Explicit OR 0x1 to avoid calling Bits::Log2FloorNonZero(0), which is
   // undefined.
-  ui32 log2value = Bits::Log2FloorNonZero64(value | 0x1);
+  arc_ui32 log2value = Bits::Log2FloorNonZero64(value | 0x1);
   return static_cast<size_t>((log2value * 9 + 73) / 64);
 }
 
-inline size_t CodedOutputStream::VarintSize64PlusOne(ui64 value) {
+inline size_t CodedOutputStream::VarintSize64PlusOne(arc_ui64 value) {
   // Same as above, but one more.
-  ui32 log2value = Bits::Log2FloorNonZero64(value | 0x1);
+  arc_ui32 log2value = Bits::Log2FloorNonZero64(value | 0x1);
   return static_cast<size_t>((log2value * 9 + 73 + 64) / 64);
 }
 
-inline size_t CodedOutputStream::VarintSize32SignExtended(i32 value) {
-  return VarintSize64(static_cast<ui64>(i64{value}));
+inline size_t CodedOutputStream::VarintSize32SignExtended(arc_i32 value) {
+  return VarintSize64(static_cast<arc_ui64>(arc_i64{value}));
 }
 
-inline size_t CodedOutputStream::VarintSize32SignExtendedPlusOne(i32 value) {
-  return VarintSize64PlusOne(static_cast<ui64>(i64{value}));
+inline size_t CodedOutputStream::VarintSize32SignExtendedPlusOne(arc_i32 value) {
+  return VarintSize64PlusOne(static_cast<arc_ui64>(arc_i64{value}));
 }
 
 inline void CodedOutputStream::WriteString(const TProtoStringType& str) {

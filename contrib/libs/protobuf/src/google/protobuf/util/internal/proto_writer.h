@@ -83,16 +83,16 @@ class PROTOBUF_EXPORT ProtoWriter : public StructuredObjectWriter {
   ProtoWriter* RenderBool(StringPiece name, bool value) override {
     return RenderDataPiece(name, DataPiece(value));
   }
-  ProtoWriter* RenderInt32(StringPiece name, i32 value) override {
+  ProtoWriter* RenderInt32(StringPiece name, arc_i32 value) override {
     return RenderDataPiece(name, DataPiece(value));
   }
-  ProtoWriter* RenderUint32(StringPiece name, ui32 value) override {
+  ProtoWriter* RenderUint32(StringPiece name, arc_ui32 value) override {
     return RenderDataPiece(name, DataPiece(value));
   }
-  ProtoWriter* RenderInt64(StringPiece name, i64 value) override {
+  ProtoWriter* RenderInt64(StringPiece name, arc_i64 value) override {
     return RenderDataPiece(name, DataPiece(value));
   }
-  ProtoWriter* RenderUint64(StringPiece name, ui64 value) override {
+  ProtoWriter* RenderUint64(StringPiece name, arc_ui64 value) override {
     return RenderDataPiece(name, DataPiece(value));
   }
   ProtoWriter* RenderDouble(StringPiece name, double value) override {
@@ -205,11 +205,11 @@ class PROTOBUF_EXPORT ProtoWriter : public StructuredObjectWriter {
     }
 
     // Returns true if the index is already taken by a preceding oneof input.
-    bool IsOneofIndexTaken(i32 index);
+    bool IsOneofIndexTaken(arc_i32 index);
 
     // Marks the oneof 'index' as taken. Future inputs to this oneof will
     // generate an error.
-    void TakeOneofIndex(i32 index);
+    void TakeOneofIndex(arc_i32 index);
 
     bool proto3() { return proto3_; }
 

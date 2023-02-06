@@ -43,7 +43,7 @@ struct FloatValueDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT FloatValueDefaultTypeInternal _FloatValue_default_instance_;
 constexpr Int64Value::Int64Value(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : value_(i64{0}){}
+  : value_(arc_i64{0}){}
 struct Int64ValueDefaultTypeInternal {
   constexpr Int64ValueDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -55,7 +55,7 @@ struct Int64ValueDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT Int64ValueDefaultTypeInternal _Int64Value_default_instance_;
 constexpr UInt64Value::UInt64Value(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : value_(ui64{0u}){}
+  : value_(arc_ui64{0u}){}
 struct UInt64ValueDefaultTypeInternal {
   constexpr UInt64ValueDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -627,7 +627,7 @@ Int64Value::Int64Value(const Int64Value& from)
 }
 
 void Int64Value::SharedCtor() {
-value_ = i64{0};
+value_ = arc_i64{0};
 }
 
 Int64Value::~Int64Value() {
@@ -657,7 +657,7 @@ void Int64Value::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  value_ = i64{0};
+  value_ = arc_i64{0};
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -805,7 +805,7 @@ UInt64Value::UInt64Value(const UInt64Value& from)
 }
 
 void UInt64Value::SharedCtor() {
-value_ = ui64{0u};
+value_ = arc_ui64{0u};
 }
 
 UInt64Value::~UInt64Value() {
@@ -835,7 +835,7 @@ void UInt64Value::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  value_ = ui64{0u};
+  value_ = arc_ui64{0u};
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 

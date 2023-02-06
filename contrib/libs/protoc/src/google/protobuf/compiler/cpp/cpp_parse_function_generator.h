@@ -65,7 +65,7 @@ struct TailCallTableInfo {
   // Table size.
   int table_size_log2;
   // Mask for has-bits of required fields.
-  ui32 has_hasbits_required_mask;
+  arc_ui32 has_hasbits_required_mask;
   // True if a generated fallback function is required instead of generic.
   bool use_generated_fallback;
 };

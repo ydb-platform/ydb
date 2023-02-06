@@ -81,18 +81,18 @@ class PROTOBUF_EXPORT ObjectWriter {
   virtual ObjectWriter* RenderBool(StringPiece name, bool value) = 0;
 
   // Renders an 32-bit integer value.
-  virtual ObjectWriter* RenderInt32(StringPiece name, i32 value) = 0;
+  virtual ObjectWriter* RenderInt32(StringPiece name, arc_i32 value) = 0;
 
   // Renders an 32-bit unsigned integer value.
   virtual ObjectWriter* RenderUint32(StringPiece name,
-                                     ui32 value) = 0;
+                                     arc_ui32 value) = 0;
 
   // Renders a 64-bit integer value.
-  virtual ObjectWriter* RenderInt64(StringPiece name, i64 value) = 0;
+  virtual ObjectWriter* RenderInt64(StringPiece name, arc_i64 value) = 0;
 
   // Renders an 64-bit unsigned integer value.
   virtual ObjectWriter* RenderUint64(StringPiece name,
-                                     ui64 value) = 0;
+                                     arc_ui64 value) = 0;
 
 
   // Renders a double value.

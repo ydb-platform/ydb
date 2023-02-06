@@ -100,19 +100,19 @@ class MapWireFieldTypeTraits {};
 TYPE_TRAITS(MESSAGE, Type, LENGTH_DELIMITED, true, false)
 TYPE_TRAITS(STRING, ArenaStringPtr, LENGTH_DELIMITED, false, false)
 TYPE_TRAITS(BYTES, ArenaStringPtr, LENGTH_DELIMITED, false, false)
-TYPE_TRAITS(INT64, i64, VARINT, false, false)
-TYPE_TRAITS(UINT64, ui64, VARINT, false, false)
-TYPE_TRAITS(INT32, i32, VARINT, false, false)
-TYPE_TRAITS(UINT32, ui32, VARINT, false, false)
-TYPE_TRAITS(SINT64, i64, VARINT, false, false)
-TYPE_TRAITS(SINT32, i32, VARINT, false, false)
+TYPE_TRAITS(INT64, arc_i64, VARINT, false, false)
+TYPE_TRAITS(UINT64, arc_ui64, VARINT, false, false)
+TYPE_TRAITS(INT32, arc_i32, VARINT, false, false)
+TYPE_TRAITS(UINT32, arc_ui32, VARINT, false, false)
+TYPE_TRAITS(SINT64, arc_i64, VARINT, false, false)
+TYPE_TRAITS(SINT32, arc_i32, VARINT, false, false)
 TYPE_TRAITS(ENUM, int, VARINT, false, true)
 TYPE_TRAITS(DOUBLE, double, FIXED64, false, false)
 TYPE_TRAITS(FLOAT, float, FIXED32, false, false)
-TYPE_TRAITS(FIXED64, ui64, FIXED64, false, false)
-TYPE_TRAITS(FIXED32, ui32, FIXED32, false, false)
-TYPE_TRAITS(SFIXED64, i64, FIXED64, false, false)
-TYPE_TRAITS(SFIXED32, i32, FIXED32, false, false)
+TYPE_TRAITS(FIXED64, arc_ui64, FIXED64, false, false)
+TYPE_TRAITS(FIXED32, arc_ui32, FIXED32, false, false)
+TYPE_TRAITS(SFIXED64, arc_i64, FIXED64, false, false)
+TYPE_TRAITS(SFIXED32, arc_i32, FIXED32, false, false)
 TYPE_TRAITS(BOOL, bool, VARINT, false, false)
 
 #undef TYPE_TRAITS
@@ -406,23 +406,23 @@ const char* MapTypeHandler<WireFormatLite::TYPE_BYTES, Type>::Read(
   return ctx->ReadString(ptr, size, value);
 }
 
-inline const char* ReadINT64(const char* ptr, i64* value) {
-  return VarintParse(ptr, reinterpret_cast<ui64*>(value));
+inline const char* ReadINT64(const char* ptr, arc_i64* value) {
+  return VarintParse(ptr, reinterpret_cast<arc_ui64*>(value));
 }
-inline const char* ReadUINT64(const char* ptr, ui64* value) {
+inline const char* ReadUINT64(const char* ptr, arc_ui64* value) {
   return VarintParse(ptr, value);
 }
-inline const char* ReadINT32(const char* ptr, i32* value) {
-  return VarintParse(ptr, reinterpret_cast<ui32*>(value));
+inline const char* ReadINT32(const char* ptr, arc_i32* value) {
+  return VarintParse(ptr, reinterpret_cast<arc_ui32*>(value));
 }
-inline const char* ReadUINT32(const char* ptr, ui32* value) {
+inline const char* ReadUINT32(const char* ptr, arc_ui32* value) {
   return VarintParse(ptr, value);
 }
-inline const char* ReadSINT64(const char* ptr, i64* value) {
+inline const char* ReadSINT64(const char* ptr, arc_i64* value) {
   *value = ReadVarintZigZag64(&ptr);
   return ptr;
 }
-inline const char* ReadSINT32(const char* ptr, i32* value) {
+inline const char* ReadSINT32(const char* ptr, arc_i32* value) {
   *value = ReadVarintZigZag32(&ptr);
   return ptr;
 }
@@ -447,16 +447,16 @@ inline const char* ReadFLOAT(const char* ptr, float* value) {
 inline const char* ReadDOUBLE(const char* ptr, double* value) {
   return ReadUnaligned(ptr, value);
 }
-inline const char* ReadFIXED64(const char* ptr, ui64* value) {
+inline const char* ReadFIXED64(const char* ptr, arc_ui64* value) {
   return ReadUnaligned(ptr, value);
 }
-inline const char* ReadFIXED32(const char* ptr, ui32* value) {
+inline const char* ReadFIXED32(const char* ptr, arc_ui32* value) {
   return ReadUnaligned(ptr, value);
 }
-inline const char* ReadSFIXED64(const char* ptr, i64* value) {
+inline const char* ReadSFIXED64(const char* ptr, arc_i64* value) {
   return ReadUnaligned(ptr, value);
 }
-inline const char* ReadSFIXED32(const char* ptr, i32* value) {
+inline const char* ReadSFIXED32(const char* ptr, arc_i32* value) {
   return ReadUnaligned(ptr, value);
 }
 

@@ -87,17 +87,17 @@ JsonObjectWriter* JsonObjectWriter::RenderBool(StringPiece name,
 }
 
 JsonObjectWriter* JsonObjectWriter::RenderInt32(StringPiece name,
-                                                i32 value) {
+                                                arc_i32 value) {
   return RenderSimple(name, StrCat(value));
 }
 
 JsonObjectWriter* JsonObjectWriter::RenderUint32(StringPiece name,
-                                                 ui32 value) {
+                                                 arc_ui32 value) {
   return RenderSimple(name, StrCat(value));
 }
 
 JsonObjectWriter* JsonObjectWriter::RenderInt64(StringPiece name,
-                                                i64 value) {
+                                                arc_i64 value) {
   WritePrefix(name);
   WriteChar('"');
   WriteRawString(StrCat(value));
@@ -106,7 +106,7 @@ JsonObjectWriter* JsonObjectWriter::RenderInt64(StringPiece name,
 }
 
 JsonObjectWriter* JsonObjectWriter::RenderUint64(StringPiece name,
-                                                 ui64 value) {
+                                                 arc_ui64 value) {
   WritePrefix(name);
   WriteChar('"');
   WriteRawString(StrCat(value));

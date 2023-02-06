@@ -109,56 +109,56 @@ util::StatusOr<float> DoubleToFloat(double before) {
 
 }  // namespace
 
-util::StatusOr<i32> DataPiece::ToInt32() const {
+util::StatusOr<arc_i32> DataPiece::ToInt32() const {
   if (type_ == TYPE_STRING)
-    return StringToNumber<i32>(safe_strto32);
+    return StringToNumber<arc_i32>(safe_strto32);
 
   if (type_ == TYPE_DOUBLE)
-    return FloatingPointToIntConvertAndCheck<i32, double>(double_);
+    return FloatingPointToIntConvertAndCheck<arc_i32, double>(double_);
 
   if (type_ == TYPE_FLOAT)
-    return FloatingPointToIntConvertAndCheck<i32, float>(float_);
+    return FloatingPointToIntConvertAndCheck<arc_i32, float>(float_);
 
-  return GenericConvert<i32>();
+  return GenericConvert<arc_i32>();
 }
 
-util::StatusOr<ui32> DataPiece::ToUint32() const {
+util::StatusOr<arc_ui32> DataPiece::ToUint32() const {
   if (type_ == TYPE_STRING)
-    return StringToNumber<ui32>(safe_strtou32);
+    return StringToNumber<arc_ui32>(safe_strtou32);
 
   if (type_ == TYPE_DOUBLE)
-    return FloatingPointToIntConvertAndCheck<ui32, double>(double_);
+    return FloatingPointToIntConvertAndCheck<arc_ui32, double>(double_);
 
   if (type_ == TYPE_FLOAT)
-    return FloatingPointToIntConvertAndCheck<ui32, float>(float_);
+    return FloatingPointToIntConvertAndCheck<arc_ui32, float>(float_);
 
-  return GenericConvert<ui32>();
+  return GenericConvert<arc_ui32>();
 }
 
-util::StatusOr<i64> DataPiece::ToInt64() const {
+util::StatusOr<arc_i64> DataPiece::ToInt64() const {
   if (type_ == TYPE_STRING)
-    return StringToNumber<i64>(safe_strto64);
+    return StringToNumber<arc_i64>(safe_strto64);
 
   if (type_ == TYPE_DOUBLE)
-    return FloatingPointToIntConvertAndCheck<i64, double>(double_);
+    return FloatingPointToIntConvertAndCheck<arc_i64, double>(double_);
 
   if (type_ == TYPE_FLOAT)
-    return FloatingPointToIntConvertAndCheck<i64, float>(float_);
+    return FloatingPointToIntConvertAndCheck<arc_i64, float>(float_);
 
-  return GenericConvert<i64>();
+  return GenericConvert<arc_i64>();
 }
 
-util::StatusOr<ui64> DataPiece::ToUint64() const {
+util::StatusOr<arc_ui64> DataPiece::ToUint64() const {
   if (type_ == TYPE_STRING)
-    return StringToNumber<ui64>(safe_strtou64);
+    return StringToNumber<arc_ui64>(safe_strtou64);
 
   if (type_ == TYPE_DOUBLE)
-    return FloatingPointToIntConvertAndCheck<ui64, double>(double_);
+    return FloatingPointToIntConvertAndCheck<arc_ui64, double>(double_);
 
   if (type_ == TYPE_FLOAT)
-    return FloatingPointToIntConvertAndCheck<ui64, float>(float_);
+    return FloatingPointToIntConvertAndCheck<arc_ui64, float>(float_);
 
-  return GenericConvert<ui64>();
+  return GenericConvert<arc_ui64>();
 }
 
 util::StatusOr<double> DataPiece::ToDouble() const {
@@ -284,7 +284,7 @@ util::StatusOr<int> DataPiece::ToEnum(const google::protobuf::Enum* enum_type,
     if (value != nullptr) return value->number();
 
     // Check if int version of enum is sent as string.
-    util::StatusOr<i32> int_value = ToInt32();
+    util::StatusOr<arc_i32> int_value = ToInt32();
     if (int_value.ok()) {
       if (const google::protobuf::EnumValue* enum_value =
               FindEnumValueByNumberOrNull(enum_type, int_value.value())) {
@@ -332,13 +332,13 @@ template <typename To>
 util::StatusOr<To> DataPiece::GenericConvert() const {
   switch (type_) {
     case TYPE_INT32:
-      return NumberConvertAndCheck<To, i32>(i32_);
+      return NumberConvertAndCheck<To, arc_i32>(i32_);
     case TYPE_INT64:
-      return NumberConvertAndCheck<To, i64>(i64_);
+      return NumberConvertAndCheck<To, arc_i64>(i64_);
     case TYPE_UINT32:
-      return NumberConvertAndCheck<To, ui32>(u32_);
+      return NumberConvertAndCheck<To, arc_ui32>(u32_);
     case TYPE_UINT64:
-      return NumberConvertAndCheck<To, ui64>(u64_);
+      return NumberConvertAndCheck<To, arc_ui64>(u64_);
     case TYPE_DOUBLE:
       return NumberConvertAndCheck<To, double>(double_);
     case TYPE_FLOAT:

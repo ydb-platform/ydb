@@ -126,9 +126,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_BOOL> {
 
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_INT32> {
-  typedef i32 Type;
+  typedef arc_i32 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteInt32NoTag(Get<i32>(ptr), output);
+    WireFormatLite::WriteInt32NoTag(Get<arc_i32>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteInt32NoTagToArray(Get<Type>(ptr), buffer);
@@ -137,9 +137,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_INT32> {
 
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_SINT32> {
-  typedef i32 Type;
+  typedef arc_i32 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteSInt32NoTag(Get<i32>(ptr), output);
+    WireFormatLite::WriteSInt32NoTag(Get<arc_i32>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteSInt32NoTagToArray(Get<Type>(ptr), buffer);
@@ -148,9 +148,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_SINT32> {
 
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_UINT32> {
-  typedef ui32 Type;
+  typedef arc_ui32 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteUInt32NoTag(Get<ui32>(ptr), output);
+    WireFormatLite::WriteUInt32NoTag(Get<arc_ui32>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteUInt32NoTagToArray(Get<Type>(ptr), buffer);
@@ -158,9 +158,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_UINT32> {
 };
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_INT64> {
-  typedef i64 Type;
+  typedef arc_i64 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteInt64NoTag(Get<i64>(ptr), output);
+    WireFormatLite::WriteInt64NoTag(Get<arc_i64>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteInt64NoTagToArray(Get<Type>(ptr), buffer);
@@ -169,9 +169,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_INT64> {
 
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_SINT64> {
-  typedef i64 Type;
+  typedef arc_i64 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteSInt64NoTag(Get<i64>(ptr), output);
+    WireFormatLite::WriteSInt64NoTag(Get<arc_i64>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteSInt64NoTagToArray(Get<Type>(ptr), buffer);
@@ -179,9 +179,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_SINT64> {
 };
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_UINT64> {
-  typedef ui64 Type;
+  typedef arc_ui64 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteUInt64NoTag(Get<ui64>(ptr), output);
+    WireFormatLite::WriteUInt64NoTag(Get<arc_ui64>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteUInt64NoTagToArray(Get<Type>(ptr), buffer);
@@ -190,9 +190,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_UINT64> {
 
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_FIXED32> {
-  typedef ui32 Type;
+  typedef arc_ui32 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteFixed32NoTag(Get<ui32>(ptr), output);
+    WireFormatLite::WriteFixed32NoTag(Get<arc_ui32>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteFixed32NoTagToArray(Get<Type>(ptr), buffer);
@@ -201,9 +201,9 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_FIXED32> {
 
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_FIXED64> {
-  typedef ui64 Type;
+  typedef arc_ui64 Type;
   static void Serialize(const void* ptr, io::CodedOutputStream* output) {
-    WireFormatLite::WriteFixed64NoTag(Get<ui64>(ptr), output);
+    WireFormatLite::WriteFixed64NoTag(Get<arc_ui64>(ptr), output);
   }
   static uint8_t* SerializeToArray(const void* ptr, uint8_t* buffer) {
     return WireFormatLite::WriteFixed64NoTagToArray(Get<Type>(ptr), buffer);
@@ -217,12 +217,12 @@ struct PrimitiveTypeHelper<WireFormatLite::TYPE_ENUM>
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_SFIXED32>
     : PrimitiveTypeHelper<WireFormatLite::TYPE_FIXED32> {
-  typedef i32 Type;
+  typedef arc_i32 Type;
 };
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_SFIXED64>
     : PrimitiveTypeHelper<WireFormatLite::TYPE_FIXED64> {
-  typedef i64 Type;
+  typedef arc_i64 Type;
 };
 template <>
 struct PrimitiveTypeHelper<WireFormatLite::TYPE_FLOAT>
@@ -270,12 +270,12 @@ void SerializeTo(const void* ptr, O* output) {
 }
 
 template <typename O>
-void WriteTagTo(ui32 tag, O* output) {
+void WriteTagTo(arc_ui32 tag, O* output) {
   SerializeTo<WireFormatLite::TYPE_UINT32>(&tag, output);
 }
 
 template <typename O>
-void WriteLengthTo(ui32 length, O* output) {
+void WriteLengthTo(arc_ui32 length, O* output) {
   SerializeTo<WireFormatLite::TYPE_UINT32>(&length, output);
 }
 
@@ -316,7 +316,7 @@ void SerializeMessageNoTable(const MessageLite* msg, ArrayOutput* output) {
 // Helper to branch to fast path if possible
 void SerializeMessageDispatch(const MessageLite& msg,
                               const FieldMetadata* field_table, int num_fields,
-                              i32 cached_size,
+                              arc_i32 cached_size,
                               io::CodedOutputStream* output) {
   const uint8_t* base = reinterpret_cast<const uint8_t*>(&msg);
   SerializeInternal(base, field_table, num_fields, output);
@@ -325,7 +325,7 @@ void SerializeMessageDispatch(const MessageLite& msg,
 // Helper to branch to fast path if possible
 void SerializeMessageDispatch(const MessageLite& msg,
                               const FieldMetadata* field_table, int num_fields,
-                              i32 cached_size, ArrayOutput* output) {
+                              arc_i32 cached_size, ArrayOutput* output) {
   const uint8_t* base = reinterpret_cast<const uint8_t*>(&msg);
   output->ptr = SerializeInternalToArray(base, field_table, num_fields,
                                          output->is_deterministic, output->ptr);
@@ -347,7 +347,7 @@ void SerializeMessageTo(const MessageLite* msg, const void* table_ptr,
   const FieldMetadata* field_table = table->field_table;
   const uint8_t* base = reinterpret_cast<const uint8_t*>(msg);
   int cached_size =
-      *reinterpret_cast<const i32*>(base + field_table->offset);
+      *reinterpret_cast<const arc_i32*>(base + field_table->offset);
   WriteLengthTo(cached_size, output);
   int num_fields = table->num_fields - 1;
   SerializeMessageDispatch(*msg, field_table + 1, num_fields, cached_size,
@@ -368,7 +368,7 @@ void SerializeGroupTo(const MessageLite* msg, const void* table_ptr,
   const FieldMetadata* field_table = table->field_table;
   const uint8_t* base = reinterpret_cast<const uint8_t*>(msg);
   int cached_size =
-      *reinterpret_cast<const i32*>(base + field_table->offset);
+      *reinterpret_cast<const arc_i32*>(base + field_table->offset);
   int num_fields = table->num_fields - 1;
   SerializeMessageDispatch(*msg, field_table + 1, num_fields, cached_size,
                            output);
@@ -628,7 +628,7 @@ bool IsNull<FieldMetadata::kInlinedType>(const void* ptr) {
 
 void SerializeInternal(const uint8_t* base,
                        const FieldMetadata* field_metadata_table,
-                       i32 num_fields, io::CodedOutputStream* output) {
+                       arc_i32 num_fields, io::CodedOutputStream* output) {
   SpecialSerializer func = nullptr;
   for (int i = 0; i < num_fields; i++) {
     const FieldMetadata& field_metadata = field_metadata_table[i];
@@ -670,7 +670,7 @@ void SerializeInternal(const uint8_t* base,
 
 uint8_t* SerializeInternalToArray(const uint8_t* base,
                                   const FieldMetadata* field_metadata_table,
-                                  i32 num_fields, bool is_deterministic,
+                                  arc_i32 num_fields, bool is_deterministic,
                                   uint8_t* buffer) {
   ArrayOutput array_output = {buffer, is_deterministic};
   ArrayOutput* output = &array_output;
@@ -719,14 +719,14 @@ uint8_t* SerializeInternalToArray(const uint8_t* base,
 #undef SERIALIZERS_FOR_TYPE
 
 void ExtensionSerializer(const MessageLite* extendee, const uint8_t* ptr,
-                         ui32 offset, ui32 tag, ui32 has_offset,
+                         arc_ui32 offset, arc_ui32 tag, arc_ui32 has_offset,
                          io::CodedOutputStream* output) {
   reinterpret_cast<const ExtensionSet*>(ptr + offset)
       ->SerializeWithCachedSizes(extendee, tag, has_offset, output);
 }
 
-void UnknownFieldSerializerLite(const uint8_t* ptr, ui32 offset,
-                                ui32 tag, ui32 has_offset,
+void UnknownFieldSerializerLite(const uint8_t* ptr, arc_ui32 offset,
+                                arc_ui32 tag, arc_ui32 has_offset,
                                 io::CodedOutputStream* output) {
   output->WriteString(
       reinterpret_cast<const InternalMetadata*>(ptr + offset)

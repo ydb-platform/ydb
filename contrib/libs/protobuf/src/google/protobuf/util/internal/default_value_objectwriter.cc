@@ -86,7 +86,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderBool(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt32(
-    StringPiece name, i32 value) {
+    StringPiece name, arc_i32 value) {
   if (current_ == nullptr) {
     ow_->RenderInt32(name, value);
   } else {
@@ -96,7 +96,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt32(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint32(
-    StringPiece name, ui32 value) {
+    StringPiece name, arc_ui32 value) {
   if (current_ == nullptr) {
     ow_->RenderUint32(name, value);
   } else {
@@ -106,7 +106,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint32(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt64(
-    StringPiece name, i64 value) {
+    StringPiece name, arc_i64 value) {
   if (current_ == nullptr) {
     ow_->RenderInt64(name, value);
   } else {
@@ -116,7 +116,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt64(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint64(
-    StringPiece name, ui64 value) {
+    StringPiece name, arc_ui64 value) {
   if (current_ == nullptr) {
     ow_->RenderUint64(name, value);
   } else {
@@ -461,20 +461,20 @@ DataPiece DefaultValueObjectWriter::CreateDefaultDataPieceForField(
     case google::protobuf::Field::TYPE_INT64:
     case google::protobuf::Field::TYPE_SINT64:
     case google::protobuf::Field::TYPE_SFIXED64: {
-      return DataPiece(ConvertTo<i64>(
-          field.default_value(), &DataPiece::ToInt64, static_cast<i64>(0)));
+      return DataPiece(ConvertTo<arc_i64>(
+          field.default_value(), &DataPiece::ToInt64, static_cast<arc_i64>(0)));
     }
     case google::protobuf::Field::TYPE_UINT64:
     case google::protobuf::Field::TYPE_FIXED64: {
-      return DataPiece(ConvertTo<ui64>(field.default_value(),
+      return DataPiece(ConvertTo<arc_ui64>(field.default_value(),
                                            &DataPiece::ToUint64,
-                                           static_cast<ui64>(0)));
+                                           static_cast<arc_ui64>(0)));
     }
     case google::protobuf::Field::TYPE_INT32:
     case google::protobuf::Field::TYPE_SINT32:
     case google::protobuf::Field::TYPE_SFIXED32: {
-      return DataPiece(ConvertTo<i32>(
-          field.default_value(), &DataPiece::ToInt32, static_cast<i32>(0)));
+      return DataPiece(ConvertTo<arc_i32>(
+          field.default_value(), &DataPiece::ToInt32, static_cast<arc_i32>(0)));
     }
     case google::protobuf::Field::TYPE_BOOL: {
       return DataPiece(
@@ -488,9 +488,9 @@ DataPiece DefaultValueObjectWriter::CreateDefaultDataPieceForField(
     }
     case google::protobuf::Field::TYPE_UINT32:
     case google::protobuf::Field::TYPE_FIXED32: {
-      return DataPiece(ConvertTo<ui32>(field.default_value(),
+      return DataPiece(ConvertTo<arc_ui32>(field.default_value(),
                                            &DataPiece::ToUint32,
-                                           static_cast<ui32>(0)));
+                                           static_cast<arc_ui32>(0)));
     }
     case google::protobuf::Field::TYPE_ENUM: {
       return FindEnumDefault(field, typeinfo, use_ints_for_enums);

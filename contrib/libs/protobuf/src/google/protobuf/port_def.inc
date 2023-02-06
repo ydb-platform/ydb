@@ -662,7 +662,7 @@
   ::google::protobuf::MessageLite *msg, const char *ptr,                 \
       ::google::protobuf::internal::ParseContext *ctx,                   \
       const ::google::protobuf::internal::TailCallParseTableBase *table, \
-      ui64 hasbits, ::google::protobuf::internal::TcFieldData data
+      arc_ui64 hasbits, ::google::protobuf::internal::TcFieldData data
 
 #ifdef PROTOBUF_UNUSED
 #error PROTOBUF_UNUSED was previously defined

@@ -153,16 +153,16 @@ class PROTOBUF_EXPORT WireFormatLite {
   // Number of bits in a tag which identify the wire type.
   static constexpr int kTagTypeBits = 3;
   // Mask for those bits.
-  static constexpr ui32 kTagTypeMask = (1 << kTagTypeBits) - 1;
+  static constexpr arc_ui32 kTagTypeMask = (1 << kTagTypeBits) - 1;
 
   // Helper functions for encoding and decoding tags.  (Inlined below and in
   // _inl.h)
   //
   // This is different from MakeTag(field->number(), field->type()) in the
   // case of packed repeated fields.
-  constexpr static ui32 MakeTag(int field_number, WireType type);
-  static WireType GetTagWireType(ui32 tag);
-  static int GetTagFieldNumber(ui32 tag);
+  constexpr static arc_ui32 MakeTag(int field_number, WireType type);
+  static WireType GetTagWireType(arc_ui32 tag);
+  static int GetTagFieldNumber(arc_ui32 tag);
 
   // Compute the byte size of a tag.  For groups, this includes both the start
   // and end tags.
@@ -173,12 +173,12 @@ class PROTOBUF_EXPORT WireFormatLite {
   // positioned immediately after the tag.  Skipped values are simply
   // discarded, not recorded anywhere.  See WireFormat::SkipField() for a
   // version that records to an UnknownFieldSet.
-  static bool SkipField(io::CodedInputStream* input, ui32 tag);
+  static bool SkipField(io::CodedInputStream* input, arc_ui32 tag);
 
   // Skips a field value with the given tag.  The input should start
   // positioned immediately after the tag. Skipped values are recorded to a
   // CodedOutputStream.
-  static bool SkipField(io::CodedInputStream* input, ui32 tag,
+  static bool SkipField(io::CodedInputStream* input, arc_ui32 tag,
                         io::CodedOutputStream* output);
 
   // Reads and ignores a message from the input.  Skipped values are simply
@@ -196,7 +196,7 @@ class PROTOBUF_EXPORT WireFormatLite {
   // as a switch case or a template input.  WireFormatLite::MakeTag() is more
   // type-safe, though, so prefer it if possible.
 #define GOOGLE_PROTOBUF_WIRE_FORMAT_MAKE_TAG(FIELD_NUMBER, TYPE) \
-  static_cast<ui32>((static_cast<ui32>(FIELD_NUMBER) << 3) | (TYPE))
+  static_cast<arc_ui32>((static_cast<arc_ui32>(FIELD_NUMBER) << 3) | (TYPE))
 
   // These are the tags for the old MessageSet format, which was defined as:
   //   message MessageSet {
@@ -223,10 +223,10 @@ class PROTOBUF_EXPORT WireFormatLite {
   // Helper functions for converting between floats/doubles and IEEE-754
   // uint32s/uint64s so that they can be written.  (Assumes your platform
   // uses IEEE-754 floats.)
-  static ui32 EncodeFloat(float value);
-  static float DecodeFloat(ui32 value);
-  static ui64 EncodeDouble(double value);
-  static double DecodeDouble(ui64 value);
+  static arc_ui32 EncodeFloat(float value);
+  static float DecodeFloat(arc_ui32 value);
+  static arc_ui64 EncodeDouble(double value);
+  static double DecodeDouble(arc_ui64 value);
 
   // Helper functions for mapping signed integers to unsigned integers in
   // such a way that numbers with small magnitudes will encode to smaller
@@ -234,10 +234,10 @@ class PROTOBUF_EXPORT WireFormatLite {
   // number and varint-encode it, it will always take 10 bytes, defeating
   // the purpose of varint.  So, for the "sint32" and "sint64" field types,
   // we ZigZag-encode the values.
-  static ui32 ZigZagEncode32(i32 n);
-  static i32 ZigZagDecode32(ui32 n);
-  static ui64 ZigZagEncode64(i64 n);
-  static i64 ZigZagDecode64(ui64 n);
+  static arc_ui32 ZigZagEncode32(arc_i32 n);
+  static arc_i32 ZigZagDecode32(arc_ui32 n);
+  static arc_ui64 ZigZagEncode64(arc_i64 n);
+  static arc_i64 ZigZagDecode64(arc_ui64 n);
 
   // =================================================================
   // Methods for reading/writing individual field.
@@ -257,13 +257,13 @@ class PROTOBUF_EXPORT WireFormatLite {
   // protocol compiler.
   template <typename CType, enum FieldType DeclaredType>
   PROTOBUF_NDEBUG_INLINE static bool ReadRepeatedPrimitive(
-      int tag_size, ui32 tag, io::CodedInputStream* input,
+      int tag_size, arc_ui32 tag, io::CodedInputStream* input,
       RepeatedField<CType>* value);
 
   // Identical to ReadRepeatedPrimitive, except will not inline the
   // implementation.
   template <typename CType, enum FieldType DeclaredType>
-  static bool ReadRepeatedPrimitiveNoInline(int tag_size, ui32 tag,
+  static bool ReadRepeatedPrimitiveNoInline(int tag_size, arc_ui32 tag,
                                             io::CodedInputStream* input,
                                             RepeatedField<CType>* value);
 
@@ -346,25 +346,25 @@ class PROTOBUF_EXPORT WireFormatLite {
 
   // Write fields, without tags.
   PROTOBUF_NDEBUG_INLINE static void WriteInt32NoTag(
-      i32 value, io::CodedOutputStream* output);
+      arc_i32 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteInt64NoTag(
-      i64 value, io::CodedOutputStream* output);
+      arc_i64 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteUInt32NoTag(
-      ui32 value, io::CodedOutputStream* output);
+      arc_ui32 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteUInt64NoTag(
-      ui64 value, io::CodedOutputStream* output);
+      arc_ui64 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteSInt32NoTag(
-      i32 value, io::CodedOutputStream* output);
+      arc_i32 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteSInt64NoTag(
-      i64 value, io::CodedOutputStream* output);
+      arc_i64 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteFixed32NoTag(
-      ui32 value, io::CodedOutputStream* output);
+      arc_ui32 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteFixed64NoTag(
-      ui64 value, io::CodedOutputStream* output);
+      arc_ui64 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteSFixed32NoTag(
-      i32 value, io::CodedOutputStream* output);
+      arc_i32 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteSFixed64NoTag(
-      i64 value, io::CodedOutputStream* output);
+      arc_i64 value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteFloatNoTag(
       float value, io::CodedOutputStream* output);
   PROTOBUF_NDEBUG_INLINE static void WriteDoubleNoTag(
@@ -379,37 +379,37 @@ class PROTOBUF_EXPORT WireFormatLite {
                               io::CodedOutputStream* output);
   static void WriteDoubleArray(const double* a, int n,
                                io::CodedOutputStream* output);
-  static void WriteFixed32Array(const ui32* a, int n,
+  static void WriteFixed32Array(const arc_ui32* a, int n,
                                 io::CodedOutputStream* output);
-  static void WriteFixed64Array(const ui64* a, int n,
+  static void WriteFixed64Array(const arc_ui64* a, int n,
                                 io::CodedOutputStream* output);
-  static void WriteSFixed32Array(const i32* a, int n,
+  static void WriteSFixed32Array(const arc_i32* a, int n,
                                  io::CodedOutputStream* output);
-  static void WriteSFixed64Array(const i64* a, int n,
+  static void WriteSFixed64Array(const arc_i64* a, int n,
                                  io::CodedOutputStream* output);
   static void WriteBoolArray(const bool* a, int n,
                              io::CodedOutputStream* output);
 
   // Write fields, including tags.
-  static void WriteInt32(int field_number, i32 value,
+  static void WriteInt32(int field_number, arc_i32 value,
                          io::CodedOutputStream* output);
-  static void WriteInt64(int field_number, i64 value,
+  static void WriteInt64(int field_number, arc_i64 value,
                          io::CodedOutputStream* output);
-  static void WriteUInt32(int field_number, ui32 value,
+  static void WriteUInt32(int field_number, arc_ui32 value,
                           io::CodedOutputStream* output);
-  static void WriteUInt64(int field_number, ui64 value,
+  static void WriteUInt64(int field_number, arc_ui64 value,
                           io::CodedOutputStream* output);
-  static void WriteSInt32(int field_number, i32 value,
+  static void WriteSInt32(int field_number, arc_i32 value,
                           io::CodedOutputStream* output);
-  static void WriteSInt64(int field_number, i64 value,
+  static void WriteSInt64(int field_number, arc_i64 value,
                           io::CodedOutputStream* output);
-  static void WriteFixed32(int field_number, ui32 value,
+  static void WriteFixed32(int field_number, arc_ui32 value,
                            io::CodedOutputStream* output);
-  static void WriteFixed64(int field_number, ui64 value,
+  static void WriteFixed64(int field_number, arc_ui64 value,
                            io::CodedOutputStream* output);
-  static void WriteSFixed32(int field_number, i32 value,
+  static void WriteSFixed32(int field_number, arc_i32 value,
                             io::CodedOutputStream* output);
-  static void WriteSFixed64(int field_number, i64 value,
+  static void WriteSFixed64(int field_number, arc_i64 value,
                             io::CodedOutputStream* output);
   static void WriteFloat(int field_number, float value,
                          io::CodedOutputStream* output);
@@ -461,25 +461,25 @@ class PROTOBUF_EXPORT WireFormatLite {
 
   // Write fields, without tags.
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt32NoTagToArray(
-      i32 value, uint8_t* target);
+      arc_i32 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt64NoTagToArray(
-      i64 value, uint8_t* target);
+      arc_i64 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt32NoTagToArray(
-      ui32 value, uint8_t* target);
+      arc_ui32 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt64NoTagToArray(
-      ui64 value, uint8_t* target);
+      arc_ui64 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt32NoTagToArray(
-      i32 value, uint8_t* target);
+      arc_i32 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt64NoTagToArray(
-      i64 value, uint8_t* target);
+      arc_i64 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed32NoTagToArray(
-      ui32 value, uint8_t* target);
+      arc_ui32 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed64NoTagToArray(
-      ui64 value, uint8_t* target);
+      arc_ui64 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed32NoTagToArray(
-      i32 value, uint8_t* target);
+      arc_i32 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed64NoTagToArray(
-      i64 value, uint8_t* target);
+      arc_i64 value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFloatNoTagToArray(
       float value, uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteDoubleNoTagToArray(
@@ -500,25 +500,25 @@ class PROTOBUF_EXPORT WireFormatLite {
       uint8_t* target);
 
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt32NoTagToArray(
-      const RepeatedField<i32>& value, uint8_t* output);
+      const RepeatedField<arc_i32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt64NoTagToArray(
-      const RepeatedField<i64>& value, uint8_t* output);
+      const RepeatedField<arc_i64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt32NoTagToArray(
-      const RepeatedField<ui32>& value, uint8_t* output);
+      const RepeatedField<arc_ui32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt64NoTagToArray(
-      const RepeatedField<ui64>& value, uint8_t* output);
+      const RepeatedField<arc_ui64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt32NoTagToArray(
-      const RepeatedField<i32>& value, uint8_t* output);
+      const RepeatedField<arc_i32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt64NoTagToArray(
-      const RepeatedField<i64>& value, uint8_t* output);
+      const RepeatedField<arc_i64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed32NoTagToArray(
-      const RepeatedField<ui32>& value, uint8_t* output);
+      const RepeatedField<arc_ui32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed64NoTagToArray(
-      const RepeatedField<ui64>& value, uint8_t* output);
+      const RepeatedField<arc_ui64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed32NoTagToArray(
-      const RepeatedField<i32>& value, uint8_t* output);
+      const RepeatedField<arc_i32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed64NoTagToArray(
-      const RepeatedField<i64>& value, uint8_t* output);
+      const RepeatedField<arc_i64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFloatNoTagToArray(
       const RepeatedField<float>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteDoubleNoTagToArray(
@@ -530,34 +530,34 @@ class PROTOBUF_EXPORT WireFormatLite {
 
   // Write fields, including tags.
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt32ToArray(int field_number,
-                                                           i32 value,
+                                                           arc_i32 value,
                                                            uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt64ToArray(int field_number,
-                                                           i64 value,
+                                                           arc_i64 value,
                                                            uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt32ToArray(int field_number,
-                                                            ui32 value,
+                                                            arc_ui32 value,
                                                             uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt64ToArray(int field_number,
-                                                            ui64 value,
+                                                            arc_ui64 value,
                                                             uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt32ToArray(int field_number,
-                                                            i32 value,
+                                                            arc_i32 value,
                                                             uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt64ToArray(int field_number,
-                                                            i64 value,
+                                                            arc_i64 value,
                                                             uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed32ToArray(int field_number,
-                                                             ui32 value,
+                                                             arc_ui32 value,
                                                              uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed64ToArray(int field_number,
-                                                             ui64 value,
+                                                             arc_ui64 value,
                                                              uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed32ToArray(int field_number,
-                                                              i32 value,
+                                                              arc_i32 value,
                                                               uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed64ToArray(int field_number,
-                                                              i64 value,
+                                                              arc_i64 value,
                                                               uint8_t* target);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFloatToArray(int field_number,
                                                            float value,
@@ -578,25 +578,25 @@ class PROTOBUF_EXPORT WireFormatLite {
       uint8_t* (*Writer)(int, T, uint8_t*), uint8_t* target);
 
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt32ToArray(
-      int field_number, const RepeatedField<i32>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_i32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteInt64ToArray(
-      int field_number, const RepeatedField<i64>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_i64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt32ToArray(
-      int field_number, const RepeatedField<ui32>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_ui32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteUInt64ToArray(
-      int field_number, const RepeatedField<ui64>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_ui64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt32ToArray(
-      int field_number, const RepeatedField<i32>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_i32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSInt64ToArray(
-      int field_number, const RepeatedField<i64>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_i64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed32ToArray(
-      int field_number, const RepeatedField<ui32>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_ui32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFixed64ToArray(
-      int field_number, const RepeatedField<ui64>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_ui64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed32ToArray(
-      int field_number, const RepeatedField<i32>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_i32>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteSFixed64ToArray(
-      int field_number, const RepeatedField<i64>& value, uint8_t* output);
+      int field_number, const RepeatedField<arc_i64>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteFloatToArray(
       int field_number, const RepeatedField<float>& value, uint8_t* output);
   PROTOBUF_NDEBUG_INLINE static uint8_t* WriteDoubleToArray(
@@ -643,7 +643,7 @@ class PROTOBUF_EXPORT WireFormatLite {
         target,
         value.GetCachedSize() +
             static_cast<int>(2 * io::CodedOutputStream::VarintSize32(
-                                     static_cast<ui32>(field_number) << 3)),
+                                     static_cast<arc_ui32>(field_number) << 3)),
         io::CodedOutputStream::IsDefaultSerializationDeterministic());
     return InternalWriteGroup(field_number, value, target, &stream);
   }
@@ -653,7 +653,7 @@ class PROTOBUF_EXPORT WireFormatLite {
     io::EpsCopyOutputStream stream(
         target,
         size + static_cast<int>(io::CodedOutputStream::VarintSize32(
-                                    static_cast<ui32>(field_number) << 3) +
+                                    static_cast<arc_ui32>(field_number) << 3) +
                                 io::CodedOutputStream::VarintSize32(size)),
         io::CodedOutputStream::IsDefaultSerializationDeterministic());
     return InternalWriteMessage(field_number, value, target, &stream);
@@ -663,27 +663,27 @@ class PROTOBUF_EXPORT WireFormatLite {
   // the tag, so you must also call TagSize().  (This is because, for repeated
   // fields, you should only call TagSize() once and multiply it by the element
   // count, but you may have to call XxSize() for each individual element.)
-  static inline size_t Int32Size(i32 value);
-  static inline size_t Int64Size(i64 value);
-  static inline size_t UInt32Size(ui32 value);
-  static inline size_t UInt64Size(ui64 value);
-  static inline size_t SInt32Size(i32 value);
-  static inline size_t SInt64Size(i64 value);
+  static inline size_t Int32Size(arc_i32 value);
+  static inline size_t Int64Size(arc_i64 value);
+  static inline size_t UInt32Size(arc_ui32 value);
+  static inline size_t UInt64Size(arc_ui64 value);
+  static inline size_t SInt32Size(arc_i32 value);
+  static inline size_t SInt64Size(arc_i64 value);
   static inline size_t EnumSize(int value);
-  static inline size_t Int32SizePlusOne(i32 value);
-  static inline size_t Int64SizePlusOne(i64 value);
-  static inline size_t UInt32SizePlusOne(ui32 value);
-  static inline size_t UInt64SizePlusOne(ui64 value);
-  static inline size_t SInt32SizePlusOne(i32 value);
-  static inline size_t SInt64SizePlusOne(i64 value);
+  static inline size_t Int32SizePlusOne(arc_i32 value);
+  static inline size_t Int64SizePlusOne(arc_i64 value);
+  static inline size_t UInt32SizePlusOne(arc_ui32 value);
+  static inline size_t UInt64SizePlusOne(arc_ui64 value);
+  static inline size_t SInt32SizePlusOne(arc_i32 value);
+  static inline size_t SInt64SizePlusOne(arc_i64 value);
   static inline size_t EnumSizePlusOne(int value);
 
-  static size_t Int32Size(const RepeatedField<i32>& value);
-  static size_t Int64Size(const RepeatedField<i64>& value);
-  static size_t UInt32Size(const RepeatedField<ui32>& value);
-  static size_t UInt64Size(const RepeatedField<ui64>& value);
-  static size_t SInt32Size(const RepeatedField<i32>& value);
-  static size_t SInt64Size(const RepeatedField<i64>& value);
+  static size_t Int32Size(const RepeatedField<arc_i32>& value);
+  static size_t Int64Size(const RepeatedField<arc_i64>& value);
+  static size_t UInt32Size(const RepeatedField<arc_ui32>& value);
+  static size_t UInt64Size(const RepeatedField<arc_ui64>& value);
+  static size_t SInt32Size(const RepeatedField<arc_i32>& value);
+  static size_t SInt64Size(const RepeatedField<arc_i64>& value);
   static size_t EnumSize(const RepeatedField<int>& value);
 
   // These types always have the same size.
@@ -721,7 +721,7 @@ class PROTOBUF_EXPORT WireFormatLite {
   // can be read using potentially faster paths.
   template <typename CType, enum FieldType DeclaredType>
   PROTOBUF_NDEBUG_INLINE static bool ReadRepeatedFixedSizePrimitive(
-      int tag_size, ui32 tag, io::CodedInputStream* input,
+      int tag_size, arc_ui32 tag, io::CodedInputStream* input,
       RepeatedField<CType>* value);
 
   // Like ReadRepeatedFixedSizePrimitive but for packed primitive fields.
@@ -747,7 +747,7 @@ class PROTOBUF_EXPORT FieldSkipper {
   virtual ~FieldSkipper() {}
 
   // Skip a field whose tag has already been consumed.
-  virtual bool SkipField(io::CodedInputStream* input, ui32 tag);
+  virtual bool SkipField(io::CodedInputStream* input, arc_ui32 tag);
 
   // Skip an entire message or group, up to an end-group tag (which is consumed)
   // or end-of-stream.
@@ -768,7 +768,7 @@ class PROTOBUF_EXPORT CodedOutputStreamFieldSkipper : public FieldSkipper {
   ~CodedOutputStreamFieldSkipper() override {}
 
   // implements FieldSkipper -----------------------------------------
-  bool SkipField(io::CodedInputStream* input, ui32 tag) override;
+  bool SkipField(io::CodedInputStream* input, arc_ui32 tag) override;
   bool SkipMessage(io::CodedInputStream* input) override;
   void SkipUnknownEnum(int field_number, int value) override;
 
@@ -783,23 +783,23 @@ inline WireFormatLite::CppType WireFormatLite::FieldTypeToCppType(
   return kFieldTypeToCppTypeMap[type];
 }
 
-constexpr inline ui32 WireFormatLite::MakeTag(int field_number,
+constexpr inline arc_ui32 WireFormatLite::MakeTag(int field_number,
                                                   WireType type) {
   return GOOGLE_PROTOBUF_WIRE_FORMAT_MAKE_TAG(field_number, type);
 }
 
-inline WireFormatLite::WireType WireFormatLite::GetTagWireType(ui32 tag) {
+inline WireFormatLite::WireType WireFormatLite::GetTagWireType(arc_ui32 tag) {
   return static_cast<WireType>(tag & kTagTypeMask);
 }
 
-inline int WireFormatLite::GetTagFieldNumber(ui32 tag) {
+inline int WireFormatLite::GetTagFieldNumber(arc_ui32 tag) {
   return static_cast<int>(tag >> kTagTypeBits);
 }
 
 inline size_t WireFormatLite::TagSize(int field_number,
                                       WireFormatLite::FieldType type) {
   size_t result = io::CodedOutputStream::VarintSize32(
-      static_cast<ui32>(field_number << kTagTypeBits));
+      static_cast<arc_ui32>(field_number << kTagTypeBits));
   if (type == TYPE_GROUP) {
     // Groups have both a start and an end tag.
     return result * 2;
@@ -808,19 +808,19 @@ inline size_t WireFormatLite::TagSize(int field_number,
   }
 }
 
-inline ui32 WireFormatLite::EncodeFloat(float value) {
-  return bit_cast<ui32>(value);
+inline arc_ui32 WireFormatLite::EncodeFloat(float value) {
+  return bit_cast<arc_ui32>(value);
 }
 
-inline float WireFormatLite::DecodeFloat(ui32 value) {
+inline float WireFormatLite::DecodeFloat(arc_ui32 value) {
   return bit_cast<float>(value);
 }
 
-inline ui64 WireFormatLite::EncodeDouble(double value) {
-  return bit_cast<ui64>(value);
+inline arc_ui64 WireFormatLite::EncodeDouble(double value) {
+  return bit_cast<arc_ui64>(value);
 }
 
-inline double WireFormatLite::DecodeDouble(ui64 value) {
+inline double WireFormatLite::DecodeDouble(arc_ui64 value) {
   return bit_cast<double>(value);
 }
 
@@ -835,7 +835,7 @@ inline double WireFormatLite::DecodeDouble(ui64 value) {
 // in such a way that those with a small absolute value will have smaller
 // encoded values, making them appropriate for encoding using varint.
 //
-//       i32 ->     ui32
+//       arc_i32 ->     arc_ui32
 // -------------------------
 //           0 ->          0
 //          -1 ->          1
@@ -848,26 +848,26 @@ inline double WireFormatLite::DecodeDouble(ui64 value) {
 //        >> encode >>
 //        << decode <<
 
-inline ui32 WireFormatLite::ZigZagEncode32(i32 n) {
+inline arc_ui32 WireFormatLite::ZigZagEncode32(arc_i32 n) {
   // Note:  the right-shift must be arithmetic
   // Note:  left shift must be unsigned because of overflow
-  return (static_cast<ui32>(n) << 1) ^ static_cast<ui32>(n >> 31);
+  return (static_cast<arc_ui32>(n) << 1) ^ static_cast<arc_ui32>(n >> 31);
 }
 
-inline i32 WireFormatLite::ZigZagDecode32(ui32 n) {
+inline arc_i32 WireFormatLite::ZigZagDecode32(arc_ui32 n) {
   // Note:  Using unsigned types prevent undefined behavior
-  return static_cast<i32>((n >> 1) ^ (~(n & 1) + 1));
+  return static_cast<arc_i32>((n >> 1) ^ (~(n & 1) + 1));
 }
 
-inline ui64 WireFormatLite::ZigZagEncode64(i64 n) {
+inline arc_ui64 WireFormatLite::ZigZagEncode64(arc_i64 n) {
   // Note:  the right-shift must be arithmetic
   // Note:  left shift must be unsigned because of overflow
-  return (static_cast<ui64>(n) << 1) ^ static_cast<ui64>(n >> 63);
+  return (static_cast<arc_ui64>(n) << 1) ^ static_cast<arc_ui64>(n >> 63);
 }
 
-inline i64 WireFormatLite::ZigZagDecode64(ui64 n) {
+inline arc_i64 WireFormatLite::ZigZagDecode64(arc_ui64 n) {
   // Note:  Using unsigned types prevent undefined behavior
-  return static_cast<i64>((n >> 1) ^ (~(n & 1) + 1));
+  return static_cast<arc_i64>((n >> 1) ^ (~(n & 1) + 1));
 }
 
 // String is for UTF-8 text only, but, even so, ReadString() can simply
@@ -898,83 +898,83 @@ inline size_t ComputeUnknownMessageSetItemsSize(
 // Implementation details of ReadPrimitive.
 
 template <>
-inline bool WireFormatLite::ReadPrimitive<i32, WireFormatLite::TYPE_INT32>(
-    io::CodedInputStream* input, i32* value) {
-  ui32 temp;
+inline bool WireFormatLite::ReadPrimitive<arc_i32, WireFormatLite::TYPE_INT32>(
+    io::CodedInputStream* input, arc_i32* value) {
+  arc_ui32 temp;
   if (!input->ReadVarint32(&temp)) return false;
-  *value = static_cast<i32>(temp);
+  *value = static_cast<arc_i32>(temp);
   return true;
 }
 template <>
-inline bool WireFormatLite::ReadPrimitive<i64, WireFormatLite::TYPE_INT64>(
-    io::CodedInputStream* input, i64* value) {
-  ui64 temp;
+inline bool WireFormatLite::ReadPrimitive<arc_i64, WireFormatLite::TYPE_INT64>(
+    io::CodedInputStream* input, arc_i64* value) {
+  arc_ui64 temp;
   if (!input->ReadVarint64(&temp)) return false;
-  *value = static_cast<i64>(temp);
+  *value = static_cast<arc_i64>(temp);
   return true;
 }
 template <>
 inline bool
-WireFormatLite::ReadPrimitive<ui32, WireFormatLite::TYPE_UINT32>(
-    io::CodedInputStream* input, ui32* value) {
+WireFormatLite::ReadPrimitive<arc_ui32, WireFormatLite::TYPE_UINT32>(
+    io::CodedInputStream* input, arc_ui32* value) {
   return input->ReadVarint32(value);
 }
 template <>
 inline bool
-WireFormatLite::ReadPrimitive<ui64, WireFormatLite::TYPE_UINT64>(
-    io::CodedInputStream* input, ui64* value) {
+WireFormatLite::ReadPrimitive<arc_ui64, WireFormatLite::TYPE_UINT64>(
+    io::CodedInputStream* input, arc_ui64* value) {
   return input->ReadVarint64(value);
 }
 template <>
-inline bool WireFormatLite::ReadPrimitive<i32, WireFormatLite::TYPE_SINT32>(
-    io::CodedInputStream* input, i32* value) {
-  ui32 temp;
+inline bool WireFormatLite::ReadPrimitive<arc_i32, WireFormatLite::TYPE_SINT32>(
+    io::CodedInputStream* input, arc_i32* value) {
+  arc_ui32 temp;
   if (!input->ReadVarint32(&temp)) return false;
   *value = ZigZagDecode32(temp);
   return true;
 }
 template <>
-inline bool WireFormatLite::ReadPrimitive<i64, WireFormatLite::TYPE_SINT64>(
-    io::CodedInputStream* input, i64* value) {
-  ui64 temp;
+inline bool WireFormatLite::ReadPrimitive<arc_i64, WireFormatLite::TYPE_SINT64>(
+    io::CodedInputStream* input, arc_i64* value) {
+  arc_ui64 temp;
   if (!input->ReadVarint64(&temp)) return false;
   *value = ZigZagDecode64(temp);
   return true;
 }
 template <>
 inline bool
-WireFormatLite::ReadPrimitive<ui32, WireFormatLite::TYPE_FIXED32>(
-    io::CodedInputStream* input, ui32* value) {
+WireFormatLite::ReadPrimitive<arc_ui32, WireFormatLite::TYPE_FIXED32>(
+    io::CodedInputStream* input, arc_ui32* value) {
   return input->ReadLittleEndian32(value);
 }
 template <>
 inline bool
-WireFormatLite::ReadPrimitive<ui64, WireFormatLite::TYPE_FIXED64>(
-    io::CodedInputStream* input, ui64* value) {
+WireFormatLite::ReadPrimitive<arc_ui64, WireFormatLite::TYPE_FIXED64>(
+    io::CodedInputStream* input, arc_ui64* value) {
   return input->ReadLittleEndian64(value);
 }
 template <>
 inline bool
-WireFormatLite::ReadPrimitive<i32, WireFormatLite::TYPE_SFIXED32>(
-    io::CodedInputStream* input, i32* value) {
-  ui32 temp;
+WireFormatLite::ReadPrimitive<arc_i32, WireFormatLite::TYPE_SFIXED32>(
+    io::CodedInputStream* input, arc_i32* value) {
+  arc_ui32 temp;
   if (!input->ReadLittleEndian32(&temp)) return false;
-  *value = static_cast<i32>(temp);
+  *value = static_cast<arc_i32>(temp);
   return true;
 }
 template <>
 inline bool
-WireFormatLite::ReadPrimitive<i64, WireFormatLite::TYPE_SFIXED64>(
-    io::CodedInputStream* input, i64* value) {
-  ui64 temp;
+WireFormatLite::ReadPrimitive<arc_i64, WireFormatLite::TYPE_SFIXED64>(
+    io::CodedInputStream* input, arc_i64* value) {
+  arc_ui64 temp;
   if (!input->ReadLittleEndian64(&temp)) return false;
-  *value = static_cast<i64>(temp);
+  *value = static_cast<arc_i64>(temp);
   return true;
 }
 template <>
 inline bool WireFormatLite::ReadPrimitive<float, WireFormatLite::TYPE_FLOAT>(
     io::CodedInputStream* input, float* value) {
-  ui32 temp;
+  arc_ui32 temp;
   if (!input->ReadLittleEndian32(&temp)) return false;
   *value = DecodeFloat(temp);
   return true;
@@ -982,7 +982,7 @@ inline bool WireFormatLite::ReadPrimitive<float, WireFormatLite::TYPE_FLOAT>(
 template <>
 inline bool WireFormatLite::ReadPrimitive<double, WireFormatLite::TYPE_DOUBLE>(
     io::CodedInputStream* input, double* value) {
-  ui64 temp;
+  arc_ui64 temp;
   if (!input->ReadLittleEndian64(&temp)) return false;
   *value = DecodeDouble(temp);
   return true;
@@ -990,7 +990,7 @@ inline bool WireFormatLite::ReadPrimitive<double, WireFormatLite::TYPE_DOUBLE>(
 template <>
 inline bool WireFormatLite::ReadPrimitive<bool, WireFormatLite::TYPE_BOOL>(
     io::CodedInputStream* input, bool* value) {
-  ui64 temp;
+  arc_ui64 temp;
   if (!input->ReadVarint64(&temp)) return false;
   *value = temp != 0;
   return true;
@@ -998,7 +998,7 @@ inline bool WireFormatLite::ReadPrimitive<bool, WireFormatLite::TYPE_BOOL>(
 template <>
 inline bool WireFormatLite::ReadPrimitive<int, WireFormatLite::TYPE_ENUM>(
     io::CodedInputStream* input, int* value) {
-  ui32 temp;
+  arc_ui32 temp;
   if (!input->ReadVarint32(&temp)) return false;
   *value = static_cast<int>(temp);
   return true;
@@ -1006,39 +1006,39 @@ inline bool WireFormatLite::ReadPrimitive<int, WireFormatLite::TYPE_ENUM>(
 
 template <>
 inline const uint8_t*
-WireFormatLite::ReadPrimitiveFromArray<ui32, WireFormatLite::TYPE_FIXED32>(
-    const uint8_t* buffer, ui32* value) {
+WireFormatLite::ReadPrimitiveFromArray<arc_ui32, WireFormatLite::TYPE_FIXED32>(
+    const uint8_t* buffer, arc_ui32* value) {
   return io::CodedInputStream::ReadLittleEndian32FromArray(buffer, value);
 }
 template <>
 inline const uint8_t*
-WireFormatLite::ReadPrimitiveFromArray<ui64, WireFormatLite::TYPE_FIXED64>(
-    const uint8_t* buffer, ui64* value) {
+WireFormatLite::ReadPrimitiveFromArray<arc_ui64, WireFormatLite::TYPE_FIXED64>(
+    const uint8_t* buffer, arc_ui64* value) {
   return io::CodedInputStream::ReadLittleEndian64FromArray(buffer, value);
 }
 template <>
 inline const uint8_t*
-WireFormatLite::ReadPrimitiveFromArray<i32, WireFormatLite::TYPE_SFIXED32>(
-    const uint8_t* buffer, i32* value) {
-  ui32 temp;
+WireFormatLite::ReadPrimitiveFromArray<arc_i32, WireFormatLite::TYPE_SFIXED32>(
+    const uint8_t* buffer, arc_i32* value) {
+  arc_ui32 temp;
   buffer = io::CodedInputStream::ReadLittleEndian32FromArray(buffer, &temp);
-  *value = static_cast<i32>(temp);
+  *value = static_cast<arc_i32>(temp);
   return buffer;
 }
 template <>
 inline const uint8_t*
-WireFormatLite::ReadPrimitiveFromArray<i64, WireFormatLite::TYPE_SFIXED64>(
-    const uint8_t* buffer, i64* value) {
-  ui64 temp;
+WireFormatLite::ReadPrimitiveFromArray<arc_i64, WireFormatLite::TYPE_SFIXED64>(
+    const uint8_t* buffer, arc_i64* value) {
+  arc_ui64 temp;
   buffer = io::CodedInputStream::ReadLittleEndian64FromArray(buffer, &temp);
-  *value = static_cast<i64>(temp);
+  *value = static_cast<arc_i64>(temp);
   return buffer;
 }
 template <>
 inline const uint8_t*
 WireFormatLite::ReadPrimitiveFromArray<float, WireFormatLite::TYPE_FLOAT>(
     const uint8_t* buffer, float* value) {
-  ui32 temp;
+  arc_ui32 temp;
   buffer = io::CodedInputStream::ReadLittleEndian32FromArray(buffer, &temp);
   *value = DecodeFloat(temp);
   return buffer;
@@ -1047,7 +1047,7 @@ template <>
 inline const uint8_t*
 WireFormatLite::ReadPrimitiveFromArray<double, WireFormatLite::TYPE_DOUBLE>(
     const uint8_t* buffer, double* value) {
-  ui64 temp;
+  arc_ui64 temp;
   buffer = io::CodedInputStream::ReadLittleEndian64FromArray(buffer, &temp);
   *value = DecodeDouble(temp);
   return buffer;
@@ -1056,7 +1056,7 @@ WireFormatLite::ReadPrimitiveFromArray<double, WireFormatLite::TYPE_DOUBLE>(
 template <typename CType, enum WireFormatLite::FieldType DeclaredType>
 inline bool WireFormatLite::ReadRepeatedPrimitive(
     int,  // tag_size, unused.
-    ui32 tag, io::CodedInputStream* input, RepeatedField<CType>* values) {
+    arc_ui32 tag, io::CodedInputStream* input, RepeatedField<CType>* values) {
   CType value;
   if (!ReadPrimitive<CType, DeclaredType>(input, &value)) return false;
   values->Add(value);
@@ -1071,7 +1071,7 @@ inline bool WireFormatLite::ReadRepeatedPrimitive(
 
 template <typename CType, enum WireFormatLite::FieldType DeclaredType>
 inline bool WireFormatLite::ReadRepeatedFixedSizePrimitive(
-    int tag_size, ui32 tag, io::CodedInputStream* input,
+    int tag_size, arc_ui32 tag, io::CodedInputStream* input,
     RepeatedField<CType>* values) {
   GOOGLE_DCHECK_EQ(UInt32Size(tag), static_cast<size_t>(tag_size));
   CType value;
@@ -1120,17 +1120,17 @@ inline bool WireFormatLite::ReadRepeatedFixedSizePrimitive(
   template <>                                                             \
   inline bool WireFormatLite::ReadRepeatedPrimitive<                      \
       CPPTYPE, WireFormatLite::DECLARED_TYPE>(                            \
-      int tag_size, ui32 tag, io::CodedInputStream* input,            \
+      int tag_size, arc_ui32 tag, io::CodedInputStream* input,            \
       RepeatedField<CPPTYPE>* values) {                                   \
     return ReadRepeatedFixedSizePrimitive<CPPTYPE,                        \
                                           WireFormatLite::DECLARED_TYPE>( \
         tag_size, tag, input, values);                                    \
   }
 
-READ_REPEATED_FIXED_SIZE_PRIMITIVE(ui32, TYPE_FIXED32)
-READ_REPEATED_FIXED_SIZE_PRIMITIVE(ui64, TYPE_FIXED64)
-READ_REPEATED_FIXED_SIZE_PRIMITIVE(i32, TYPE_SFIXED32)
-READ_REPEATED_FIXED_SIZE_PRIMITIVE(i64, TYPE_SFIXED64)
+READ_REPEATED_FIXED_SIZE_PRIMITIVE(arc_ui32, TYPE_FIXED32)
+READ_REPEATED_FIXED_SIZE_PRIMITIVE(arc_ui64, TYPE_FIXED64)
+READ_REPEATED_FIXED_SIZE_PRIMITIVE(arc_i32, TYPE_SFIXED32)
+READ_REPEATED_FIXED_SIZE_PRIMITIVE(arc_i64, TYPE_SFIXED64)
 READ_REPEATED_FIXED_SIZE_PRIMITIVE(float, TYPE_FLOAT)
 READ_REPEATED_FIXED_SIZE_PRIMITIVE(double, TYPE_DOUBLE)
 
@@ -1138,7 +1138,7 @@ READ_REPEATED_FIXED_SIZE_PRIMITIVE(double, TYPE_DOUBLE)
 
 template <typename CType, enum WireFormatLite::FieldType DeclaredType>
 bool WireFormatLite::ReadRepeatedPrimitiveNoInline(
-    int tag_size, ui32 tag, io::CodedInputStream* input,
+    int tag_size, arc_ui32 tag, io::CodedInputStream* input,
     RepeatedField<CType>* value) {
   return ReadRepeatedPrimitive<CType, DeclaredType>(tag_size, tag, input,
                                                     value);
@@ -1180,13 +1180,13 @@ inline bool WireFormatLite::ReadPackedFixedSizePrimitive(
   // -1               >= 0   Use fast path if length <= Limit.
   // >= 0             -1     Use slow path.
   // >= 0             >= 0   Use fast path if length <= min(both limits).
-  i64 bytes_limit = input->BytesUntilTotalBytesLimit();
+  arc_i64 bytes_limit = input->BytesUntilTotalBytesLimit();
   if (bytes_limit == -1) {
     bytes_limit = input->BytesUntilLimit();
   } else {
     // parentheses around (std::min) prevents macro expansion of min(...)
     bytes_limit =
-        (std::min)(bytes_limit, static_cast<i64>(input->BytesUntilLimit()));
+        (std::min)(bytes_limit, static_cast<arc_i64>(input->BytesUntilLimit()));
   }
   if (bytes_limit >= new_bytes) {
     // Fast-path that pre-allocates *values to the final size.
@@ -1231,10 +1231,10 @@ inline bool WireFormatLite::ReadPackedFixedSizePrimitive(
         input, values);                                                        \
   }
 
-READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(ui32, TYPE_FIXED32)
-READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(ui64, TYPE_FIXED64)
-READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(i32, TYPE_SFIXED32)
-READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(i64, TYPE_SFIXED64)
+READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(arc_ui32, TYPE_FIXED32)
+READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(arc_ui64, TYPE_FIXED64)
+READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(arc_i32, TYPE_SFIXED32)
+READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(arc_i64, TYPE_SFIXED64)
 READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(float, TYPE_FLOAT)
 READ_REPEATED_PACKED_FIXED_SIZE_PRIMITIVE(double, TYPE_DOUBLE)
 
@@ -1280,45 +1280,45 @@ inline void WireFormatLite::WriteTag(int field_number, WireType type,
   output->WriteTag(MakeTag(field_number, type));
 }
 
-inline void WireFormatLite::WriteInt32NoTag(i32 value,
+inline void WireFormatLite::WriteInt32NoTag(arc_i32 value,
                                             io::CodedOutputStream* output) {
   output->WriteVarint32SignExtended(value);
 }
-inline void WireFormatLite::WriteInt64NoTag(i64 value,
+inline void WireFormatLite::WriteInt64NoTag(arc_i64 value,
                                             io::CodedOutputStream* output) {
-  output->WriteVarint64(static_cast<ui64>(value));
+  output->WriteVarint64(static_cast<arc_ui64>(value));
 }
-inline void WireFormatLite::WriteUInt32NoTag(ui32 value,
+inline void WireFormatLite::WriteUInt32NoTag(arc_ui32 value,
                                              io::CodedOutputStream* output) {
   output->WriteVarint32(value);
 }
-inline void WireFormatLite::WriteUInt64NoTag(ui64 value,
+inline void WireFormatLite::WriteUInt64NoTag(arc_ui64 value,
                                              io::CodedOutputStream* output) {
   output->WriteVarint64(value);
 }
-inline void WireFormatLite::WriteSInt32NoTag(i32 value,
+inline void WireFormatLite::WriteSInt32NoTag(arc_i32 value,
                                              io::CodedOutputStream* output) {
   output->WriteVarint32(ZigZagEncode32(value));
 }
-inline void WireFormatLite::WriteSInt64NoTag(i64 value,
+inline void WireFormatLite::WriteSInt64NoTag(arc_i64 value,
                                              io::CodedOutputStream* output) {
   output->WriteVarint64(ZigZagEncode64(value));
 }
-inline void WireFormatLite::WriteFixed32NoTag(ui32 value,
+inline void WireFormatLite::WriteFixed32NoTag(arc_ui32 value,
                                               io::CodedOutputStream* output) {
   output->WriteLittleEndian32(value);
 }
-inline void WireFormatLite::WriteFixed64NoTag(ui64 value,
+inline void WireFormatLite::WriteFixed64NoTag(arc_ui64 value,
                                               io::CodedOutputStream* output) {
   output->WriteLittleEndian64(value);
 }
-inline void WireFormatLite::WriteSFixed32NoTag(i32 value,
+inline void WireFormatLite::WriteSFixed32NoTag(arc_i32 value,
                                                io::CodedOutputStream* output) {
-  output->WriteLittleEndian32(static_cast<ui32>(value));
+  output->WriteLittleEndian32(static_cast<arc_ui32>(value));
 }
-inline void WireFormatLite::WriteSFixed64NoTag(i64 value,
+inline void WireFormatLite::WriteSFixed64NoTag(arc_i64 value,
                                                io::CodedOutputStream* output) {
-  output->WriteLittleEndian64(static_cast<ui64>(value));
+  output->WriteLittleEndian64(static_cast<arc_ui64>(value));
 }
 inline void WireFormatLite::WriteFloatNoTag(float value,
                                             io::CodedOutputStream* output) {
@@ -1365,50 +1365,50 @@ inline uint8_t* WireFormatLite::WriteTagToArray(int field_number, WireType type,
                                                 target);
 }
 
-inline uint8_t* WireFormatLite::WriteInt32NoTagToArray(i32 value,
+inline uint8_t* WireFormatLite::WriteInt32NoTagToArray(arc_i32 value,
                                                        uint8_t* target) {
   return io::CodedOutputStream::WriteVarint32SignExtendedToArray(value, target);
 }
-inline uint8_t* WireFormatLite::WriteInt64NoTagToArray(i64 value,
+inline uint8_t* WireFormatLite::WriteInt64NoTagToArray(arc_i64 value,
                                                        uint8_t* target) {
   return io::CodedOutputStream::WriteVarint64ToArray(
-      static_cast<ui64>(value), target);
+      static_cast<arc_ui64>(value), target);
 }
-inline uint8_t* WireFormatLite::WriteUInt32NoTagToArray(ui32 value,
+inline uint8_t* WireFormatLite::WriteUInt32NoTagToArray(arc_ui32 value,
                                                         uint8_t* target) {
   return io::CodedOutputStream::WriteVarint32ToArray(value, target);
 }
-inline uint8_t* WireFormatLite::WriteUInt64NoTagToArray(ui64 value,
+inline uint8_t* WireFormatLite::WriteUInt64NoTagToArray(arc_ui64 value,
                                                         uint8_t* target) {
   return io::CodedOutputStream::WriteVarint64ToArray(value, target);
 }
-inline uint8_t* WireFormatLite::WriteSInt32NoTagToArray(i32 value,
+inline uint8_t* WireFormatLite::WriteSInt32NoTagToArray(arc_i32 value,
                                                         uint8_t* target) {
   return io::CodedOutputStream::WriteVarint32ToArray(ZigZagEncode32(value),
                                                      target);
 }
-inline uint8_t* WireFormatLite::WriteSInt64NoTagToArray(i64 value,
+inline uint8_t* WireFormatLite::WriteSInt64NoTagToArray(arc_i64 value,
                                                         uint8_t* target) {
   return io::CodedOutputStream::WriteVarint64ToArray(ZigZagEncode64(value),
                                                      target);
 }
-inline uint8_t* WireFormatLite::WriteFixed32NoTagToArray(ui32 value,
+inline uint8_t* WireFormatLite::WriteFixed32NoTagToArray(arc_ui32 value,
                                                          uint8_t* target) {
   return io::CodedOutputStream::WriteLittleEndian32ToArray(value, target);
 }
-inline uint8_t* WireFormatLite::WriteFixed64NoTagToArray(ui64 value,
+inline uint8_t* WireFormatLite::WriteFixed64NoTagToArray(arc_ui64 value,
                                                          uint8_t* target) {
   return io::CodedOutputStream::WriteLittleEndian64ToArray(value, target);
 }
-inline uint8_t* WireFormatLite::WriteSFixed32NoTagToArray(i32 value,
+inline uint8_t* WireFormatLite::WriteSFixed32NoTagToArray(arc_i32 value,
                                                           uint8_t* target) {
   return io::CodedOutputStream::WriteLittleEndian32ToArray(
-      static_cast<ui32>(value), target);
+      static_cast<arc_ui32>(value), target);
 }
-inline uint8_t* WireFormatLite::WriteSFixed64NoTagToArray(i64 value,
+inline uint8_t* WireFormatLite::WriteSFixed64NoTagToArray(arc_i64 value,
                                                           uint8_t* target) {
   return io::CodedOutputStream::WriteLittleEndian64ToArray(
-      static_cast<ui64>(value), target);
+      static_cast<arc_ui64>(value), target);
 }
 inline uint8_t* WireFormatLite::WriteFloatNoTagToArray(float value,
                                                        uint8_t* target) {
@@ -1465,43 +1465,43 @@ inline uint8_t* WireFormatLite::WriteFixedNoTagToArray(
 }
 
 inline uint8_t* WireFormatLite::WriteInt32NoTagToArray(
-    const RepeatedField<i32>& value, uint8_t* target) {
+    const RepeatedField<arc_i32>& value, uint8_t* target) {
   return WritePrimitiveNoTagToArray(value, WriteInt32NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteInt64NoTagToArray(
-    const RepeatedField<i64>& value, uint8_t* target) {
+    const RepeatedField<arc_i64>& value, uint8_t* target) {
   return WritePrimitiveNoTagToArray(value, WriteInt64NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteUInt32NoTagToArray(
-    const RepeatedField<ui32>& value, uint8_t* target) {
+    const RepeatedField<arc_ui32>& value, uint8_t* target) {
   return WritePrimitiveNoTagToArray(value, WriteUInt32NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteUInt64NoTagToArray(
-    const RepeatedField<ui64>& value, uint8_t* target) {
+    const RepeatedField<arc_ui64>& value, uint8_t* target) {
   return WritePrimitiveNoTagToArray(value, WriteUInt64NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteSInt32NoTagToArray(
-    const RepeatedField<i32>& value, uint8_t* target) {
+    const RepeatedField<arc_i32>& value, uint8_t* target) {
   return WritePrimitiveNoTagToArray(value, WriteSInt32NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteSInt64NoTagToArray(
-    const RepeatedField<i64>& value, uint8_t* target) {
+    const RepeatedField<arc_i64>& value, uint8_t* target) {
   return WritePrimitiveNoTagToArray(value, WriteSInt64NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteFixed32NoTagToArray(
-    const RepeatedField<ui32>& value, uint8_t* target) {
+    const RepeatedField<arc_ui32>& value, uint8_t* target) {
   return WriteFixedNoTagToArray(value, WriteFixed32NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteFixed64NoTagToArray(
-    const RepeatedField<ui64>& value, uint8_t* target) {
+    const RepeatedField<arc_ui64>& value, uint8_t* target) {
   return WriteFixedNoTagToArray(value, WriteFixed64NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteSFixed32NoTagToArray(
-    const RepeatedField<i32>& value, uint8_t* target) {
+    const RepeatedField<arc_i32>& value, uint8_t* target) {
   return WriteFixedNoTagToArray(value, WriteSFixed32NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteSFixed64NoTagToArray(
-    const RepeatedField<i64>& value, uint8_t* target) {
+    const RepeatedField<arc_i64>& value, uint8_t* target) {
   return WriteFixedNoTagToArray(value, WriteSFixed64NoTagToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteFloatNoTagToArray(
@@ -1522,61 +1522,61 @@ inline uint8_t* WireFormatLite::WriteEnumNoTagToArray(
 }
 
 inline uint8_t* WireFormatLite::WriteInt32ToArray(int field_number,
-                                                  i32 value,
+                                                  arc_i32 value,
                                                   uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_VARINT, target);
   return WriteInt32NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteInt64ToArray(int field_number,
-                                                  i64 value,
+                                                  arc_i64 value,
                                                   uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_VARINT, target);
   return WriteInt64NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteUInt32ToArray(int field_number,
-                                                   ui32 value,
+                                                   arc_ui32 value,
                                                    uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_VARINT, target);
   return WriteUInt32NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteUInt64ToArray(int field_number,
-                                                   ui64 value,
+                                                   arc_ui64 value,
                                                    uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_VARINT, target);
   return WriteUInt64NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteSInt32ToArray(int field_number,
-                                                   i32 value,
+                                                   arc_i32 value,
                                                    uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_VARINT, target);
   return WriteSInt32NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteSInt64ToArray(int field_number,
-                                                   i64 value,
+                                                   arc_i64 value,
                                                    uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_VARINT, target);
   return WriteSInt64NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteFixed32ToArray(int field_number,
-                                                    ui32 value,
+                                                    arc_ui32 value,
                                                     uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_FIXED32, target);
   return WriteFixed32NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteFixed64ToArray(int field_number,
-                                                    ui64 value,
+                                                    arc_ui64 value,
                                                     uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_FIXED64, target);
   return WriteFixed64NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteSFixed32ToArray(int field_number,
-                                                     i32 value,
+                                                     arc_i32 value,
                                                      uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_FIXED32, target);
   return WriteSFixed32NoTagToArray(value, target);
 }
 inline uint8_t* WireFormatLite::WriteSFixed64ToArray(int field_number,
-                                                     i64 value,
+                                                     arc_i64 value,
                                                      uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_FIXED64, target);
   return WriteSFixed64NoTagToArray(value, target);
@@ -1622,46 +1622,46 @@ inline uint8_t* WireFormatLite::WritePrimitiveToArray(
 }
 
 inline uint8_t* WireFormatLite::WriteInt32ToArray(
-    int field_number, const RepeatedField<i32>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_i32>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteInt32ToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteInt64ToArray(
-    int field_number, const RepeatedField<i64>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_i64>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteInt64ToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteUInt32ToArray(
-    int field_number, const RepeatedField<ui32>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_ui32>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteUInt32ToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteUInt64ToArray(
-    int field_number, const RepeatedField<ui64>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_ui64>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteUInt64ToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteSInt32ToArray(
-    int field_number, const RepeatedField<i32>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_i32>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteSInt32ToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteSInt64ToArray(
-    int field_number, const RepeatedField<i64>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_i64>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteSInt64ToArray, target);
 }
 inline uint8_t* WireFormatLite::WriteFixed32ToArray(
-    int field_number, const RepeatedField<ui32>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_ui32>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteFixed32ToArray,
                                target);
 }
 inline uint8_t* WireFormatLite::WriteFixed64ToArray(
-    int field_number, const RepeatedField<ui64>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_ui64>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteFixed64ToArray,
                                target);
 }
 inline uint8_t* WireFormatLite::WriteSFixed32ToArray(
-    int field_number, const RepeatedField<i32>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_i32>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteSFixed32ToArray,
                                target);
 }
 inline uint8_t* WireFormatLite::WriteSFixed64ToArray(
-    int field_number, const RepeatedField<i64>& value, uint8_t* target) {
+    int field_number, const RepeatedField<arc_i64>& value, uint8_t* target) {
   return WritePrimitiveToArray(field_number, value, WriteSFixed64ToArray,
                                target);
 }
@@ -1714,7 +1714,7 @@ inline uint8_t* WireFormatLite::InternalWriteMessage(
     io::EpsCopyOutputStream* stream) {
   target = WriteTagToArray(field_number, WIRETYPE_LENGTH_DELIMITED, target);
   target = io::CodedOutputStream::WriteVarint32ToArrayOutOfLine(
-      static_cast<ui32>(value.GetCachedSize()), target);
+      static_cast<arc_ui32>(value.GetCachedSize()), target);
   return value._InternalSerialize(target, stream);
 }
 
@@ -1735,7 +1735,7 @@ inline uint8_t* WireFormatLite::InternalWriteMessageNoVirtualToArray(
     uint8_t* target) {
   target = WriteTagToArray(field_number, WIRETYPE_LENGTH_DELIMITED, target);
   target = io::CodedOutputStream::WriteVarint32ToArray(
-      static_cast<ui32>(
+      static_cast<arc_ui32>(
           value.MessageType_WorkAroundCppLookupDefect::GetCachedSize()),
       target);
   return value
@@ -1745,44 +1745,44 @@ inline uint8_t* WireFormatLite::InternalWriteMessageNoVirtualToArray(
 
 // ===================================================================
 
-inline size_t WireFormatLite::Int32Size(i32 value) {
+inline size_t WireFormatLite::Int32Size(arc_i32 value) {
   return io::CodedOutputStream::VarintSize32SignExtended(value);
 }
-inline size_t WireFormatLite::Int64Size(i64 value) {
-  return io::CodedOutputStream::VarintSize64(static_cast<ui64>(value));
+inline size_t WireFormatLite::Int64Size(arc_i64 value) {
+  return io::CodedOutputStream::VarintSize64(static_cast<arc_ui64>(value));
 }
-inline size_t WireFormatLite::UInt32Size(ui32 value) {
+inline size_t WireFormatLite::UInt32Size(arc_ui32 value) {
   return io::CodedOutputStream::VarintSize32(value);
 }
-inline size_t WireFormatLite::UInt64Size(ui64 value) {
+inline size_t WireFormatLite::UInt64Size(arc_ui64 value) {
   return io::CodedOutputStream::VarintSize64(value);
 }
-inline size_t WireFormatLite::SInt32Size(i32 value) {
+inline size_t WireFormatLite::SInt32Size(arc_i32 value) {
   return io::CodedOutputStream::VarintSize32(ZigZagEncode32(value));
 }
-inline size_t WireFormatLite::SInt64Size(i64 value) {
+inline size_t WireFormatLite::SInt64Size(arc_i64 value) {
   return io::CodedOutputStream::VarintSize64(ZigZagEncode64(value));
 }
 inline size_t WireFormatLite::EnumSize(int value) {
   return io::CodedOutputStream::VarintSize32SignExtended(value);
 }
-inline size_t WireFormatLite::Int32SizePlusOne(i32 value) {
+inline size_t WireFormatLite::Int32SizePlusOne(arc_i32 value) {
   return io::CodedOutputStream::VarintSize32SignExtendedPlusOne(value);
 }
-inline size_t WireFormatLite::Int64SizePlusOne(i64 value) {
+inline size_t WireFormatLite::Int64SizePlusOne(arc_i64 value) {
   return io::CodedOutputStream::VarintSize64PlusOne(
-      static_cast<ui64>(value));
+      static_cast<arc_ui64>(value));
 }
-inline size_t WireFormatLite::UInt32SizePlusOne(ui32 value) {
+inline size_t WireFormatLite::UInt32SizePlusOne(arc_ui32 value) {
   return io::CodedOutputStream::VarintSize32PlusOne(value);
 }
-inline size_t WireFormatLite::UInt64SizePlusOne(ui64 value) {
+inline size_t WireFormatLite::UInt64SizePlusOne(arc_ui64 value) {
   return io::CodedOutputStream::VarintSize64PlusOne(value);
 }
-inline size_t WireFormatLite::SInt32SizePlusOne(i32 value) {
+inline size_t WireFormatLite::SInt32SizePlusOne(arc_i32 value) {
   return io::CodedOutputStream::VarintSize32PlusOne(ZigZagEncode32(value));
 }
-inline size_t WireFormatLite::SInt64SizePlusOne(i64 value) {
+inline size_t WireFormatLite::SInt64SizePlusOne(arc_i64 value) {
   return io::CodedOutputStream::VarintSize64PlusOne(ZigZagEncode64(value));
 }
 inline size_t WireFormatLite::EnumSizePlusOne(int value) {
@@ -1822,11 +1822,11 @@ inline size_t WireFormatLite::MessageSizeNoVirtual(
 
 inline size_t WireFormatLite::LengthDelimitedSize(size_t length) {
   // The static_cast here prevents an error in certain compiler configurations
-  // but is not technically correct--if length is too large to fit in a ui32
+  // but is not technically correct--if length is too large to fit in a arc_ui32
   // then it will be silently truncated. We will need to fix this if we ever
   // decide to start supporting serialized messages greater than 2 GiB in size.
   return length +
-         io::CodedOutputStream::VarintSize32(static_cast<ui32>(length));
+         io::CodedOutputStream::VarintSize32(static_cast<arc_ui32>(length));
 }
 
 template <typename MS>
@@ -1835,7 +1835,7 @@ bool ParseMessageSetItemImpl(io::CodedInputStream* input, MS ms) {
   //   required int32 type_id = 2;
   //   required data message = 3;
 
-  ui32 last_type_id = 0;
+  arc_ui32 last_type_id = 0;
 
   // If we see message data before the type_id, we'll append it to this so
   // we can parse it later.
@@ -1845,12 +1845,12 @@ bool ParseMessageSetItemImpl(io::CodedInputStream* input, MS ms) {
   State state = State::kNoTag;
 
   while (true) {
-    const ui32 tag = input->ReadTagNoLastTag();
+    const arc_ui32 tag = input->ReadTagNoLastTag();
     if (tag == 0) return false;
 
     switch (tag) {
       case WireFormatLite::kMessageSetTypeIdTag: {
-        ui32 type_id;
+        arc_ui32 type_id;
         if (!input->ReadVarint32(&type_id)) return false;
         if (state == State::kNoTag) {
           last_type_id = type_id;
@@ -1881,10 +1881,10 @@ bool ParseMessageSetItemImpl(io::CodedInputStream* input, MS ms) {
           state = State::kDone;
         } else if (state == State::kNoTag) {
           // We haven't seen a type_id yet.  Append this data to message_data.
-          ui32 length;
+          arc_ui32 length;
           if (!input->ReadVarint32(&length)) return false;
-          if (static_cast<i32>(length) < 0) return false;
-          ui32 size = static_cast<ui32>(
+          if (static_cast<arc_i32>(length) < 0) return false;
+          arc_ui32 size = static_cast<arc_ui32>(
               length + io::CodedOutputStream::VarintSize32(length));
           message_data.resize(size);
           auto ptr = reinterpret_cast<uint8_t*>(&message_data[0]);

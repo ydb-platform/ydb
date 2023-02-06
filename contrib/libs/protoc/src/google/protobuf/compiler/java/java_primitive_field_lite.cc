@@ -80,7 +80,7 @@ void SetPrimitiveVariables(const FieldDescriptor* descriptor,
   (*variables)["capitalized_type"] =
       GetCapitalizedType(descriptor, /* immutable = */ true);
   (*variables)["tag"] =
-      StrCat(static_cast<i32>(WireFormat::MakeTag(descriptor)));
+      StrCat(static_cast<arc_i32>(WireFormat::MakeTag(descriptor)));
   (*variables)["tag_size"] = StrCat(
       WireFormat::TagSize(descriptor->number(), GetType(descriptor)));
   (*variables)["required"] = descriptor->is_required() ? "true" : "false";

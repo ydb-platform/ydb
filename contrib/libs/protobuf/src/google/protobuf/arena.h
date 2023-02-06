@@ -351,19 +351,19 @@ class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8) Arena {
   // policies. Do not use these in unit tests.
   // Returns the total space allocated by the arena, which is the sum of the
   // sizes of the underlying blocks.
-  ui64 SpaceAllocated() const { return impl_.SpaceAllocated(); }
+  arc_ui64 SpaceAllocated() const { return impl_.SpaceAllocated(); }
   // Returns the total space used by the arena. Similar to SpaceAllocated but
   // does not include free space and block overhead. The total space returned
   // may not include space used by other threads executing concurrently with
   // the call to this method.
-  ui64 SpaceUsed() const { return impl_.SpaceUsed(); }
+  arc_ui64 SpaceUsed() const { return impl_.SpaceUsed(); }
 
   // Frees all storage allocated by this arena after calling destructors
   // registered with OwnDestructor() and freeing objects registered with Own().
   // Any objects allocated on this arena are unusable after this call. It also
   // returns the total space used by the arena which is the sums of the sizes
   // of the allocated blocks. This method is not thread-safe.
-  ui64 Reset() { return impl_.Reset(); }
+  arc_ui64 Reset() { return impl_.Reset(); }
 
   // Adds |object| to a list of heap-allocated objects to be freed with |delete|
   // when the arena is destroyed or reset.

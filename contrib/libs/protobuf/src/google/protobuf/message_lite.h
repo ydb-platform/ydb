@@ -158,7 +158,7 @@ class ExplicitlyConstructed {
   // Prefer c++14 aligned_storage, but for compatibility this will do.
   union AlignedUnion {
     alignas(T) char space[sizeof(T)];
-    i64 align_to_int64;
+    arc_i64 align_to_int64;
     void* align_to_ptr;
   } union_;
 };

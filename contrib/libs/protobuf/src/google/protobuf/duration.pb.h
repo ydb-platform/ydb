@@ -230,7 +230,7 @@ class PROTOBUF_EXPORT Duration final :
 
 // int64 seconds = 1;
 inline void Duration::clear_seconds() {
-  seconds_ = i64{0};
+  seconds_ = arc_i64{0};
 }
 inline ::PROTOBUF_NAMESPACE_ID::int64 Duration::_internal_seconds() const {
   return seconds_;

@@ -206,18 +206,18 @@ struct Metadata {
 
 namespace internal {
 template <class To>
-inline To* GetPointerAtOffset(Message* message, ui32 offset) {
+inline To* GetPointerAtOffset(Message* message, arc_ui32 offset) {
   return reinterpret_cast<To*>(reinterpret_cast<char*>(message) + offset);
 }
 
 template <class To>
-const To* GetConstPointerAtOffset(const Message* message, ui32 offset) {
+const To* GetConstPointerAtOffset(const Message* message, arc_ui32 offset) {
   return reinterpret_cast<const To*>(reinterpret_cast<const char*>(message) +
                                      offset);
 }
 
 template <class To>
-const To& GetConstRefAtOffset(const Message& message, ui32 offset) {
+const To& GetConstRefAtOffset(const Message& message, arc_ui32 offset) {
   return *GetConstPointerAtOffset<To>(&message, offset);
 }
 
@@ -421,7 +421,7 @@ class PROTOBUF_EXPORT Message : public MessageLite {
 
 
  protected:
-  static ui64 GetInvariantPerBuild(ui64 salt);
+  static arc_ui64 GetInvariantPerBuild(arc_ui64 salt);
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Message);
@@ -575,11 +575,11 @@ class PROTOBUF_EXPORT Reflection final {
   // These get the value of a non-repeated field.  They return the default
   // value for fields that aren't set.
 
-  i32 GetInt32(const Message& message, const FieldDescriptor* field) const;
-  i64 GetInt64(const Message& message, const FieldDescriptor* field) const;
-  ui32 GetUInt32(const Message& message,
+  arc_i32 GetInt32(const Message& message, const FieldDescriptor* field) const;
+  arc_i64 GetInt64(const Message& message, const FieldDescriptor* field) const;
+  arc_ui32 GetUInt32(const Message& message,
                      const FieldDescriptor* field) const;
-  ui64 GetUInt64(const Message& message,
+  arc_ui64 GetUInt64(const Message& message,
                      const FieldDescriptor* field) const;
   float GetFloat(const Message& message, const FieldDescriptor* field) const;
   double GetDouble(const Message& message, const FieldDescriptor* field) const;
@@ -625,13 +625,13 @@ class PROTOBUF_EXPORT Reflection final {
   // These mutate the value of a non-repeated field.
 
   void SetInt32(Message* message, const FieldDescriptor* field,
-                i32 value) const;
+                arc_i32 value) const;
   void SetInt64(Message* message, const FieldDescriptor* field,
-                i64 value) const;
+                arc_i64 value) const;
   void SetUInt32(Message* message, const FieldDescriptor* field,
-                 ui32 value) const;
+                 arc_ui32 value) const;
   void SetUInt64(Message* message, const FieldDescriptor* field,
-                 ui64 value) const;
+                 arc_ui64 value) const;
   void SetFloat(Message* message, const FieldDescriptor* field,
                 float value) const;
   void SetDouble(Message* message, const FieldDescriptor* field,
@@ -700,13 +700,13 @@ class PROTOBUF_EXPORT Reflection final {
   // Repeated field getters ------------------------------------------
   // These get the value of one element of a repeated field.
 
-  i32 GetRepeatedInt32(const Message& message, const FieldDescriptor* field,
+  arc_i32 GetRepeatedInt32(const Message& message, const FieldDescriptor* field,
                            int index) const;
-  i64 GetRepeatedInt64(const Message& message, const FieldDescriptor* field,
+  arc_i64 GetRepeatedInt64(const Message& message, const FieldDescriptor* field,
                            int index) const;
-  ui32 GetRepeatedUInt32(const Message& message,
+  arc_ui32 GetRepeatedUInt32(const Message& message,
                              const FieldDescriptor* field, int index) const;
-  ui64 GetRepeatedUInt64(const Message& message,
+  arc_ui64 GetRepeatedUInt64(const Message& message,
                              const FieldDescriptor* field, int index) const;
   float GetRepeatedFloat(const Message& message, const FieldDescriptor* field,
                          int index) const;
@@ -741,13 +741,13 @@ class PROTOBUF_EXPORT Reflection final {
   // These mutate the value of one element of a repeated field.
 
   void SetRepeatedInt32(Message* message, const FieldDescriptor* field,
-                        int index, i32 value) const;
+                        int index, arc_i32 value) const;
   void SetRepeatedInt64(Message* message, const FieldDescriptor* field,
-                        int index, i64 value) const;
+                        int index, arc_i64 value) const;
   void SetRepeatedUInt32(Message* message, const FieldDescriptor* field,
-                         int index, ui32 value) const;
+                         int index, arc_ui32 value) const;
   void SetRepeatedUInt64(Message* message, const FieldDescriptor* field,
-                         int index, ui64 value) const;
+                         int index, arc_ui64 value) const;
   void SetRepeatedFloat(Message* message, const FieldDescriptor* field,
                         int index, float value) const;
   void SetRepeatedDouble(Message* message, const FieldDescriptor* field,
@@ -778,13 +778,13 @@ class PROTOBUF_EXPORT Reflection final {
   // These add an element to a repeated field.
 
   void AddInt32(Message* message, const FieldDescriptor* field,
-                i32 value) const;
+                arc_i32 value) const;
   void AddInt64(Message* message, const FieldDescriptor* field,
-                i64 value) const;
+                arc_i64 value) const;
   void AddUInt32(Message* message, const FieldDescriptor* field,
-                 ui32 value) const;
+                 arc_ui32 value) const;
   void AddUInt64(Message* message, const FieldDescriptor* field,
-                 ui64 value) const;
+                 arc_ui64 value) const;
   void AddFloat(Message* message, const FieldDescriptor* field,
                 float value) const;
   void AddDouble(Message* message, const FieldDescriptor* field,
@@ -827,14 +827,14 @@ class PROTOBUF_EXPORT Reflection final {
   // to acceptable T.
   //
   //   field->cpp_type()      T
-  //   CPPTYPE_INT32        i32
-  //   CPPTYPE_UINT32       ui32
-  //   CPPTYPE_INT64        i64
-  //   CPPTYPE_UINT64       ui64
+  //   CPPTYPE_INT32        arc_i32
+  //   CPPTYPE_UINT32       arc_ui32
+  //   CPPTYPE_INT64        arc_i64
+  //   CPPTYPE_UINT64       arc_ui64
   //   CPPTYPE_DOUBLE       double
   //   CPPTYPE_FLOAT        float
   //   CPPTYPE_BOOL         bool
-  //   CPPTYPE_ENUM         generated enum type or i32
+  //   CPPTYPE_ENUM         generated enum type or arc_i32
   //   CPPTYPE_STRING       TProtoStringType
   //   CPPTYPE_MESSAGE      generated message type or google::protobuf::Message
   //
@@ -1157,11 +1157,11 @@ class PROTOBUF_EXPORT Reflection final {
 
   const Message* GetDefaultMessageInstance(const FieldDescriptor* field) const;
 
-  inline const ui32* GetHasBits(const Message& message) const;
-  inline ui32* MutableHasBits(Message* message) const;
-  inline ui32 GetOneofCase(const Message& message,
+  inline const arc_ui32* GetHasBits(const Message& message) const;
+  inline arc_ui32* MutableHasBits(Message* message) const;
+  inline arc_ui32 GetOneofCase(const Message& message,
                                const OneofDescriptor* oneof_descriptor) const;
-  inline ui32* MutableOneofCase(
+  inline arc_ui32* MutableOneofCase(
       Message* message, const OneofDescriptor* oneof_descriptor) const;
   inline bool HasExtensionSet(const Message& /* message */) const {
     return schema_.HasExtensionSet();
@@ -1183,9 +1183,9 @@ class PROTOBUF_EXPORT Reflection final {
   inline void SwapBit(Message* message1, Message* message2,
                       const FieldDescriptor* field) const;
 
-  inline const ui32* GetInlinedStringDonatedArray(
+  inline const arc_ui32* GetInlinedStringDonatedArray(
       const Message& message) const;
-  inline ui32* MutableInlinedStringDonatedArray(Message* message) const;
+  inline arc_ui32* MutableInlinedStringDonatedArray(Message* message) const;
   inline bool IsInlinedStringDonated(const Message& message,
                                      const FieldDescriptor* field) const;
 
@@ -1354,10 +1354,10 @@ class PROTOBUF_EXPORT MessageFactory {
   Reflection::MutableRepeatedFieldInternal<TYPE>(                  \
       Message * message, const FieldDescriptor* field) const;
 
-DECLARE_GET_REPEATED_FIELD(i32)
-DECLARE_GET_REPEATED_FIELD(i64)
-DECLARE_GET_REPEATED_FIELD(ui32)
-DECLARE_GET_REPEATED_FIELD(ui64)
+DECLARE_GET_REPEATED_FIELD(arc_i32)
+DECLARE_GET_REPEATED_FIELD(arc_i64)
+DECLARE_GET_REPEATED_FIELD(arc_ui32)
+DECLARE_GET_REPEATED_FIELD(arc_ui64)
 DECLARE_GET_REPEATED_FIELD(float)
 DECLARE_GET_REPEATED_FIELD(double)
 DECLARE_GET_REPEATED_FIELD(bool)
@@ -1483,17 +1483,17 @@ const Type& Reflection::DefaultRaw(const FieldDescriptor* field) const {
   return *reinterpret_cast<const Type*>(schema_.GetFieldDefault(field));
 }
 
-ui32 Reflection::GetOneofCase(
+arc_ui32 Reflection::GetOneofCase(
     const Message& message, const OneofDescriptor* oneof_descriptor) const {
   GOOGLE_DCHECK(!oneof_descriptor->is_synthetic());
-  return internal::GetConstRefAtOffset<ui32>(
+  return internal::GetConstRefAtOffset<arc_ui32>(
       message, schema_.GetOneofCaseOffset(oneof_descriptor));
 }
 
 bool Reflection::HasOneofField(const Message& message,
                                const FieldDescriptor* field) const {
   return (GetOneofCase(message, field->containing_oneof()) ==
-          static_cast<ui32>(field->number()));
+          static_cast<arc_ui32>(field->number()));
 }
 
 template <typename Type>

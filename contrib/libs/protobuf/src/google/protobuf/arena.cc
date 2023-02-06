@@ -168,8 +168,8 @@ void SerialArena::AllocateNewBlock(size_t n, const AllocationPolicy* policy) {
 #endif  // ADDRESS_SANITIZER
 }
 
-ui64 SerialArena::SpaceUsed() const {
-  ui64 space_used = ptr_ - head_->Pointer(kBlockHeaderSize);
+arc_ui64 SerialArena::SpaceUsed() const {
+  arc_ui64 space_used = ptr_ - head_->Pointer(kBlockHeaderSize);
   space_used += space_used_;
   // Remove the overhead of the SerialArena itself.
   space_used -= ThreadSafeArena::kSerialArenaSize;
@@ -263,11 +263,11 @@ void ThreadSafeArena::Init(bool record_allocs) {
   auto id = tc.next_lifecycle_id;
   // We increment lifecycle_id's by multiples of two so we can use bit 0 as
   // a tag.
-  constexpr ui64 kDelta = 2;
-  constexpr ui64 kInc = ThreadCache::kPerThreadIds * kDelta;
+  constexpr arc_ui64 kDelta = 2;
+  constexpr arc_ui64 kInc = ThreadCache::kPerThreadIds * kDelta;
   if (PROTOBUF_PREDICT_FALSE((id & (kInc - 1)) == 0)) {
     constexpr auto relaxed = std::memory_order_relaxed;
-    // On platforms that don't support ui64 atomics we can certainly not
+    // On platforms that don't support arc_ui64 atomics we can certainly not
     // afford to increment by large intervals and expect uniqueness due to
     // wrapping, hence we only add by 1.
     id = lifecycle_id_generator_.id.fetch_add(1, relaxed) * kInc;
@@ -316,7 +316,7 @@ SerialArena::Memory ThreadSafeArena::Free(size_t* space_allocated) {
   return mem;
 }
 
-ui64 ThreadSafeArena::Reset() {
+arc_ui64 ThreadSafeArena::Reset() {
   // Have to do this in a first pass, because some of the destructors might
   // refer to memory in other blocks.
   CleanupList();
@@ -406,18 +406,18 @@ void ThreadSafeArena::AddCleanupFallback(void* elem, void (*cleanup)(void*)) {
       ->AddCleanup(elem, cleanup, AllocPolicy());
 }
 
-ui64 ThreadSafeArena::SpaceAllocated() const {
+arc_ui64 ThreadSafeArena::SpaceAllocated() const {
   SerialArena* serial = threads_.load(std::memory_order_acquire);
-  ui64 res = 0;
+  arc_ui64 res = 0;
   for (; serial; serial = serial->next()) {
     res += serial->SpaceAllocated();
   }
   return res;
 }
 
-ui64 ThreadSafeArena::SpaceUsed() const {
+arc_ui64 ThreadSafeArena::SpaceUsed() const {
   SerialArena* serial = threads_.load(std::memory_order_acquire);
-  ui64 space_used = 0;
+  arc_ui64 space_used = 0;
   for (; serial; serial = serial->next()) {
     space_used += serial->SpaceUsed();
   }

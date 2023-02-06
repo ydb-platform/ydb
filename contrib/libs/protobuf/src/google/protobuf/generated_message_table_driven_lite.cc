@@ -43,7 +43,7 @@ namespace internal {
 
 namespace {
 
-TProtoStringType* MutableUnknownFields(MessageLite* msg, i64 arena_offset) {
+TProtoStringType* MutableUnknownFields(MessageLite* msg, arc_i64 arena_offset) {
   return Raw<InternalMetadata>(msg, arena_offset)
       ->mutable_unknown_fields<TProtoStringType>();
 }

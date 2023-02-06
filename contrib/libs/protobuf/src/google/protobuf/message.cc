@@ -251,7 +251,7 @@ size_t Message::SpaceUsedLong() const {
   return GetReflection()->SpaceUsedLong(*this);
 }
 
-ui64 Message::GetInvariantPerBuild(ui64 salt) {
+arc_ui64 Message::GetInvariantPerBuild(arc_ui64 salt) {
   return salt;
 }
 
@@ -389,14 +389,14 @@ const internal::RepeatedFieldAccessor* Reflection::RepeatedFieldAccessor(
 #define HANDLE_PRIMITIVE_TYPE(TYPE, type) \
   case FieldDescriptor::CPPTYPE_##TYPE:   \
     return GetSingleton<internal::RepeatedFieldPrimitiveAccessor<type> >();
-    HANDLE_PRIMITIVE_TYPE(INT32, i32)
-    HANDLE_PRIMITIVE_TYPE(UINT32, ui32)
-    HANDLE_PRIMITIVE_TYPE(INT64, i64)
-    HANDLE_PRIMITIVE_TYPE(UINT64, ui64)
+    HANDLE_PRIMITIVE_TYPE(INT32, arc_i32)
+    HANDLE_PRIMITIVE_TYPE(UINT32, arc_ui32)
+    HANDLE_PRIMITIVE_TYPE(INT64, arc_i64)
+    HANDLE_PRIMITIVE_TYPE(UINT64, arc_ui64)
     HANDLE_PRIMITIVE_TYPE(FLOAT, float)
     HANDLE_PRIMITIVE_TYPE(DOUBLE, double)
     HANDLE_PRIMITIVE_TYPE(BOOL, bool)
-    HANDLE_PRIMITIVE_TYPE(ENUM, i32)
+    HANDLE_PRIMITIVE_TYPE(ENUM, arc_i32)
 #undef HANDLE_PRIMITIVE_TYPE
     case FieldDescriptor::CPPTYPE_STRING:
       switch (field->options().ctype()) {

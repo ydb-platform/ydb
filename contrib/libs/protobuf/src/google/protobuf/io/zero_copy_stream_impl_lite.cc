@@ -406,7 +406,7 @@ void CopyingOutputStreamAdaptor::FreeBuffer() {
 // ===================================================================
 
 LimitingInputStream::LimitingInputStream(ZeroCopyInputStream* input,
-                                         i64 limit)
+                                         arc_i64 limit)
     : input_(input), limit_(limit) {
   prior_bytes_read_ = input_->ByteCount();
 }

@@ -379,10 +379,10 @@ enum { REPEATED_FIELD, OPTIONAL_FIELD };
     extension->repeated_##LOWERCASE##_value->Add(value);                      \
   }
 
-PRIMITIVE_ACCESSORS(INT32, i32, Int32)
-PRIMITIVE_ACCESSORS(INT64, i64, Int64)
-PRIMITIVE_ACCESSORS(UINT32, ui32, UInt32)
-PRIMITIVE_ACCESSORS(UINT64, ui64, UInt64)
+PRIMITIVE_ACCESSORS(INT32, arc_i32, Int32)
+PRIMITIVE_ACCESSORS(INT64, arc_i64, Int64)
+PRIMITIVE_ACCESSORS(UINT32, arc_ui32, UInt32)
+PRIMITIVE_ACCESSORS(UINT64, arc_ui64, UInt64)
 PRIMITIVE_ACCESSORS(FLOAT, float, Float)
 PRIMITIVE_ACCESSORS(DOUBLE, double, Double)
 PRIMITIVE_ACCESSORS(BOOL, bool, Bool)
@@ -397,7 +397,7 @@ const void* ExtensionSet::GetRawRepeatedField(int number,
   }
   // We assume that all the RepeatedField<>* pointers have the same
   // size and alignment within the anonymous union in Extension.
-  return extension->repeated_i32_value;
+  return extension->repeated_arc_i32_value;
 }
 
 void* ExtensionSet::MutableRawRepeatedField(int number, FieldType field_type,
@@ -415,20 +415,20 @@ void* ExtensionSet::MutableRawRepeatedField(int number, FieldType field_type,
     switch (WireFormatLite::FieldTypeToCppType(
         static_cast<WireFormatLite::FieldType>(field_type))) {
       case WireFormatLite::CPPTYPE_INT32:
-        extension->repeated_i32_value =
-            Arena::CreateMessage<RepeatedField<i32>>(arena_);
+        extension->repeated_arc_i32_value =
+            Arena::CreateMessage<RepeatedField<arc_i32>>(arena_);
         break;
       case WireFormatLite::CPPTYPE_INT64:
-        extension->repeated_i64_value =
-            Arena::CreateMessage<RepeatedField<i64>>(arena_);
+        extension->repeated_arc_i64_value =
+            Arena::CreateMessage<RepeatedField<arc_i64>>(arena_);
         break;
       case WireFormatLite::CPPTYPE_UINT32:
-        extension->repeated_ui32_value =
-            Arena::CreateMessage<RepeatedField<ui32>>(arena_);
+        extension->repeated_arc_ui32_value =
+            Arena::CreateMessage<RepeatedField<arc_ui32>>(arena_);
         break;
       case WireFormatLite::CPPTYPE_UINT64:
-        extension->repeated_ui64_value =
-            Arena::CreateMessage<RepeatedField<ui64>>(arena_);
+        extension->repeated_arc_ui64_value =
+            Arena::CreateMessage<RepeatedField<arc_ui64>>(arena_);
         break;
       case WireFormatLite::CPPTYPE_DOUBLE:
         extension->repeated_double_value =
@@ -459,7 +459,7 @@ void* ExtensionSet::MutableRawRepeatedField(int number, FieldType field_type,
 
   // We assume that all the RepeatedField<>* pointers have the same
   // size and alignment within the anonymous union in Extension.
-  return extension->repeated_i32_value;
+  return extension->repeated_arc_i32_value;
 }
 
 // Compatible version using old call signature. Does not create extensions when
@@ -469,7 +469,7 @@ void* ExtensionSet::MutableRawRepeatedField(int number) {
   GOOGLE_CHECK(extension != NULL) << "Extension not found.";
   // We assume that all the RepeatedField<>* pointers have the same
   // size and alignment within the anonymous union in Extension.
-  return extension->repeated_i32_value;
+  return extension->repeated_arc_i32_value;
 }
 
 // -------------------------------------------------------------------
@@ -848,16 +848,16 @@ void ExtensionSet::RemoveLast(int number) {
 
   switch (cpp_type(extension->type)) {
     case WireFormatLite::CPPTYPE_INT32:
-      extension->repeated_i32_value->RemoveLast();
+      extension->repeated_arc_i32_value->RemoveLast();
       break;
     case WireFormatLite::CPPTYPE_INT64:
-      extension->repeated_i64_value->RemoveLast();
+      extension->repeated_arc_i64_value->RemoveLast();
       break;
     case WireFormatLite::CPPTYPE_UINT32:
-      extension->repeated_ui32_value->RemoveLast();
+      extension->repeated_arc_ui32_value->RemoveLast();
       break;
     case WireFormatLite::CPPTYPE_UINT64:
-      extension->repeated_ui64_value->RemoveLast();
+      extension->repeated_arc_ui64_value->RemoveLast();
       break;
     case WireFormatLite::CPPTYPE_FLOAT:
       extension->repeated_float_value->RemoveLast();
@@ -903,16 +903,16 @@ void ExtensionSet::SwapElements(int number, int index1, int index2) {
 
   switch (cpp_type(extension->type)) {
     case WireFormatLite::CPPTYPE_INT32:
-      extension->repeated_i32_value->SwapElements(index1, index2);
+      extension->repeated_arc_i32_value->SwapElements(index1, index2);
       break;
     case WireFormatLite::CPPTYPE_INT64:
-      extension->repeated_i64_value->SwapElements(index1, index2);
+      extension->repeated_arc_i64_value->SwapElements(index1, index2);
       break;
     case WireFormatLite::CPPTYPE_UINT32:
-      extension->repeated_ui32_value->SwapElements(index1, index2);
+      extension->repeated_arc_ui32_value->SwapElements(index1, index2);
       break;
     case WireFormatLite::CPPTYPE_UINT64:
-      extension->repeated_ui64_value->SwapElements(index1, index2);
+      extension->repeated_arc_ui64_value->SwapElements(index1, index2);
       break;
     case WireFormatLite::CPPTYPE_FLOAT:
       extension->repeated_float_value->SwapElements(index1, index2);
@@ -1007,10 +1007,10 @@ void ExtensionSet::InternalExtensionMergeFrom(
         *other_extension.repeated_##LOWERCASE##_value);  \
     break;
 
-      HANDLE_TYPE(INT32, i32, RepeatedField<i32>);
-      HANDLE_TYPE(INT64, i64, RepeatedField<i64>);
-      HANDLE_TYPE(UINT32, ui32, RepeatedField<ui32>);
-      HANDLE_TYPE(UINT64, ui64, RepeatedField<ui64>);
+      HANDLE_TYPE(INT32, arc_i32, RepeatedField<arc_i32>);
+      HANDLE_TYPE(INT64, arc_i64, RepeatedField<arc_i64>);
+      HANDLE_TYPE(UINT32, arc_ui32, RepeatedField<arc_ui32>);
+      HANDLE_TYPE(UINT64, arc_ui64, RepeatedField<arc_ui64>);
       HANDLE_TYPE(FLOAT, float, RepeatedField<float>);
       HANDLE_TYPE(DOUBLE, double, RepeatedField<double>);
       HANDLE_TYPE(BOOL, bool, RepeatedField<bool>);
@@ -1051,10 +1051,10 @@ void ExtensionSet::InternalExtensionMergeFrom(
                    other_extension.descriptor);       \
     break;
 
-        HANDLE_TYPE(INT32, i32, Int32);
-        HANDLE_TYPE(INT64, i64, Int64);
-        HANDLE_TYPE(UINT32, ui32, UInt32);
-        HANDLE_TYPE(UINT64, ui64, UInt64);
+        HANDLE_TYPE(INT32, arc_i32, Int32);
+        HANDLE_TYPE(INT64, arc_i64, Int64);
+        HANDLE_TYPE(UINT32, arc_ui32, UInt32);
+        HANDLE_TYPE(UINT64, arc_ui64, UInt64);
         HANDLE_TYPE(FLOAT, float, Float);
         HANDLE_TYPE(DOUBLE, double, Double);
         HANDLE_TYPE(BOOL, bool, Bool);
@@ -1218,7 +1218,7 @@ bool ExtensionSet::IsInitialized() const {
   return true;
 }
 
-bool ExtensionSet::FindExtensionInfoFromTag(ui32 tag,
+bool ExtensionSet::FindExtensionInfoFromTag(arc_ui32 tag,
                                             ExtensionFinder* extension_finder,
                                             int* field_number,
                                             ExtensionInfo* extension,
@@ -1252,7 +1252,7 @@ bool ExtensionSet::FindExtensionInfoFromFieldNumber(
   return expected_wire_type == wire_type;
 }
 
-bool ExtensionSet::ParseField(ui32 tag, io::CodedInputStream* input,
+bool ExtensionSet::ParseField(arc_ui32 tag, io::CodedInputStream* input,
                               ExtensionFinder* extension_finder,
                               FieldSkipper* field_skipper) {
   int number;
@@ -1267,7 +1267,7 @@ bool ExtensionSet::ParseField(ui32 tag, io::CodedInputStream* input,
   }
 }
 
-const char* ExtensionSet::ParseField(ui64 tag, const char* ptr,
+const char* ExtensionSet::ParseField(arc_ui64 tag, const char* ptr,
                                      const MessageLite* extendee,
                                      internal::InternalMetadata* metadata,
                                      internal::ParseContext* ctx) {
@@ -1299,7 +1299,7 @@ bool ExtensionSet::ParseFieldWithExtensionInfo(int number,
   // Explicitly not read extension.is_packed, instead check whether the field
   // was encoded in packed form on the wire.
   if (was_packed_on_wire) {
-    ui32 size;
+    arc_ui32 size;
     if (!input->ReadVarint32(&size)) return false;
     io::CodedInputStream::Limit limit = input->PushLimit(size);
 
@@ -1317,16 +1317,16 @@ bool ExtensionSet::ParseFieldWithExtensionInfo(int number,
     }                                                                       \
     break
 
-      HANDLE_TYPE(INT32, Int32, i32);
-      HANDLE_TYPE(INT64, Int64, i64);
-      HANDLE_TYPE(UINT32, UInt32, ui32);
-      HANDLE_TYPE(UINT64, UInt64, ui64);
-      HANDLE_TYPE(SINT32, Int32, i32);
-      HANDLE_TYPE(SINT64, Int64, i64);
-      HANDLE_TYPE(FIXED32, UInt32, ui32);
-      HANDLE_TYPE(FIXED64, UInt64, ui64);
-      HANDLE_TYPE(SFIXED32, Int32, i32);
-      HANDLE_TYPE(SFIXED64, Int64, i64);
+      HANDLE_TYPE(INT32, Int32, arc_i32);
+      HANDLE_TYPE(INT64, Int64, arc_i64);
+      HANDLE_TYPE(UINT32, UInt32, arc_ui32);
+      HANDLE_TYPE(UINT64, UInt64, arc_ui64);
+      HANDLE_TYPE(SINT32, Int32, arc_i32);
+      HANDLE_TYPE(SINT64, Int64, arc_i64);
+      HANDLE_TYPE(FIXED32, UInt32, arc_ui32);
+      HANDLE_TYPE(FIXED64, UInt64, arc_ui64);
+      HANDLE_TYPE(SFIXED32, Int32, arc_i32);
+      HANDLE_TYPE(SFIXED64, Int64, arc_i64);
       HANDLE_TYPE(FLOAT, Float, float);
       HANDLE_TYPE(DOUBLE, Double, double);
       HANDLE_TYPE(BOOL, Bool, bool);
@@ -1376,16 +1376,16 @@ bool ExtensionSet::ParseFieldWithExtensionInfo(int number,
     }                                                                       \
   } break
 
-      HANDLE_TYPE(INT32, Int32, i32);
-      HANDLE_TYPE(INT64, Int64, i64);
-      HANDLE_TYPE(UINT32, UInt32, ui32);
-      HANDLE_TYPE(UINT64, UInt64, ui64);
-      HANDLE_TYPE(SINT32, Int32, i32);
-      HANDLE_TYPE(SINT64, Int64, i64);
-      HANDLE_TYPE(FIXED32, UInt32, ui32);
-      HANDLE_TYPE(FIXED64, UInt64, ui64);
-      HANDLE_TYPE(SFIXED32, Int32, i32);
-      HANDLE_TYPE(SFIXED64, Int64, i64);
+      HANDLE_TYPE(INT32, Int32, arc_i32);
+      HANDLE_TYPE(INT64, Int64, arc_i64);
+      HANDLE_TYPE(UINT32, UInt32, arc_ui32);
+      HANDLE_TYPE(UINT64, UInt64, arc_ui64);
+      HANDLE_TYPE(SINT32, Int32, arc_i32);
+      HANDLE_TYPE(SINT64, Int64, arc_i64);
+      HANDLE_TYPE(FIXED32, UInt32, arc_ui32);
+      HANDLE_TYPE(FIXED64, UInt64, arc_ui64);
+      HANDLE_TYPE(SFIXED32, Int32, arc_i32);
+      HANDLE_TYPE(SFIXED64, Int64, arc_i64);
       HANDLE_TYPE(FLOAT, Float, float);
       HANDLE_TYPE(DOUBLE, Double, double);
       HANDLE_TYPE(BOOL, Bool, bool);
@@ -1464,14 +1464,14 @@ bool ExtensionSet::ParseFieldWithExtensionInfo(int number,
   return true;
 }
 
-bool ExtensionSet::ParseField(ui32 tag, io::CodedInputStream* input,
+bool ExtensionSet::ParseField(arc_ui32 tag, io::CodedInputStream* input,
                               const MessageLite* extendee) {
   FieldSkipper skipper;
   GeneratedExtensionFinder finder(extendee);
   return ParseField(tag, input, &finder, &skipper);
 }
 
-bool ExtensionSet::ParseField(ui32 tag, io::CodedInputStream* input,
+bool ExtensionSet::ParseField(arc_ui32 tag, io::CodedInputStream* input,
                               const MessageLite* extendee,
                               io::CodedOutputStream* unknown_fields) {
   CodedOutputStreamFieldSkipper skipper(unknown_fields);
@@ -1483,7 +1483,7 @@ bool ExtensionSet::ParseMessageSetLite(io::CodedInputStream* input,
                                        ExtensionFinder* extension_finder,
                                        FieldSkipper* field_skipper) {
   while (true) {
-    const ui32 tag = input->ReadTag();
+    const arc_ui32 tag = input->ReadTag();
     switch (tag) {
       case 0:
         return true;
@@ -1511,7 +1511,7 @@ bool ExtensionSet::ParseMessageSetItemLite(io::CodedInputStream* input,
           extension_finder, field_skipper);
     }
 
-    bool SkipField(ui32 tag, io::CodedInputStream* input) {
+    bool SkipField(arc_ui32 tag, io::CodedInputStream* input) {
       return field_skipper->SkipField(input, tag);
     }
 
@@ -1599,10 +1599,10 @@ void ExtensionSet::Extension::Clear() {
     repeated_##LOWERCASE##_value->Clear();  \
     break
 
-      HANDLE_TYPE(INT32, i32);
-      HANDLE_TYPE(INT64, i64);
-      HANDLE_TYPE(UINT32, ui32);
-      HANDLE_TYPE(UINT64, ui64);
+      HANDLE_TYPE(INT32, arc_i32);
+      HANDLE_TYPE(INT64, arc_i64);
+      HANDLE_TYPE(UINT32, arc_ui32);
+      HANDLE_TYPE(UINT64, arc_ui64);
       HANDLE_TYPE(FLOAT, float);
       HANDLE_TYPE(DOUBLE, double);
       HANDLE_TYPE(BOOL, bool);
@@ -1650,12 +1650,12 @@ size_t ExtensionSet::Extension::ByteSize(int number) const {
     }                                                                \
     break
 
-        HANDLE_TYPE(INT32, Int32, i32);
-        HANDLE_TYPE(INT64, Int64, i64);
-        HANDLE_TYPE(UINT32, UInt32, ui32);
-        HANDLE_TYPE(UINT64, UInt64, ui64);
-        HANDLE_TYPE(SINT32, SInt32, i32);
-        HANDLE_TYPE(SINT64, SInt64, i64);
+        HANDLE_TYPE(INT32, Int32, arc_i32);
+        HANDLE_TYPE(INT64, Int64, arc_i64);
+        HANDLE_TYPE(UINT32, UInt32, arc_ui32);
+        HANDLE_TYPE(UINT64, UInt64, arc_ui64);
+        HANDLE_TYPE(SINT32, SInt32, arc_i32);
+        HANDLE_TYPE(SINT64, SInt64, arc_i64);
         HANDLE_TYPE(ENUM, Enum, enum);
 #undef HANDLE_TYPE
 
@@ -1665,10 +1665,10 @@ size_t ExtensionSet::Extension::ByteSize(int number) const {
     result += WireFormatLite::k##CAMELCASE##Size *               \
               FromIntSize(repeated_##LOWERCASE##_value->size()); \
     break
-        HANDLE_TYPE(FIXED32, Fixed32, ui32);
-        HANDLE_TYPE(FIXED64, Fixed64, ui64);
-        HANDLE_TYPE(SFIXED32, SFixed32, i32);
-        HANDLE_TYPE(SFIXED64, SFixed64, i64);
+        HANDLE_TYPE(FIXED32, Fixed32, arc_ui32);
+        HANDLE_TYPE(FIXED64, Fixed64, arc_ui64);
+        HANDLE_TYPE(SFIXED32, SFixed32, arc_i32);
+        HANDLE_TYPE(SFIXED64, SFixed64, arc_i64);
         HANDLE_TYPE(FLOAT, Float, float);
         HANDLE_TYPE(DOUBLE, Double, double);
         HANDLE_TYPE(BOOL, Bool, bool);
@@ -1701,12 +1701,12 @@ size_t ExtensionSet::Extension::ByteSize(int number) const {
     }                                                                       \
     break
 
-        HANDLE_TYPE(INT32, Int32, i32);
-        HANDLE_TYPE(INT64, Int64, i64);
-        HANDLE_TYPE(UINT32, UInt32, ui32);
-        HANDLE_TYPE(UINT64, UInt64, ui64);
-        HANDLE_TYPE(SINT32, SInt32, i32);
-        HANDLE_TYPE(SINT64, SInt64, i64);
+        HANDLE_TYPE(INT32, Int32, arc_i32);
+        HANDLE_TYPE(INT64, Int64, arc_i64);
+        HANDLE_TYPE(UINT32, UInt32, arc_ui32);
+        HANDLE_TYPE(UINT64, UInt64, arc_ui64);
+        HANDLE_TYPE(SINT32, SInt32, arc_i32);
+        HANDLE_TYPE(SINT64, SInt64, arc_i64);
         HANDLE_TYPE(STRING, String, string);
         HANDLE_TYPE(BYTES, Bytes, string);
         HANDLE_TYPE(ENUM, Enum, enum);
@@ -1720,10 +1720,10 @@ size_t ExtensionSet::Extension::ByteSize(int number) const {
     result += (tag_size + WireFormatLite::k##CAMELCASE##Size) *  \
               FromIntSize(repeated_##LOWERCASE##_value->size()); \
     break
-        HANDLE_TYPE(FIXED32, Fixed32, ui32);
-        HANDLE_TYPE(FIXED64, Fixed64, ui64);
-        HANDLE_TYPE(SFIXED32, SFixed32, i32);
-        HANDLE_TYPE(SFIXED64, SFixed64, i64);
+        HANDLE_TYPE(FIXED32, Fixed32, arc_ui32);
+        HANDLE_TYPE(FIXED64, Fixed64, arc_ui64);
+        HANDLE_TYPE(SFIXED32, SFixed32, arc_i32);
+        HANDLE_TYPE(SFIXED64, SFixed64, arc_i64);
         HANDLE_TYPE(FLOAT, Float, float);
         HANDLE_TYPE(DOUBLE, Double, double);
         HANDLE_TYPE(BOOL, Bool, bool);
@@ -1738,12 +1738,12 @@ size_t ExtensionSet::Extension::ByteSize(int number) const {
     result += WireFormatLite::CAMELCASE##Size(LOWERCASE); \
     break
 
-      HANDLE_TYPE(INT32, Int32, i32_value);
-      HANDLE_TYPE(INT64, Int64, i64_value);
-      HANDLE_TYPE(UINT32, UInt32, ui32_value);
-      HANDLE_TYPE(UINT64, UInt64, ui64_value);
-      HANDLE_TYPE(SINT32, SInt32, i32_value);
-      HANDLE_TYPE(SINT64, SInt64, i64_value);
+      HANDLE_TYPE(INT32, Int32, arc_i32_value);
+      HANDLE_TYPE(INT64, Int64, arc_i64_value);
+      HANDLE_TYPE(UINT32, UInt32, arc_ui32_value);
+      HANDLE_TYPE(UINT64, UInt64, arc_ui64_value);
+      HANDLE_TYPE(SINT32, SInt32, arc_i32_value);
+      HANDLE_TYPE(SINT64, SInt64, arc_i64_value);
       HANDLE_TYPE(STRING, String, *string_value);
       HANDLE_TYPE(BYTES, Bytes, *string_value);
       HANDLE_TYPE(ENUM, Enum, enum_value);
@@ -1785,10 +1785,10 @@ int ExtensionSet::Extension::GetSize() const {
   case WireFormatLite::CPPTYPE_##UPPERCASE: \
     return repeated_##LOWERCASE##_value->size()
 
-    HANDLE_TYPE(INT32, i32);
-    HANDLE_TYPE(INT64, i64);
-    HANDLE_TYPE(UINT32, ui32);
-    HANDLE_TYPE(UINT64, ui64);
+    HANDLE_TYPE(INT32, arc_i32);
+    HANDLE_TYPE(INT64, arc_i64);
+    HANDLE_TYPE(UINT32, arc_ui32);
+    HANDLE_TYPE(UINT64, arc_ui64);
     HANDLE_TYPE(FLOAT, float);
     HANDLE_TYPE(DOUBLE, double);
     HANDLE_TYPE(BOOL, bool);
@@ -1812,10 +1812,10 @@ void ExtensionSet::Extension::Free() {
     delete repeated_##LOWERCASE##_value;    \
     break
 
-      HANDLE_TYPE(INT32, i32);
-      HANDLE_TYPE(INT64, i64);
-      HANDLE_TYPE(UINT32, ui32);
-      HANDLE_TYPE(UINT64, ui64);
+      HANDLE_TYPE(INT32, arc_i32);
+      HANDLE_TYPE(INT64, arc_i64);
+      HANDLE_TYPE(UINT32, arc_ui32);
+      HANDLE_TYPE(UINT64, arc_ui64);
       HANDLE_TYPE(FLOAT, float);
       HANDLE_TYPE(DOUBLE, double);
       HANDLE_TYPE(BOOL, bool);
@@ -2013,16 +2013,16 @@ uint8_t* ExtensionSet::Extension::InternalSerializeFieldWithCachedSizesToArray(
     }                                                                \
     break
 
-        HANDLE_TYPE(INT32, Int32, i32);
-        HANDLE_TYPE(INT64, Int64, i64);
-        HANDLE_TYPE(UINT32, UInt32, ui32);
-        HANDLE_TYPE(UINT64, UInt64, ui64);
-        HANDLE_TYPE(SINT32, SInt32, i32);
-        HANDLE_TYPE(SINT64, SInt64, i64);
-        HANDLE_TYPE(FIXED32, Fixed32, ui32);
-        HANDLE_TYPE(FIXED64, Fixed64, ui64);
-        HANDLE_TYPE(SFIXED32, SFixed32, i32);
-        HANDLE_TYPE(SFIXED64, SFixed64, i64);
+        HANDLE_TYPE(INT32, Int32, arc_i32);
+        HANDLE_TYPE(INT64, Int64, arc_i64);
+        HANDLE_TYPE(UINT32, UInt32, arc_ui32);
+        HANDLE_TYPE(UINT64, UInt64, arc_ui64);
+        HANDLE_TYPE(SINT32, SInt32, arc_i32);
+        HANDLE_TYPE(SINT64, SInt64, arc_i64);
+        HANDLE_TYPE(FIXED32, Fixed32, arc_ui32);
+        HANDLE_TYPE(FIXED64, Fixed64, arc_ui64);
+        HANDLE_TYPE(SFIXED32, SFixed32, arc_i32);
+        HANDLE_TYPE(SFIXED64, SFixed64, arc_i64);
         HANDLE_TYPE(FLOAT, Float, float);
         HANDLE_TYPE(DOUBLE, Double, double);
         HANDLE_TYPE(BOOL, Bool, bool);
@@ -2047,16 +2047,16 @@ uint8_t* ExtensionSet::Extension::InternalSerializeFieldWithCachedSizesToArray(
     }                                                                \
     break
 
-        HANDLE_TYPE(INT32, Int32, i32);
-        HANDLE_TYPE(INT64, Int64, i64);
-        HANDLE_TYPE(UINT32, UInt32, ui32);
-        HANDLE_TYPE(UINT64, UInt64, ui64);
-        HANDLE_TYPE(SINT32, SInt32, i32);
-        HANDLE_TYPE(SINT64, SInt64, i64);
-        HANDLE_TYPE(FIXED32, Fixed32, ui32);
-        HANDLE_TYPE(FIXED64, Fixed64, ui64);
-        HANDLE_TYPE(SFIXED32, SFixed32, i32);
-        HANDLE_TYPE(SFIXED64, SFixed64, i64);
+        HANDLE_TYPE(INT32, Int32, arc_i32);
+        HANDLE_TYPE(INT64, Int64, arc_i64);
+        HANDLE_TYPE(UINT32, UInt32, arc_ui32);
+        HANDLE_TYPE(UINT64, UInt64, arc_ui64);
+        HANDLE_TYPE(SINT32, SInt32, arc_i32);
+        HANDLE_TYPE(SINT64, SInt64, arc_i64);
+        HANDLE_TYPE(FIXED32, Fixed32, arc_ui32);
+        HANDLE_TYPE(FIXED64, Fixed64, arc_ui64);
+        HANDLE_TYPE(SFIXED32, SFixed32, arc_i32);
+        HANDLE_TYPE(SFIXED64, SFixed64, arc_i64);
         HANDLE_TYPE(FLOAT, Float, float);
         HANDLE_TYPE(DOUBLE, Double, double);
         HANDLE_TYPE(BOOL, Bool, bool);
@@ -2095,16 +2095,16 @@ uint8_t* ExtensionSet::Extension::InternalSerializeFieldWithCachedSizesToArray(
     target = WireFormatLite::Write##CAMELCASE##ToArray(number, VALUE, target); \
     break
 
-      HANDLE_TYPE(INT32, Int32, i32_value);
-      HANDLE_TYPE(INT64, Int64, i64_value);
-      HANDLE_TYPE(UINT32, UInt32, ui32_value);
-      HANDLE_TYPE(UINT64, UInt64, ui64_value);
-      HANDLE_TYPE(SINT32, SInt32, i32_value);
-      HANDLE_TYPE(SINT64, SInt64, i64_value);
-      HANDLE_TYPE(FIXED32, Fixed32, ui32_value);
-      HANDLE_TYPE(FIXED64, Fixed64, ui64_value);
-      HANDLE_TYPE(SFIXED32, SFixed32, i32_value);
-      HANDLE_TYPE(SFIXED64, SFixed64, i64_value);
+      HANDLE_TYPE(INT32, Int32, arc_i32_value);
+      HANDLE_TYPE(INT64, Int64, arc_i64_value);
+      HANDLE_TYPE(UINT32, UInt32, arc_ui32_value);
+      HANDLE_TYPE(UINT64, UInt64, arc_ui64_value);
+      HANDLE_TYPE(SINT32, SInt32, arc_i32_value);
+      HANDLE_TYPE(SINT64, SInt64, arc_i64_value);
+      HANDLE_TYPE(FIXED32, Fixed32, arc_ui32_value);
+      HANDLE_TYPE(FIXED64, Fixed64, arc_ui64_value);
+      HANDLE_TYPE(SFIXED32, SFixed32, arc_i32_value);
+      HANDLE_TYPE(SFIXED64, SFixed64, arc_i64_value);
       HANDLE_TYPE(FLOAT, Float, float_value);
       HANDLE_TYPE(DOUBLE, Double, double_value);
       HANDLE_TYPE(BOOL, Bool, bool_value);

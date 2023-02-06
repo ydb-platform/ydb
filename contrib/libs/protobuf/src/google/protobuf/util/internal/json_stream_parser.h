@@ -157,8 +157,8 @@ class PROTOBUF_EXPORT JsonStreamParser {
     Type type;
     union {
       double double_val;
-      i64 int_val;
-      ui64 uint_val;
+      arc_i64 int_val;
+      arc_ui64 uint_val;
     };
   };
 

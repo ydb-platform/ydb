@@ -552,7 +552,7 @@ void FieldMaskTree::MergeMessage(const Node* node, const Message& source,
 
 void FieldMaskTree::AddRequiredFieldPath(Node* node,
                                          const Descriptor* descriptor) {
-  const i32 field_count = descriptor->field_count();
+  const arc_i32 field_count = descriptor->field_count();
   for (int index = 0; index < field_count; ++index) {
     const FieldDescriptor* field = descriptor->field(index);
     if (field->is_required()) {
@@ -589,7 +589,7 @@ bool FieldMaskTree::TrimMessage(const Node* node, Message* message) {
   GOOGLE_DCHECK(!node->children.empty());
   const Reflection* reflection = message->GetReflection();
   const Descriptor* descriptor = message->GetDescriptor();
-  const i32 field_count = descriptor->field_count();
+  const arc_i32 field_count = descriptor->field_count();
   bool modified = false;
   for (int index = 0; index < field_count; ++index) {
     const FieldDescriptor* field = descriptor->field(index);

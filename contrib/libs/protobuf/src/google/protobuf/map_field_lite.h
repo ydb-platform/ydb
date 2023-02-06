@@ -106,7 +106,7 @@ class MapFieldLite {
 
   template <typename UnknownType>
   const char* ParseWithEnumValidation(const char* ptr, ParseContext* ctx,
-                                      bool (*is_valid)(int), ui32 field_num,
+                                      bool (*is_valid)(int), arc_ui32 field_num,
                                       InternalMetadata* metadata) {
     typename Derived::template Parser<MapFieldLite, Map<Key, T>> parser(this);
     return parser.template ParseWithEnumValidation<UnknownType>(
@@ -129,7 +129,7 @@ struct EnumParseWrapper {
   }
   T* map_field;
   bool (*is_valid)(int);
-  ui32 field_num;
+  arc_ui32 field_num;
   InternalMetadata* metadata;
 };
 
@@ -138,7 +138,7 @@ struct EnumParseWrapper {
 // generated code
 template <typename UnknownType, typename T>
 EnumParseWrapper<UnknownType, T> InitEnumParseWrapper(
-    T* map_field, bool (*is_valid)(int), ui32 field_num,
+    T* map_field, bool (*is_valid)(int), arc_ui32 field_num,
     InternalMetadata* metadata) {
   return EnumParseWrapper<UnknownType, T>{map_field, is_valid, field_num,
                                           metadata};

@@ -68,11 +68,11 @@ class PROTOBUF_EXPORT TimeUtil {
   // The min/max Timestamp/Duration values we support.
   //
   // For "0001-01-01T00:00:00Z".
-  static const i64 kTimestampMinSeconds = -62135596800LL;
+  static const arc_i64 kTimestampMinSeconds = -62135596800LL;
   // For "9999-12-31T23:59:59.999999999Z".
-  static const i64 kTimestampMaxSeconds = 253402300799LL;
-  static const i64 kDurationMinSeconds = -315576000000LL;
-  static const i64 kDurationMaxSeconds = 315576000000LL;
+  static const arc_i64 kTimestampMaxSeconds = 253402300799LL;
+  static const arc_i64 kDurationMinSeconds = -315576000000LL;
+  static const arc_i64 kDurationMaxSeconds = 315576000000LL;
 
   // Converts Timestamp to/from RFC 3339 date string format.
   // Generated output will always be Z-normalized and uses 3, 6 or 9
@@ -111,12 +111,12 @@ class PROTOBUF_EXPORT TimeUtil {
 
   // Converts between Duration and integer types. The behavior is undefined if
   // the input value is not in the valid range of Duration.
-  static Duration NanosecondsToDuration(i64 nanos);
-  static Duration MicrosecondsToDuration(i64 micros);
-  static Duration MillisecondsToDuration(i64 millis);
-  static Duration SecondsToDuration(i64 seconds);
-  static Duration MinutesToDuration(i64 minutes);
-  static Duration HoursToDuration(i64 hours);
+  static Duration NanosecondsToDuration(arc_i64 nanos);
+  static Duration MicrosecondsToDuration(arc_i64 micros);
+  static Duration MillisecondsToDuration(arc_i64 millis);
+  static Duration SecondsToDuration(arc_i64 seconds);
+  static Duration MinutesToDuration(arc_i64 minutes);
+  static Duration HoursToDuration(arc_i64 hours);
   // Result will be truncated towards zero. For example, "-1.5s" will be
   // truncated to "-1s", and "1.5s" to "1s" when converting to seconds.
   // It's undefined behavior if the input duration is not valid or the result
@@ -124,28 +124,28 @@ class PROTOBUF_EXPORT TimeUtil {
   // valid range of Duration, or have an invalid nanos value (i.e., larger
   // than 999999999, less than -999999999, or have a different sign from the
   // seconds part).
-  static i64 DurationToNanoseconds(const Duration& duration);
-  static i64 DurationToMicroseconds(const Duration& duration);
-  static i64 DurationToMilliseconds(const Duration& duration);
-  static i64 DurationToSeconds(const Duration& duration);
-  static i64 DurationToMinutes(const Duration& duration);
-  static i64 DurationToHours(const Duration& duration);
+  static arc_i64 DurationToNanoseconds(const Duration& duration);
+  static arc_i64 DurationToMicroseconds(const Duration& duration);
+  static arc_i64 DurationToMilliseconds(const Duration& duration);
+  static arc_i64 DurationToSeconds(const Duration& duration);
+  static arc_i64 DurationToMinutes(const Duration& duration);
+  static arc_i64 DurationToHours(const Duration& duration);
   // Creates Timestamp from integer types. The integer value indicates the
   // time elapsed from Epoch time. The behavior is undefined if the input
   // value is not in the valid range of Timestamp.
-  static Timestamp NanosecondsToTimestamp(i64 nanos);
-  static Timestamp MicrosecondsToTimestamp(i64 micros);
-  static Timestamp MillisecondsToTimestamp(i64 millis);
-  static Timestamp SecondsToTimestamp(i64 seconds);
+  static Timestamp NanosecondsToTimestamp(arc_i64 nanos);
+  static Timestamp MicrosecondsToTimestamp(arc_i64 micros);
+  static Timestamp MillisecondsToTimestamp(arc_i64 millis);
+  static Timestamp SecondsToTimestamp(arc_i64 seconds);
   // Result will be truncated down to the nearest integer value. For example,
   // with "1969-12-31T23:59:59.9Z", TimestampToMilliseconds() returns -100
   // and TimestampToSeconds() returns -1. It's undefined behavior if the input
   // Timestamp is not valid (i.e., its seconds part or nanos part does not fall
   // in the valid range) or the return value doesn't fit into int64.
-  static i64 TimestampToNanoseconds(const Timestamp& timestamp);
-  static i64 TimestampToMicroseconds(const Timestamp& timestamp);
-  static i64 TimestampToMilliseconds(const Timestamp& timestamp);
-  static i64 TimestampToSeconds(const Timestamp& timestamp);
+  static arc_i64 TimestampToNanoseconds(const Timestamp& timestamp);
+  static arc_i64 TimestampToMicroseconds(const Timestamp& timestamp);
+  static arc_i64 TimestampToMilliseconds(const Timestamp& timestamp);
+  static arc_i64 TimestampToSeconds(const Timestamp& timestamp);
 
   // Conversion to/from other time/date types. Note that these types may
   // have a different precision and time range from Timestamp/Duration.
@@ -177,19 +177,19 @@ PROTOBUF_EXPORT Duration& operator+=(Duration& d1,
                                      const Duration& d2);  // NOLINT
 PROTOBUF_EXPORT Duration& operator-=(Duration& d1,
                                      const Duration& d2);     // NOLINT
-PROTOBUF_EXPORT Duration& operator*=(Duration& d, i64 r);  // NOLINT
+PROTOBUF_EXPORT Duration& operator*=(Duration& d, arc_i64 r);  // NOLINT
 PROTOBUF_EXPORT Duration& operator*=(Duration& d, double r);  // NOLINT
-PROTOBUF_EXPORT Duration& operator/=(Duration& d, i64 r);  // NOLINT
+PROTOBUF_EXPORT Duration& operator/=(Duration& d, arc_i64 r);  // NOLINT
 PROTOBUF_EXPORT Duration& operator/=(Duration& d, double r);  // NOLINT
 // Overload for other integer types.
 template <typename T>
 Duration& operator*=(Duration& d, T r) {  // NOLINT
-  i64 x = r;
+  arc_i64 x = r;
   return d *= x;
 }
 template <typename T>
 Duration& operator/=(Duration& d, T r) {  // NOLINT
-  i64 x = r;
+  arc_i64 x = r;
   return d /= x;
 }
 PROTOBUF_EXPORT Duration& operator%=(Duration& d1,
@@ -244,7 +244,7 @@ template <typename T>
 inline Duration operator/(Duration d, T r) {
   return d /= r;
 }
-PROTOBUF_EXPORT i64 operator/(const Duration& d1, const Duration& d2);
+PROTOBUF_EXPORT arc_i64 operator/(const Duration& d1, const Duration& d2);
 
 inline Duration operator%(const Duration& d1, const Duration& d2) {
   Duration result = d1;

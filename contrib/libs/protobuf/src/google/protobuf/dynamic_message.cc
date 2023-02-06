@@ -140,13 +140,13 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
   if (field->label() == FD::LABEL_REPEATED) {
     switch (field->cpp_type()) {
       case FD::CPPTYPE_INT32:
-        return sizeof(RepeatedField<i32>);
+        return sizeof(RepeatedField<arc_i32>);
       case FD::CPPTYPE_INT64:
-        return sizeof(RepeatedField<i64>);
+        return sizeof(RepeatedField<arc_i64>);
       case FD::CPPTYPE_UINT32:
-        return sizeof(RepeatedField<ui32>);
+        return sizeof(RepeatedField<arc_ui32>);
       case FD::CPPTYPE_UINT64:
-        return sizeof(RepeatedField<ui64>);
+        return sizeof(RepeatedField<arc_ui64>);
       case FD::CPPTYPE_DOUBLE:
         return sizeof(RepeatedField<double>);
       case FD::CPPTYPE_FLOAT:
@@ -173,13 +173,13 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
   } else {
     switch (field->cpp_type()) {
       case FD::CPPTYPE_INT32:
-        return sizeof(i32);
+        return sizeof(arc_i32);
       case FD::CPPTYPE_INT64:
-        return sizeof(i64);
+        return sizeof(arc_i64);
       case FD::CPPTYPE_UINT32:
-        return sizeof(ui32);
+        return sizeof(arc_ui32);
       case FD::CPPTYPE_UINT64:
-        return sizeof(ui64);
+        return sizeof(arc_ui64);
       case FD::CPPTYPE_DOUBLE:
         return sizeof(double);
       case FD::CPPTYPE_FLOAT:
@@ -208,8 +208,8 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
 
 inline int DivideRoundingUp(int i, int j) { return (i + (j - 1)) / j; }
 
-static const int kSafeAlignment = sizeof(ui64);
-static const int kMaxOneofUnionSize = sizeof(ui64);
+static const int kSafeAlignment = sizeof(arc_ui64);
+static const int kMaxOneofUnionSize = sizeof(arc_ui64);
 
 inline int AlignTo(int offset, int alignment) {
   return DivideRoundingUp(offset, alignment) * alignment;
@@ -316,8 +316,8 @@ struct DynamicMessageFactory::TypeInfo {
 
   // Warning:  The order in which the following pointers are defined is
   //   important (the prototype must be deleted *before* the offsets).
-  std::unique_ptr<ui32[]> offsets;
-  std::unique_ptr<ui32[]> has_bits_indices;
+  std::unique_ptr<arc_ui32[]> offsets;
+  std::unique_ptr<arc_ui32[]> has_bits_indices;
   std::unique_ptr<const Reflection> reflection;
   // Don't use a unique_ptr to hold the prototype: the destructor for
   // DynamicMessage needs to know whether it is the prototype, and does so by
@@ -346,7 +346,7 @@ DynamicMessage::DynamicMessage(DynamicMessageFactory::TypeInfo* type_info,
                                bool lock_factory)
     : type_info_(type_info), cached_byte_size_(0) {
   // The prototype in type_info has to be set before creating the prototype
-  // instance on memory. e.g., message Foo { map<i32, Foo> a = 1; }. When
+  // instance on memory. e.g., message Foo { map<arc_i32, Foo> a = 1; }. When
   // creating prototype for Foo, prototype of the map entry will also be
   // created, which needs the address of the prototype of Foo (the value in
   // map). To break the cyclic dependency, we have to assign the address of
@@ -366,7 +366,7 @@ void* DynamicMessage::MutableWeakFieldMapRaw() {
   return OffsetToPointer(type_info_->weak_field_map_offset);
 }
 void* DynamicMessage::MutableOneofCaseRaw(int i) {
-  return OffsetToPointer(type_info_->oneof_case_offset + sizeof(ui32) * i);
+  return OffsetToPointer(type_info_->oneof_case_offset + sizeof(arc_ui32) * i);
 }
 void* DynamicMessage::MutableOneofFieldRaw(const FieldDescriptor* f) {
   return OffsetToPointer(
@@ -390,7 +390,7 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
   int oneof_count = 0;
   for (int i = 0; i < descriptor->oneof_decl_count(); ++i) {
     if (descriptor->oneof_decl(i)->is_synthetic()) continue;
-    new (MutableOneofCaseRaw(oneof_count++)) ui32{0};
+    new (MutableOneofCaseRaw(oneof_count++)) arc_ui32{0};
   }
 
   if (type_info_->extensions_offset != -1) {
@@ -412,10 +412,10 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
     }                                                               \
     break;
 
-      HANDLE_TYPE(INT32, i32);
-      HANDLE_TYPE(INT64, i64);
-      HANDLE_TYPE(UINT32, ui32);
-      HANDLE_TYPE(UINT64, ui64);
+      HANDLE_TYPE(INT32, arc_i32);
+      HANDLE_TYPE(INT64, arc_i64);
+      HANDLE_TYPE(UINT32, arc_ui32);
+      HANDLE_TYPE(UINT64, arc_ui64);
       HANDLE_TYPE(DOUBLE, double);
       HANDLE_TYPE(FLOAT, float);
       HANDLE_TYPE(BOOL, bool);
@@ -534,7 +534,7 @@ DynamicMessage::~DynamicMessage() {
     const FieldDescriptor* field = descriptor->field(i);
     if (InRealOneof(field)) {
       void* field_ptr = MutableOneofCaseRaw(field->containing_oneof()->index());
-      if (*(reinterpret_cast<const i32*>(field_ptr)) == field->number()) {
+      if (*(reinterpret_cast<const arc_i32*>(field_ptr)) == field->number()) {
         field_ptr = MutableOneofFieldRaw(field);
         if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
           switch (field->options().ctype()) {
@@ -566,10 +566,10 @@ DynamicMessage::~DynamicMessage() {
         ->~RepeatedField<LOWERCASE>();                     \
     break
 
-        HANDLE_TYPE(INT32, i32);
-        HANDLE_TYPE(INT64, i64);
-        HANDLE_TYPE(UINT32, ui32);
-        HANDLE_TYPE(UINT64, ui64);
+        HANDLE_TYPE(INT32, arc_i32);
+        HANDLE_TYPE(INT64, arc_i64);
+        HANDLE_TYPE(UINT32, arc_ui32);
+        HANDLE_TYPE(UINT64, arc_ui64);
         HANDLE_TYPE(DOUBLE, double);
         HANDLE_TYPE(FLOAT, float);
         HANDLE_TYPE(BOOL, bool);
@@ -728,7 +728,7 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   }
 
   // Compute size and offsets.
-  ui32* offsets = new ui32[type->field_count() + real_oneof_count];
+  arc_ui32* offsets = new arc_ui32[type->field_count() + real_oneof_count];
   type_info->offsets.reset(offsets);
 
   // Decide all field offsets by packing in order.
@@ -746,10 +746,10 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
         // At least one field in the message requires a hasbit, so allocate
         // hasbits.
         type_info->has_bits_offset = size;
-        ui32* has_bits_indices = new ui32[type->field_count()];
+        arc_ui32* has_bits_indices = new arc_ui32[type->field_count()];
         for (int i = 0; i < type->field_count(); i++) {
           // Initialize to -1, fields that need a hasbit will overwrite.
-          has_bits_indices[i] = static_cast<ui32>(-1);
+          has_bits_indices[i] = static_cast<arc_ui32>(-1);
         }
         type_info->has_bits_indices.reset(has_bits_indices);
       }
@@ -758,15 +758,15 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   }
 
   if (max_hasbit > 0) {
-    int has_bits_array_size = DivideRoundingUp(max_hasbit, bitsizeof(ui32));
-    size += has_bits_array_size * sizeof(ui32);
+    int has_bits_array_size = DivideRoundingUp(max_hasbit, bitsizeof(arc_ui32));
+    size += has_bits_array_size * sizeof(arc_ui32);
     size = AlignOffset(size);
   }
 
   // The oneof_case, if any. It is an array of uint32s.
   if (real_oneof_count > 0) {
     type_info->oneof_case_offset = size;
-    size += real_oneof_count * sizeof(ui32);
+    size += real_oneof_count * sizeof(arc_ui32);
     size = AlignOffset(size);
   }
 

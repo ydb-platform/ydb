@@ -338,12 +338,12 @@ bool ConcatenatingInputStream::Skip(int count) {
   while (stream_count_ > 0) {
     // Assume that ByteCount() can be used to find out how much we actually
     // skipped when Skip() fails.
-    i64 target_byte_count = streams_[0]->ByteCount() + count;
+    arc_i64 target_byte_count = streams_[0]->ByteCount() + count;
     if (streams_[0]->Skip(count)) return true;
 
     // Hit the end of the stream.  Figure out how many more bytes we still have
     // to skip.
-    i64 final_byte_count = streams_[0]->ByteCount();
+    arc_i64 final_byte_count = streams_[0]->ByteCount();
     GOOGLE_DCHECK_LT(final_byte_count, target_byte_count);
     count = target_byte_count - final_byte_count;
 

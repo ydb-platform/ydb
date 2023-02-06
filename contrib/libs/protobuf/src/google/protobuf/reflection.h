@@ -282,19 +282,19 @@ namespace internal {
 // cpp_type to the type that should be used in this interface:
 //
 //   field->cpp_type()      T                Actual type of void*
-//   CPPTYPE_INT32        i32                 i32
-//   CPPTYPE_UINT32       ui32                ui32
-//   CPPTYPE_INT64        i64                 i64
-//   CPPTYPE_UINT64       ui64                ui64
+//   CPPTYPE_INT32        arc_i32                 arc_i32
+//   CPPTYPE_UINT32       arc_ui32                arc_ui32
+//   CPPTYPE_INT64        arc_i64                 arc_i64
+//   CPPTYPE_UINT64       arc_ui64                arc_ui64
 //   CPPTYPE_DOUBLE       double                  double
 //   CPPTYPE_FLOAT        float                   float
 //   CPPTYPE_BOOL         bool                    bool
-//   CPPTYPE_ENUM         generated enum type     i32
+//   CPPTYPE_ENUM         generated enum type     arc_i32
 //   CPPTYPE_STRING       string                  TProtoStringType
 //   CPPTYPE_MESSAGE      generated message type  google::protobuf::Message
 //                        or google::protobuf::Message
 //
-// Note that for enums we use i32 in the interface.
+// Note that for enums we use arc_i32 in the interface.
 //
 // You can map from T to the actual type using RefTypeTraits:
 //   typedef RefTypeTraits<T>::AccessorValueType ActualType;
@@ -362,7 +362,7 @@ class PROTOBUF_EXPORT RepeatedFieldAccessor {
     // be ActualType. Here we have a ValueType object and want a ActualType
     // pointer. We can't cast a ValueType pointer to an ActualType pointer
     // directly because their type might be different (for enums ValueType
-    // may be a generated enum type while ActualType is i32). To be safe
+    // may be a generated enum type while ActualType is arc_i32). To be safe
     // we make a copy to get a temporary ActualType object and use it.
     ActualType tmp = static_cast<ActualType>(value);
     Set(data, index, static_cast<const Value*>(&tmp));
@@ -376,7 +376,7 @@ class PROTOBUF_EXPORT RepeatedFieldAccessor {
     // be ActualType. Here we have a ValueType object and want a ActualType
     // pointer. We can't cast a ValueType pointer to an ActualType pointer
     // directly because their type might be different (for enums ValueType
-    // may be a generated enum type while ActualType is i32). To be safe
+    // may be a generated enum type while ActualType is arc_i32). To be safe
     // we make a copy to get a temporary ActualType object and use it.
     ActualType tmp = static_cast<ActualType>(value);
     Add(data, static_cast<const Value*>(&tmp));
@@ -485,10 +485,10 @@ struct PrimitiveTraits {
     static const FieldDescriptor::CppType cpp_type = \
         FieldDescriptor::CPPTYPE_##TYPE;             \
   };
-DEFINE_PRIMITIVE(INT32, i32)
-DEFINE_PRIMITIVE(UINT32, ui32)
-DEFINE_PRIMITIVE(INT64, i64)
-DEFINE_PRIMITIVE(UINT64, ui64)
+DEFINE_PRIMITIVE(INT32, arc_i32)
+DEFINE_PRIMITIVE(UINT32, arc_ui32)
+DEFINE_PRIMITIVE(INT64, arc_i64)
+DEFINE_PRIMITIVE(UINT64, arc_ui64)
 DEFINE_PRIMITIVE(FLOAT, float)
 DEFINE_PRIMITIVE(DOUBLE, double)
 DEFINE_PRIMITIVE(BOOL, bool)
@@ -512,10 +512,10 @@ struct RefTypeTraits<
     T, typename std::enable_if<is_proto_enum<T>::value>::type> {
   typedef RepeatedFieldRefIterator<T> iterator;
   typedef RepeatedFieldAccessor AccessorType;
-  // We use i32 for repeated enums in RepeatedFieldAccessor.
-  typedef i32 AccessorValueType;
+  // We use arc_i32 for repeated enums in RepeatedFieldAccessor.
+  typedef arc_i32 AccessorValueType;
   typedef T IteratorValueType;
-  typedef i32* IteratorPointerType;
+  typedef arc_i32* IteratorPointerType;
   static constexpr FieldDescriptor::CppType cpp_type =
       FieldDescriptor::CPPTYPE_ENUM;
   static const Descriptor* GetMessageFieldDescriptor() { return NULL; }

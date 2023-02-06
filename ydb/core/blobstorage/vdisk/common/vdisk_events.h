@@ -683,7 +683,7 @@ namespace NKikimr {
             }
             if (qos.HasWindow()) {
                 str << " Window# {";
-                const NKikimrBlobStorage::TWindowFeedback &window = qos.GetWindow();
+                const auto &window = qos.GetWindow();
                 if (window.HasStatus()) {
                     str << " Status# " << NKikimrBlobStorage::TWindowFeedback::EStatus_Name(window.GetStatus()).data();
                 }

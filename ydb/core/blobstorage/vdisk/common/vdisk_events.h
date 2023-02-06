@@ -3482,6 +3482,10 @@ namespace NKikimr {
                 return ExtremeQueries;
             }
 
+            const TExtremeQuery& GetExtremeQueries(int i) const {
+                return ExtremeQueries[i];
+            }
+
             TExtremeQuery* AddExtremeQueries() {
                 ExtremeQueries.push_back({});
                 return &ExtremeQueries.back();

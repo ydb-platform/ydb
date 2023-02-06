@@ -111,15 +111,32 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
 namespace {
 
 TStatus WaitForQueue(std::deque<TAsyncStatus>& inFlightRequests, size_t maxQueueSize) {
-    while (!inFlightRequests.empty() && inFlightRequests.size() > maxQueueSize) {
-        auto status = inFlightRequests.front().ExtractValueSync();
-        inFlightRequests.pop_front();
-        if (!status.IsSuccess()) {
-            return status;
+    std::vector<TStatus> problemResults;
+    while (!inFlightRequests.empty() && inFlightRequests.size() > maxQueueSize && problemResults.empty()) {
+        Y_UNUSED(NThreading::WaitAny(inFlightRequests));
+        ui32 delta = 0;
+        for (ui32 i = 0; i + delta < inFlightRequests.size();) {
+            inFlightRequests[i] = inFlightRequests[i + delta];
+            if (inFlightRequests[i].HasValue() || inFlightRequests[i].HasException()) {
+                auto status = inFlightRequests[i].ExtractValueSync();
+                if (!status.IsSuccess()) {
+                    problemResults.emplace_back(status);
+                }
+                ++delta;
+            } else {
+                ++i;
+            }
+        }
+        while (delta) {
+            inFlightRequests.pop_back();
+            --delta;
         }
     }
-
-    return MakeStatus();
+    if (problemResults.size()) {
+        return problemResults.front();
+    } else {
+        return MakeStatus();
+    }
 }
 
 }

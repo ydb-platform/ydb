@@ -7,12 +7,14 @@
 #include "logoblob.h"
 #include "pathid.h"
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/util/yverify_stream.h>
+
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
 #include <library/cpp/lwtrace/shuttle.h>
@@ -2334,21 +2336,21 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
     }
 }
 
-    // EGetHandleClass defines BlobStorage queue to a request to
-    static inline RawSerializer::EVDiskQueueId HandleClassToQueueId(RawSerializer::EGetHandleClass cls) {
-        switch (cls) {
-            case RawSerializer::EGetHandleClass::AsyncRead:
-                return RawSerializer::EVDiskQueueId::GetAsyncRead;
-            case RawSerializer::EGetHandleClass::FastRead:
-                return RawSerializer::EVDiskQueueId::GetFastRead;
-            case RawSerializer::EGetHandleClass::Discover:
-                return RawSerializer::EVDiskQueueId::GetDiscover;
-            case RawSerializer::EGetHandleClass::LowRead:
-                return RawSerializer::EVDiskQueueId::GetLowRead;
-            default:
-                Y_FAIL("Unexpected case");
-        }
+// EGetHandleClass defines BlobStorage queue to a request to
+static inline RawSerializer::EVDiskQueueId HandleClassToQueueId(RawSerializer::EGetHandleClass cls) {
+    switch (cls) {
+        case RawSerializer::EGetHandleClass::AsyncRead:
+            return RawSerializer::EVDiskQueueId::GetAsyncRead;
+        case RawSerializer::EGetHandleClass::FastRead:
+            return RawSerializer::EVDiskQueueId::GetFastRead;
+        case RawSerializer::EGetHandleClass::Discover:
+            return RawSerializer::EVDiskQueueId::GetDiscover;
+        case RawSerializer::EGetHandleClass::LowRead:
+            return RawSerializer::EVDiskQueueId::GetLowRead;
+        default:
+            Y_FAIL("Unexpected case");
     }
+}
 
 
 inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,

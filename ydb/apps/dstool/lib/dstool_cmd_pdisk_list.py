@@ -1,6 +1,7 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
+from google.protobuf import text_format
 
 description = 'List pdisks'
 
@@ -30,6 +31,7 @@ def do(args):
         'Guid',
         'NumStaticSlots',
         'ExpectedSlotCount',
+        'PDiskConfig',
         'Usage',
         'UsedSize',
         'AvailableSize',
@@ -87,6 +89,7 @@ def do(args):
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
         row['ExpectedSlotCount'] = pdisk.ExpectedSlotCount
+        row['PDiskConfig'] = text_format.MessageToString(pdisk.PDiskConfig, as_one_line=True)
         row['AvailableSize'] = pdisk.PDiskMetrics.AvailableSize
         row['TotalSize'] = pdisk.PDiskMetrics.TotalSize
         row['UsedSize'] = pdisk.PDiskMetrics.TotalSize - pdisk.PDiskMetrics.AvailableSize

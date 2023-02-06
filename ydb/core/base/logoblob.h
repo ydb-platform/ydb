@@ -307,7 +307,11 @@ namespace NKikimr {
 
     TLogoBlobID LogoBlobIDFromLogoBlobID(const RawSerializer::TLogoBlobID &proto);
     TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
+
     void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, RawSerializer::TLogoBlobID *proto);
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
+
+
     void LogoBlobIDVectorFromLogoBlobIDRepeated(
                 TVector<TLogoBlobID> *to,
                 const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto);

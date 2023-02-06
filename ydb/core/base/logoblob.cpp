@@ -109,6 +109,13 @@ void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, RawSerializer::TLogoBlobID 
     proto->SetRawX3(raw[2]);
 }
 
+void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto) {
+    const ui64* raw = id.GetRaw();
+    proto->SetRawX1(raw[0]);
+    proto->SetRawX2(raw[1]);
+    proto->SetRawX3(raw[2]);
+}
+
 void LogoBlobIDVectorFromLogoBlobIDRepeated(
             TVector<TLogoBlobID> *to,
             const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto) {

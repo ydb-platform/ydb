@@ -827,7 +827,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
                 if (auto max = info.MaxValue(ttlColumnId)) {
                     bool keep = NArrow::ScalarLess(expireTimestamp, max);
 
-                    if (keep && allowEviction) {
+                    if (keep && allowEviction && ttl.HasTiers()) {
                         TString tierName;
                         for (auto& tierRef : ttl.OrderedTiers) { // TODO: lower/upper_bound + move into TEviction
                             auto& tierInfo = tierRef.Get();

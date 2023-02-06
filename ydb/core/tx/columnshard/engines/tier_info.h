@@ -107,12 +107,12 @@ struct TTiering {
     TSet<TTierRef> OrderedTiers; // Tiers ordered by border
     std::shared_ptr<TTierInfo> Ttl;
 
-    bool Empty() const {
-        return OrderedTiers.empty();
+    bool HasTiers() const {
+        return !OrderedTiers.empty();
     }
 
     void Add(const std::shared_ptr<TTierInfo>& tier) {
-        if (!Empty()) {
+        if (HasTiers()) {
             // TODO: support different ttl columns
             Y_VERIFY(tier->EvictColumnName == OrderedTiers.begin()->Get().EvictColumnName);
         }

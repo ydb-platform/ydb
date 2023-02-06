@@ -1134,9 +1134,23 @@ namespace NKikimr {
                 return "TMessageId";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint64_t);
             }
+
+            void CopyFrom(const TMessageId& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t));
+
+            }
+
         };
 
         struct TTimestamps {
@@ -1253,9 +1267,23 @@ namespace NKikimr {
                 return "TTimestamps";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
+
+            void CopyFrom(const TTimestamps& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+
+            }
+
         };
 
         enum class EGetHandleClass {
@@ -1325,9 +1353,23 @@ namespace NKikimr {
                 return "TActorId";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint64_t);
             }
+
+            void CopyFrom(const TActorId& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t));
+
+            }
+
         };
 
         struct TExecTimeStats {
@@ -1525,9 +1567,23 @@ namespace NKikimr {
                 return "TExecTimeStats";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
+
+            void CopyFrom(const TExecTimeStats& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+
+            }
+
         };
 
         enum class EStatus {
@@ -1680,9 +1736,23 @@ namespace NKikimr {
                 return "TWindowFeedback";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId);
             }
+
+            void CopyFrom(const TWindowFeedback& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(EStatus) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(TMessageId) + sizeof(TMessageId));
+
+            }
+
         };
 
         enum class EVDiskQueueId {
@@ -1879,9 +1949,23 @@ namespace NKikimr {
                 return "TVDiskCostSettings";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t);
             }
+
+            void CopyFrom(const TVDiskCostSettings& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint32_t));
+
+            }
+
         };
 
         struct TMsgQoS {
@@ -2268,9 +2352,23 @@ namespace NKikimr {
                 return "TMsgQoS";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId);
             }
+
+            void CopyFrom(const TMsgQoS& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint32_t) + sizeof(TMessageId) + sizeof(uint64_t) + sizeof(EVDiskQueueId) + sizeof(EVDiskInternalQueueId) + sizeof(TVDiskCostSettings) + sizeof(bool) + sizeof(TWindowFeedback) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(TExecTimeStats) + sizeof(TActorId));
+
+            }
+
         };
 
         struct TVDiskID {
@@ -2414,9 +2512,23 @@ namespace NKikimr {
                 return "TVDiskID";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
             }
+
+            void CopyFrom(const TVDiskID& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
+
+            }
+
         };
 
         struct TLogoBlobID {
@@ -2506,9 +2618,23 @@ namespace NKikimr {
                 return "TLogoBlobID";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
+
+            void CopyFrom(const TLogoBlobID& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+
+            }
+
         };
 
         struct TRangeQuery {
@@ -2625,9 +2751,23 @@ namespace NKikimr {
                 return "TRangeQuery";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t);
             }
+
+            void CopyFrom(const TRangeQuery& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(TLogoBlobID) + sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint32_t));
+
+            }
+
         };
 
         struct TExtremeQuery {
@@ -2744,9 +2884,23 @@ namespace NKikimr {
                 return "TExtremeQuery";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
             }
+
+            void CopyFrom(const TExtremeQuery& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(TLogoBlobID) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t));
+
+            }
+
         };
 
         struct TTabletData {
@@ -2809,9 +2963,23 @@ namespace NKikimr {
                 return "TTabletData";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(uint64_t) + sizeof(uint32_t);
             }
+
+            void CopyFrom(const TTabletData& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(uint64_t) + sizeof(uint32_t));
+
+            }
+
         };
 
         struct TEvVGet {
@@ -3269,9 +3437,24 @@ namespace NKikimr {
                 return "TEvVGet";
             }
 
-            size_t ByteSize() const {
-                return 42;
+            int ByteSize() const {
+                return sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString) + sizeof(TExtremeQuery) * ExtremeQueries.size();
             }
+
+            void CopyFrom(const TEvVGet& other) {
+                *this = other;
+            }
+
+            static bool serializeHelper(NProtoBuf::io::ZeroCopyOutputStream *output, void* data, int size) {
+                return output->Next(&data, &size);
+            }
+
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) {
+                serializeHelper(output, this, sizeof(TRangeQuery) + sizeof(TVDiskID) + sizeof(bool) + sizeof(bool) + sizeof(uint64_t) + sizeof(TMsgQoS) + sizeof(bool) + sizeof(EGetHandleClass) + sizeof(bool) + sizeof(uint64_t) + sizeof(bool) + sizeof(TTimestamps) + sizeof(uint32_t) + sizeof(TTabletData) + sizeof(TTabletData) + sizeof(TString));
+                serializeHelper(output, ExtremeQueries.data(), sizeof(TExtremeQuery) * ExtremeQueries.size());
+
+            }
+
         };
     }
 

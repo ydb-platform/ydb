@@ -3482,8 +3482,6 @@ namespace NKikimr {
 
 
         };
-
-
     }
 
     struct TEvBlobStorage::TEvVGet

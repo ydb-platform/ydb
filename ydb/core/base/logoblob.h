@@ -6,6 +6,7 @@ namespace NKikimrProto {
 }
 
 namespace NKikimr {
+
     struct TLogoBlobID {
         static const ui32 MaxChannel = 255ul;
         static const ui32 MaxBlobSize = 67108863ul;

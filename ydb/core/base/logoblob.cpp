@@ -2,7 +2,6 @@
 #include <ydb/core/protos/base.pb.h>
 #include <util/string/printf.h>
 
-
 namespace NKikimr {
 
 TString TLogoBlobID::ToString() const {
@@ -98,7 +97,6 @@ template <typename TLogoBlobIDSerializationClass>
 TLogoBlobID LogoBlobIDFromLogoBlobID(const TLogoBlobIDSerializationClass &proto) {
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
-
 
 template <typename TLogoBlobIDSerializationClass>
 void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TLogoBlobIDSerializationClass *proto) {

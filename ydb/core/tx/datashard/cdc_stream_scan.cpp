@@ -640,6 +640,9 @@ public:
         const auto snapshotVersion = TRowVersion(snapshotKey.Step, snapshotKey.TxId);
         Y_VERIFY(info->SnapshotVersion == snapshotVersion);
 
+        // Note: cdc stream is added with a schema transaction and those wait for volatile txs
+        Y_VERIFY(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
+
         const ui64 localTxId = ++Self->NextTieBreakerIndex;
         auto scan = MakeHolder<TCdcStreamScan>(Self, Request->Sender, localTxId,
             tablePathId, streamPathId, snapshotVersion, valueTags, info->LastKey, info->Stats, record.GetLimits());

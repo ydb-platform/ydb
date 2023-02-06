@@ -99,10 +99,11 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
             Y_VERIFY(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
 
             bool wait = false;
-            const auto& byVersion = DataShard.GetVolatileTxManager().GetVolatileTxByVersion();
-            auto end = byVersion.upper_bound(TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId()));
-            for (auto it = byVersion.begin(); it != end; ++it) {
-                auto* info = *it;
+            TRowVersion snapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+            for (auto* info : DataShard.GetVolatileTxManager().GetVolatileTxByVersion()) {
+                if (!(info->Version <= snapshot)) {
+                    break;
+                }
                 op->AddVolatileDependency(info->TxId);
                 bool ok = DataShard.GetVolatileTxManager().AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
                 Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << op->GetTxId() << " to volatile tx " << info->TxId);
@@ -132,6 +133,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
             auto readVersion = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
             options.SetSnapshotRowVersion(readVersion);
         } else if (DataShard.IsMvccEnabled()) {
+            // Note: this mode is only used in legacy tests and may not work with volatile transactions
             // With mvcc we have to mark all preceding transactions as logically complete
             auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
             hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(readVersion, txc);

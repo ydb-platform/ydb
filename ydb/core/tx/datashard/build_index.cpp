@@ -555,6 +555,14 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
 void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
+    // Note: it's very unlikely that we have volatile txs before this snapshot
+    if (VolatileTxManager.HasVolatileTxsAtSnapshot(TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId()))) {
+        VolatileTxManager.AttachWaitingSnapshotEvent(
+            TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId()),
+            std::unique_ptr<IEventHandle>(ev.Release()));
+        return;
+    }
+
     auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
     response->Record.SetBuildIndexId(record.GetBuildIndexId());
     response->Record.SetTabletId(TabletID());

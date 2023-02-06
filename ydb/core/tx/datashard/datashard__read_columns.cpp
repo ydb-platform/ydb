@@ -212,6 +212,15 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        // FIXME: we need to transform HEAD into some non-repeatable snapshot here
+        if (!ReadVersion.IsMax() && Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(ReadVersion)) {
+            Self->GetVolatileTxManager().AttachWaitingSnapshotEvent(
+                ReadVersion,
+                std::unique_ptr<IEventHandle>(Ev.Release()));
+            Result.Destroy();
+            return true;
+        }
+
         Result = new TEvDataShard::TEvReadColumnsResponse(Self->TabletID());
 
         bool useScan = Self->ReadColumnsScanEnabled;

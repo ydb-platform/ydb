@@ -366,7 +366,8 @@ void InitRoot(Tests::TServer::TPtr server,
 
 class TLambdaActor : public IActorCallback {
 public:
-    using TCallback = std::function<void(TAutoPtr<IEventHandle>&)>;
+    using TCallback = std::function<void(TAutoPtr<IEventHandle>&, const TActorContext&)>;
+    using TNoCtxCallback = std::function<void(TAutoPtr<IEventHandle>&)>;
 
 public:
     TLambdaActor(TCallback&& callback)
@@ -374,10 +375,15 @@ public:
         , Callback(std::move(callback))
     { }
 
+    TLambdaActor(TNoCtxCallback&& callback)
+        : TLambdaActor([callback = std::move(callback)](auto& ev, auto&) {
+            callback(ev);
+        })
+    { }
+
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
-        Callback(ev);
+        Callback(ev, ctx);
     }
 
 private:

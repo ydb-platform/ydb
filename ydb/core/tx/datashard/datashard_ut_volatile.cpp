@@ -2,6 +2,8 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
@@ -1230,6 +1232,124 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
         }
+    }
+
+    Y_UNIT_TEST(DistributedWriteThenScanQuery) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000)
+            .SetAppConfig(app);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
+
+        ui64 maxReadSetStep = 0;
+        bool captureReadSets = true;
+        TVector<THolder<IEventHandle>> capturedReadSets;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    maxReadSetStep = Max(maxReadSetStep, msg->Record.GetStep());
+                    if (captureReadSets) {
+                        Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << Endl;
+                        capturedReadSets.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", true /* commitTx */), "/Root");
+
+        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
+        TVector<TString> observedResults;
+        TMaybe<Ydb::StatusIds::StatusCode> observedStatus;
+        auto scanSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TEvKqpExecuter::TEvStreamData::EventType: {
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>();
+                    Cerr << "... observed stream data" << Endl;
+                    observedResults.push_back(FormatResult(msg->Record.GetResultSet()));
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    resp->Record.SetSeqNo(msg->Record.GetSeqNo());
+                    resp->Record.SetFreeSpace(1);
+                    ctx.Send(ev->Sender, resp.Release());
+                    break;
+                }
+                case NKqp::TEvKqp::TEvQueryResponse::EventType: {
+                    auto* msg = ev->Get<NKqp::TEvKqp::TEvQueryResponse>();
+                    Cerr << "... observed query result" << Endl;
+                    observedStatus = msg->Record.GetRef().GetYdbStatus();
+                    break;
+                }
+                default: {
+                    Cerr << "... ignored event " << ev->GetTypeRewrite();
+                    if (ev->GetBase()) {
+                        Cerr << " " << ev->GetBase()->ToString();
+                    }
+                    Cerr << Endl;
+                }
+            }
+        }));
+
+        SendRequest(runtime, scanSender, MakeStreamRequest(scanSender, R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key;
+        )"));
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(observedResults.size(), 0u);
+
+        captureReadSets = false;
+        for (auto& ev : capturedReadSets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(observedResults.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            observedResults[0],
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+        UNIT_ASSERT_VALUES_EQUAL(observedStatus, Ydb::StatusIds::SUCCESS);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)

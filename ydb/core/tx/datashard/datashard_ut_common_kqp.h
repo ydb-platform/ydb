@@ -120,12 +120,16 @@ namespace NKqpHelpers {
         return request;
     }
 
+    inline TString FormatResult(const Ydb::ResultSet& rs) {
+        Cerr << JoinSeq(", ", rs.rows());
+        return JoinSeq(", ", rs.rows());
+    }
+
     inline TString FormatResult(const Ydb::Table::ExecuteQueryResult& result) {
         if (result.result_sets_size() == 0) {
             return "<empty>";
         }
-        Cerr << JoinSeq(", ", result.result_sets(0).rows());
-        return JoinSeq(", ", result.result_sets(0).rows());
+        return FormatResult(result.result_sets(0));
     }
 
     inline TString FormatResult(const Ydb::Table::ExecuteDataQueryResponse& response) {

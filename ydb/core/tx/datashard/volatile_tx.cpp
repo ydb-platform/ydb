@@ -471,6 +471,20 @@ namespace NKikimr::NDataShard {
         }
         VolatileTxByVersion.erase(info);
         VolatileTxs.erase(txId);
+
+        if (!WaitingSnapshotEvents.empty()) {
+            TVolatileTxInfo* next = !VolatileTxByVersion.empty() ? *VolatileTxByVersion.begin() : nullptr;
+            while (!WaitingSnapshotEvents.empty()) {
+                auto& top = WaitingSnapshotEvents.front();
+                if (next && next->Version <= top.Snapshot) {
+                    // Still waiting
+                    break;
+                }
+                TActivationContext::Send(std::move(top.Event));
+                std::pop_heap(WaitingSnapshotEvents.begin(), WaitingSnapshotEvents.end());
+                WaitingSnapshotEvents.pop_back();
+            }
+        }
     }
 
     bool TVolatileTxManager::AttachVolatileTxCallback(ui64 txId, IVolatileTxCallback::TPtr callback) {
@@ -531,6 +545,13 @@ namespace NKikimr::NDataShard {
 
         it->second->WaitingRemovalOperations.insert(dependentTxId);
         return true;
+    }
+
+    void TVolatileTxManager::AttachWaitingSnapshotEvent(const TRowVersion& snapshot, std::unique_ptr<IEventHandle>&& event) {
+        Y_VERIFY(!VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot);
+
+        WaitingSnapshotEvents.emplace_back(snapshot, std::move(event));
+        std::push_heap(WaitingSnapshotEvents.begin(), WaitingSnapshotEvents.end());
     }
 
     void TVolatileTxManager::AbortWaitingTransaction(TVolatileTxInfo* info) {

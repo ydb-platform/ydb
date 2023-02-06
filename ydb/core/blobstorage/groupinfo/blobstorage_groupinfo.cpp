@@ -908,6 +908,8 @@ TString TBlobStorageGroupInfo::ToString() const {
     return str.Str();
 }
 
+
+
 TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
     return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
 }

@@ -6,8 +6,8 @@
 #include "tablet_types.h"
 #include "logoblob.h"
 #include "pathid.h"
+#include <ydb/core/blobstorage/vdisk/common/raw_serialization.h>
 
-//#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
@@ -2336,10 +2336,6 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
     }
 }
 
-namespace RawSerializer {
-    enum class EVDiskQueueId;
-    enum class EGetHandleClass;
-}
 
 // EGetHandleClass defines BlobStorage queue to a request to
 static inline RawSerializer::EVDiskQueueId HandleClassToQueueId(RawSerializer::EGetHandleClass cls) {

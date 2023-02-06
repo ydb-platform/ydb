@@ -79,8 +79,12 @@ struct TVDiskID {
 };
 #pragma pack(pop)
 
-TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x);
-void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto);
+template<typename SerializerType>
+TVDiskID VDiskIDFromVDiskID(const SerializerType &x);
+
+template<typename SerializerType>
+void VDiskIDFromVDiskID(const TVDiskID &id, SerializerType *proto);
+
 // Takes a string in the same format as ToString output, sets isGenerationSet if second number is not '_'
 TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet = nullptr);
 

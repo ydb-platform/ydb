@@ -3645,7 +3645,7 @@ namespace NKikimr {
             return ToString(Record);
         }
 
-        static TString ToString(const NKikimrBlobStorage::TEvVGet &record) {
+        static TString ToString(const RawSerializer::TEvVGet &record) {
             TStringStream str;
             if (record.HasRangeQuery()) {
                 const NKikimrBlobStorage::TRangeQuery &query = record.GetRangeQuery();

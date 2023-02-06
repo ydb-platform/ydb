@@ -34,7 +34,6 @@ public:
         S_IDLE,
         S_BROKEN,
         S_ACTIVE,
-        S_DISCONNECTED,
         S_CLOSING
     };
 
@@ -60,7 +59,6 @@ public:
     void MarkStandalone();
     void MarkActive();
     void MarkIdle();
-    void MarkDisconnected();
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
     bool NeedUpdateActiveCounter() const;

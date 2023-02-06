@@ -930,12 +930,8 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // Allow migrate requests between session during session balancing
     FLUENT_SETTING_DEFAULT(bool, AllowRequestMigration, true);
 
-    // Max number of seconds to keep session in SettlerSessionPool
-    // Settler pool is a session pool is used to keep
-    // sessions in case of errors when we dont known actual server
-    // status (e.g. CLIENT_RESOURCE_EXHAUSTED). In this case
-    // sessions from this pool we be keep alived with progressive timeout
-    // to try to return it to main session pool
+    // This feature has been removed as inefficient
+    // the settings will be removed in next releases
     FLUENT_SETTING_DEFAULT(ui32, SettlerSessionPoolTTL, 100);
     // Settings of session pool
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);

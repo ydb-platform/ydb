@@ -181,12 +181,6 @@ public:
     };
 
     struct TSessionPoolStatCollector {
-
-        enum class EStatCollectorType: size_t {
-            SESSIONPOOL,
-            SETTLERPOOL
-        };
-
         TSessionPoolStatCollector(::NMonitoring::TIntGauge* activeSessions = nullptr
         , ::NMonitoring::TIntGauge* inPoolSessions = nullptr
         , ::NMonitoring::TRate* fakeSessions = nullptr)
@@ -272,7 +266,6 @@ public:
         CacheMiss_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                      {"sensor", "Request/ClientQueryCacheMiss"} }));
         ActiveSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,             {"sensor", "Sessions/InUse"} }));
         InPoolSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,             {"sensor", "Sessions/InPool"} }));
-        SettlerSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,            {"sensor", "Sessions/InSettler"} }));
         SessionCV_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,                  {"sensor", "SessionBalancer/Variation"} }));
         SessionRemovedDueBalancing_.Set(sensorsRegistry->Rate({ DatabaseLabel_,     {"sensor", "SessionBalancer/SessionsRemoved"} }));
         RequestMigrated_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                {"sensor", "SessionBalancer/RequestsMigrated"} }));
@@ -350,20 +343,12 @@ public:
         }
     }
 
-    TSessionPoolStatCollector GetSessionPoolStatCollector(TSessionPoolStatCollector::EStatCollectorType type) {
+    TSessionPoolStatCollector GetSessionPoolStatCollector() {
         if (!IsCollecting()) {
             return TSessionPoolStatCollector();
         }
 
-        switch (type) {
-            case TSessionPoolStatCollector::EStatCollectorType::SESSIONPOOL:
-                return TSessionPoolStatCollector(ActiveSessions_.Get(), InPoolSessions_.Get(), FakeSessions_.Get());
-
-            case TSessionPoolStatCollector::EStatCollectorType::SETTLERPOOL:
-                return TSessionPoolStatCollector(nullptr, SettlerSessions_.Get(), nullptr);
-        }
-
-        return TSessionPoolStatCollector();
+        return TSessionPoolStatCollector(ActiveSessions_.Get(), InPoolSessions_.Get(), FakeSessions_.Get());
     }
 
     TClientStatCollector GetClientStatCollector() {
@@ -401,7 +386,6 @@ private:
     TAtomicCounter<::NMonitoring::TRate> DiscoveryFailDueTransportError_;
     TAtomicPointer<::NMonitoring::TIntGauge> ActiveSessions_;
     TAtomicPointer<::NMonitoring::TIntGauge> InPoolSessions_;
-    TAtomicPointer<::NMonitoring::TIntGauge> SettlerSessions_;
     TAtomicCounter<::NMonitoring::TIntGauge> SessionCV_;
     TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing_;
     TAtomicCounter<::NMonitoring::TRate> RequestMigrated_;

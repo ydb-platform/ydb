@@ -89,16 +89,6 @@ void TSession::TImpl::MarkIdle() {
     NeedUpdateActiveCounter_ = false;
 }
 
-// Can be called from interceptor, need lock
-void TSession::TImpl::MarkDisconnected() {
-    with_lock(Lock_) {
-        if (State_ == EState::S_ACTIVE) {
-            NeedUpdateActiveCounter_ = true;
-        }
-        State_ = EState::S_DISCONNECTED;
-    }
-}
-
 TSession::TImpl::EState TSession::TImpl::GetState() const {
     // See comments in InjectSessionStatusInterception about lock
     with_lock(Lock_) {

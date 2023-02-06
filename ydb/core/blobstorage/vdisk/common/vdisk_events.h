@@ -649,10 +649,10 @@ namespace NKikimr {
                 str << " Cost# " << qos.GetCost();
             }
             if (qos.HasExtQueueId()) {
-                str << " ExtQueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(qos.GetExtQueueId()).data();
+                str << " ExtQueueId# " << qos.GetExtQueueId();
             }
             if (qos.HasIntQueueId()) {
-                str << " IntQueueId# " << NKikimrBlobStorage::EVDiskInternalQueueId_Name(qos.GetIntQueueId()).data();
+                str << " IntQueueId# " << qos.GetIntQueueId();
             }
             if (qos.HasCostSettings()) {
                 str << " CostSettings# {";
@@ -685,7 +685,7 @@ namespace NKikimr {
                 str << " Window# {";
                 const auto &window = qos.GetWindow();
                 if (window.HasStatus()) {
-                    str << " Status# " << NKikimrBlobStorage::TWindowFeedback::EStatus_Name(window.GetStatus()).data();
+                    str << " Status# " << window.GetStatus();
                 }
                 if (window.HasActualWindowSize()) {
                     str << " ActualWindowSize# " << window.GetActualWindowSize();

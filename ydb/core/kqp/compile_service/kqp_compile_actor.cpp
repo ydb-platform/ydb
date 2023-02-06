@@ -186,6 +186,7 @@ private:
         replayMessage.InsertValue("query_database", Query.Database);
         replayMessage.InsertValue("query_cluster", Query.Cluster);
         replayMessage.InsertValue("query_plan", queryPlan);
+        replayMessage.InsertValue("query_type", ToString(Query.QueryType));
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
             << "Built the replay message " << message);

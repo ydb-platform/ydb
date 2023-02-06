@@ -1,8 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blob_depot/events.h>
 
-#include "blob_depot_event_managers.h"
-#include "blob_depot_auxiliary_structures.h"
 #include "blob_depot_test_functions.h"
 
 #include <util/random/entropy.h>
@@ -128,7 +126,8 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         Seed().LoadOrFail(&seed, sizeof(seed));
         TBlobDepotTestEnvironment tenv(seed);
         
-        TestLoadPutAndGet(tenv, 15, tenv.RegularGroups[0], 100, 1 << 10, 500, true, { 5, 1, 5, 1, 1, 0 });
+        TestLoadPutAndGet(tenv, 15, tenv.RegularGroups[0], 100, 1 << 10, 500, true, 10, { 5, 1, 5, 1, 1, 0 });
+        // no blob depot restarts performed
     }
 
     Y_UNIT_TEST(DecommitVerifiedRandom) {
@@ -136,6 +135,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         Seed().LoadOrFail(&seed, sizeof(seed));
         TBlobDepotTestEnvironment tenv(seed);
         
-        TestVerifiedRandom(tenv, 8, 15, tenv.RegularGroups[0], 1000, 499, { 10, 10, 3, 3, 2, 1, 1, 3, 3, 0 });
+        TestVerifiedRandom(tenv, 8, 15, tenv.RegularGroups[0], 1000, 500, 10, { 10, 10, 3, 3, 2, 1, 1, 3, 3, 0 });
+        // no blob depot restarts performed
     }
 }

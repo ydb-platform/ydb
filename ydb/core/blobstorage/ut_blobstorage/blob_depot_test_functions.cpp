@@ -1,57 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blob_depot/events.h>
 
-#include <util/random/mersenne.h>
-#include <util/random/random.h>
-
 #include <algorithm>
 #include <random>
 
-#include "blob_depot_event_managers.h"
 #include "blob_depot_test_functions.h"
-#include "blob_depot_auxiliary_structures.h"
-
-void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot, ui32 nodeCount, TBlobStorageGroupType erasure) {
-    envPtr = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
-        .NodeCount = nodeCount,
-        .Erasure = erasure,
-        .SetupHive = true,
-    });
-
-    envPtr->CreateBoxAndPool(1, numGroups);
-    envPtr->Sim(TDuration::Seconds(20));
-
-    regularGroups = envPtr->GetGroups();
-
-    NKikimrBlobStorage::TConfigRequest request;
-    TString virtualPool = "virtual_pool";
-    {
-        auto *cmd = request.AddCommand()->MutableDefineStoragePool();
-        cmd->SetBoxId(1);
-        cmd->SetName(virtualPool);
-        cmd->SetErasureSpecies("none");
-        cmd->SetVDiskKind("Default");
-    }
-    {
-        auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
-        cmd->SetName("vg");
-        cmd->SetHiveId(envPtr->Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
-        cmd->SetStoragePoolName(virtualPool);
-        auto *prof = cmd->AddChannelProfiles();
-        prof->SetStoragePoolName(envPtr->StoragePoolName);
-        prof->SetCount(2);
-        prof = cmd->AddChannelProfiles();
-        prof->SetStoragePoolName(envPtr->StoragePoolName);
-        prof->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
-        prof->SetCount(2);
-    }
-
-    auto response = envPtr->Invoke(request);
-    UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-    blobDepot = response.GetStatus(1).GetGroupId(0);
-
-    envPtr->Sim(TDuration::Seconds(5)); // some time for blob depot to crank up
-}
 
 void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId) {
     TString blobDepotPool = "decommit_blob_depot_pool";
@@ -494,7 +447,8 @@ void TestRestoreRange(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 group
     }
 }
 
-void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 tabletId0, ui32 groupId, ui32 iterationsNum, ui32 decommitStep, std::vector<ui32> probabilities) {
+void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 tabletId0, ui32 groupId, 
+        ui32 iterationsNum, ui32 decommitStep, ui32 timeLimitSec, std::vector<ui32> probabilities) {
     enum EActions {
         ALTER = 0,
         PUT,
@@ -507,6 +461,11 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
         COLLECT_GARBAGE_SOFT,
         RESTART_BLOB_DEPOT,
     };
+    
+    std::vector<std::string> actionName = {
+        "ALTER", "PUT", "GET", "MULTIGET", "RANGE", "BLOCK", "DISCOVER", "COLLECT_GARBAGE_HARD", "COLLECT_GARBAGE_SOFT", "RESTART_BLOB_DEPOT"
+    };
+
     std::vector<ui32> probs = probabilities;
     TIntervals act(probs);
 
@@ -526,12 +485,15 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
 
     ui32 perGenCtr = 0;
 
+    THPTimer timer;
+
     for (ui32 iteration = 0; iteration < iterationsNum; ++iteration) {
         if (iteration == decommitStep) {
             DecommitGroup(tenv, groupId);
             continue;
         }
-        if (tenv.IsFinished()) {
+
+        if (timeLimitSec && timer.Passed() > timeLimitSec) {
             break;
         }
         ui32 tablet = tenv.Rand(tablets.size());
@@ -547,7 +509,7 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
         ui32 hardCollectStep = state[tabletId].Channels[channel].HardCollectStep;
         
         ui32 action = act.GetInterval(tenv.Rand(act.UpperLimit()));
-        // Cerr << action << Endl;
+        // Cerr << "iteration# " << iteration << " action# " << actionName[action] << " timer# " << timer.Passed() << Endl;
         switch (action) {
         case EActions::ALTER:
             {
@@ -732,7 +694,8 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
     }
 }
 
-void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, ui32 readsNum, bool decommit, std::vector<ui32> probablities) {
+void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, 
+        ui32 readsNum, bool decommit, ui32 timeLimitSec, std::vector<ui32> probablities) {
     enum EActions {
         GET,
         MULTIGET,
@@ -782,12 +745,14 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
         DecommitGroup(tenv, groupId);
     }
 
+    THPTimer timer;
+
     for (ui32 iteration = 0; iteration < readsNum; ++iteration) {
         ui32 action = act.GetInterval(tenv.Rand(act.UpperLimit()));
         if (iteration == readsNum - 1) { // Catch all results on the last iteration
             action = EActions::CATCH_ALL;
         }
-        if (tenv.IsFinished()) {
+        if (timeLimitSec && timer.Passed() > timeLimitSec) {
             break;
         }
 

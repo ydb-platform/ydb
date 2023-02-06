@@ -2,6 +2,9 @@
 
 #include <ydb/core/base/logoblob.h>
 
+#include <util/random/mersenne.h>
+#include <util/random/random.h>
+
 #include <vector>
 #include <map>
 
@@ -92,8 +95,6 @@ struct TIntervals {
     }
 };
 
-/* ------------------------ REQUEST ARGUMENTS ----------------------- */
-
 struct TEvArgs {
     enum EEventType : ui32 {
         PUT,
@@ -174,4 +175,115 @@ struct TEvRangeArgs : public TEvArgs {
 
     bool MustRestoreFirst = false;
     bool IndexOnly = false;
+};
+
+struct TBlobDepotTestEnvironment {
+    TMersenne<ui32> Mt;
+    TMersenne<ui64> Mt64;
+    
+    std::unique_ptr<TEnvironmentSetup> Env;
+    std::vector<ui32> RegularGroups;
+    ui32 BlobDepot;
+    ui32 BlobDepotTabletId;
+
+    TBlobDepotTestEnvironment(ui32 seed = 0, ui32 numGroups = 1, ui32 nodeCount = 8, 
+            TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4) 
+        : Mt(seed)
+        , Mt64(seed) {
+        Cerr << "Mersenne random seed " << seed << Endl;
+        ConfigureEnvironment(numGroups, Env, RegularGroups, BlobDepot, nodeCount, erasure);
+        BlobDepotTabletId = 0;
+    }
+
+    void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot, 
+            ui32 nodeCount = 8, TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4) {
+        envPtr = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
+            .NodeCount = nodeCount,
+            .Erasure = erasure,
+            .SetupHive = true,
+        });
+
+        envPtr->CreateBoxAndPool(1, numGroups);
+        envPtr->Sim(TDuration::Seconds(20));
+
+        regularGroups = envPtr->GetGroups();
+
+        NKikimrBlobStorage::TConfigRequest request;
+        TString virtualPool = "virtual_pool";
+        {
+            auto *cmd = request.AddCommand()->MutableDefineStoragePool();
+            cmd->SetBoxId(1);
+            cmd->SetName(virtualPool);
+            cmd->SetErasureSpecies("none");
+            cmd->SetVDiskKind("Default");
+        }
+        {
+            auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
+            cmd->SetName("vg");
+            cmd->SetHiveId(envPtr->Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
+            cmd->SetStoragePoolName(virtualPool);
+            auto *prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(envPtr->StoragePoolName);
+            prof->SetCount(2);
+            prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(envPtr->StoragePoolName);
+            prof->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+            prof->SetCount(2);
+        }
+
+        auto response = envPtr->Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        blobDepot = response.GetStatus(1).GetGroupId(0);
+
+        envPtr->Sim(TDuration::Seconds(5)); // some time for blob depot to crank up
+    }
+
+    TString DataGen(ui32 len) {
+        TString res = "";
+        for (ui32 i = 0; i < len; ++i) {
+            res += 'A' + Mt.GenRand() % ('z' - 'A');
+        }
+        return res;
+    }
+
+    ui32 Rand(ui32 a, ui32 b) {
+        if (a >= b) {
+            return a;
+        }
+        return Mt.GenRand() % (b - a) + a;
+    }
+
+    ui32 Rand(ui32 b) {
+        return Rand(0, b);
+    }
+
+    ui32 Rand() {
+        return Mt.GenRand();
+    }
+
+    ui32 Rand64() {
+        return Mt64.GenRand();
+    }
+
+    template <class T>
+    T& Rand(std::vector<T>& v) {
+        return v[Rand(v.size())];
+    } 
+
+    ui32 SeedRand(ui32 a, ui32 b, ui32 seed) {
+        TMersenne<ui32> temp(seed);
+        if (a >= b) {
+            return a;
+        }
+        return temp.GenRand() % (b - a) + a;
+    }
+
+    ui32 SeedRand(ui32 b, ui32 seed) {
+        return SeedRand(0, b, seed);
+    }
+
+    template <class T>
+    const T& Rand(const std::vector<T>& v) {
+        return v[Rand(v.size())];
+    }
 };

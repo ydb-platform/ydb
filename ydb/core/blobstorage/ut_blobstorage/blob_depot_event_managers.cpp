@@ -1,7 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blob_depot/events.h>
 
-#include <blob_depot_event_managers.h>
+#include "blob_depot_event_managers.h"
 
 // #define LOG_PUT
 // #define LOG_GET
@@ -20,6 +20,10 @@ bool IsCollected(const TBlobInfo& blob, ui32 softCollectGen, ui32 softCollectSte
     return CheckBarrier(blob.Id, hardCollectGen, hardCollectStep) || (!keep && CheckBarrier(blob.Id, softCollectGen, softCollectStep));
 }
 
+
+TInstant MakeDeadline(TEnvironmentSetup& env, bool withDeadline, TDuration deadline = TDuration::Seconds(10)) {
+    return withDeadline ? env.Runtime->GetClock() +deadline : TInstant::Max();
+}
 
 std::unique_ptr<IEventHandle> CaptureAnyResult(TEnvironmentSetup& env, TActorId sender) {
     std::set<TActorId> ids{sender};
@@ -63,8 +67,10 @@ void SendTEvPut(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlob
 }
 
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> CaptureTEvPutResult(TEnvironmentSetup& env, 
-        TActorId sender, bool termOnCapture) {
-    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, termOnCapture);
+        TActorId sender, bool termOnCapture, bool withDeadline) {
+    const TInstant deadline = MakeDeadline(env, withDeadline);
+    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, termOnCapture, deadline);
+    UNIT_ASSERT(res);
 
 #ifdef LOG_PUT
     Cerr << "Response# " << res->Get()->ToString() << Endl;
@@ -103,10 +109,10 @@ void VerifyTEvPutResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvPutResult>> res
     }
 }
 
-void VerifiedPut(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, TBlobInfo& blob, TBSState& state) {
+void VerifiedPut(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, TBlobInfo& blob, TBSState& state, bool withDeadline) {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
     SendTEvPut(env, sender, groupId, blob.Id, blob.Data);
-    auto res = CaptureTEvPutResult(env, sender, true);
+    auto res = CaptureTEvPutResult(env, sender, true, withDeadline);
     VerifyTEvPutResult(res.Release(), blob, state);
 }
 
@@ -125,7 +131,7 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, TLogoBlob
 }
 
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
-    const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
+    const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
 
@@ -212,8 +218,8 @@ void SendTEvGet(TEnvironmentSetup& env, TActorId sender, ui32 groupId, std::vect
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
-    const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
+TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> CaptureMultiTEvGetResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {    
+    const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, termOnCapture, deadline);
     UNIT_ASSERT(res);
 
@@ -289,8 +295,9 @@ void SendTEvRange(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 ta
 }
     
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvRangeResult>> CaptureTEvRangeResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
-    const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
+    const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender, termOnCapture, deadline);
+    UNIT_ASSERT(res);
 
 #ifdef LOG_RANGE
     Cerr << "Response# " << res->Get()->ToString() << Endl;
@@ -384,9 +391,9 @@ void SendTEvDiscover(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64
 }
 
 TAutoPtr<TEventHandle<TEvBlobStorage::TEvDiscoverResult>> CaptureTEvDiscoverResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture, bool withDeadline) {
-    const TInstant deadline = withDeadline ? env.Runtime->GetClock() + TDuration::Seconds(10) : TInstant::Max();
+    const TInstant deadline = MakeDeadline(env, withDeadline);
     auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(sender, termOnCapture, deadline);
-    UNIT_ASSERT_C(res, "Timeout - no TEvDiscoverResult received");
+    UNIT_ASSERT(res);
 
 #ifdef LOG_DISCOVER
     Cerr << "Response# " << res->Get()->ToString() << Endl;
@@ -483,8 +490,11 @@ void SendTEvCollectGarbage(TEnvironmentSetup& env, TActorId sender, ui32 groupId
     });
 }  
     
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvCollectGarbageResult>> CaptureTEvCollectGarbageResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture) {
-    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender, termOnCapture);
+TAutoPtr<TEventHandle<TEvBlobStorage::TEvCollectGarbageResult>> CaptureTEvCollectGarbageResult(TEnvironmentSetup& env, TActorId sender,
+        bool termOnCapture, bool withDeadline) {
+    const TInstant deadline = MakeDeadline(env, withDeadline);
+    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender, termOnCapture, deadline);
+    UNIT_ASSERT(res);
 
 #ifdef LOG_COLLECT_GARBAGE
     Cerr << "Response# " << res->Get()->ToString() << Endl;
@@ -575,7 +585,7 @@ void VerifiedCollectGarbage(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
     ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
     bool collect, ui32 collectGeneration,
     ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep,
-    bool isMultiCollectAllowed, bool hard, std::vector<TBlobInfo>& blobs, TBSState& state) 
+    bool isMultiCollectAllowed, bool hard, std::vector<TBlobInfo>& blobs, TBSState& state, bool withDeadline) 
 {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
 
@@ -591,7 +601,7 @@ void VerifiedCollectGarbage(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId,
     SendTEvCollectGarbage(env, sender, groupId, tabletId, recordGeneration, perGenerationCounter, channel, collect, 
             collectGeneration, collectStep, keep, doNotKeep, isMultiCollectAllowed, hard);
 
-    auto res = CaptureTEvCollectGarbageResult(env, sender, true);
+    auto res = CaptureTEvCollectGarbageResult(env, sender, true, withDeadline);
     VerifyTEvCollectGarbageResult(res.Release(), tabletId, recordGeneration, perGenerationCounter, channel, collect, 
         collectGeneration, collectStep, copyKeep.Get(), copyDoNotKeep.Get(), isMultiCollectAllowed, hard, blobs, state);
 }
@@ -609,8 +619,11 @@ void SendTEvBlock(TEnvironmentSetup& env, TActorId sender, ui32 groupId, ui64 ta
     });
 }
 
-TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> CaptureTEvBlockResult(TEnvironmentSetup& env, TActorId sender, bool termOnCapture) {
-    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(sender, termOnCapture);
+TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>> CaptureTEvBlockResult(TEnvironmentSetup& env, TActorId sender,
+        bool termOnCapture, bool withDeadline) {
+    const TInstant deadline = MakeDeadline(env, withDeadline);
+    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(sender, termOnCapture, deadline);
+    UNIT_ASSERT(res);
     
 #ifdef LOG_BLOCK
     Cerr << "Response# " << res->Get()->ToString() << Endl;
@@ -637,10 +650,10 @@ void VerifyTEvBlockResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvBlockResult>>
     }
 }
 
-void VerifiedBlock(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, ui32 generation, TBSState& state) {
+void VerifiedBlock(TEnvironmentSetup& env, ui32 nodeId, ui32 groupId, ui64 tabletId, ui32 generation, TBSState& state, bool withDeadline) {
     auto sender = env.Runtime->AllocateEdgeActor(nodeId);
 
     SendTEvBlock(env, sender, groupId, tabletId, generation);
-    auto res = CaptureTEvBlockResult(env, sender, true);
+    auto res = CaptureTEvBlockResult(env, sender, true, withDeadline);
     VerifyTEvBlockResult(res.Release(), tabletId, generation, state);
 }

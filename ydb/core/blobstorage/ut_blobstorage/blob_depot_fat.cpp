@@ -2,7 +2,7 @@
 #include <ydb/core/blob_depot/events.h>
 
 #include "blob_depot_event_managers.h"
-#include "blob_depot_auxiliary_structures.h"
+#include "blob_depot_test_env.h"
 #include "blob_depot_test_functions.h"
 
 #include <util/random/entropy.h>
@@ -13,17 +13,17 @@ Y_UNIT_TEST_SUITE(BlobDepotFat) {
     Y_UNIT_TEST(FatVerifiedRandom) {
         ui32 seed;
         Seed().LoadOrFail(&seed, sizeof(seed));
-        TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4, 1500);
+        TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4);
         
-        TestVerifiedRandom(tenv, 8, 100, tenv.BlobDepot, 1e9);
+        TestVerifiedRandom(tenv, 8, 100, tenv.BlobDepot, 1e9, 1e9, 1500);
     }
 
     Y_UNIT_TEST(FatDecommitVerifiedRandom) {
         ui32 seed;
         Seed().LoadOrFail(&seed, sizeof(seed));
-        TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4, 1500);
+        TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4);
         
-        TestVerifiedRandom(tenv, 8, 100, tenv.BlobDepot, 1e9, 1000);
+        TestVerifiedRandom(tenv, 8, 100, tenv.BlobDepot, 1e9, 1000, 1500);
     }
 
 /* ----- Restore is not implemented in blob depot ------

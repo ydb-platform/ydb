@@ -2,8 +2,10 @@
 
 #include <ydb/core/base/logoblob.h>
 
+#include <util/random/entropy.h>
 #include <util/random/mersenne.h>
 #include <util/random/random.h>
+#include <util/system/env.h>
 
 #include <vector>
 #include <map>

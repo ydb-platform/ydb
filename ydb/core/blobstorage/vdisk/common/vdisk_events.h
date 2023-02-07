@@ -1437,7 +1437,7 @@ namespace NKikimr {
 
             size_t size = request.ExtremeQueriesSize();
             for (unsigned i = 0; i < size; i++) {
-                const NKikimrBlobStorage::TExtremeQuery &query = request.GetExtremeQueries(i);
+                const auto &query = request.GetExtremeQueries(i);
                 Y_VERIFY(request.HasVDiskID());
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
                 ui64 shift = (query.HasShift() ? query.GetShift() : 0);
@@ -1458,7 +1458,8 @@ namespace NKikimr {
                 Record.SetCookie(request.GetCookie());
             }
             if (request.HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
+                // TODO(stetsyuk): copy timestamps directly, without using CopyFrom
+//                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
             }
         }
     };

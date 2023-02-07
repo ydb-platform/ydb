@@ -474,7 +474,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                                     .Callable(1, "Member")
                                         .Callable(0, "Nth")
                                             .Arg(0, "row")
-                                            .Atom(1, std::get<bool>(item) ? "0" : "1", TNodeFlags::Default)
+                                            .Atom(1, std::get<bool>(item) ? 0 : 1)
                                         .Seal()
                                         .Add(1, std::move(std::get<0>(item)))
                                     .Seal()
@@ -561,12 +561,12 @@ TExprNode::TPtr PeepHolePlainKeyForPartitionByKey(const TExprNode::TPtr& node, T
                                         .Add(0, ExpandType(keySelectorLambda->Pos(), *keySelectorLambda->GetTypeAnn(), ctx))
                                         .Callable(1, "Nth")
                                             .Arg(0, "item")
-                                            .Atom(1, "0", TNodeFlags::Default)
+                                            .Atom(1, 0)
                                         .Seal()
                                     .Seal()
                                     .Callable(1, "Nth")
                                         .Arg(0, "item")
-                                        .Atom(1, "1", TNodeFlags::Default)
+                                        .Atom(1, 1)
                                     .Seal()
                                 .Seal()
                             .Seal()
@@ -640,8 +640,8 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
             .Body<TCoVoid>().Build()
             .Build()
         .Settings()
-            .Add().Build("One")
-            .Add().Build("Hashed")
+            .Add().Build("One", TNodeFlags::Default)
+            .Add().Build("Hashed", TNodeFlags::Default)
             .Build()
         .Done()
         .Ptr();
@@ -904,14 +904,14 @@ TExprNode::TPtr ExpandCastOverDict(const TExprNode::TPtr& input, TExprContext& c
                 .Param("item")
                 .Callable("Nth")
                     .Arg(0, "item")
-                    .Atom(1, "0", TNodeFlags::Default)
+                    .Atom(1, 0)
                 .Seal()
             .Seal()
             .Lambda(2)
                 .Param("item")
                 .Callable("Nth")
                     .Arg(0, "item")
-                    .Atom(1, "1", TNodeFlags::Default)
+                    .Atom(1, 1)
                 .Seal()
             .Seal()
             .List(3)
@@ -1011,7 +1011,7 @@ TExprNode::TPtr ExpandCastOverVariant(const TExprNode::TPtr& input, TExprContext
             const auto& items = targetTupleType->GetItems();
             for (ui32 i = 0U; i < size; ++i) {
                 types[i] = ExpandType(input->Tail().Pos(), *items[i], ctx);
-                variants[i] = ctx.NewAtom(input->Pos(), ctx.GetIndexAsString(i), TNodeFlags::Default);
+                variants[i] = ctx.NewAtom(input->Pos(), i);
             }
             break;
         }
@@ -1126,14 +1126,14 @@ TExprNode::TPtr ExpandCastOverOptionalDict(const TExprNode::TPtr& input, TExprCo
                         .Param("item")
                         .Callable("Nth")
                             .Arg(0, "item")
-                            .Atom(1, "0", TNodeFlags::Default)
+                            .Atom(1, 0)
                         .Seal()
                     .Seal()
                     .Lambda(2)
                         .Param("item")
                         .Callable("Nth")
                             .Arg(0, "item")
-                            .Atom(1, "1", TNodeFlags::Default)
+                            .Atom(1, 1)
                         .Seal()
                     .Seal()
                     .List(3)
@@ -1294,7 +1294,7 @@ TExprNode::TPtr ExpandCastOverOptionalTuple(const TExprNode::TPtr& input, TExprC
                     .Callable("Exists")
                         .Callable(0, "Nth")
                             .Add(0, input->HeadPtr())
-                            .Atom(1, ToString(i), TNodeFlags::Default)
+                            .Atom(1, i)
                         .Seal()
                     .Seal().Build()
                 );
@@ -1455,7 +1455,7 @@ TExprNode::TPtr ExpandCastOverOptionalVariant(const TExprNode::TPtr& input, TExp
             renumIndex.resize(sources.size());
             for (ui32 i = 0U; i < variants.size(); ++i) {
                 renumIndex[i] = i;
-                variants[i] = ctx.NewAtom(input->Pos(), ToString(i), TNodeFlags::Default);
+                variants[i] = ctx.NewAtom(input->Pos(), i);
                 if (i < types.size()) {
                     types[i] = ExpandType(input->Tail().Pos(), *targets[i], ctx);
                     checks[i] = CastMayFail<Strong>(sources[i], targets[i]);
@@ -2461,13 +2461,13 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
                     .Callable("OrderedMap")
                         .Callable(0, "Nth")
                             .Add(0, node->HeadPtr())
-                            .Atom(1, ToString(i), TNodeFlags::Default)
+                            .Atom(1, i)
                         .Seal()
                         .Lambda(1)
                             .Param("item")
                             .Callable("Variant")
                                 .Arg(0, "item")
-                                .Atom(1, ToString(i), TNodeFlags::Default)
+                                .Atom(1, i)
                                 .Add(2, varType)
                             .Seal()
                         .Seal()
@@ -2534,7 +2534,7 @@ TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
                             .Param("item")
                             .Callable("Guess")
                                 .Arg(0, "item")
-                                .Atom(1, ToString(i), TNodeFlags::Default)
+                                .Atom(1, i)
                             .Seal()
                         .Seal()
                     .Seal().Build();
@@ -2880,20 +2880,20 @@ TExprNode::TPtr MakeWideMapJoinCore(const TExprNode& mapjoin, TExprNode::TPtr&& 
     TExprNode::TListType indexes;
     indexes.reserve(mapjoin.Child(3)->ChildrenSize());
     mapjoin.Child(3)->ForEachChild([&](const TExprNode& item){
-        indexes.emplace_back(ctx.NewAtom(item.Pos(), ToString(*GetFieldPosition(*inStructType, item.Content())), TNodeFlags::Default));
+        indexes.emplace_back(ctx.NewAtom(item.Pos(), *GetFieldPosition(*inStructType, item.Content())));
     });
 
     TExprNode::TListType leftRenames;
     leftRenames.reserve(mapjoin.Child(4)->ChildrenSize());
     bool split = false;
     mapjoin.Child(4)->ForEachChild([&](const TExprNode& item){
-        leftRenames.emplace_back(ctx.NewAtom(item.Pos(), ToString(*GetFieldPosition(*((split = !split) ? inStructType : outStructType), item.Content())), TNodeFlags::Default));
+        leftRenames.emplace_back(ctx.NewAtom(item.Pos(), *GetFieldPosition(*((split = !split) ? inStructType : outStructType), item.Content())));
     });
 
     auto rightRenames = mapjoin.Child(5)->ChildrenList();
 
     for (auto i = 1U; i < rightRenames.size(); ++++i)
-        rightRenames[i] = ctx.NewAtom(rightRenames[i]->Pos(), ToString(*GetFieldPosition(*outStructType, rightRenames[i]->Content())), TNodeFlags::Default);
+        rightRenames[i] = ctx.NewAtom(rightRenames[i]->Pos(), *GetFieldPosition(*outStructType, rightRenames[i]->Content()));
 
     auto children = mapjoin.ChildrenList();
 
@@ -2914,24 +2914,24 @@ std::pair<TExprNode::TPtr, TExprNode::TListType> MakeWideCommonJoinCore(const TE
 
     leftColumns.reserve(commonJoin.Child(2)->ChildrenSize());
     for (auto& item :  commonJoin.Child(2)->ChildrenList()) {
-        leftColumns.emplace_back(ctx.NewAtom(item->Pos(), ToString(*GetFieldPosition(*inStructType, item->Content())), TNodeFlags::Default));
+        leftColumns.emplace_back(ctx.NewAtom(item->Pos(), *GetFieldPosition(*inStructType, item->Content())));
         outputColumns.emplace_back(std::move(item));
     }
 
     rightColumns.reserve(commonJoin.Child(3)->ChildrenSize());
     for (auto& item :  commonJoin.Child(3)->ChildrenList()) {
-        rightColumns.emplace_back(ctx.NewAtom(item->Pos(), ToString(*GetFieldPosition(*inStructType, item->Content())), TNodeFlags::Default));
+        rightColumns.emplace_back(ctx.NewAtom(item->Pos(),*GetFieldPosition(*inStructType, item->Content())));
         outputColumns.emplace_back(std::move(item));
     }
 
     requred.reserve(commonJoin.Child(4)->ChildrenSize());
     commonJoin.Child(4)->ForEachChild([&](const TExprNode& item){
-        requred.emplace_back(ctx.NewAtom(item.Pos(), ToString(*GetFieldPosition(*inStructType, item.Content())), TNodeFlags::Default));
+        requred.emplace_back(ctx.NewAtom(item.Pos(), *GetFieldPosition(*inStructType, item.Content())));
     });
 
     keys.reserve(commonJoin.Child(5)->ChildrenSize());
     commonJoin.Child(5)->ForEachChild([&](const TExprNode& item){
-        keys.emplace_back(ctx.NewAtom(item.Pos(), ToString(*GetFieldPosition(*inStructType, item.Content())), TNodeFlags::Default));
+        keys.emplace_back(ctx.NewAtom(item.Pos(), *GetFieldPosition(*inStructType, item.Content())));
     });
 
     auto children = commonJoin.ChildrenList();
@@ -2941,7 +2941,7 @@ std::pair<TExprNode::TPtr, TExprNode::TListType> MakeWideCommonJoinCore(const TE
     children[3] = ctx.ChangeChildren(*children[3], std::move(rightColumns));
     children[4] = ctx.ChangeChildren(*children[4], std::move(requred));
     children[5] = ctx.ChangeChildren(*children[5], std::move(keys));
-    children.back() = ctx.NewAtom(commonJoin.Tail().Pos(), ToString(*GetFieldPosition(*inStructType, commonJoin.Tail().Content())), TNodeFlags::Default);
+    children.back() = ctx.NewAtom(commonJoin.Tail().Pos(), *GetFieldPosition(*inStructType, commonJoin.Tail().Content()));
 
     return {ctx.ChangeChildren(commonJoin, std::move(children)), std::move(outputColumns)};
 }
@@ -4109,7 +4109,7 @@ TExprNode::TPtr OptimizeTop(const TExprNode::TPtr& node, TExprContext& ctx, TTyp
             auto dir = node->Child(2U)->IsList() ? node->Child(2U)->ChildPtr(i) : node->ChildPtr(2U);
             directions[i] = ctx.Builder(dir->Pos())
                 .List()
-                    .Atom(0, ctx.GetIndexAsString(sorted[i]), TNodeFlags::Default)
+                    .Atom(0, sorted[i])
                     .Add(1, std::move(dir))
                 .Seal().Build();
         }
@@ -4331,7 +4331,7 @@ void FlattenLambdaBody(TExprNode::TPtr& lambda, const TTupleExpandMap& expandMap
         if (const auto expand = expandMap.size() > i ? expandMap[i] : std::nullopt) {
             for (ui32 j = 0U; j < *expand; ++j)
                 flatten.emplace_back(child->IsList() ? child->ChildPtr(j) : ctx.NewCallable(child->Pos(), "Nth",
-                    {lambda->ChildPtr(i + 1U), ctx.NewAtom(child->Pos(), ToString(j), TNodeFlags::Default)}
+                    {lambda->ChildPtr(i + 1U), ctx.NewAtom(child->Pos(), j)}
                 ));
         } else {
             flatten.emplace_back(lambda->ChildPtr(i + 1U));
@@ -5212,7 +5212,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         auto result = ctx.Builder(node->Pos())
             .Callable("BlockCompress")
                 .Add(0, blockMapped)
-                .Atom(1, ToString(it->second), TNodeFlags::Default)
+                .Atom(1, it->second)
             .Seal()
             .Build();
 
@@ -5321,10 +5321,10 @@ TExprNode::TPtr UpdateBlockCombineColumns(const TExprNode::TPtr& node, std::opti
     combineChildren[0] = node->Head().HeadPtr();
     if (filterColumn) {
         YQL_ENSURE(combineChildren[1]->IsCallable("Void"), "Filter column is already used");
-        combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(*filterColumn));
+        combineChildren[1] = ctx.NewAtom(node->Pos(), *filterColumn);
     } else {
         if (!combineChildren[1]->IsCallable("Void")) {
-            combineChildren[1] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(combineChildren[1]->Content())]));
+            combineChildren[1] = ctx.NewAtom(node->Pos(), argIndices[FromString<ui32>(combineChildren[1]->Content())]);
         }
     }
 
@@ -5332,7 +5332,7 @@ TExprNode::TPtr UpdateBlockCombineColumns(const TExprNode::TPtr& node, std::opti
     if (hashed) {
         auto keyNodes = combineChildren[2]->ChildrenList();
         for (auto& p : keyNodes) {
-            p = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(p->Content())]));
+            p = ctx.NewAtom(node->Pos(), argIndices[FromString<ui32>(p->Content())]);
         }
 
         combineChildren[2] = ctx.ChangeChildren(*combineChildren[2], std::move(keyNodes));
@@ -5344,7 +5344,7 @@ TExprNode::TPtr UpdateBlockCombineColumns(const TExprNode::TPtr& node, std::opti
         YQL_ENSURE(p->IsList() && p->ChildrenSize() >= 1 && p->Head().IsCallable("AggBlockApply"), "Expected AggBlockApply");
         auto payloadArgs = p->ChildrenList();
         for (ui32 i = 1; i < payloadArgs.size(); ++i) {
-            payloadArgs[i] = ctx.NewAtom(node->Pos(), ToString(argIndices[FromString<ui32>(payloadArgs[i]->Content())]));
+            payloadArgs[i] = ctx.NewAtom(node->Pos(), argIndices[FromString<ui32>(payloadArgs[i]->Content())]);
         }
 
         p = ctx.ChangeChildren(*p, std::move(payloadArgs));
@@ -5495,7 +5495,7 @@ TExprNode::TListType GetOptionals(const TPositionHandle& pos, const TTupleExprTy
     if (const auto& items = type.GetItems(); !items.empty())
         for (ui32 i = 0U; i < items.size(); ++i)
             if (ETypeAnnotationKind::Optional == items[i]->GetKind())
-                result.emplace_back(ctx.NewAtom(pos, ToString(i), TNodeFlags::Default));
+                result.emplace_back(ctx.NewAtom(pos, i));
     return result;
 }
 
@@ -5807,14 +5807,14 @@ TExprNode::TPtr SqlEqualTuples(const TExprNode& node, TExprContext& ctx) {
         TExprNode::TPtr left = (i >= lSize) ? nullNode : ctx.Builder(node.Pos())
             .Callable("Nth")
                 .Add(0, node.HeadPtr())
-                .Atom(1, ToString(i), TNodeFlags::Default)
+                .Atom(1, i)
                 .Seal()
             .Build();
 
         TExprNode::TPtr right = (i >= rSize) ? nullNode : ctx.Builder(node.Pos())
             .Callable("Nth")
                 .Add(0, node.TailPtr())
-                .Atom(1, ToString(i), TNodeFlags::Default)
+                .Atom(1, i)
             .Seal()
             .Build();
 
@@ -5881,11 +5881,11 @@ TExprNode::TPtr AggrEqualTuples(const TExprNode& node, TExprContext& ctx) {
             .Callable(node.Content())
                 .Callable(0, "Nth")
                     .Add(0, node.HeadPtr())
-                    .Atom(1, ToString(i), TNodeFlags::Default)
+                    .Atom(1, i)
                 .Seal()
                 .Callable(1, "Nth")
                     .Add(0, node.TailPtr())
-                    .Atom(1, ToString(i), TNodeFlags::Default)
+                    .Atom(1, i)
                 .Seal()
             .Seal()
         .Build());
@@ -5902,11 +5902,11 @@ TExprNode::TPtr SqlCompareTuplesImpl(ui32 index, ui32 min, ui32 max, const TExpr
                     .Callable(0, "==")
                         .Callable(0, "Nth")
                             .Add(0, node.HeadPtr())
-                            .Atom(1, ToString(index), TNodeFlags::Default)
+                            .Atom(1, index)
                         .Seal()
                         .Callable(1, "Nth")
                             .Add(0, node.TailPtr())
-                            .Atom(1, ToString(index), TNodeFlags::Default)
+                            .Atom(1, index)
                         .Seal()
                     .Seal()
                     .Add(1, MakeBool<false>(node.Pos(), ctx))
@@ -5915,11 +5915,11 @@ TExprNode::TPtr SqlCompareTuplesImpl(ui32 index, ui32 min, ui32 max, const TExpr
                 .Callable(2, node.Content().SubString(0U, 1U))
                     .Callable(0, "Nth")
                         .Add(0, node.HeadPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                     .Callable(1, "Nth")
                         .Add(0, node.TailPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                 .Seal()
             .Seal()
@@ -5930,11 +5930,11 @@ TExprNode::TPtr SqlCompareTuplesImpl(ui32 index, ui32 min, ui32 max, const TExpr
                 .Callable(0, node.Content().SubString(0U, 1U))
                     .Callable(0, "Nth")
                         .Add(0, node.HeadPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                     .Callable(1, "Nth")
                         .Add(0, node.TailPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                 .Seal()
                 .Add(1, MakeBoolNothing(node.Pos(), ctx))
@@ -5945,11 +5945,11 @@ TExprNode::TPtr SqlCompareTuplesImpl(ui32 index, ui32 min, ui32 max, const TExpr
             .Callable(node.Content())
                 .Callable(0, "Nth")
                     .Add(0, node.HeadPtr())
-                    .Atom(1, ToString(index), TNodeFlags::Default)
+                    .Atom(1, index)
                 .Seal()
                 .Callable(1, "Nth")
                     .Add(0, node.TailPtr())
-                    .Atom(1, ToString(index), TNodeFlags::Default)
+                    .Atom(1, index)
                 .Seal()
             .Seal()
         .Build();
@@ -5972,22 +5972,22 @@ TExprNode::TPtr AggrCompareTuplesImpl(ui32 index, ui32 count, const TExprNode& n
                 .Callable(0, "AggrEquals")
                     .Callable(0, "Nth")
                         .Add(0, node.HeadPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                     .Callable(1, "Nth")
                         .Add(0, node.TailPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                 .Seal()
                 .Add(1, AggrCompareTuplesImpl<Asc>(next, count, node, ctx))
                 .Callable(2, Asc ? "AggrLess" : "AggrGreater")
                     .Callable(0, "Nth")
                         .Add(0, node.HeadPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                     .Callable(1, "Nth")
                         .Add(0, node.TailPtr())
-                        .Atom(1, ToString(index), TNodeFlags::Default)
+                        .Atom(1, index)
                     .Seal()
                 .Seal()
             .Seal()
@@ -5997,11 +5997,11 @@ TExprNode::TPtr AggrCompareTuplesImpl(ui32 index, ui32 count, const TExprNode& n
             .Callable(node.Content())
                 .Callable(0, "Nth")
                     .Add(0, node.HeadPtr())
-                    .Atom(1, ToString(index), TNodeFlags::Default)
+                    .Atom(1, index)
                 .Seal()
                 .Callable(1, "Nth")
                     .Add(0, node.TailPtr())
-                    .Atom(1, ToString(index), TNodeFlags::Default)
+                    .Atom(1, index)
                 .Seal()
             .Seal()
         .Build();
@@ -6147,11 +6147,11 @@ TExprNode::TPtr SqlEqualLists(const TExprNode& node, TExprContext& ctx) {
                                 .Callable(node.Content())
                                     .Callable(0, "Nth")
                                         .Arg(0, "item")
-                                        .Atom(1, "0", TNodeFlags::Default)
+                                        .Atom(1, 0)
                                     .Seal()
                                     .Callable(1, "Nth")
                                         .Arg(0, "item")
-                                        .Atom(1, "1", TNodeFlags::Default)
+                                        .Atom(1, 1)
                                     .Seal()
                                 .Seal()
                             .Seal()
@@ -6163,11 +6163,11 @@ TExprNode::TPtr SqlEqualLists(const TExprNode& node, TExprContext& ctx) {
                                     .Callable(1, node.Content())
                                         .Callable(0, "Nth")
                                             .Arg(0, "item")
-                                            .Atom(1, "0", TNodeFlags::Default)
+                                            .Atom(1, 0)
                                         .Seal()
                                         .Callable(1, "Nth")
                                             .Arg(0, "item")
-                                            .Atom(1, "1", TNodeFlags::Default)
+                                            .Atom(1, 1)
                                         .Seal()
                                     .Seal()
                                 .Seal()
@@ -6196,11 +6196,11 @@ TExprNode::TPtr AggrEqualLists(const TExprNode& node, TExprContext& ctx) {
                         .Callable("AggrEquals")
                             .Callable(0, "Nth")
                                 .Arg(0, "item")
-                                .Atom(1, "0", TNodeFlags::Default)
+                                .Atom(1, 0)
                             .Seal()
                             .Callable(1, "Nth")
                                 .Arg(0, "item")
-                                .Atom(1, "1", TNodeFlags::Default)
+                                .Atom(1, 1)
                             .Seal()
                         .Seal()
                     .Seal()
@@ -6264,11 +6264,11 @@ TExprNode::TPtr SqlCompareLists(const TExprNode& node, TExprContext& ctx) {
                             .Callable(0, "==")
                                 .Callable(0, "Nth")
                                     .Arg(0, "item")
-                                    .Atom(1, "0", TNodeFlags::Default)
+                                    .Atom(1, 0)
                                 .Seal()
                                 .Callable(1, "Nth")
                                     .Arg(0, "item")
-                                    .Atom(1, "1", TNodeFlags::Default)
+                                    .Atom(1, 1)
                                 .Seal()
                             .Seal()
                             .Add(1, MakeBool<false>(node.Pos(), ctx))
@@ -6281,11 +6281,11 @@ TExprNode::TPtr SqlCompareLists(const TExprNode& node, TExprContext& ctx) {
                 .Callable(node.Content().SubString(0U, 1U))
                     .Callable(0, "Nth")
                         .Arg(0, "item")
-                        .Atom(1, "0", TNodeFlags::Default)
+                        .Atom(1, 0)
                     .Seal()
                     .Callable(1, "Nth")
                         .Arg(0, "item")
-                        .Atom(1, "1", TNodeFlags::Default)
+                        .Atom(1, 1)
                     .Seal()
                 .Seal()
             .Seal()
@@ -6308,11 +6308,11 @@ TExprNode::TPtr AggrCompareLists(const TExprNode& node, TExprContext& ctx) {
                         .Callable("AggrEquals")
                             .Callable(0, "Nth")
                                 .Arg(0, "item")
-                                .Atom(1, "0", TNodeFlags::Default)
+                                .Atom(1, 0)
                             .Seal()
                             .Callable(1, "Nth")
                                 .Arg(0, "item")
-                                .Atom(1, "1", TNodeFlags::Default)
+                                .Atom(1, 1)
                             .Seal()
                         .Seal()
                     .Seal()
@@ -6323,11 +6323,11 @@ TExprNode::TPtr AggrCompareLists(const TExprNode& node, TExprContext& ctx) {
                 .Callable(node.Content())
                     .Callable(0, "Nth")
                         .Arg(0, "item")
-                        .Atom(1, "0", TNodeFlags::Default)
+                        .Atom(1, 0)
                     .Seal()
                     .Callable(1, "Nth")
                         .Arg(0, "item")
-                        .Atom(1, "1", TNodeFlags::Default)
+                        .Atom(1, 1)
                     .Seal()
                 .Seal()
             .Seal()
@@ -6409,7 +6409,7 @@ TExprNode::TPtr SqlEqualDicts(const TExprNode& node, TExprContext& ctx) {
                                         .Add(0, node.TailPtr())
                                         .Callable(1, "Nth")
                                             .Arg(0, "item")
-                                            .Atom(1, "0", TNodeFlags::Default)
+                                            .Atom(1, 0)
                                         .Seal()
                                     .Seal()
                                     .Lambda(1)
@@ -6417,7 +6417,7 @@ TExprNode::TPtr SqlEqualDicts(const TExprNode& node, TExprContext& ctx) {
                                         .Callable(node.Content())
                                             .Callable(0, "Nth")
                                                 .Arg(0, "item")
-                                                .Atom(1, "1", TNodeFlags::Default)
+                                                .Atom(1, 1)
                                             .Seal()
                                             .Arg(1, "payload")
                                         .Seal()
@@ -6435,7 +6435,7 @@ TExprNode::TPtr SqlEqualDicts(const TExprNode& node, TExprContext& ctx) {
                                             .Add(0, node.TailPtr())
                                             .Callable(1, "Nth")
                                                 .Arg(0, "item")
-                                                .Atom(1, "0", TNodeFlags::Default)
+                                                .Atom(1, 0)
                                             .Seal()
                                         .Seal()
                                         .Lambda(1)
@@ -6443,7 +6443,7 @@ TExprNode::TPtr SqlEqualDicts(const TExprNode& node, TExprContext& ctx) {
                                             .Callable(node.Content())
                                                 .Callable(0, "Nth")
                                                     .Arg(0, "item")
-                                                    .Atom(1, "1", TNodeFlags::Default)
+                                                    .Atom(1, 1)
                                                 .Seal()
                                                 .Arg(1, "payload")
                                             .Seal()
@@ -6478,7 +6478,7 @@ TExprNode::TPtr AggrEqualDicts(const TExprNode& node, TExprContext& ctx) {
                                 .Add(0, node.TailPtr())
                                 .Callable(1, "Nth")
                                     .Arg(0, "item")
-                                    .Atom(1, "0", TNodeFlags::Default)
+                                    .Atom(1, 0)
                                 .Seal()
                             .Seal()
                             .Lambda(1)
@@ -6486,7 +6486,7 @@ TExprNode::TPtr AggrEqualDicts(const TExprNode& node, TExprContext& ctx) {
                                 .Callable("AggrEquals")
                                     .Callable(0, "Nth")
                                         .Arg(0, "item")
-                                        .Atom(1, "1", TNodeFlags::Default)
+                                        .Atom(1, 1)
                                     .Seal()
                                     .Arg(1, "payload")
                                 .Seal()
@@ -6541,7 +6541,7 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
             const auto& lItems = lTuple->GetItems();
             const auto& rItems = rTuple->GetItems();
             for (ui32 i = 0U; i < tupleType->GetSize(); ++i) {
-                variants.emplace_back(ctx.NewAtom(node.Pos(), ToString(i), TNodeFlags::Default),
+                variants.emplace_back(ctx.NewAtom(node.Pos(), i),
                     !IsDistinct && ECompareOptions::Optional == CanCompare<true>(lItems[i], rItems[i]));
             }
 
@@ -6655,7 +6655,7 @@ TExprNode::TPtr AggrCompareVariants(const TExprNode& node, TExprContext& ctx) {
             const auto size = type->Cast<TTupleExprType>()->GetSize();
             variants.reserve(size);
             for (ui32 i = 0U; i < size; ++i) {
-                variants.emplace_back(ctx.NewAtom(node.Pos(), ToString(i), TNodeFlags::Default));
+                variants.emplace_back(ctx.NewAtom(node.Pos(), i));
             }
             break;
         }
@@ -6910,8 +6910,8 @@ TExprNode::TPtr BuildCheckedBinaryOpOverDecimal(TPositionHandle pos, TStringBuf 
                     .Seal()
                     .Callable(1, "DataType")
                         .Atom(0, "Decimal")
-                        .Atom(1, "20")
-                        .Atom(2, "0")
+                        .Atom(1, 20)
+                        .Atom(2, 0)
                     .Seal()
                 .Seal()
                 .Callable(1, "SafeCast")
@@ -6921,8 +6921,8 @@ TExprNode::TPtr BuildCheckedBinaryOpOverDecimal(TPositionHandle pos, TStringBuf 
                     .Seal()
                     .Callable(1, "DataType")
                         .Atom(0, "Decimal")
-                        .Atom(1, "20")
-                        .Atom(2, "0")
+                        .Atom(1, 20)
+                        .Atom(2, 0)
                     .Seal()
                 .Seal()
             .Seal()
@@ -6975,8 +6975,8 @@ TExprNode::TPtr ExpandCheckedMinus(const TExprNode::TPtr& node, TExprContext& ct
                     .Add(0, node->HeadPtr())
                     .Callable(1, "DataType")
                         .Atom(0, "Decimal")
-                        .Atom(1, "20")
-                        .Atom(2, "0")
+                        .Atom(1, 20)
+                        .Atom(2, 0)
                     .Seal()
                 .Seal()
             .Seal()

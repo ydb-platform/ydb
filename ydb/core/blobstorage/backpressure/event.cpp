@@ -37,7 +37,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         if (sendMeCostSettings) {
             msgQoS.SetSendMeCostSettings(true);
         }
-        NKikimrBlobStorage::TMessageId& id = *msgQoS.MutableMsgId();
+        auto& id = *msgQoS.MutableMsgId();
         id.SetMsgId(msgId);
         id.SetSequenceId(sequenceId);
         clientId.Serialize(&msgQoS);

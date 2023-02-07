@@ -112,7 +112,8 @@ namespace NKikimr {
                 return Identifier;
             }
 
-            void Serialize(NKikimrBlobStorage::TMsgQoS *msgQoS) const {
+            template<typename SerializerType>
+            void Serialize(SerializerType *msgQoS) const {
                 switch (Type) {
                     case EQueueClientType::None:
                         break;

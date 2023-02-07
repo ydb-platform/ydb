@@ -84,17 +84,18 @@ where:
 
 **Example**
 
-``` sql
+```sql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
-    c Uft8,
+    c Utf8,
     d Date,
     INDEX idx_d GLOBAL ON (d),
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
     PRIMARY KEY (a)
 )
 ```
+
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
@@ -167,7 +168,5 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 {% endnote %}
 
 {% endif %}
-
-
 
 {% endif %}

@@ -84,11 +84,11 @@ CREATE TABLE table_name (
 
 **Пример**
 
-``` sql
+```sql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
-    c Uft8,
+    c Utf8,
     d Date,
     INDEX idx_d GLOBAL ON (d),
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
@@ -167,7 +167,5 @@ CREATE TABLE series_with_families (
 {% endnote %}
 
 {% endif %}
-
-
 
 {% endif %}

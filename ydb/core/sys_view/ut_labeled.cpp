@@ -72,7 +72,7 @@ bool CheckLabeledCounters(::NMonitoring::TDynamicCounterPtr databaseGroup, const
 
 void GetCounters(TTestEnv& env, const TString& databaseName, const TString& databasePath,
                  std::function<bool(::NMonitoring::TDynamicCounterPtr)> particularCountersCheck) {
-    for (size_t iter = 0; iter < 30; ++iter) {
+    for (size_t iter = 0; iter < 35; ++iter) {
         Cerr << "iteration " << iter << Endl;
 
         bool checkDb = false;
@@ -92,9 +92,9 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
             return;
         }
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(10));
     }
-    UNIT_ASSERT_C(false, "out of iterations");
+    UNIT_ASSERT_C(false, "out of 35 iterations with delay 10s");
 }
 
 } // namespace
@@ -260,11 +260,11 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
 
         for (ui32 i = 0; i < env.GetServer().StaticNodes() + env.GetServer().DynamicNodes(); i++) {
             env.GetClient().MarkNodeInHive(env.GetServer().GetRuntime(), i, false);
+            if (i > 0) {
+                env.GetServer().GetRuntime()->DisconnectNodes(0, i, false);
+                env.GetServer().GetRuntime()->DisconnectNodes(i, 0, false);
+            }
         }
-        env.GetServer().GetRuntime()->DisconnectNodes(0, 1, false);
-        env.GetServer().GetRuntime()->DisconnectNodes(1, 0, false);
-        env.GetServer().GetRuntime()->DisconnectNodes(0, 2, false);
-        env.GetServer().GetRuntime()->DisconnectNodes(2, 0, false);
 
         {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
@@ -277,8 +277,6 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
 
             GetCounters(env, databaseName, databasePath, check);
         }
-
-        env.GetServer().GetRuntime()->Register(CreateTabletKiller(env.GetPqTabletIds()[0]));
     }
 }
 

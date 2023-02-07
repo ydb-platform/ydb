@@ -17,9 +17,16 @@ public:
     TGRpcYdbTableService(
         NActors::TActorSystem *system,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-        NActors::TActorId id,
+        const NActors::TActorId& proxyId,
         bool rlAllowed,
         size_t handlersPerCompletionQueue = 1);
+
+    TGRpcYdbTableService(
+        NActors::TActorSystem *system,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        const TVector<NActors::TActorId>& proxies,
+        bool rlAllowed,
+        size_t handlersPerCompletionQueue);
 
 private:
     void SetupIncomingRequests(NGrpc::TLoggerPtr logger);

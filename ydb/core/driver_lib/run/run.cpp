@@ -669,7 +669,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             }
         }
 
-        const auto grpcRequestProxyId = NGRpcService::CreateGRpcRequestProxyId();
+
+        // TODO: for now we pass multiple proxies only to the table service
+        const size_t proxyCount = Max(ui32{1}, grpcConfig.GetGRpcProxyCount());
+        TVector<TActorId> grpcRequestProxies;
+        grpcRequestProxies.reserve(proxyCount);
+        for (size_t i = 0; i < proxyCount; ++i) {
+            grpcRequestProxies.push_back(NGRpcService::CreateGRpcRequestProxyId(i));
+        }
 
         if (hasLegacy) {
             // start legacy service
@@ -697,60 +704,60 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasTableService) {
-            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId,
+            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxies,
                 hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasClickhouseInternal) {
             server.AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(ActorSystem.Get(), Counters,
-                AppData->InFlightLimiterRegistry, grpcRequestProxyId, hasClickhouseInternal.IsRlAllowed()));
+                AppData->InFlightLimiterRegistry, grpcRequestProxies[0], hasClickhouseInternal.IsRlAllowed()));
         }
 
         if (hasScripting) {
             server.AddService(new NGRpcService::TGRpcYdbScriptingService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasScripting.IsRlAllowed()));
+                grpcRequestProxies[0], hasScripting.IsRlAllowed()));
         }
 
         if (hasLongTx) {
             server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasLongTx.IsRlAllowed()));
+                grpcRequestProxies[0], hasLongTx.IsRlAllowed()));
         }
 
         if (hasSchemeService) {
             // RPC RL enabled
             // We have no way to disable or enable this service explicitly
             server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, true /*hasSchemeService.IsRlAllowed()*/));
+                grpcRequestProxies[0], true /*hasSchemeService.IsRlAllowed()*/));
         }
 
         if (hasOperationService) {
             server.AddService(new NGRpcService::TGRpcOperationService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasOperationService.IsRlAllowed()));
+                grpcRequestProxies[0], hasOperationService.IsRlAllowed()));
         }
 
         if (hasExport) {
             server.AddService(new NGRpcService::TGRpcYdbExportService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasExport.IsRlAllowed()));
+                grpcRequestProxies[0], hasExport.IsRlAllowed()));
         }
 
         if (hasImport) {
             server.AddService(new NGRpcService::TGRpcYdbImportService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasImport.IsRlAllowed()));
+                grpcRequestProxies[0], hasImport.IsRlAllowed()));
         }
 
         if (hasKesus) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasKesus.IsRlAllowed()));
+                grpcRequestProxies[0], hasKesus.IsRlAllowed()));
         }
 
         if (hasPQv1) {
             server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
-                grpcRequestProxyId, hasPQv1.IsRlAllowed()));
+                grpcRequestProxies[0], hasPQv1.IsRlAllowed()));
         }
 
         if (hasPQv1 || hasTopic) {
             server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
-                grpcRequestProxyId, hasTopic.IsRlAllowed() || hasPQv1.IsRlAllowed()));
+                grpcRequestProxies[0], hasTopic.IsRlAllowed() || hasPQv1.IsRlAllowed()));
         }
 
         if (hasPQCD) {
@@ -761,64 +768,64 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 inflightLimit = pqcdConfig.GetRequestInflightLimit();
             }
             server.AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(
-                    ActorSystem.Get(), Counters, grpcRequestProxyId, inflightLimit
+                    ActorSystem.Get(), Counters, grpcRequestProxies[0], inflightLimit
             ));
         }
 
         if (hasCms) {
             server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasCms.IsRlAllowed()));
+                grpcRequestProxies[0], hasCms.IsRlAllowed()));
         }
 
         if (hasDiscovery) {
             server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasDiscovery.IsRlAllowed()));
+                grpcRequestProxies[0], hasDiscovery.IsRlAllowed()));
         }
 
         if (hasLocalDiscovery) {
             server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters,
-                grpcRequestProxyId));
+                grpcRequestProxies[0]));
         }
 
         if (hasRateLimiter) {
-            server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasMonitoring) {
             server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasMonitoring.IsRlAllowed()));
+                grpcRequestProxies[0], hasMonitoring.IsRlAllowed()));
         }
 
         if (hasAuth) {
             server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasAuth.IsRlAllowed()));
+                grpcRequestProxies[0], hasAuth.IsRlAllowed()));
         }
 
         if (hasDataStreams) {
             server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasDataStreams.IsRlAllowed()));
+                grpcRequestProxies[0], hasDataStreams.IsRlAllowed()));
         }
 
         if (hasYandexQuery) {
-            server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-            server.AddService(new NGRpcService::TGRpcFederatedQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-            server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TGRpcFederatedQueryService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
-            server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasQueryService) {
             server.AddService(new NGRpcService::TGRpcYdbQueryService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasDataStreams.IsRlAllowed()));
+                grpcRequestProxies[0], hasDataStreams.IsRlAllowed()));
         }
 
         if (hasLogStore) {
             server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId, hasLogStore.IsRlAllowed()));
+                grpcRequestProxies[0], hasLogStore.IsRlAllowed()));
         }
 
         if (ModuleFactories) {
-            for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxyId)) {
+            for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxies[0])) {
                 server.AddService(service);
             }
         }

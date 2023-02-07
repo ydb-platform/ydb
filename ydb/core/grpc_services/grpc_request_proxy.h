@@ -76,8 +76,13 @@ protected:
     TActorId DiscoveryCacheActorID;
 };
 
-inline TActorId CreateGRpcRequestProxyId() {
-    const auto actorId = TActorId(0, "GRpcReqProxy");
+inline TActorId CreateGRpcRequestProxyId(int n = 0) {
+    if (n == 0) {
+        const auto actorId = TActorId(0, "GRpcReqProxy");
+        return actorId;
+    }
+
+    const auto actorId = TActorId(0, TStringBuilder() << "GRpcReqPro" << n);
     return actorId;
 }
 

@@ -656,6 +656,8 @@ message TGRpcConfig {
     optional uint32 WorkersPerCompletionQueue = 104 [default = 1];
     optional uint32 HandlersPerCompletionQueue = 105 [default = 10];
 
+    optional uint32 GRpcProxyCount = 106 [default = 2];
+
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 }
 

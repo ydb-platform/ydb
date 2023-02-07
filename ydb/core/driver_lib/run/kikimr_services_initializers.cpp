@@ -1614,14 +1614,17 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         }
     }
 
-    if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) {
-        auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
-            ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-            : NGRpcService::CreateGRpcRequestProxy(Config);
-        setup->LocalServices.push_back(std::pair<TActorId,
-                                       TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(),
-                                                       TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
-                                                                      appData->UserPoolId)));
+    if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId(0))) {
+        const size_t proxyCount = Config.HasGRpcConfig() ? Config.GetGRpcConfig().GetGRpcProxyCount() : 1UL;
+        for (size_t i = 0; i < proxyCount; ++i) {
+            auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
+                ? NGRpcService::CreateGRpcRequestProxySimple(Config)
+                : NGRpcService::CreateGRpcRequestProxy(Config);
+            setup->LocalServices.push_back(std::pair<TActorId,
+                                           TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
+                                                           TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
+                                                                          appData->UserPoolId)));
+        }
     }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {

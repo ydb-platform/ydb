@@ -66,7 +66,12 @@ message TVolumeConfig {
     optional uint32 PerformanceProfileMaxWriteIops = 24;
     optional uint32 PerformanceProfileBurstPercentage = 25;
 
+    // Label of base volume.
+    // If set then current volume is called "overlay volume".
     optional string BaseDiskId = 26;
+
+    // "base volume checkpoint" overlay volume sits on.
+    // Should not be empty when BaseDiskId is not empty.
     optional string BaseDiskCheckpointId = 27;
 
     optional bool SizeDecreaseAllowed = 28;
@@ -113,6 +118,9 @@ message TVolumeConfig {
 
     // Placement partition id.
     optional string PlacementPartitionId = 45;
+
+    // Tablet id of base disk.
+    optional uint64 BaseDiskTabletId = 46;
 }
 
 message TUpdateVolumeConfig {

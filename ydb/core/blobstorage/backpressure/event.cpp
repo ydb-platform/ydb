@@ -44,7 +44,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
 
         // update in sender queue duration
         TDuration inSenderQueue = TDuration::Seconds(processingTimer.Passed());
-        NKikimrBlobStorage::TExecTimeStats& execTimeStats = *msgQoS.MutableExecTimeStats();
+        auto& execTimeStats = *msgQoS.MutableExecTimeStats();
         execTimeStats.SetInSenderQueue(inSenderQueue.GetValue());
         LWTRACK(DSQueueVPutIsSent, Orbit, inSenderQueue.SecondsFloat() * 1e3);
     };

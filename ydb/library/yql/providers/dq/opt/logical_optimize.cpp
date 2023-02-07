@@ -1,6 +1,7 @@
 #include "logical_optimize.h"
 #include "dqs_opt.h"
 
+#include <ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -78,6 +79,17 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
+        if (!Config->UseFinalizeByKey.Get().GetOrElse(false) && node.Maybe<TCoAggregate>()) {
+            auto aggregate = node.Cast<TCoAggregate>();
+            auto input = aggregate.Input().Maybe<TDqConnection>();
+
+            if (input) {
+                auto newNode = TAggregateExpander::CountAggregateRewrite(aggregate, ctx, TypesCtx.UseBlocks);
+                if (node.Ptr() != newNode) {
+                    return TExprBase(newNode);
+                }
+            }
+        }
         auto aggregate = node.Cast<TCoAggregateBase>();
         auto input = aggregate.Input().Maybe<TDqConnection>();
 

@@ -91,9 +91,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "ResultSet",
@@ -189,9 +196,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "Precompute_0",
@@ -256,9 +270,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "ResultSet",
@@ -354,9 +375,16 @@
                                 "Operators": [
                                     {
                                         "Name": "Aggregate"
+                                    },
+                                    {
+                                        "Name": "Limit",
+                                        "Limit": "1"
+                                    },
+                                    {
+                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate"
+                                "Node Type": "Aggregate-Limit-Aggregate"
                             }
                         ],
                         "Node Type": "Precompute_0",

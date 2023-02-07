@@ -1343,6 +1343,307 @@ TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TP
     .Seal().Build();
 }
 
+
+TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggregate& node, TExprContext& ctx, bool useBlocks) {
+    auto keyColumns = node.Keys();
+    auto aggregatedColumns = node.Handlers();
+    if (keyColumns.Size() > 0 || aggregatedColumns.Size() != 1) {
+        return node.Ptr();
+    }
+
+    auto settings = node.Settings();
+    auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
+    if (hoppingSetting) {
+        return node.Ptr();
+    }
+
+    if (GetSetting(settings.Ref(), "session")) {
+        // TODO: support
+        return node.Ptr();
+    }
+
+    auto aggregatedColumn = aggregatedColumns.Item(0);
+    const bool isDistinct = (aggregatedColumn.Ref().ChildrenSize() == 3);
+
+    auto traits = aggregatedColumn.Ref().Child(1);
+    auto outputColumn = aggregatedColumn.Ref().HeadPtr();
+
+    // validation of traits
+    const TTypeAnnotationNode* inputItemType;
+    bool onlyColumn = true;
+    bool onlyZero = true;
+    TExprNode::TPtr initVal;
+    if (traits->IsCallable("AggregationTraits")) {
+        inputItemType = traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+        auto init = NNodes::TCoLambda(traits->Child(1));
+        TExprNode::TPtr updateVal;
+        if (init.Body().Ref().IsCallable("Uint64") &&
+            init.Body().Ref().Head().Content() == "1") {
+            onlyZero = false;
+        } else if (init.Body().Ref().IsCallable("Uint64") &&
+            init.Body().Ref().Head().Content() == "0") {
+            onlyColumn = false;
+        } else if (init.Body().Ref().IsCallable("AggrCountInit")) {
+            initVal = init.Body().Ref().HeadPtr();
+            onlyColumn = onlyColumn && init.Body().Ref().Child(0) == init.Args().Arg(0).Raw();
+            onlyZero = false;
+        } else {
+            return node.Ptr();
+        }
+
+        auto update = NNodes::TCoLambda(traits->Child(2));
+        auto inc = update.Body().Ptr();
+        if (inc->IsCallable("Inc") && inc->Child(0) == update.Args().Arg(1).Raw()) {
+            onlyZero = false;
+        } else if (inc->IsCallable("AggrCountUpdate") && inc->Child(1) == update.Args().Arg(1).Raw()) {
+            updateVal = inc->HeadPtr();
+            onlyColumn = onlyColumn && inc->Child(0) == update.Args().Arg(0).Raw();
+            onlyZero = false;
+        } else if (inc == update.Args().Arg(1).Raw()) {
+            onlyColumn = false;
+        } else {
+            return node.Ptr();
+        }
+
+        auto save = NNodes::TCoLambda(traits->Child(3));
+        if (save.Body().Raw() != save.Args().Arg(0).Raw()) {
+            return node.Ptr();
+        }
+
+        auto load = NNodes::TCoLambda(traits->Child(4));
+        if (load.Body().Raw() != load.Args().Arg(0).Raw()) {
+            return node.Ptr();
+        }
+
+        auto merge = NNodes::TCoLambda(traits->Child(5));
+        {
+            auto& plus = merge.Body().Ref();
+            if (!plus.IsCallable("+")) {
+                return node.Ptr();
+            }
+
+            if (!(plus.Child(0) == merge.Args().Arg(0).Raw() &&
+                plus.Child(1) == merge.Args().Arg(1).Raw())) {
+                return node.Ptr();
+            }
+        }
+
+        auto finish = NNodes::TCoLambda(traits->Child(6));
+        if (finish.Body().Raw() != finish.Args().Arg(0).Raw()) {
+            return node.Ptr();
+        }
+
+        auto defVal = traits->Child(7);
+        if (!defVal->IsCallable("Uint64") || defVal->Head().Content() != "0") {
+            return node.Ptr();
+        }
+
+        if (!isDistinct) {
+            if (!onlyZero && !onlyColumn) {
+                if (!initVal || !updateVal || initVal != updateVal) {
+                    return node.Ptr();
+                }
+            }
+        }
+    } else if (traits->IsCallable("AggApply")) {
+        if (traits->Head().Content() != "count_all" && traits->Head().Content() != "count") {
+            return node.Ptr();
+        }
+
+        inputItemType = traits->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        onlyZero = false;
+        onlyColumn = false;
+        if (&traits->Child(2)->Head().Head() == &traits->Child(2)->Tail()) {
+            onlyColumn = true;
+        }
+
+        if (!isDistinct) {
+            if (IsDepended(traits->Child(2)->Tail(), traits->Child(2)->Head().Head())) {
+                return node.Ptr();
+            }
+
+            if (traits->Head().Content() == "count") {
+                initVal = traits->Child(2)->TailPtr();
+            }
+        }
+    } else {
+        return node.Ptr();
+    }
+
+    const bool isOptionalColumn = inputItemType->GetKind() == ETypeAnnotationKind::Optional;
+
+    if (!isDistinct) {
+        auto length = ctx.Builder(node.Pos())
+            .Callable("Length")
+                .Add(0, node.Input().Ptr())
+            .Seal()
+            .Build();
+
+        if (onlyZero) {
+            length = ctx.Builder(node.Pos())
+                .Callable("Uint64")
+                    .Atom(0, "0", TNodeFlags::Default)
+                .Seal()
+                .Build();
+        } else if (!onlyColumn && initVal) {
+            length = ctx.Builder(node.Pos())
+                .Callable("If")
+                    .Callable(0, "Exists")
+                        .Add(0, initVal)
+                    .Seal()
+                    .Add(1, std::move(length))
+                    .Callable(2, "Uint64")
+                        .Atom(0, "0", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        auto ret = ctx.Builder(node.Pos())
+            .Callable("AsList")
+                .Callable(0, "AsStruct")
+                    .List(0)
+                        .Add(0, std::move(outputColumn))
+                        .Add(1, std::move(length))
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        return ret;
+    }
+
+    if (useBlocks || !onlyColumn) {
+        return node.Ptr();
+    }
+    auto removedOptionalType = inputItemType;
+    if (isOptionalColumn) {
+        removedOptionalType = removedOptionalType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    const bool needPickle = removedOptionalType->GetKind() != ETypeAnnotationKind::Data;
+    auto pickleTypeNode = ExpandType(node.Pos(), *inputItemType, ctx);
+
+    auto distictColumn = aggregatedColumn.Ref().ChildPtr(2);
+    auto combine = ctx.Builder(node.Pos())
+        .Callable("CombineByKey")
+            .Callable(0, "ExtractMembers")
+                .Add(0, node.Input().Ptr())
+                .List(1)
+                    .Add(0, distictColumn)
+                .Seal()
+            .Seal()
+            .Lambda(1)
+                .Param("row")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    if (isOptionalColumn) {
+                        parent.Callable("Map")
+                            .Callable(0, "Member")
+                                .Arg(0, "row")
+                                .Add(1, distictColumn)
+                            .Seal()
+                            .Lambda(1)
+                                .Param("unpacked")
+                                .Arg("unpacked")
+                            .Seal()
+                        .Seal();
+                    } else {
+                        parent.Callable("Just")
+                            .Callable(0, "Member")
+                                .Arg(0, "row")
+                                .Add(1, distictColumn)
+                            .Seal()
+                        .Seal();
+                    }
+
+                    return parent;
+                })
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    if (needPickle) {
+                        parent.Callable("StablePickle")
+                            .Arg(0, "item")
+                            .Seal();
+                    } else {
+                        parent.Arg("item");
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Lambda(3)
+                .Param("key")
+                .Param("item")
+                .Callable("Void")
+                .Seal()
+            .Seal()
+            .Lambda(4)
+                .Param("key")
+                .Param("item")
+                .Param("state")
+                .Arg("state")
+            .Seal()
+            .Lambda(5)
+                .Param("key")
+                .Param("state")
+                .Callable("Just")
+                    .Callable(0, "AsStruct")
+                        .List(0)
+                            .Atom(0, "value")
+                            .Arg(1, "key")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto groupByKey = ctx.Builder(node.Pos())
+        .Callable("PartitionByKey")
+            .Add(0, combine)
+            .Lambda(1)
+                .Param("combineRow")
+                .Callable("Member")
+                    .Arg(0, "combineRow")
+                    .Atom(1, "value")
+                .Seal()
+            .Seal()
+            .Callable(2, "Void")
+            .Seal()
+            .Callable(3, "Void")
+            .Seal()
+            .Lambda(4)
+                .Param("groups")
+                .Callable("Map")
+                    .Arg(0, "groups")
+                    .Lambda(1)
+                        .Param("group")
+                        .Callable("AsStruct")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto ret = ctx.Builder(node.Pos())
+        .Callable("AsList")
+            .Callable(0, "AsStruct")
+                .List(0)
+                    .Add(0, outputColumn)
+                    .Callable(1, "Length")
+                        .Add(0, std::move(groupByKey))
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ret;
+}
+
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr& preAgg, const TExprNode::TPtr& keyExtractor)
 {
     auto preprocessLambda = GeneratePreprocessLambda(keyExtractor);
@@ -2525,6 +2826,18 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
             .Add(2, lambdaStream)
         .Seal()
         .Build();
+}
+
+TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    if (NNodes::TCoAggregate::Match(node.Get())) {
+        NNodes::TCoAggregate self(node);
+        auto ret = TAggregateExpander::CountAggregateRewrite(self, ctx, typesCtx.UseBlocks);
+        if (ret != node) {
+            YQL_CLOG(DEBUG, Core) << "CountAggregateRewrite on peephole";
+            return ret;
+        }
+    }
+    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.UseBlocks);
 }
 
 } // namespace NYql

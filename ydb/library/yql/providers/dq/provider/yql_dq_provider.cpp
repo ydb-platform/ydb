@@ -8,7 +8,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
 #include <ydb/library/yql/utils/log/log.h>

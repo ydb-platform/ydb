@@ -14,15 +14,9 @@ target_compile_options(providers-dq-interface PRIVATE
 target_link_libraries(providers-dq-interface PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-protobuf
-  library-cpp-yson
-  library-yql-ast
-  library-yql-core
-  yql-dq-tasks
+  yql-public-udf
 )
 target_sources(providers-dq-interface PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_full_result_writer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_integration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_task_transform.cpp
 )

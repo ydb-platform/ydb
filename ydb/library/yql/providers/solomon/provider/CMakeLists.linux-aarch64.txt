@@ -17,6 +17,7 @@ target_link_libraries(providers-solomon-provider PUBLIC
   yutil
   cpp-actors-protos
   yql-dq-expr_nodes
+  yql-dq-integration
   providers-common-config
   providers-common-proto
   providers-common-provider

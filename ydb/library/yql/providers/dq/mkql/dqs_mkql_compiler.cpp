@@ -1,6 +1,6 @@
 #include "dqs_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
 

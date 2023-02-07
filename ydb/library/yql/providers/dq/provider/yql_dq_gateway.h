@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <ydb/library/yql/core/yql_udf_resolver.h>

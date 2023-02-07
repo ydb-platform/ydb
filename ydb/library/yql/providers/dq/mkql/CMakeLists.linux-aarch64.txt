@@ -16,9 +16,9 @@ target_link_libraries(providers-dq-mkql PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-yql-core
+  yql-dq-integration
   providers-common-mkql
   providers-dq-expr_nodes
-  providers-dq-interface
 )
 target_sources(providers-dq-mkql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.cpp

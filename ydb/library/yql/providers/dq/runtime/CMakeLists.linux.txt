@@ -23,12 +23,12 @@ target_link_libraries(providers-dq-runtime PUBLIC
   yql-utils-backtrace
   yql-core-expr_nodes
   yql-dq-common
+  dq-integration-transform
   yql-dq-runtime
   providers-common-proto
   dq-api-protos
   providers-dq-common
   providers-dq-counters
-  providers-dq-interface
   providers-dq-task_runner
 )
 target_sources(providers-dq-runtime PRIVATE

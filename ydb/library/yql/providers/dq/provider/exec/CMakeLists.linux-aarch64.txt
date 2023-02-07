@@ -20,6 +20,7 @@ target_link_libraries(dq-provider-exec PUBLIC
   public-lib-yson_value
   cpp-client-ydb_driver
   library-yql-core
+  yql-dq-integration
   yql-dq-runtime
   yql-dq-tasks
   yql-dq-type_ann
@@ -33,7 +34,6 @@ target_link_libraries(dq-provider-exec PUBLIC
   providers-dq-common
   providers-dq-counters
   providers-dq-expr_nodes
-  providers-dq-interface
   providers-dq-opt
   providers-dq-planner
   providers-dq-runtime

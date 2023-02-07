@@ -17,6 +17,7 @@ target_link_libraries(providers-dq-task_runner PUBLIC
   library-cpp-svnversion
   cpp-threading-task_scheduler
   cpp-yson-node
+  dq-integration-transform
   library-yql-minikql
   yql-minikql-computation
   yql-minikql-invoke_builtins
@@ -29,7 +30,6 @@ target_link_libraries(providers-dq-task_runner PUBLIC
   providers-common-proto
   dq-api-protos
   providers-dq-counters
-  providers-dq-interface
 )
 target_sources(providers-dq-task_runner PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/file_cache.cpp

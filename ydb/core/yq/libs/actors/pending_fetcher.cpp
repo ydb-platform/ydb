@@ -22,7 +22,7 @@
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>

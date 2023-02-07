@@ -1,6 +1,6 @@
 #include "execution_planner.h"
 
-#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>

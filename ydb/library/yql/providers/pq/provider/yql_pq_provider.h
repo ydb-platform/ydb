@@ -3,7 +3,7 @@
 #include "yql_pq_gateway.h"
 
 #include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 

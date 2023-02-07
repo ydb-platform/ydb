@@ -39,13 +39,13 @@ target_link_libraries(yq-libs-mock PUBLIC
   yql-sql-settings
   api-protos
   cpp-client-ydb_table
+  dq-integration-transform
   providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes
   providers-common-provider
   common-schema-mkql
   providers-common-udf_resolve
-  providers-dq-interface
   providers-dq-provider
   dq-worker_manager-interface
   providers-ydb-provider

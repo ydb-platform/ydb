@@ -58,6 +58,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   api-protos
   public-lib-fq
   cpp-client-ydb_table
+  dq-integration-transform
   providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes
@@ -69,7 +70,6 @@ target_link_libraries(yq-libs-actors PUBLIC
   providers-dq-actors
   providers-dq-common
   providers-dq-counters
-  providers-dq-interface
   providers-dq-provider
   dq-provider-exec
   dq-worker_manager-interface

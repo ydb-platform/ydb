@@ -17,6 +17,7 @@ target_link_libraries(providers-dq-task_runner_actor PUBLIC
   yutil
   cpp-actors-core
   dq-actors-task_runner
+  yql-dq-proto
   dq-api-protos
   providers-dq-runtime
   yql-utils-actors

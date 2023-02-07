@@ -27,6 +27,7 @@ target_link_libraries(providers-pq-provider PUBLIC
   library-yql-core
   yql-core-type_ann
   yql-dq-expr_nodes
+  yql-dq-integration
   yql-dq-opt
   providers-common-config
   providers-common-dq
@@ -35,7 +36,6 @@ target_link_libraries(providers-pq-provider PUBLIC
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes
-  providers-dq-interface
   dq-provider-exec
   providers-pq-cm_client
   providers-pq-common

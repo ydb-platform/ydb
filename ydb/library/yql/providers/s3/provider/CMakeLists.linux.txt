@@ -27,6 +27,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   library-yql-core
   yql-core-type_ann
   yql-dq-expr_nodes
+  yql-dq-integration
   library-yql-minikql
   yql-minikql-comp_nodes
   yql-minikql-computation
@@ -42,7 +43,6 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes
-  providers-dq-interface
   providers-result-expr_nodes
   providers-s3-common
   providers-s3-expr_nodes

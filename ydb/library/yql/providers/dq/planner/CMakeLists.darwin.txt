@@ -17,13 +17,13 @@ target_link_libraries(providers-dq-planner PUBLIC
   yql-core-services
   yql-minikql-comp_nodes
   yql-minikql-computation
+  yql-dq-integration
   yql-dq-opt
   yql-dq-tasks
   providers-common-mkql
   dq-api-protos
   providers-dq-common
   providers-dq-expr_nodes
-  providers-dq-interface
   providers-dq-mkql
   providers-dq-opt
 )

@@ -24,6 +24,7 @@ target_link_libraries(providers-clickhouse-provider PUBLIC
   library-yql-core
   yql-core-type_ann
   yql-dq-expr_nodes
+  yql-dq-integration
   providers-common-db_id_async_resolver
   providers-clickhouse-expr_nodes
   providers-clickhouse-proto
@@ -36,7 +37,6 @@ target_link_libraries(providers-clickhouse-provider PUBLIC
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes
-  providers-dq-interface
 )
 target_sources(providers-clickhouse-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink.cpp

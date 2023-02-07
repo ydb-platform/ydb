@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 
 namespace NYql {
 namespace NTaskRunnerProxy {

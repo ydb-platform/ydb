@@ -23,6 +23,8 @@ target_link_libraries(providers-dq-provider PUBLIC
   library-yql-core
   yql-core-issue
   yql-utils-backtrace
+  yql-dq-integration
+  dq-integration-transform
   yql-dq-transform
   yql-dq-tasks
   yql-dq-type_ann
@@ -35,7 +37,6 @@ target_link_libraries(providers-dq-provider PUBLIC
   providers-dq-common
   providers-dq-config
   providers-dq-expr_nodes
-  providers-dq-interface
   providers-dq-opt
   providers-dq-planner
   providers-result-expr_nodes

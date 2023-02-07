@@ -1360,6 +1360,14 @@ public:
         TabletCounters->Simple()[counter].Set(num);
     }
 
+    void DecCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
+        TabletCounters->Simple()[counter].Sub(num);
+    }
+
+    void IncCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
+        TabletCounters->Simple()[counter].Add(num);
+    }
+
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
         TabletCounters->Cumulative()[counter].Increment(num);
     }

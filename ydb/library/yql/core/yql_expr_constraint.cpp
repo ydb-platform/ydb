@@ -1250,9 +1250,9 @@ private:
                         }
 
                         if (childNdx < input->ChildrenSize())
-                            ++it;
-                        else
                             it = content[i].first.erase(it);
+                        else
+                            ++it;
                     }
 
                     if (content[i].first.empty()) {

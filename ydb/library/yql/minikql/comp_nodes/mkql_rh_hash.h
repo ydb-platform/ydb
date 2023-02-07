@@ -7,6 +7,8 @@
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
 
+#include <ydb/library/yql/minikql/primes.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -27,11 +29,11 @@ protected:
     template <>
     struct TPSLStorageImpl<true> {
         i32 Distance = -1;
-        ui32 Hash = 0;
+        ui64 Hash = 0;
         TPSLStorageImpl() = default;
         TPSLStorageImpl(const ui64 hash)
             : Distance(0)
-            , Hash(hash& Max<ui32>()) {
+            , Hash(hash) {
 
         }
     };
@@ -51,11 +53,10 @@ protected:
     explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
         : HashLocal(std::move(hash))
         , EqualLocal(std::move(equal))
-        , Capacity(initialCapacity)
+        , Capacity(FindNearestPrime(initialCapacity))
         , Allocator()
         , SelfHash(GetSelfHash(this))
     {
-        Y_ENSURE((Capacity & (Capacity - 1)) == 0);
     }
 
     ~TRobinHoodHashBase() {
@@ -161,7 +162,7 @@ private:
     Y_FORCE_INLINE char* InsertImpl(TKey key, const ui64 hash, bool& isNew, ui64 capacity, char* data, char* dataEnd) {
         isNew = false;
         TPSLStorage psl(hash);
-        ui64 bucket = (SelfHash ^ hash) & (capacity - 1);
+        ui64 bucket = (SelfHash ^ hash) % capacity;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         char* returnPtr;
         typename TDeriv::TPayloadStore tmpPayload;
@@ -223,7 +224,7 @@ private:
     }
 
     void Grow() {
-        auto newCapacity = Capacity * 2;
+        auto newCapacity = FindNearestPrime(Capacity * 2);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {

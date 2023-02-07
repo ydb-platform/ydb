@@ -126,6 +126,7 @@ private:
     struct TResult {
         const ui64 ShardId;
         THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+        size_t UnprocessedResultRow = 0;
     };
 
     struct TEvPrivate {
@@ -314,25 +315,24 @@ private:
         }
         batch.reserve(rowsCount);
 
-        for (; !Results.empty() && !sizeLimitExceeded; Results.pop_front()) {
-            const auto& readResult = Results.front().ReadResult;
-            const auto shardId = Results.front().ShardId;
-
-            for (size_t rowId = 0; rowId < readResult->Get()->GetRowsCount(); ++rowId) {
-                const auto& result = readResult->Get()->GetCells(rowId);
-                YQL_ENSURE(result.size() <= Columns.size(), "Result columns mismatch");
+        while (!Results.empty() && !sizeLimitExceeded) {
+            auto& result = Results.front();
+            for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
+                const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
+                YQL_ENSURE(resultRow.size() <= Columns.size(), "Result columns mismatch");
 
                 NUdf::TUnboxedValue* rowItems = nullptr;
                 auto row = HolderFactory.CreateDirectArrayHolder(Columns.size(), rowItems);
 
                 i64 rowSize = 0;
-                for (size_t colIndex = 0, resultColIndex = 0; colIndex < Columns.size() && resultColIndex < result.size(); ++colIndex) {
+                for (size_t colIndex = 0, resultColIndex = 0; colIndex < Columns.size(); ++colIndex) {
                     const auto& column = Columns[colIndex];
                     if (IsSystemColumn(column.Name)) {
-                        NMiniKQL::FillSystemColumn(rowItems[colIndex], shardId, column.Id, column.PType);
+                        NMiniKQL::FillSystemColumn(rowItems[colIndex], result.ShardId, column.Id, column.PType);
                         rowSize += sizeof(NUdf::TUnboxedValue);
                     } else {
-                        rowItems[colIndex] = NMiniKQL::GetCellValue(result[resultColIndex], column.PType);
+                        YQL_ENSURE(resultColIndex < resultRow.size());
+                        rowItems[colIndex] = NMiniKQL::GetCellValue(resultRow[resultColIndex], column.PType);
                         rowSize += NMiniKQL::GetUnboxedValueSize(rowItems[colIndex], column.PType).AllocatedBytes;
                         ++resultColIndex;
                     }
@@ -346,6 +346,10 @@ private:
 
                 batch.push_back(std::move(row));
                 totalSize += rowSize;
+            }
+
+            if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
+                Results.pop_front();
             }
         }
 

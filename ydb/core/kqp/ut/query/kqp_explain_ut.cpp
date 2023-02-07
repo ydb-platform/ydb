@@ -84,9 +84,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
-        auto lookup = FindPlanNodeByKv(join, "Node Type", "TableLookup");
-        UNIT_ASSERT(lookup.IsDefined());
-        auto right = FindPlanNodeByKv(lookup, "Table", "KeyValue");
+        auto right = FindPlanNodeByKv(join, "Table", "KeyValue");
         UNIT_ASSERT(right.IsDefined());
     }
 
@@ -113,9 +111,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
-        auto lookup = FindPlanNodeByKv(join, "Node Type", "TableLookup");
-        UNIT_ASSERT(lookup.IsDefined());
-        auto right = FindPlanNodeByKv(lookup, "Table", "KeyValue");
+        auto right = FindPlanNodeByKv(join, "Table", "KeyValue");
         UNIT_ASSERT(right.IsDefined());
     }
 
@@ -205,9 +201,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
-        auto lookup = FindPlanNodeByKv(join, "Node Type", "TableLookup");
-        UNIT_ASSERT(lookup.IsDefined());
-        auto right = FindPlanNodeByKv(lookup, "Table", "FourShard");
+        auto right = FindPlanNodeByKv(join, "Table", "FourShard");
         UNIT_ASSERT(right.IsDefined());
     }
 
@@ -452,7 +446,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST(ExplainDataQuery) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -473,12 +468,19 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
         node = FindPlanNodeByKv(plan, "Name", "TableFullScan");
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
-        node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
-        UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
+        } else {
+            node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
+            UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
+        }
     }
 
     Y_UNIT_TEST(FewEffects) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -509,7 +511,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             CountPlanNodesByKv(plan, "Name", "TableRangeScan");
         UNIT_ASSERT_VALUES_EQUAL(rangeScansCount, 1);
 
-        auto lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TablePointLookup-ConstantExpr");
+        ui32 lookupsCount = 0;
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        } else {
+            lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TablePointLookup-ConstantExpr");
+        }
         UNIT_ASSERT_VALUES_EQUAL(lookupsCount, 3);
 
         /* check tables section */

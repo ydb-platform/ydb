@@ -168,7 +168,7 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos, const T
     const TKqpOptimizeContext& kqpCtx)
 {
     if (kqpCtx.IsScanQuery()) {
-        YQL_ENSURE(kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup(), "Stream lookup is not enabled");
+        YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamLookup, "Stream lookup is not enabled");
         return Build<TKqlStreamLookupIndex>(ctx, pos)
             .Table(read.Table())
             .LookupKeys<TCoSkipNullMembers>()
@@ -201,7 +201,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos, const T
     const TExprBase& keysToLookup, const TVector<TCoAtom>& lookupNames, const TKqpOptimizeContext& kqpCtx)
 {
     if (kqpCtx.IsScanQuery()) {
-        YQL_ENSURE(kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup(), "Stream lookup is not enabled");
+        YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamLookup, "Stream lookup is not enabled");
         return Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(read.Table())
             .LookupKeys<TCoSkipNullMembers>()
@@ -214,7 +214,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos, const T
             .Done();
     }
 
-    if (kqpCtx.Config->FeatureFlags.GetEnableKqpDataQueryStreamLookup()) {
+    if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
         return Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(read.Table())
             .LookupKeys<TCoSkipNullMembers>()
@@ -471,7 +471,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     bool needPrecomputeLeft = kqpCtx.IsDataQuery()
-        && !kqpCtx.Config->FeatureFlags.GetEnableKqpDataQueryStreamLookup()
         && !join.LeftInput().Maybe<TCoParameter>()
         && !IsParameterToListOfStructsRepack(join.LeftInput());
 
@@ -589,7 +588,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const NYql::TKikimrConfiguration::TPtr& config)
 {
-    if ((kqpCtx.IsScanQuery() && !kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup()) || !node.Maybe<TDqJoin>()) {
+    if ((kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamLookup) || !node.Maybe<TDqJoin>()) {
         return node;
     }
     auto join = node.Cast<TDqJoin>();

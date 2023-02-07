@@ -232,7 +232,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
             // is available, currently it can introduce redundant compute stage.
             useDataQueryLookup = kqpCtx.IsDataQuery() && isFullKey;
             useScanQueryLookup = kqpCtx.IsScanQuery() && isFullKey
-                && kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup();
+                && kqpCtx.Config->EnableKqpScanQueryStreamLookup;
         }
 
         TMaybeNode<TExprBase> readInput;
@@ -247,7 +247,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                     .Index(indexName.Cast())
                     .Done();
             } else {
-                if (kqpCtx.Config->FeatureFlags.GetEnableKqpDataQueryStreamLookup()) {
+                if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
                     readInput = Build<TKqlStreamLookupTable>(ctx, read.Pos())
                         .Table(read.Table())
                         .LookupKeys(lookupKeys)
@@ -262,7 +262,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                 }
             }
         } else if (useScanQueryLookup) {
-            YQL_ENSURE(kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup());
+            YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamLookup);
             auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
 
             if (indexName) {

@@ -665,9 +665,12 @@ key = 4, value = (empty maybe)
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetEnableMvcc(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 

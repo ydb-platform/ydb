@@ -273,7 +273,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryTimeoutImmediate) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -411,7 +415,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryCancelImmediate) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

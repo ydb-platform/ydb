@@ -62,8 +62,10 @@ Y_UNIT_TEST(JoinNoStats) {
 }
 
 Y_UNIT_TEST(JoinStatsBasic) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
     auto settings = TKikimrSettings()
-        .SetEnableKqpScanQueryStreamLookup(false);  // TODO: enable stream lookup KIKIMR-14294
+        .SetAppConfig(appConfig);  // TODO: enable stream lookup KIKIMR-14294
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();

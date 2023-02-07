@@ -66,7 +66,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PkSelect1) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -80,7 +81,13 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-        UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpCnStreamLookup"), explainResult.GetAst());
+        } else {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+        }
+
         UNIT_ASSERT_C(!explainResult.GetAst().Contains("Take"), explainResult.GetAst());
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
@@ -98,9 +105,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases().size()); // no LiteralExecuter phase
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access().size());
-        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
         UNIT_ASSERT_VALUES_EQUAL("/Root/EightShard", stats.query_phases()[0].table_access()[0].name());
-        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access()[0].partitions_count());
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
+            UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access()[0].partitions_count());
+        }
 
         params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$key").Uint64(330).Build()
@@ -114,13 +123,16 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases().size()); // no LiteralExecuter phase
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access().size());
-        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
         UNIT_ASSERT_VALUES_EQUAL("/Root/EightShard", stats.query_phases()[0].table_access()[0].name());
-        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access()[0].partitions_count());
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
+            UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access()[0].partitions_count());
+        }
     }
 
     Y_UNIT_TEST(PkSelect2) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -135,7 +147,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-        UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpCnStreamLookup"), explainResult.GetAst());
+        } else {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+        }
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$group").OptionalUint32(1).Build()
@@ -1105,7 +1121,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PrunePartitionsByLiteral) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1125,8 +1142,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1); // no literal phase
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 2);
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 2);
+        }
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
         UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 0);
@@ -1134,7 +1153,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PrunePartitionsByExpr) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1155,19 +1175,24 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[[3];[301u];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
-        UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
+        ui32 index = 0;
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
+            UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-        UNIT_ASSERT(stats.query_phases(1).table_access(0).reads().bytes() > 0);
-        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+            index = 1;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/EightShard");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
+        UNIT_ASSERT(stats.query_phases(index).table_access(0).reads().bytes() > 0);
+        UNIT_ASSERT(stats.query_phases(index).duration_us() > 0);
     }
 
     Y_UNIT_TEST(PruneWritePartitions) {
@@ -1343,7 +1368,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(JoinIdxLookup) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1376,16 +1402,24 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        }
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1");
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 0);
+        ui32 index = 1;
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 0);
+            index = 2;
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/Join2");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join2");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 4);
     }
 
     Y_UNIT_TEST(LeftSemiJoin) {
@@ -1724,7 +1758,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PruneEffectPartitions) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings serverSettings;
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1752,8 +1787,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+        if (!serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+        }
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
@@ -3280,10 +3317,9 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(StreamLookupForDataQuery) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpDataQueryStreamLookup(true)
-            .SetEnablePredicateExtractForDataQueries(false);
-        TKikimrRunner kikimr{settings};
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3319,11 +3355,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT(streamLookup.IsDefined());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/KeyValue");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/KeyValue");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 2);
         }
 
         {

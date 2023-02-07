@@ -131,6 +131,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
     bool EnableKqpScanQuerySourceRead = false;
     bool EnableKqpDataQuerySourceRead = false;
+    bool EnableKqpScanQueryStreamLookup = false;
+    bool EnableKqpDataQueryStreamLookup = false;
 };
 
 }

@@ -383,17 +383,16 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(DataColumnUpsertMixedSemantic, WithMvcc) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(WithMvcc);
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
-
-        if (!WithMvcc) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-            serverSettings.SetAppConfig(appConfig);
-        }
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -435,16 +434,17 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(DataColumnWriteNull, WithMvcc) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(WithMvcc);
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
-        if (!WithMvcc) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-            serverSettings.SetAppConfig(appConfig);
-        }
+
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -519,16 +519,17 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(DataColumnWrite, WithMvcc) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(WithMvcc);
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
-        if (!WithMvcc) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-            serverSettings.SetAppConfig(appConfig);
-        }
+
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -921,16 +922,17 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(DataColumnSelect, WithMvcc) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(WithMvcc);
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
-        if (!WithMvcc) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-            serverSettings.SetAppConfig(appConfig);
-        }
+
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1020,16 +1022,16 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(DuplicateUpsert, WithMvcc) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(WithMvcc);
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
             .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
-        if (!WithMvcc) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-            serverSettings.SetAppConfig(appConfig);
-        }
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1059,16 +1061,15 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(SortByPk, WithMvcc) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(WithMvcc);
+
         auto serverSettings = TKikimrSettings()
             .SetEnableMvcc(WithMvcc)
-            .SetEnableMvccSnapshotReads(WithMvcc);
-        if (!WithMvcc) {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-            serverSettings.SetAppConfig(appConfig);
-        }
-        TKikimrRunner kikimr(serverSettings);
+            .SetAppConfig(appConfig);
 
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);

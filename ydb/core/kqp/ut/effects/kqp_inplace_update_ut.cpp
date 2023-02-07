@@ -40,7 +40,15 @@ void Test(bool enableInplaceUpdate, const TString& query, TParams&& params, cons
     setting.SetName("_KqpAllowUnsafeCommit");
     setting.SetValue("true");
 
-    TKikimrRunner kikimr({setting});
+    // stream lookup use iterator interface, that doesn't use datashard transactions
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+
+    auto settings = TKikimrSettings()
+        .SetAppConfig(appConfig)
+        .SetKqpSettings({setting});
+
+    TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -362,7 +370,15 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
     unsafeCommitSetting.SetName("_KqpAllowUnsafeCommit");
     unsafeCommitSetting.SetValue("true");
 
-    TKikimrRunner kikimr({keysLimitSetting, unsafeCommitSetting});
+    // stream lookup use iterator interface, that doesn't use datashard transactions
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+
+    auto settings = TKikimrSettings()
+        .SetAppConfig(appConfig)
+        .SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
+
+    TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

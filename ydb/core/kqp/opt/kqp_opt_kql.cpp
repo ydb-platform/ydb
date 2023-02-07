@@ -571,7 +571,7 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
             return nullptr;
         }
 
-        if (kqpCtx->IsScanQuery() && !kqpCtx->Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup()) {
+        if (kqpCtx->IsScanQuery() && !kqpCtx->Config->EnableKqpScanQueryStreamLookup) {
             const TString err = "Secondary index is not supported for ScanQuery";
             ctx.AddError(YqlIssue(ctx.GetPosition(read.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
             return nullptr;

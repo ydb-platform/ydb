@@ -81,7 +81,6 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 
     TKikimrSettings()
     {
-        this->SetEnableKqpScanQueryStreamLookup(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

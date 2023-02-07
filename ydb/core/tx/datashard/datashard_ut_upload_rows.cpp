@@ -208,10 +208,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
     }
 
     Y_UNIT_TEST_WITH_MVCC(TestUploadRowsLocks) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(WithMvcc);
+
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
+            .SetAppConfig(appConfig)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

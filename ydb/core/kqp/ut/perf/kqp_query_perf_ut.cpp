@@ -472,7 +472,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST(IdxLookupJoin) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -494,11 +495,16 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        }
     }
 
     Y_UNIT_TEST(IdxLookupJoinThreeWay) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -521,7 +527,11 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+        }
     }
 
     Y_UNIT_TEST(ComputeLength) {

@@ -33,8 +33,6 @@ public:
     FEATURE_FLAG_SETTER(EnableNotNullColumns)
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableChangefeeds)
-    FEATURE_FLAG_SETTER(EnableKqpScanQueryStreamLookup)
-    FEATURE_FLAG_SETTER(EnableKqpDataQueryStreamLookup)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
     FEATURE_FLAG_SETTER(EnablePredicateExtractForDataQueries)
     FEATURE_FLAG_SETTER(EnableNotNullDataColumns)

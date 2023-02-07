@@ -185,7 +185,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         return true;
     };
 
-    map[TCoAssumeUnique::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map[TCoAssumeUnique::CallableName()] = map[TCoAssumeDistinct::CallableName()] =  [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToAssumeUnique(input, members, ctx, " with multi-usage");

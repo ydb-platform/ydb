@@ -40,11 +40,8 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     Y_ENSURE(UserDataStorage);
 
     // Disable "in progress" constraints
-    //DisableConstraintCheck.emplace(TSortedConstraintNode::Name());
-    //DisableConstraintCheck.emplace(TEmptyConstraintNode::Name());
     DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
-    //DisableConstraintCheck.emplace(TMultiConstraintNode::Name());
-    //DisableConstraintCheck.emplace(TVarIndexConstraintNode::Name());
+    DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
     return true;
 }

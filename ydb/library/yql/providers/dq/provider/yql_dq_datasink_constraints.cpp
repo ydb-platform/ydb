@@ -83,7 +83,7 @@ public:
 
     TStatus HandleConnection(TExprBase input, TExprContext&) {
         const auto output = input.Cast<TDqConnection>().Output();
-        TCopyConstraint<TUniqueConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input.Ptr());
+        TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input.Ptr());
         return TStatus::Ok;
     }
 
@@ -95,7 +95,7 @@ public:
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), "Expected sorted constraint on stage output."));
             return TStatus::Error;
         }
-        TCopyConstraint<TUniqueConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input.Ptr());
+        TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input.Ptr());
         return TStatus::Ok;
     }
 

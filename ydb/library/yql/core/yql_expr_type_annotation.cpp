@@ -2401,6 +2401,15 @@ bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type,
     return true;
 }
 
+bool EnsureStaticContainerType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx) || !(type.GetKind() == ETypeAnnotationKind::Struct || type.GetKind() == ETypeAnnotationKind::Tuple || type.GetKind() == ETypeAnnotationKind::Multi)) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected struct, tuple or multi type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx) {
     if (!EnsureType(node, ctx)) {
         return false;

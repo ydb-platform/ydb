@@ -4323,7 +4323,7 @@ namespace {
         }
 
         if (input->ChildrenSize() > 1U) {
-            if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
+            if (!EnsureStaticContainerType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -4332,11 +4332,13 @@ namespace {
                     return status;
                 }
 
-                const auto structType = inputItemType->Cast<TStructExprType>();
-                for (const auto& x : input->Child(i)->Children()) {
-                    YQL_ENSURE(x->IsAtom());
-                    if (!FindOrReportMissingMember(x->Content(), x->Pos(), *structType, ctx.Expr)) {
-                        return IGraphTransformer::TStatus::Error;
+                if (ETypeAnnotationKind::Struct == inputItemType->GetKind()) {
+                    const auto structType = inputItemType->Cast<TStructExprType>();
+                    for (const auto& x : input->Child(i)->Children()) {
+                        YQL_ENSURE(x->IsAtom());
+                        if (!FindOrReportMissingMember(x->Content(), x->Pos(), *structType, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
                     }
                 }
             }

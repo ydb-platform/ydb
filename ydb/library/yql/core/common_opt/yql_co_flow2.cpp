@@ -1389,7 +1389,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        if (self.Input().Maybe<TCoAssumeUnique>()) {
+        if (self.Input().Maybe<TCoAssumeUnique>() || self.Input().Maybe<TCoAssumeDistinct>()) {
             if (auto res = ApplyExtractMembersToAssumeUnique(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }

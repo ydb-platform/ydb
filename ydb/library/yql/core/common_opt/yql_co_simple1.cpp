@@ -138,25 +138,33 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
         .Build();
 }
 
-TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
-    auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
-    if (const auto uniq = src.GetConstraint<TUniqueConstraintNode>()) {
+template<bool Distinct>
+TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto uniq = src.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
         TExprNode::TListType columns;
         for (const auto& set : uniq->GetAllSets())
             for (const auto& path : set)
                 if (!path.empty())
                     columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
-        res = columns.empty() ?
-            ctx.NewCallable(node->Pos(), "AssumeUnique", {std::move(res)}):
+        const auto& name = std::conditional_t<Distinct, TCoAssumeDistinct, TCoAssumeUnique>::CallableName();
+        return columns.empty() ?
+            ctx.NewCallable(node->Pos(), name, {std::move(node)}):
             ctx.Builder(node->Pos())
-                .Callable("AssumeUnique")
-                    .Add(0, std::move(res))
+                .Callable(name)
+                    .Add(0, std::move(node))
                     .List(1)
                         .Add(std::move(columns))
                     .Seal()
                 .Seal()
                 .Build();
     }
+    return node;
+}
+
+TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
+    res = KeepUniqueConstraint<true>(std::move(res), src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
     return res;
 }
 
@@ -536,7 +544,7 @@ TExprNode::TPtr HandleEmptyListInJoin(const TExprNode::TPtr& node, TExprContext&
     return node;
 }
 
-TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, const TVector<const TUniqueConstraintNode*>& unique, TExprContext& ctx) {
+TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, const TVector<const TDistinctConstraintNode*>& unique, TExprContext& ctx) {
     TExprNode::TPtr res = joinTree;
 
     TEquiJoinLinkSettings linkSettings = GetEquiJoinLinkSettings(*joinTree->Child(5));
@@ -602,12 +610,12 @@ TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, c
 
 
 TExprNode::TPtr HandleUniqueListInJoin(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-    if (!typeCtx.IsConstraintCheckEnabled<TUniqueConstraintNode>()) {
+    if (!typeCtx.IsConstraintCheckEnabled<TDistinctConstraintNode>()) {
         return node;
     }
 
     TJoinLabels labels;
-    TVector<const TUniqueConstraintNode*> unique;
+    TVector<const TDistinctConstraintNode*> unique;
     unique.reserve(node->ChildrenSize() - 2);
     for (ui32 i = 0; i < node->ChildrenSize() - 2; ++i) {
         auto err = labels.Add(ctx, *node->Child(i)->Child(1),
@@ -616,7 +624,7 @@ TExprNode::TPtr HandleUniqueListInJoin(const TExprNode::TPtr& node, TExprContext
             ctx.AddError(*err);
             return nullptr;
         }
-        unique.push_back(node->Child(i)->Head().GetConstraint<TUniqueConstraintNode>());
+        unique.push_back(node->Child(i)->Head().GetConstraint<TDistinctConstraintNode>());
     }
 
     auto joinTree = UpdateJoinTreeUniqueRecursive(node->ChildPtr(node->ChildrenSize() - 2), labels, unique, ctx);

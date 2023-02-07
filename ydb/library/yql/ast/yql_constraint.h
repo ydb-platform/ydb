@@ -173,40 +173,6 @@ protected:
     TSetType Columns_;
 };
 
-class TUniqueConstraintNode final: public TConstraintNode {
-public:
-    using TSetType = NSorted::TSimpleSet<TPathType>;
-    using TFullSetType = NSorted::TSimpleSet<TSetType>;
-protected:
-    friend struct TExprContext;
-
-    TUniqueConstraintNode(TExprContext& ctx, const std::vector<std::string_view>& columns);
-    TUniqueConstraintNode(TExprContext& ctx, TFullSetType&& sets);
-    TUniqueConstraintNode(TUniqueConstraintNode&& constr);
-public:
-    static constexpr std::string_view Name() {
-        return "Unique";
-    }
-
-    const TFullSetType& GetAllSets() const { return Sets_; }
-
-    bool Equals(const TConstraintNode& node) const override;
-    bool Includes(const TConstraintNode& node) const override;
-    void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override;
-
-    bool HasEqualColumns(const std::vector<std::string_view>& columns) const;
-
-    static const TUniqueConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
-    const TUniqueConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
-    const TUniqueConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
-
-    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
-    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
-private:
-    TFullSetType Sets_;
-};
-
 class TSortedConstraintNode final: public TConstraintNode {
 public:
     using TSetType = NSorted::TSimpleSet<TPathType>;
@@ -234,7 +200,6 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     bool IsPrefixOf(const TSortedConstraintNode& node) const;
-    bool IsOrderBy(const TUniqueConstraintNode& unique) const;
 
     const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const;
 
@@ -249,6 +214,48 @@ public:
 protected:
     TContainerType Content_;
 };
+
+template<bool Distinct>
+class TUniqueConstraintNodeBase final: public TConstraintNode {
+public:
+    using TSetType = NSorted::TSimpleSet<TPathType>;
+    using TFullSetType = NSorted::TSimpleSet<TSetType>;
+protected:
+    friend struct TExprContext;
+
+    TUniqueConstraintNodeBase(TExprContext& ctx, const std::vector<std::string_view>& columns);
+    TUniqueConstraintNodeBase(TExprContext& ctx, TFullSetType&& sets);
+    TUniqueConstraintNodeBase(TUniqueConstraintNodeBase&& constr);
+public:
+    static constexpr std::string_view Name() {
+        return Distinct ? "Distinct" : "Unique";
+    }
+
+    const TFullSetType& GetAllSets() const { return Sets_; }
+
+    bool Equals(const TConstraintNode& node) const override;
+    bool Includes(const TConstraintNode& node) const override;
+    void Out(IOutputStream& out) const override;
+    void ToJson(NJson::TJsonWriter& out) const override;
+
+    bool IsOrderBy(const TSortedConstraintNode& sorted) const;
+    bool HasEqualColumns(const std::vector<std::string_view>& columns) const;
+
+    static const TUniqueConstraintNodeBase* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+    const TUniqueConstraintNodeBase* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
+    const TUniqueConstraintNodeBase* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
+
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
+private:
+    static TSetType ColumnsListToSet(const std::vector<std::string_view>& columns);
+    static TFullSetType DedupSets(TFullSetType&& sets);
+
+    TFullSetType Sets_;
+};
+
+using TUniqueConstraintNode = TUniqueConstraintNodeBase<false>;
+using TDistinctConstraintNode = TUniqueConstraintNodeBase<true>;
 
 class TGroupByConstraintNode final: public TColumnSetConstraintNodeBase {
 protected:
@@ -271,9 +278,10 @@ public:
 template<class TOriginalConstraintNode>
 class TPartOfConstraintNode : public TConstraintNode {
 public:
+    using TMainConstraint = TOriginalConstraintNode;
     using TPartType = NSorted::TSimpleMap<TPathType, TPathType>;
     using TReversePartType = NSorted::TSimpleMap<TPathType, NSorted::TSimpleSet<TPathType>>;
-    using TMapType = std::unordered_map<const TOriginalConstraintNode*, TPartType>;
+    using TMapType = std::unordered_map<const TMainConstraint*, TPartType>;
 private:
     friend struct TExprContext;
 
@@ -296,11 +304,11 @@ public:
 
     static const TPartOfConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 
-    static TMapType GetCommonMapping(const TOriginalConstraintNode* complete, const TPartOfConstraintNode* incomplete = nullptr, const std::string_view& field = {});
+    static TMapType GetCommonMapping(const TMainConstraint* complete, const TPartOfConstraintNode* incomplete = nullptr, const std::string_view& field = {});
     static void UniqueMerge(TMapType& output, TMapType&& input);
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
-    static const TOriginalConstraintNode* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TOriginalConstraintNode* original);
+    static const TMainConstraint* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TMainConstraint* original);
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
@@ -309,6 +317,7 @@ private:
 
 using TPartOfSortedConstraintNode = TPartOfConstraintNode<TSortedConstraintNode>;
 using TPartOfUniqueConstraintNode = TPartOfConstraintNode<TUniqueConstraintNode>;
+using TPartOfDistinctConstraintNode = TPartOfConstraintNode<TDistinctConstraintNode>;
 
 template<>
 constexpr std::string_view TPartOfSortedConstraintNode::Name() {
@@ -318,6 +327,11 @@ constexpr std::string_view TPartOfSortedConstraintNode::Name() {
 template<>
 constexpr std::string_view TPartOfUniqueConstraintNode::Name() {
     return "PartOfUnique";
+}
+
+template<>
+constexpr std::string_view TPartOfDistinctConstraintNode::Name() {
+    return "PartOfDistinct";
 }
 
 class TPassthroughConstraintNode final: public TConstraintNode {

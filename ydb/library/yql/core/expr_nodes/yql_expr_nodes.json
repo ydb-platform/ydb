@@ -1685,6 +1685,14 @@
             ]
         },
         {
+            "Name": "TCoAssumeDistinct",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "AssumeDistinct"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoAssumeColumnOrder",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "AssumeColumnOrder"},

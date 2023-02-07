@@ -22,7 +22,7 @@ inline void SplitTableName(const TStringBuf& fullName, TStringBuf& table, TStrin
 }
 
 struct TJoinLabel {
-    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique);
+    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct);
     TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label);
     TString FullName(const TStringBuf& column) const;
     TStringBuf ColumnName(const TStringBuf& column) const;
@@ -37,10 +37,11 @@ struct TJoinLabel {
     const TStructExprType* InputType;
     TVector<TStringBuf> Tables;
     const TUniqueConstraintNode* Unique = nullptr;
+    const TDistinctConstraintNode* Distinct = nullptr;
 };
 
 struct TJoinLabels {
-    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique = nullptr);
+    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique = nullptr, const TDistinctConstraintNode* distinct = nullptr);
     TMaybe<const TJoinLabel*> FindInput(const TStringBuf& table) const;
     TMaybe<ui32> FindInputIndex(const TStringBuf& table) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& table, const TStringBuf& column) const;
@@ -76,9 +77,10 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     TExprContext& ctx
 );
 
-IGraphTransformer::TStatus EquiJoinUniq(
+IGraphTransformer::TStatus EquiJoinConstraints(
     TPositionHandle positionHandle,
     const TUniqueConstraintNode*& unique,
+    const TDistinctConstraintNode*& distinct,
     const TJoinLabels& labels,
     const TExprNode& joins,
     TExprContext& ctx

@@ -1351,7 +1351,8 @@ IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNo
     TOptimizeExprSettings settings(typeCtx);
     settings.ProcessedNodes = &processedNodes; // Prevent optimizer to go deeper
 
-    static THashSet<TStringBuf> CALLABLE = {"AssumeUnique",
+    static THashSet<TStringBuf> CALLABLE = {
+        "AssumeUnique", "AssumeDistinct",
         "Map", "OrderedMap",
         "Filter", "OrderedFilter",
         "FlatMap", "OrderedFlatMap",

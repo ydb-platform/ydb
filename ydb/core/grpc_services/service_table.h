@@ -31,7 +31,5 @@ void DoDescribeTableOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFaci
 void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
 
-void DoAddOffsetsToTransaction(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
-
 }
 }

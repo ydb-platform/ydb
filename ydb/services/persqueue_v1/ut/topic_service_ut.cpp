@@ -1,4 +1,4 @@
-#include <ydb/public/api/grpc/draft/ydb_topic_tx_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
@@ -44,8 +44,8 @@ std::unique_ptr<typename T::Stub> CreateServiceStub(const NPersQueue::TTestServe
     return stub;
 }
 
-std::unique_ptr<Ydb::Topic::V1::TopicServiceTx::Stub> CreateTopicServiceTxStub(const NPersQueue::TTestServer &server) {
-    return CreateServiceStub<Ydb::Topic::V1::TopicServiceTx>(server);
+std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> CreateTopicServiceStub(const NPersQueue::TTestServer &server) {
+    return CreateServiceStub<Ydb::Topic::V1::TopicService>(server);
 }
 
 struct TOffsetRange {
@@ -72,7 +72,7 @@ void AppendOffsetsRange(const TOffsetRange& r, google::protobuf::RepeatedPtrFiel
 }
 
 void AppendPartition(const TPartition& p,
-                     google::protobuf::RepeatedPtrField<Ydb::Topic::AddOffsetsToTransactionRequest_TopicOffsets_PartitionOffsets> *partitions)
+                     google::protobuf::RepeatedPtrField<Ydb::Topic::UpdateOffsetsInTransactionRequest_TopicOffsets_PartitionOffsets> *partitions)
 {
     auto* partition = partitions->Add();
 
@@ -84,7 +84,7 @@ void AppendPartition(const TPartition& p,
 }
 
 void AppendTopic(const TTopic &t,
-                 google::protobuf::RepeatedPtrField<Ydb::Topic::AddOffsetsToTransactionRequest_TopicOffsets> *topics)
+                 google::protobuf::RepeatedPtrField<Ydb::Topic::UpdateOffsetsInTransactionRequest_TopicOffsets> *topics)
 {
     auto* topic = topics->Add();
 
@@ -95,15 +95,15 @@ void AppendTopic(const TTopic &t,
     }
 }
 
-Ydb::Topic::AddOffsetsToTransactionRequest CreateRequest(const TString& session_id,
-                                                         const TString& tx_id,
-                                                         const TString& consumer,
-                                                         const TVector<TTopic>& topics)
+Ydb::Topic::UpdateOffsetsInTransactionRequest CreateRequest(const TString& session_id,
+                                                            const TString& tx_id,
+                                                            const TString& consumer,
+                                                            const TVector<TTopic>& topics)
 {
-    Ydb::Topic::AddOffsetsToTransactionRequest request;
+    Ydb::Topic::UpdateOffsetsInTransactionRequest request;
 
-    request.set_session_id(session_id);
-    request.mutable_tx_control()->set_tx_id(tx_id);
+    request.mutable_tx()->set_id(tx_id);
+    request.mutable_tx()->set_session(session_id);
 
     request.set_consumer(consumer);
 
@@ -114,12 +114,12 @@ Ydb::Topic::AddOffsetsToTransactionRequest CreateRequest(const TString& session_
     return request;
 }
 
-class TAddOffsetToTransactionFixture : public NUnitTest::TBaseFixture {
+class TUpdateOffsetsInTransactionFixture : public NUnitTest::TBaseFixture {
 protected:
     TMaybe<NPersQueue::TTestServer> server;
     TMaybe<NYdb::NTable::TSession> session;
     TMaybe<NYdb::NTable::TTransaction> tx;
-    std::unique_ptr<Ydb::Topic::V1::TopicServiceTx::Stub> stub;
+    std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> stub;
 
     const TString DATABASE = "/Root";
     const TString TOPIC_PARENT = "/Root/PQ";
@@ -137,6 +137,7 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override {
         server = NPersQueue::TTestServer(false);
         server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        server->ServerSettings.SetEnableTopicServiceTx(true);
         server->StartServer();
         server->EnableLogs({NKikimrServices::PQ_WRITE_PROXY
                            , NKikimrServices::PQ_READ_PROXY
@@ -169,21 +170,21 @@ protected:
         session = CreateSession(*ydbDriver);
         tx = BeginTransaction(*session);
 
-        stub = CreateTopicServiceTxStub(*server);
+        stub = CreateTopicServiceStub(*server);
     }
 
-    Ydb::Topic::AddOffsetsToTransactionResponse CallAddOffsetsToTransaction(const TVector<TTopic>& topics,
-                                                                            const TString& consumer = "c0nsumer") {
+    Ydb::Topic::UpdateOffsetsInTransactionResponse Call_UpdateOffsetsInTransaction(const TVector<TTopic>& topics,
+                                                                                   const TString& consumer = "c0nsumer") {
         grpc::ClientContext rcontext;
         rcontext.AddMetadata("x-ydb-auth-ticket", AUTH_TOKEN);
         rcontext.AddMetadata("x-ydb-database", DATABASE);
 
-        Ydb::Topic::AddOffsetsToTransactionResponse response;
+        Ydb::Topic::UpdateOffsetsInTransactionResponse response;
 
-        grpc::Status status = stub->AddOffsetsToTransaction(&rcontext,
-                                                            CreateRequest(session->GetId(), tx->GetId(),
-                                                                          consumer, topics),
-                                                            &response);
+        grpc::Status status = stub->UpdateOffsetsInTransaction(&rcontext,
+                                                               CreateRequest(session->GetId(), tx->GetId(),
+                                                                             consumer, topics),
+                                                               &response);
         UNIT_ASSERT(status.ok());
 
         return response;
@@ -194,7 +195,7 @@ protected:
         const auto BEGIN = 4;
         const auto END = 7;
 
-        auto response = CallAddOffsetsToTransaction({
+        auto response = Call_UpdateOffsetsInTransaction({
             TTopic{.Path=path1, .Partitions={
                 TPartition{.Id=PARTITION_ID, .Offsets={
                     TOffsetRange{.Begin=BEGIN, .End=END}
@@ -203,7 +204,7 @@ protected:
         });
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-        response = CallAddOffsetsToTransaction({
+        response = Call_UpdateOffsetsInTransaction({
             TTopic{.Path=path2, .Partitions={
                 TPartition{.Id=PARTITION_ID, .Offsets={
                     TOffsetRange{.Begin=BEGIN, .End=END}
@@ -214,8 +215,8 @@ protected:
     }
 };
 
-Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TAddOffsetToTransactionFixture) {
-    Ydb::Topic::AddOffsetsToTransactionResponse response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TUpdateOffsetsInTransactionFixture) {
+    Ydb::Topic::UpdateOffsetsInTransactionResponse response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=1, .End=3},
@@ -228,7 +229,7 @@ Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TAddOffsetToTransactionFixture)
     });
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    response = CallAddOffsetsToTransaction({
+    response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
                 TOffsetRange{.Begin=8, .End=11}
@@ -238,8 +239,8 @@ Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TAddOffsetToTransactionFixture)
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 }
 
-Y_UNIT_TEST_F(OneConsumer_TheRangesOverlap, TAddOffsetToTransactionFixture) {
-    Ydb::Topic::AddOffsetsToTransactionResponse response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(OneConsumer_TheRangesOverlap, TUpdateOffsetsInTransactionFixture) {
+    Ydb::Topic::UpdateOffsetsInTransactionResponse response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=1, .End=3},
@@ -252,7 +253,7 @@ Y_UNIT_TEST_F(OneConsumer_TheRangesOverlap, TAddOffsetToTransactionFixture) {
     });
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    response = CallAddOffsetsToTransaction({
+    response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=4, .End=7}
@@ -262,8 +263,8 @@ Y_UNIT_TEST_F(OneConsumer_TheRangesOverlap, TAddOffsetToTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
 }
 
-Y_UNIT_TEST_F(DifferentConsumers_TheRangesOverlap, TAddOffsetToTransactionFixture) {
-    Ydb::Topic::AddOffsetsToTransactionResponse response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(DifferentConsumers_TheRangesOverlap, TUpdateOffsetsInTransactionFixture) {
+    Ydb::Topic::UpdateOffsetsInTransactionResponse response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=1, .End=3},
@@ -276,7 +277,7 @@ Y_UNIT_TEST_F(DifferentConsumers_TheRangesOverlap, TAddOffsetToTransactionFixtur
     }, "consumer-1");
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    response = CallAddOffsetsToTransaction({
+    response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=4, .End=7}
@@ -286,8 +287,8 @@ Y_UNIT_TEST_F(DifferentConsumers_TheRangesOverlap, TAddOffsetToTransactionFixtur
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 }
 
-Y_UNIT_TEST_F(UnknownConsumer, TAddOffsetToTransactionFixture) {
-    auto response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(UnknownConsumer, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=4, .End=7}
@@ -297,8 +298,8 @@ Y_UNIT_TEST_F(UnknownConsumer, TAddOffsetToTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
 }
 
-Y_UNIT_TEST_F(UnknownTopic, TAddOffsetToTransactionFixture) {
-    auto response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(UnknownTopic, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=INVALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=4, .End=7}
@@ -308,16 +309,16 @@ Y_UNIT_TEST_F(UnknownTopic, TAddOffsetToTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
 }
 
-Y_UNIT_TEST_F(UseDoubleSlashInTopicPath, TAddOffsetToTransactionFixture) {
+Y_UNIT_TEST_F(UseDoubleSlashInTopicPath, TUpdateOffsetsInTransactionFixture) {
     TestTopicPaths("//Root//PQ//rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
 }
 
-Y_UNIT_TEST_F(RelativePath, TAddOffsetToTransactionFixture) {
+Y_UNIT_TEST_F(RelativePath, TUpdateOffsetsInTransactionFixture) {
     TestTopicPaths("PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
 }
 
-Y_UNIT_TEST_F(AccessRights, TAddOffsetToTransactionFixture) {
-    auto response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=4, .End=7}
@@ -330,7 +331,7 @@ Y_UNIT_TEST_F(AccessRights, TAddOffsetToTransactionFixture) {
     acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, AUTH_TOKEN);
     server->AnnoyingClient->ModifyACL(TOPIC_PARENT, VALID_TOPIC_NAME, acl.SerializeAsString());
 
-    response = CallAddOffsetsToTransaction({
+    response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=4, .Offsets={
                 TOffsetRange{.Begin=14, .End=17}
@@ -340,8 +341,8 @@ Y_UNIT_TEST_F(AccessRights, TAddOffsetToTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::UNAUTHORIZED);
 }
 
-Y_UNIT_TEST_F(ThereAreGapsInTheOffsetRanges, TAddOffsetToTransactionFixture) {
-    auto response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(ThereAreGapsInTheOffsetRanges, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
                 TOffsetRange{.Begin=0, .End=2},
@@ -356,8 +357,8 @@ Y_UNIT_TEST_F(ThereAreGapsInTheOffsetRanges, TAddOffsetToTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture) {
-    auto response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
                 TOffsetRange{.Begin=0, .End=2}
@@ -366,7 +367,7 @@ Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture)
     });
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    response = CallAddOffsetsToTransaction({
+    response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
                 TOffsetRange{.Begin=4, .End=6}
@@ -375,7 +376,7 @@ Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture)
     });
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
-    response = CallAddOffsetsToTransaction({
+    response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
                 TOffsetRange{.Begin=2, .End=4}
@@ -391,8 +392,8 @@ Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture)
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
 }
 
-Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TAddOffsetToTransactionFixture) {
-    auto response = CallAddOffsetsToTransaction({
+Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
                 TOffsetRange{.Begin=0, .End=2}

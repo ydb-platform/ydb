@@ -1,30 +1,44 @@
-#include "add_offsets_to_transaction_actor.h"
+#include "update_offsets_in_transaction_actor.h"
 
 namespace NKikimr::NGRpcService {
 
-TAddOffsetsToTransactionActor::TAddOffsetsToTransactionActor(IRequestOpCtx* request)
+TUpdateOffsetsInTransactionActor::TUpdateOffsetsInTransactionActor(IRequestOpCtx* request)
     : TBase{request}
 {
 }
 
-void TAddOffsetsToTransactionActor::Bootstrap(const NActors::TActorContext& ctx)
+void TUpdateOffsetsInTransactionActor::Bootstrap(const NActors::TActorContext& ctx)
 {
     TBase::Bootstrap(ctx);
-    Become(&TAddOffsetsToTransactionActor::StateWork);
+    Become(&TUpdateOffsetsInTransactionActor::StateWork);
     Proceed(ctx);
 }
 
-void TAddOffsetsToTransactionActor::Proceed(const NActors::TActorContext& ctx)
+void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx)
 {
+    if (!AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
+        return Reply(Ydb::StatusIds::UNSUPPORTED,
+                     "Disabled transaction support for TopicService.",
+                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                     ctx);
+    }
+
     const auto req = GetProtoRequest();
+
+    if (!req->has_tx()) {
+        return Reply(Ydb::StatusIds::BAD_REQUEST,
+                     "Empty tx.",
+                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                     ctx);
+    }
 
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     SetAuthToken(ev, *Request_);
     SetDatabase(ev, *Request_);
 
     NYql::TIssues issues;
-    if (CheckSession(req->session_id(), issues)) {
-        ev->Record.MutableRequest()->SetSessionId(req->session_id());
+    if (CheckSession(req->tx().session(), issues)) {
+        ev->Record.MutableRequest()->SetSessionId(req->tx().session());
     } else {
         return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
     }
@@ -43,24 +57,16 @@ void TAddOffsetsToTransactionActor::Proceed(const NActors::TActorContext& ctx)
     ev->Record.MutableRequest()->SetCancelAfterMs(GetCancelAfter().MilliSeconds());
     ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds());
 
-    if (!req->has_tx_control()) {
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty tx_control."));
-        return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-    }
+    ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx().id());
 
-    //
-    // TODO: проверить комбинацию значений атрибутов tx_control
-    //
-
-    ev->Record.MutableRequest()->MutableTxControl()->CopyFrom(req->tx_control());
     ev->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(req->consumer());
     *ev->Record.MutableRequest()->MutableTopicOperations()->MutableTopics() = req->topics();
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }
 
-void TAddOffsetsToTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx)
+void TUpdateOffsetsInTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
+                                              const NActors::TActorContext& ctx)
 {
     const auto& record = ev->Get()->Record.GetRef();
     SetCost(record.GetConsumedRu());
@@ -69,7 +75,7 @@ void TAddOffsetsToTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryResponse:
     if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
         const auto& kqpResponse = record.GetResponse();
         const auto& issueMessage = kqpResponse.GetQueryIssues();
-        auto queryResult = TEvAddOffsetsToTransactionRequest::AllocateResult<Ydb::Topic::AddOffsetsToTransactionResult>(Request_);
+        auto queryResult = TEvUpdateOffsetsInTransactionRequest::AllocateResult<Ydb::Topic::UpdateOffsetsInTransactionResult>(Request_);
 
         //
         // TODO: сохранить результат
@@ -87,11 +93,6 @@ void TAddOffsetsToTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryResponse:
     } else {
         OnGenericQueryResponseError(record, ctx);
     }
-}
-
-void DoAddOffsetsToTransaction(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &)
-{
-    TActivationContext::AsActorContext().Register(new TAddOffsetsToTransactionActor(p.release()));
 }
 
 }

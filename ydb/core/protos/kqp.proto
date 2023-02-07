@@ -69,7 +69,7 @@ enum EQueryReplyFlags {
 
 message TTopicOperations {
     optional string Consumer = 1;
-    repeated Ydb.Topic.AddOffsetsToTransactionRequest.TopicOffsets Topics = 2;
+    repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
 }
 
 message TQueryRequest {

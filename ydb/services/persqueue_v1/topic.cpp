@@ -7,21 +7,26 @@
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
+#include "actors/update_offsets_in_transaction_actor.h"
+
 #include "grpc_pq_read.h"
 #include "grpc_pq_write.h"
 #include "grpc_pq_schema.h"
 
-namespace NKikimr {
-namespace NGRpcService {
-namespace V1 {
+namespace NKikimr::NGRpcService::V1 {
 
 static const ui32 TopicWriteSessionsMaxCount = 1000000;
 static const ui32 TopicReadSessionsMaxCount = 100000;
 
-TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy, bool rlAllowed)
+TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system,
+                                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                     const NActors::TActorId& schemeCache,
+                                     const NActors::TActorId& grpcRequestProxy,
+                                     bool rlAllowed)
     : TGrpcServiceBase<Ydb::Topic::V1::TopicService>(system, counters, grpcRequestProxy, rlAllowed)
     , SchemeCache(schemeCache)
-{ }
+{
+}
 
 void TGRpcTopicService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
     CQ_ = cq;
@@ -51,6 +56,11 @@ void TGRpcTopicService::InitNewSchemeCacheActor() {
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
     NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
         TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
+}
+
+void TGRpcTopicService::DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &)
+{
+    TActivationContext::AsActorContext().Register(new TUpdateOffsetsInTransactionActor(p.release()));
 }
 
 void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
@@ -128,71 +138,29 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvDescribeConsumerRequest(ctx, IsRlAllowed()));
         })
 #undef ADD_REQUEST
-}
-
-void TGRpcTopicService::StopService() noexcept {
-    TGrpcServiceBase::StopService();
-}
-
-//
-// TGRpcTopicServiceTx
-//
-TGRpcTopicServiceTx::TGRpcTopicServiceTx(NActors::TActorSystem *system,
-                                         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                                         const NActors::TActorId& grpcRequestProxy)
-    : ActorSystem(system)
-    , Counters(counters)
-    , GRpcRequestProxy(grpcRequestProxy)
-{
-}
-
-void TGRpcTopicServiceTx::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-    CQ = cq;
-
-    if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
-        SetupIncomingRequests(std::move(logger));
-    }
-}
-
-void TGRpcTopicServiceTx::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter = limiter;
-}
-
-bool TGRpcTopicServiceTx::IncRequest() {
-    return Limiter->Inc();
-}
-
-void TGRpcTopicServiceTx::DecRequest() {
-    Limiter->Dec();
-}
-
-void TGRpcTopicServiceTx::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #ifdef ADD_REQUEST_LIMIT
 #error ADD_REQUEST_LIMIT macro already defined
 #endif
 
 #define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response, TGRpcTopicServiceTx>>     \
-        (this, this->GetService(), CQ,                                                                          \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer());                                 \
-                ActorSystem->Send(GRpcRequestProxy,                                                             \
-                    new TGrpcRequestOperationCall<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response>        \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));                \
-            }, &Ydb::Topic::V1::TopicServiceTx::AsyncService::Request ## NAME,                                  \
+    MakeIntrusive<TGRpcRequest<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response, TGRpcTopicService>>     \
+        (this, this->GetService(), CQ_,                                                                       \
+            [this](NGrpc::IRequestContextBase *ctx) {                                                         \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                          \
+                    new TGrpcRequestOperationCall<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response>      \
+                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));              \
+            }, &Ydb::Topic::V1::TopicService::AsyncService::Request ## NAME,                                  \
             #NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
-    ADD_REQUEST_LIMIT(AddOffsetsToTransaction, DoAddOffsetsToTransaction, Ru)
+    ADD_REQUEST_LIMIT(UpdateOffsetsInTransaction, DoUpdateOffsetsInTransaction, Ru)
 
 #undef ADD_REQUEST_LIMIT
 }
 
-void TGRpcTopicServiceTx::StopService() noexcept {
+void TGRpcTopicService::StopService() noexcept {
     TGrpcServiceBase::StopService();
 }
 
-} // V1
-} // namespace NGRpcService
-} // namespace NKikimr
+} // namespace NKikimr::NGRpcService::V1

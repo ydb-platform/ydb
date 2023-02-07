@@ -1,4 +1,4 @@
-#include <ydb/public/api/grpc/draft/ydb_topic_tx_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
@@ -41,11 +41,11 @@ protected:
     void Wait_DataReceivedEvent(TTopicReadSession& reader,
                                 ui64 offset);
 
-    void Call_AddOffsetsToTransaction(const TString& sessionId,
-                                      const TString& txId,
-                                      const TString& consumer,
-                                      ui64 rangeBegin,
-                                      ui64 rangeEnd);
+    void Call_UpdateOffsetsInTransaction(const TString& sessionId,
+                                         const TString& txId,
+                                         const TString& consumer,
+                                         ui64 rangeBegin,
+                                         ui64 rangeEnd);
 
     const TString CONSUMER = "user";
     const TString SHORT_TOPIC_NAME = "demo";
@@ -57,7 +57,7 @@ protected:
     const TString TOPIC_PATH = TOPIC_PARENT + "/" + FULL_TOPIC_NAME;
 
     TMaybe<NPersQueue::TTestServer> Server;
-    std::unique_ptr<Ydb::Topic::V1::TopicServiceTx::Stub> TopicTxStub;
+    std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> TopicStub;
 };
 
 void TImmediateTxFixture::SetUp(NUnitTest::TTestContext&)
@@ -69,7 +69,7 @@ void TImmediateTxFixture::SetUp(NUnitTest::TTestContext&)
 
 void TImmediateTxFixture::CreateTestServer()
 {
-    Server.ConstructInPlace(PQSettings(0).SetDomainName("Root"));
+    Server.ConstructInPlace(PQSettings(0).SetDomainName("Root").SetEnableTopicServiceTx(true));
 
     Server->EnableLogs({NKikimrServices::FLAT_TX_SCHEMESHARD
                        , NKikimrServices::PERSQUEUE});
@@ -99,7 +99,7 @@ void TImmediateTxFixture::CreateTopic()
 void TImmediateTxFixture::CreateTopicTxStub()
 {
     auto channel = grpc::CreateChannel("localhost:" + ToString(Server->GrpcPort), grpc::InsecureChannelCredentials());
-    TopicTxStub = Ydb::Topic::V1::TopicServiceTx::NewStub(channel);
+    TopicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
 }
 
 NYdb::NTable::TSession TImmediateTxFixture::CreateSession()
@@ -178,21 +178,21 @@ void TImmediateTxFixture::Wait_DataReceivedEvent(TTopicReadSession& reader,
     UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), offset);
 }
 
-void TImmediateTxFixture::Call_AddOffsetsToTransaction(const TString& sessionId,
-                                                       const TString& txId,
-                                                       const TString& consumer,
-                                                       ui64 rangeBegin,
-                                                       ui64 rangeEnd)
+void TImmediateTxFixture::Call_UpdateOffsetsInTransaction(const TString& sessionId,
+                                                          const TString& txId,
+                                                          const TString& consumer,
+                                                          ui64 rangeBegin,
+                                                          ui64 rangeEnd)
 {
     grpc::ClientContext rcontext;
     rcontext.AddMetadata("x-ydb-auth-ticket", AUTH_TOKEN);
     rcontext.AddMetadata("x-ydb-database", DATABASE);
 
-    Ydb::Topic::AddOffsetsToTransactionRequest request;
-    Ydb::Topic::AddOffsetsToTransactionResponse response;
+    Ydb::Topic::UpdateOffsetsInTransactionRequest request;
+    Ydb::Topic::UpdateOffsetsInTransactionResponse response;
 
-    request.set_session_id(sessionId);
-    request.mutable_tx_control()->set_tx_id(txId);
+    request.mutable_tx()->set_id(txId);
+    request.mutable_tx()->set_session(sessionId);
     request.set_consumer(consumer);
 
     auto *topic = request.mutable_topics()->Add();
@@ -205,9 +205,9 @@ void TImmediateTxFixture::Call_AddOffsetsToTransaction(const TString& sessionId,
     range->set_start(rangeBegin);
     range->set_end(rangeEnd);
 
-    grpc::Status status = TopicTxStub->AddOffsetsToTransaction(&rcontext,
-                                                               request,
-                                                               &response);
+    grpc::Status status = TopicStub->UpdateOffsetsInTransaction(&rcontext,
+                                                                request,
+                                                                &response);
     UNIT_ASSERT(status.ok());
 
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
@@ -226,7 +226,7 @@ Y_UNIT_TEST_F(Scenario_1, TImmediateTxFixture)
         Wait_DataReceivedEvent(*reader, 0);
         Wait_DataReceivedEvent(*reader, 1);
 
-        Call_AddOffsetsToTransaction(session.GetId(), tx.GetId(), CONSUMER, 0, 2);
+        Call_UpdateOffsetsInTransaction(session.GetId(), tx.GetId(), CONSUMER, 0, 2);
 
         CommitTx(tx, NYdb::EStatus::SUCCESS);
     }
@@ -242,7 +242,7 @@ Y_UNIT_TEST_F(Scenario_1, TImmediateTxFixture)
         Wait_DataReceivedEvent(*reader, 2);
         Wait_DataReceivedEvent(*reader, 3);
 
-        Call_AddOffsetsToTransaction(session.GetId(), tx.GetId(), CONSUMER, 2, 4);
+        Call_UpdateOffsetsInTransaction(session.GetId(), tx.GetId(), CONSUMER, 2, 4);
     }
 
     {
@@ -266,7 +266,7 @@ Y_UNIT_TEST_F(Scenario_2, TImmediateTxFixture)
         Wait_DataReceivedEvent(*reader, 1);
         Wait_DataReceivedEvent(*reader, 2);
 
-        Call_AddOffsetsToTransaction(s1.GetId(), t1.GetId(), CONSUMER, 0, 3);
+        Call_UpdateOffsetsInTransaction(s1.GetId(), t1.GetId(), CONSUMER, 0, 3);
     }
 
     NYdb::NTable::TSession s2 = CreateSession();
@@ -280,7 +280,7 @@ Y_UNIT_TEST_F(Scenario_2, TImmediateTxFixture)
         Wait_DataReceivedEvent(*reader, 0);
         Wait_DataReceivedEvent(*reader, 1);
 
-        Call_AddOffsetsToTransaction(s2.GetId(), t2.GetId(), CONSUMER, 0, 2);
+        Call_UpdateOffsetsInTransaction(s2.GetId(), t2.GetId(), CONSUMER, 0, 2);
     }
 
     CommitTx(t2, NYdb::EStatus::SUCCESS);

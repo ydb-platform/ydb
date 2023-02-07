@@ -12,15 +12,16 @@
 
 namespace NKikimr::NGRpcService {
 
-using TEvAddOffsetsToTransactionRequest =
-    TGrpcRequestOperationCall<Ydb::Topic::AddOffsetsToTransactionRequest, Ydb::Topic::AddOffsetsToTransactionResponse>;
+using TEvUpdateOffsetsInTransactionRequest =
+    TGrpcRequestOperationCall<Ydb::Topic::UpdateOffsetsInTransactionRequest, Ydb::Topic::UpdateOffsetsInTransactionResponse>;
 
-class TAddOffsetsToTransactionActor : public TRpcKqpRequestActor<TAddOffsetsToTransactionActor, TEvAddOffsetsToTransactionRequest> {
+class TUpdateOffsetsInTransactionActor :
+    public TRpcKqpRequestActor<TUpdateOffsetsInTransactionActor, TEvUpdateOffsetsInTransactionRequest> {
 public:
-    using TBase = TRpcKqpRequestActor<TAddOffsetsToTransactionActor, TEvAddOffsetsToTransactionRequest>;
-    using TResult = Ydb::Topic::AddOffsetsToTransactionResult;
+    using TBase = TRpcKqpRequestActor<TUpdateOffsetsInTransactionActor, TEvUpdateOffsetsInTransactionRequest>;
+    using TResult = Ydb::Topic::UpdateOffsetsInTransactionResult;
 
-    explicit TAddOffsetsToTransactionActor(IRequestOpCtx* msg);
+    explicit TUpdateOffsetsInTransactionActor(IRequestOpCtx* msg);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 

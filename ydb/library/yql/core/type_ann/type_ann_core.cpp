@@ -8506,11 +8506,20 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         applyChildren.pop_back(); // Remove position of list argument
 
         if (input->Head().Type() != TExprNode::Lambda) {
+            if (!EnsureCallableType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
             const TCallableExprType* callableType = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
 
             if (applyChildren.size() < callableType->GetArgumentsSize() + 1 - callableType->GetOptionalArgumentsCount()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Invalid number of arguments "
                     << (applyChildren.size() - 1) << " to use with callable type " << FormatType(callableType)));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (listArg >= callableType->GetArguments().size()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expecting callable with at least "
+                    << (listArg + 1) << " arguments, but got: " << FormatType(callableType)));
                 return IGraphTransformer::TStatus::Error;
             }
 

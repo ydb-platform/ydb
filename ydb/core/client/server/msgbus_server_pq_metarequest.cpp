@@ -397,8 +397,10 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
     response.SetErrorCode(code);
     if (!errorReason.empty())
         response.SetErrorReason(errorReason);
-    if (code == NPersQueue::NErrorCode::OK) {
 
+    const auto& pqConfig = AppData(ctx)->PQConfig;
+
+    if (code == NPersQueue::NErrorCode::OK) {
         auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionLocationsResult()->AddTopicResult();
         topicResult.SetTopic(Name);
         SetErrorCode(&topicResult, SchemeEntry);
@@ -417,8 +419,15 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
                 if (hostName != NodesInfo->HostNames.end()) {
                     location.SetHost(hostName->second);
                     location.SetErrorCode(NPersQueue::NErrorCode::OK);
-                    if (nodeId < 1000) {
+                    if (nodeId < pqConfig.GetMaxStorageNodeId()) {
                         location.SetHostId(nodeId);
+                    } else if (pqConfig.GetDynNodePartitionLocationsMapping()) {
+                        auto dynNodeIdIter = NodesInfo->DynToStaticNode.find(nodeId);
+                        Y_VERIFY(!dynNodeIdIter.IsEnd());
+                        auto statNodeIdIter = NodesInfo->HostNames.find(dynNodeIdIter->second);
+                        Y_VERIFY(!statNodeIdIter.IsEnd());
+                        location.SetHostId(statNodeIdIter->first);
+                        location.SetHost(statNodeIdIter->second);
                     } else {
                         auto minIter = NodesInfo->MinNodeIdByHost.find(hostName->second);
                         if (minIter.IsEnd()) {

@@ -5,6 +5,10 @@ title: Deploy YDB OSS docs
 service: kikimr
 
 ci:
+  permissions:
+    start-flow:
+      - service: edition_90_ydb_cs
+      - service: kikimr
   secret: sec-01g3rbfrx24zvmxgqq6yb0ye1b # id секрета, созданного на шаге 1
   runtime:
     # Sandbox-группа (https://sandbox.yandex-team.ru/admin/groups),
@@ -18,7 +22,6 @@ ci:
           transport: email # доступные транспорты: telegram, email, jabber, q
           # логины сотрудников, Sandbox-группы, рассылки (рассылки только для email уведомлений) и др.
           recipients: YDB-DOCS-CI
-
   actions:
     # определение экшена, который будет вызван при пулл-реквесте,
     # затрагивающим вашу документацию
@@ -27,7 +30,6 @@ ci:
       flow: deploy-pr-docs
       triggers:
         - on: pr
-
   releases:
     release-docs:
       title: Release YDB internal and tech docs

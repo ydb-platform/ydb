@@ -1426,8 +1426,9 @@ namespace NKikimr {
             return str.Str();
         }
 
+        template<typename SerializerType>
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
-                const NKikimrBlobStorage::TEvVGet &request) {
+                const SerializerType &request) {
             NKikimrProto::EReplyStatus messageStatus = status;
             NKikimrProto::EReplyStatus queryStatus = status != NKikimrProto::NOTREADY ? status : NKikimrProto::ERROR;
 

@@ -33,7 +33,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
 
     auto processMsgQoS = [&](auto& record) {
         // prepare extra buffer with some changed params
-        NKikimrBlobStorage::TMsgQoS& msgQoS = *record.MutableMsgQoS();
+        auto& msgQoS = *record.MutableMsgQoS();
         if (sendMeCostSettings) {
             msgQoS.SetSendMeCostSettings(true);
         }

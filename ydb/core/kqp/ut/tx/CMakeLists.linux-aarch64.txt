@@ -35,9 +35,9 @@ target_link_options(ydb-core-kqp-ut-tx PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-tx PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_locks_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_mvcc_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_tx_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_locks_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_mvcc_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/tx/kqp_tx_ut.cpp
 )
 set_property(
   TARGET

@@ -14,5 +14,5 @@ target_link_libraries(cpp-html-escape PUBLIC
   yutil
 )
 target_sources(cpp-html-escape PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/html/escape/escape.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/html/escape/escape.cpp
 )

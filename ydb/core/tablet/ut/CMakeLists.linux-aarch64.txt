@@ -37,15 +37,15 @@ target_link_options(ydb-core-tablet-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tablet-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/pipe_tracker_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/resource_broker_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_aggregator_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_metrics_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipe_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipecache_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_req_blockbs_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_resolver_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/pipe_tracker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/resource_broker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_aggregator_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_metrics_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipe_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipecache_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_req_blockbs_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_resolver_ut.cpp
 )
 set_property(
   TARGET

@@ -21,7 +21,7 @@ target_link_libraries(ydb-core-control PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(ydb-core-control PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
 )

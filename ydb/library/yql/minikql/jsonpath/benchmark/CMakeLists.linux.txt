@@ -40,6 +40,6 @@ target_link_options(benchmark PRIVATE
   -ldl
 )
 target_sources(benchmark PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
 )
 vcs_info(benchmark)

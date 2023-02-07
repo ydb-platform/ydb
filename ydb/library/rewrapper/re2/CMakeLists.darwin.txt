@@ -23,5 +23,5 @@ target_link_libraries(library-rewrapper-re2.global PUBLIC
   ydb-library-rewrapper
 )
 target_sources(library-rewrapper-re2.global PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/re2/re2.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/re2/re2.cpp
 )

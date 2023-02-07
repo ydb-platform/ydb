@@ -20,5 +20,5 @@ target_link_libraries(yql-dq-state PUBLIC
   providers-pq-task_meta
 )
 target_sources(yql-dq-state PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/state/dq_state_load_plan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/state/dq_state_load_plan.cpp
 )

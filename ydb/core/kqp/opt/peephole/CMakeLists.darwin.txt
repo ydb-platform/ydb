@@ -19,6 +19,6 @@ target_link_libraries(kqp-opt-peephole PUBLIC
   yql-dq-opt
 )
 target_sources(kqp-opt-peephole PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_wide_read.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_wide_read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole.cpp
 )

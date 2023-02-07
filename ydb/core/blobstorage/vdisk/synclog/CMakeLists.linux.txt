@@ -29,20 +29,20 @@ target_link_libraries(blobstorage-vdisk-synclog PUBLIC
   ydb-core-util
 )
 target_sources(blobstorage-vdisk-synclog PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_syncloghttp.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_state.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogneighbors.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_syncloghttp.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_state.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogneighbors.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.cpp
 )

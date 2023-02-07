@@ -26,8 +26,8 @@ target_link_libraries(blobstorage-vdisk-repl PUBLIC
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-repl PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_repl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_repl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.cpp
 )

@@ -22,6 +22,6 @@ target_link_libraries(providers-clickhouse-actors PUBLIC
   providers-common-http_gateway
 )
 target_sources(providers-clickhouse-actors PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.cpp
 )

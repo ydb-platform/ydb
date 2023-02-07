@@ -31,7 +31,7 @@ target_link_options(ydb-core-blobstorage-nodewarden-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-nodewarden-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/blobstorage_node_warden_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/blobstorage_node_warden_ut.cpp
 )
 set_property(
   TARGET

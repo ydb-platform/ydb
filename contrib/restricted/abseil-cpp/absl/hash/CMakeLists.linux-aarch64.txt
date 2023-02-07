@@ -23,7 +23,7 @@ target_link_libraries(abseil-cpp-absl-hash PUBLIC
   abseil-cpp-absl-types
 )
 target_sources(abseil-cpp-absl-hash PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/city.cc
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/hash.cc
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/low_level_hash.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/city.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/hash.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/hash/internal/low_level_hash.cc
 )

@@ -20,18 +20,22 @@ target_link_libraries(dq-api-grpc PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(dq-api-grpc PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/grpc/api.proto
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/grpc/api.proto
 )
 target_proto_addincls(dq-api-grpc
   ./
-  \${CMAKE_SOURCE_DIR}/
-  \${CMAKE_BINARY_DIR}
-  \${CMAKE_SOURCE_DIR}
-  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  \${CMAKE_BINARY_DIR}
-  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(dq-api-grpc
-  --cpp_out=\${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
+target_proto_plugin(dq-api-grpc
+  grpc_cpp
+  grpc_cpp
 )

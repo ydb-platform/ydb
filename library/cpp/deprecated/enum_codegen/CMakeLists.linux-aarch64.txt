@@ -14,5 +14,5 @@ target_link_libraries(cpp-deprecated-enum_codegen PUBLIC
   yutil
 )
 target_sources(cpp-deprecated-enum_codegen PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/deprecated/enum_codegen/enum_codegen.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/deprecated/enum_codegen/enum_codegen.cpp
 )

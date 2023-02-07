@@ -34,7 +34,7 @@ target_link_options(ydb-core-blobstorage-vdisk-query-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-query-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_spacetracker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_spacetracker_ut.cpp
 )
 set_property(
   TARGET

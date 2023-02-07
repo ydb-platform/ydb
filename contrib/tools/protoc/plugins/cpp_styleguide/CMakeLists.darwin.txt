@@ -24,6 +24,6 @@ target_link_options(cpp_styleguide PRIVATE
   -fPIC
 )
 target_sources(cpp_styleguide PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide.cpp
 )
 vcs_info(cpp_styleguide)

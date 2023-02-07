@@ -20,5 +20,5 @@ target_link_libraries(tx-sequenceproxy-public PUBLIC
   yql-public-issue
 )
 target_sources(tx-sequenceproxy-public PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/public/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/public/events.cpp
 )

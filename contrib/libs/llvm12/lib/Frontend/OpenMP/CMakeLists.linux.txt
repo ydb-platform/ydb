@@ -28,9 +28,9 @@ target_link_libraries(lib-Frontend-OpenMP PUBLIC
   lib-Transforms-Utils
 )
 target_sources(lib-Frontend-OpenMP PRIVATE
-  \${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMP.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMPContext.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMPIRBuilder.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMP.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMPContext.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMPIRBuilder.cpp
 )
 
 add_dependencies(lib-Frontend-OpenMP OpenMP-gen-srcs-stealing)

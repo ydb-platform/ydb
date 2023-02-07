@@ -15,5 +15,5 @@ target_link_libraries(cpp-client-ydb_discovery PUBLIC
   cpp-client-ydb_driver
 )
 target_sources(cpp-client-ydb_discovery PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_discovery/discovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_discovery/discovery.cpp
 )

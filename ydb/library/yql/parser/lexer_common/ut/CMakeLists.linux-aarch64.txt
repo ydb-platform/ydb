@@ -31,8 +31,8 @@ target_link_options(ydb-library-yql-parser-lexer_common-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-parser-lexer_common-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/hints_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/parse_hints_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/hints_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/parse_hints_ut.cpp
 )
 set_property(
   TARGET

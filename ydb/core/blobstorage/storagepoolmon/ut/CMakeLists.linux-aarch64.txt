@@ -32,7 +32,7 @@ target_link_options(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/ut/storagepoolmon_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/ut/storagepoolmon_ut.cpp
 )
 set_property(
   TARGET

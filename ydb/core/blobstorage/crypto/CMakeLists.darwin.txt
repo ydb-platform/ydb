@@ -17,10 +17,10 @@ target_link_libraries(core-blobstorage-crypto PUBLIC
   cpp-actors-util
 )
 target_sources(core-blobstorage-crypto PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/secured_block.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/secured_block.cpp
 )

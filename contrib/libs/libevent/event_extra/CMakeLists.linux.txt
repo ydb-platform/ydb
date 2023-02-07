@@ -22,8 +22,8 @@ target_link_libraries(libs-libevent-event_extra PUBLIC
   contrib-libs-libc_compat
 )
 target_sources(libs-libevent-event_extra PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evdns.c
-  \${CMAKE_SOURCE_DIR}/contrib/libs/libevent/event_tagging.c
-  \${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evrpc.c
-  \${CMAKE_SOURCE_DIR}/contrib/libs/libevent/http.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evdns.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/event_tagging.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/evrpc.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/libevent/http.c
 )

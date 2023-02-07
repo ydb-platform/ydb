@@ -34,7 +34,7 @@ target_link_options(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_bscontroller/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_bscontroller/main.cpp
 )
 set_property(
   TARGET

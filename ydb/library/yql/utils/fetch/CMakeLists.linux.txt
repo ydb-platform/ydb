@@ -20,5 +20,5 @@ target_link_libraries(yql-utils-fetch PUBLIC
   yql-utils-log
 )
 target_sources(yql-utils-fetch PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/fetch/fetch.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/fetch/fetch.cpp
 )

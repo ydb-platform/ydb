@@ -13,5 +13,5 @@ target_link_libraries(library-cpp-random_provider PUBLIC
   yutil
 )
 target_sources(library-cpp-random_provider PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/random_provider/random_provider.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/random_provider/random_provider.cpp
 )

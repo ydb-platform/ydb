@@ -35,7 +35,7 @@ target_link_options(ydb-core-tx-time_cast-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-time_cast-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/time_cast/time_cast_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/time_cast/time_cast_ut.cpp
 )
 set_property(
   TARGET

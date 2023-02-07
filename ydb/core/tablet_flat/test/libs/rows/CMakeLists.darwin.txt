@@ -14,5 +14,5 @@ target_link_libraries(test-libs-rows PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(test-libs-rows PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/libs/rows/all.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/libs/rows/all.cpp
 )

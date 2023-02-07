@@ -35,10 +35,10 @@ target_link_options(ydb-core-blobstorage-groupinfo-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-groupinfo-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp
 )
 set_property(
   TARGET

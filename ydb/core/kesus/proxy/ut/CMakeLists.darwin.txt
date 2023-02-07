@@ -31,8 +31,8 @@ target_link_options(ydb-core-kesus-proxy-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-kesus-proxy-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/ut_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/ut_helpers.cpp
 )
 set_property(
   TARGET

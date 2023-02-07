@@ -19,5 +19,5 @@ target_link_libraries(cpp-regex-hyperscan PUBLIC
   libs-hyperscan-runtime_avx512
 )
 target_sources(cpp-regex-hyperscan PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/regex/hyperscan/hyperscan.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/regex/hyperscan/hyperscan.cpp
 )

@@ -37,7 +37,7 @@ target_link_options(ydb-core-mind-address_classification-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-mind-address_classification-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/mind/address_classification/net_classifier_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/address_classification/net_classifier_ut.cpp
 )
 set_property(
   TARGET

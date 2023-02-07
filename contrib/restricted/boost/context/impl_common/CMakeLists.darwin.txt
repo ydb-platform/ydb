@@ -26,5 +26,5 @@ target_link_libraries(boost-context-impl_common PUBLIC
   restricted-boost-smart_ptr
 )
 target_sources(boost-context-impl_common PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/posix/stack_traits.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/context/src/posix/stack_traits.cpp
 )

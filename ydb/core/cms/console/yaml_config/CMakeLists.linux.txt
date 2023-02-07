@@ -18,5 +18,5 @@ target_link_libraries(cms-console-yaml_config PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(cms-console-yaml_config PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config.cpp
 )

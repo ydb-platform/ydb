@@ -14,5 +14,5 @@ target_link_libraries(library-cpp-sliding_window PUBLIC
   yutil
 )
 target_sources(library-cpp-sliding_window PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/sliding_window/sliding_window.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/sliding_window/sliding_window.cpp
 )

@@ -20,6 +20,6 @@ target_link_libraries(common-topfreq-static PUBLIC
   yql-public-udf
 )
 target_sources(common-topfreq-static PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/static/static_udf.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/static/topfreq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/static/static_udf.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/static/topfreq.cpp
 )

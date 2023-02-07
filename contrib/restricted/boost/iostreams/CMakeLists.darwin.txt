@@ -46,11 +46,11 @@ target_link_libraries(restricted-boost-iostreams PUBLIC
   restricted-boost-utility
 )
 target_sources(restricted-boost-iostreams PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/bzip2.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/file_descriptor.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/gzip.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/lzma.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/mapped_file.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zlib.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zstd.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/bzip2.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/file_descriptor.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/gzip.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/lzma.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/mapped_file.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zlib.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zstd.cpp
 )

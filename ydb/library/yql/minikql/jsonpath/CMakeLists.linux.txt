@@ -35,17 +35,17 @@ target_link_libraries(yql-minikql-jsonpath PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-minikql-jsonpath PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_builder.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_nodes.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/binary.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/executor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/jsonpath.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/parse_double.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/type_check.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/value.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_nodes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/binary.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/executor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/jsonpath.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/parse_double.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/type_check.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/value.cpp
 )
 generate_enum_serilization(yql-minikql-jsonpath
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_nodes.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_nodes.h
   INCLUDE_HEADERS
   ydb/library/yql/minikql/jsonpath/ast_nodes.h
 )

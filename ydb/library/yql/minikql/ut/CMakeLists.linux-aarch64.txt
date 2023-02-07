@@ -38,19 +38,19 @@ target_link_options(ydb-library-yql-minikql-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-minikql-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_cast_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_printer_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_opt_literal_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_stats_registry_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_string_util_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_builder_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/pack_num_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_cast_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_printer_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_opt_literal_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_stats_registry_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_string_util_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/pack_num_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker_ut.cpp
 )
 set_property(
   TARGET

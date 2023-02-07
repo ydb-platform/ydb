@@ -44,21 +44,21 @@ target_link_libraries(providers-pq-provider PUBLIC
   providers-result-expr_nodes
 )
 target_sources(providers-pq-provider PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_execution.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_io_discovery.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_type_ann.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasource.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasource_type_ann.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_io_discovery.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_load_meta.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_logical_opt.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_mkql_compiler.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_physical_optimize.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_provider.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_provider_impl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_settings.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_execution.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_io_discovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasink_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasource.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_datasource_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_io_discovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_load_meta.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_logical_opt.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_mkql_compiler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_physical_optimize.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_provider.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_provider_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_settings.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/provider/yql_pq_helpers.cpp
 )

@@ -31,6 +31,6 @@ target_link_options(perf PRIVATE
   -ldl
 )
 target_sources(perf PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp
 )
 vcs_info(perf)

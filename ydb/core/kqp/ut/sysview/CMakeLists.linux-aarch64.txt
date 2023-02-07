@@ -35,8 +35,8 @@ target_link_options(ydb-core-kqp-ut-sysview PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-ut-sysview PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_col_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_view_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_col_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/sysview/kqp_sys_view_ut.cpp
 )
 set_property(
   TARGET

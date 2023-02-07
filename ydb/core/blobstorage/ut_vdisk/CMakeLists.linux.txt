@@ -45,10 +45,10 @@ target_link_options(ydb-core-blobstorage-ut_vdisk PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_vdisk PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/gen_restarts.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/huge_migration_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/mon_reregister_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/vdisk_test.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/gen_restarts.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/huge_migration_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/mon_reregister_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/vdisk_test.cpp
 )
 set_property(
   TARGET

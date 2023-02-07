@@ -22,10 +22,10 @@ target_link_libraries(cpp-client-ydb_coordination PUBLIC
   client-ydb_types-status
 )
 target_sources(cpp-client-ydb_coordination PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination.cpp
 )
 generate_enum_serilization(cpp-client-ydb_coordination
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination.h
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination.h
   INCLUDE_HEADERS
   ydb/public/sdk/cpp/client/ydb_coordination/coordination.h
 )

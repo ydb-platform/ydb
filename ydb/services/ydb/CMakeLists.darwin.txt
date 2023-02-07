@@ -34,15 +34,15 @@ target_link_libraries(ydb-services-ydb PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(ydb-services-ydb PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_dummy.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_export.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_operation.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_query.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_dummy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_export.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_operation.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx.cpp
 )

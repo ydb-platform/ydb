@@ -34,10 +34,10 @@ target_link_libraries(ydb-core-engine PUBLIC
   yql-public-decimal
 )
 target_sources(ydb-core-engine PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_extfunc.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_keys.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_extfunc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_keys.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto.cpp
 )

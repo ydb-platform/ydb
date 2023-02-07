@@ -27,7 +27,7 @@ target_link_options(ydb-public-sdk-cpp-client-draft-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-public-sdk-cpp-client-draft-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_scripting_response_headers_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_scripting_response_headers_ut.cpp
 )
 set_property(
   TARGET

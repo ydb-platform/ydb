@@ -20,5 +20,5 @@ target_link_libraries(providers-function-gateway PUBLIC
   cpp-threading-future
 )
 target_sources(providers-function-gateway PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/gateway/dq_function_gateway.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/gateway/dq_function_gateway.cpp
 )

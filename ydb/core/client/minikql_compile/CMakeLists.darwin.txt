@@ -27,9 +27,9 @@ target_link_libraries(core-client-minikql_compile PUBLIC
   providers-common-mkql
 )
 target_sources(core-client-minikql_compile PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_context.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_result.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/db_key_resolver.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/mkql_compile_service.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_context.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/db_key_resolver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/mkql_compile_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql.cpp
 )

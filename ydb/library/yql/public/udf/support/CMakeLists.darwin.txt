@@ -17,5 +17,5 @@ target_link_libraries(public-udf-support PUBLIC
   yql-public-udf
 )
 target_sources(public-udf-support PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/support/udf_support.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/support/udf_support.cpp
 )

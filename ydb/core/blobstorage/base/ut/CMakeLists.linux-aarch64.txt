@@ -34,9 +34,9 @@ target_link_options(ydb-core-blobstorage-base-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-base-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/bufferwithgaps_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/ptr_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/bufferwithgaps_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/ptr_ut.cpp
 )
 set_property(
   TARGET

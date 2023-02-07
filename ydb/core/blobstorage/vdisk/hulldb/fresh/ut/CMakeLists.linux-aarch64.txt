@@ -35,10 +35,10 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-fresh-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-fresh-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec_ut.cpp
 )
 set_property(
   TARGET

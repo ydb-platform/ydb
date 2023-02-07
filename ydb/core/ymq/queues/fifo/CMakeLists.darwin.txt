@@ -14,6 +14,6 @@ target_link_libraries(ymq-queues-fifo PUBLIC
   core-ymq-base
 )
 target_sources(ymq-queues-fifo PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/fifo/queries.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/fifo/schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/fifo/queries.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/fifo/schema.cpp
 )

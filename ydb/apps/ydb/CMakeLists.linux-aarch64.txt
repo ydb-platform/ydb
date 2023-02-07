@@ -28,13 +28,13 @@ target_link_options(ydb PRIVATE
   -ldl
 )
 target_sources(ydb PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/apps/ydb/main.cpp
-  \${CMAKE_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/main.cpp
+  ${CMAKE_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
 )
 resources(ydb
-  \${CMAKE_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
+  ${CMAKE_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
   INPUTS
-  \${CMAKE_SOURCE_DIR}/ydb/apps/ydb/version.txt
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/version.txt
   KEYS
   version.txt
 )

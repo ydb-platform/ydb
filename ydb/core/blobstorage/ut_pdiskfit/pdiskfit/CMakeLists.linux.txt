@@ -32,6 +32,6 @@ target_link_options(pdiskfit PRIVATE
   -ldl
 )
 target_sources(pdiskfit PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp
 )
 vcs_info(pdiskfit)

@@ -22,10 +22,10 @@ target_link_libraries(library-ycloud-impl PUBLIC
   lib-deprecated-kicli
 )
 target_sources(library-ycloud-impl PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_adapter.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_adapter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service.cpp
 )

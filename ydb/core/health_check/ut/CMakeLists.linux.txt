@@ -36,7 +36,7 @@ target_link_options(ydb-core-health_check-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-health_check-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/health_check/health_check_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/health_check/health_check_ut.cpp
 )
 set_property(
   TARGET

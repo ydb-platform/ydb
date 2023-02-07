@@ -25,12 +25,12 @@ target_link_options(ydb-core-blobstorage-crypto-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-core-blobstorage-crypto-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto_rope_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto_rope_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec_ut.cpp
 )
 set_property(
   TARGET

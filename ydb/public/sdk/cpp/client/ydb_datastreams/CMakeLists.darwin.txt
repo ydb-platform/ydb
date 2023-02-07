@@ -19,5 +19,5 @@ target_link_libraries(cpp-client-ydb_datastreams PUBLIC
   cpp-client-ydb_driver
 )
 target_sources(cpp-client-ydb_datastreams PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.cpp
 )

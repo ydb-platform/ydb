@@ -18,7 +18,7 @@ target_include_directories(grpc-third_party-address_sorting PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/include
 )
 target_sources(grpc-third_party-address_sorting PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting.c
-  \${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_posix.c
-  \${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_windows.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_posix.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/address_sorting_windows.c
 )

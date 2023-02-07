@@ -17,6 +17,6 @@ target_link_libraries(cpp-monlib-messagebus PUBLIC
   cpp-monlib-dynamic_counters
 )
 target_sources(cpp-monlib-messagebus PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/messagebus/mon_messagebus.cpp
-  \${CMAKE_SOURCE_DIR}/library/cpp/monlib/messagebus/mon_service_messagebus.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/messagebus/mon_messagebus.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/messagebus/mon_service_messagebus.cpp
 )

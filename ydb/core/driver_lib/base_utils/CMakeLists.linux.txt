@@ -24,7 +24,7 @@ target_link_libraries(base_utils PUBLIC
   lib-deprecated-client
 )
 target_sources(base_utils PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_info.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_util.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/base_utils/node_by_host.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_util.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/base_utils/node_by_host.cpp
 )

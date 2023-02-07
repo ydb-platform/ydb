@@ -42,8 +42,8 @@ target_link_options(ydb-core-tx-datashard-ut_rs PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_rs PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_rs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_rs.cpp
 )
 set_property(
   TARGET

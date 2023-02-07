@@ -23,8 +23,8 @@ target_link_libraries(cpp-messagebus-www PUBLIC
   library-cpp-uri
 )
 target_sources(cpp-messagebus-www PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/html_output.cpp
-  \${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/www.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/html_output.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/www.cpp
 )
 
 add_global_library_for(cpp-messagebus-www.global cpp-messagebus-www)
@@ -43,13 +43,13 @@ target_link_libraries(cpp-messagebus-www.global PUBLIC
   library-cpp-uri
 )
 target_sources(cpp-messagebus-www.global PRIVATE
-  \${CMAKE_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
 )
 resources(cpp-messagebus-www.global
-  \${CMAKE_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
   INPUTS
-  \${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/messagebus.js
-  \${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/bus-ico.png
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/messagebus.js
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/www/bus-ico.png
   KEYS
   /messagebus.js
   /bus-ico.png

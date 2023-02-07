@@ -31,5 +31,5 @@ target_link_libraries(yq-libs-gateway PUBLIC
   providers-pq-proto
 )
 target_sources(yq-libs-gateway PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/gateway/empty_gateway.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/gateway/empty_gateway.cpp
 )

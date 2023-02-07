@@ -32,11 +32,11 @@ target_link_options(ydb-core-base-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-base-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
 )
 set_property(
   TARGET

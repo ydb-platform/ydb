@@ -22,5 +22,5 @@ target_link_libraries(yql-dq-transform PUBLIC
   library-yql-utils
 )
 target_sources(yql-dq-transform PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/transform/yql_common_dq_transform.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/transform/yql_common_dq_transform.cpp
 )

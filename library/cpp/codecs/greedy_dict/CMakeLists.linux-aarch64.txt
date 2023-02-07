@@ -16,6 +16,6 @@ target_link_libraries(cpp-codecs-greedy_dict PUBLIC
   cpp-string_utils-relaxed_escaper
 )
 target_sources(cpp-codecs-greedy_dict PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/greedy_dict/gd_builder.cpp
-  \${CMAKE_SOURCE_DIR}/library/cpp/codecs/greedy_dict/gd_entry.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/greedy_dict/gd_builder.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/codecs/greedy_dict/gd_entry.cpp
 )

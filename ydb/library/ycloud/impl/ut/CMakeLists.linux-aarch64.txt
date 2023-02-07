@@ -35,10 +35,10 @@ target_link_options(ydb-library-ycloud-impl-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-ycloud-impl-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service_ut.cpp
 )
 set_property(
   TARGET

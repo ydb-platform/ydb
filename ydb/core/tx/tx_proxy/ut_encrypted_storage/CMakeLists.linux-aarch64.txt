@@ -39,8 +39,8 @@ target_link_options(ydb-core-tx-tx_proxy-ut_encrypted_storage PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-tx_proxy-ut_encrypted_storage PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/encrypted_storage_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_ut_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/encrypted_storage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_ut_helpers.cpp
 )
 set_property(
   TARGET

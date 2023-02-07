@@ -14,5 +14,5 @@ target_link_libraries(client-ydb_types-exceptions PUBLIC
   yutil
 )
 target_sources(client-ydb_types-exceptions PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.cpp
 )

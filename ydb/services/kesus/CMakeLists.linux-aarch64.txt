@@ -23,5 +23,5 @@ target_link_libraries(ydb-services-kesus PUBLIC
   public-lib-operation_id
 )
 target_sources(ydb-services-kesus PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/services/kesus/grpc_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/kesus/grpc_service.cpp
 )

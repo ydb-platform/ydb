@@ -39,8 +39,8 @@ target_link_options(ydb-core-blobstorage-vdisk-skeleton-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-skeleton-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor_ut.cpp
 )
 set_property(
   TARGET

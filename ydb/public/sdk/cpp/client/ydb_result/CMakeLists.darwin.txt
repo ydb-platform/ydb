@@ -17,6 +17,6 @@ target_link_libraries(cpp-client-ydb_result PUBLIC
   cpp-client-ydb_value
 )
 target_sources(cpp-client-ydb_result PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/proto_accessor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/proto_accessor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/result.cpp
 )

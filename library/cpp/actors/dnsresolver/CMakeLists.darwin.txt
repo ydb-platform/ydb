@@ -19,7 +19,7 @@ target_link_libraries(cpp-actors-dnsresolver PUBLIC
   c-ares::c-ares
 )
 target_sources(cpp-actors-dnsresolver PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver.cpp
-  \${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_caching.cpp
-  \${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_ondemand.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_caching.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_ondemand.cpp
 )

@@ -31,7 +31,7 @@ target_link_options(ydb-core-tx-sequenceproxy-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-sequenceproxy-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_ut.cpp
 )
 set_property(
   TARGET

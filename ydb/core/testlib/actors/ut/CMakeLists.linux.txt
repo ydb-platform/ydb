@@ -35,7 +35,7 @@ target_link_options(ydb-core-testlib-actors-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-testlib-actors-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime_ut.cpp
 )
 set_property(
   TARGET

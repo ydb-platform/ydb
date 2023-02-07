@@ -39,7 +39,7 @@ target_link_options(ydb-core-load_test-ut_ycsb PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-load_test-ut_ycsb PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/load_test/ut_ycsb.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ut_ycsb.cpp
 )
 set_property(
   TARGET

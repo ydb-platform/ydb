@@ -34,7 +34,7 @@ target_link_options(ydb-core-tx-long_tx_service-public-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-long_tx_service-public-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/public/types_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/public/types_ut.cpp
 )
 set_property(
   TARGET

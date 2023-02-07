@@ -16,5 +16,5 @@ target_link_libraries(yql-ast-serialize PUBLIC
   library-yql-minikql
 )
 target_sources(yql-ast-serialize PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/serialize/yql_expr_serialize.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/serialize/yql_expr_serialize.cpp
 )

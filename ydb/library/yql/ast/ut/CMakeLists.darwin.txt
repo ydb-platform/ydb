@@ -25,11 +25,11 @@ target_link_options(ydb-library-yql-ast-ut PRIVATE
   -fPIC
 )
 target_sources(ydb-library-yql-ast-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_check_args_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_check_args_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string_ut.cpp
 )
 set_property(
   TARGET

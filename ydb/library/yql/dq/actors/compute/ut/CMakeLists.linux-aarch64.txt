@@ -34,8 +34,8 @@ target_link_options(ydb-library-yql-dq-actors-compute-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-dq-actors-compute-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_issues_buffer_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_source_watermark_tracker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_issues_buffer_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_source_watermark_tracker_ut.cpp
 )
 set_property(
   TARGET

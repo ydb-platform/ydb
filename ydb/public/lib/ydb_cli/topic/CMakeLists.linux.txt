@@ -20,11 +20,11 @@ target_link_libraries(topic PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(topic PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
 )
 generate_enum_serilization(topic
-  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
   INCLUDE_HEADERS
   ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
 )

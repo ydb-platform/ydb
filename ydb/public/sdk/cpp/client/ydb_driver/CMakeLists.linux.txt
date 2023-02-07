@@ -20,5 +20,5 @@ target_link_libraries(cpp-client-ydb_driver PUBLIC
   client-ydb_types-status
 )
 target_sources(cpp-client-ydb_driver PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_driver/driver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_driver/driver.cpp
 )

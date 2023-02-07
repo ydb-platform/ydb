@@ -40,7 +40,7 @@ target_link_options(ydb-library-yql-udfs-common-stat-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-udfs-common-stat-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf_ut.cpp
 )
 set_property(
   TARGET

@@ -19,5 +19,5 @@ target_link_libraries(udf-service-exception_policy PUBLIC
   yql-public-udf
 )
 target_sources(udf-service-exception_policy PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/exception_policy/udf_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/exception_policy/udf_service.cpp
 )

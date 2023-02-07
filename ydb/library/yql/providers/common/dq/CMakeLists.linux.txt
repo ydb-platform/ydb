@@ -15,5 +15,5 @@ target_link_libraries(providers-common-dq PUBLIC
   yql-dq-integration
 )
 target_sources(providers-common-dq PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/dq/yql_dq_integration_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/dq/yql_dq_integration_impl.cpp
 )

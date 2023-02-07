@@ -34,5 +34,5 @@ target_link_libraries(ydb-core-sys_view PUBLIC
   core-sys_view-tablets
 )
 target_sources(ydb-core-sys_view PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/scan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/scan.cpp
 )

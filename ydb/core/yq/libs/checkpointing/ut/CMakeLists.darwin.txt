@@ -33,7 +33,7 @@ target_link_options(ydb-core-yq-libs-checkpointing-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-yq-libs-checkpointing-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/ut/checkpoint_coordinator_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpointing/ut/checkpoint_coordinator_ut.cpp
 )
 set_property(
   TARGET

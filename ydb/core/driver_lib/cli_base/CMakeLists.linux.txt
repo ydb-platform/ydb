@@ -23,9 +23,9 @@ target_link_libraries(cli_base PUBLIC
   cpp-client-ydb_table
 )
 target_sources(cli_base PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_db.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_discovery.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_root.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_whoami.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_kicli.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_db.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_discovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_root.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_cmds_whoami.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_base/cli_kicli.cpp
 )

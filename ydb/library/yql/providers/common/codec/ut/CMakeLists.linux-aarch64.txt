@@ -36,8 +36,8 @@ target_link_options(ydb-library-yql-providers-common-codec-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-providers-common-codec-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_json_codec_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_json_codec_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_restricted_yson_ut.cpp
 )
 set_property(
   TARGET

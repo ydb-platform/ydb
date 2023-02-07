@@ -35,7 +35,7 @@ target_link_options(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_fat/dsproxy_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_fat/dsproxy_ut.cpp
 )
 set_property(
   TARGET

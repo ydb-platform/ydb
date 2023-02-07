@@ -16,5 +16,5 @@ target_link_libraries(vdisk-hulldb-test PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-test PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/test/testhull_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/test/testhull_index.cpp
 )

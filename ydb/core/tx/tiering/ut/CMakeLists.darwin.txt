@@ -38,7 +38,7 @@ target_link_options(ydb-core-tx-tiering-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-tiering-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/ut/ut_tiers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tiering/ut/ut_tiers.cpp
 )
 set_property(
   TARGET

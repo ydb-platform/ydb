@@ -17,5 +17,5 @@ target_link_libraries(core-tx-balance_coverage PUBLIC
   ydb-core-protos
 )
 target_sources(core-tx-balance_coverage PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage/balance_coverage_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage/balance_coverage_builder.cpp
 )

@@ -13,5 +13,5 @@ target_link_libraries(ydb-library-accessor PUBLIC
   yutil
 )
 target_sources(ydb-library-accessor PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/accessor/accessor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/accessor/accessor.cpp
 )

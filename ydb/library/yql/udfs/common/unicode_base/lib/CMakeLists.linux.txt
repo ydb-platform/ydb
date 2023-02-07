@@ -25,5 +25,5 @@ target_link_libraries(common-unicode_base-lib PUBLIC
   library-yql-utils
 )
 target_sources(common-unicode_base-lib PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/unicode_base/lib/unicode_base_udf.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/unicode_base/lib/unicode_base_udf.cpp
 )

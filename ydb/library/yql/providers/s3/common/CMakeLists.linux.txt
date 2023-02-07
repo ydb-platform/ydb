@@ -16,5 +16,5 @@ target_link_libraries(providers-s3-common PUBLIC
   public-issue-protos
 )
 target_sources(providers-s3-common PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/common/util.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/common/util.cpp
 )

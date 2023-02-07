@@ -39,8 +39,8 @@ target_link_options(ydb-core-tx-datashard-ut_range_ops PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-datashard-ut_range_ops PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_range_ops.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_range_ops.cpp
 )
 set_property(
   TARGET

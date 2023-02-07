@@ -22,5 +22,5 @@ target_link_libraries(mkql_proto-ut-helpers PUBLIC
   contrib-libs-protobuf
 )
 target_sources(mkql_proto-ut-helpers PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/ut/helpers/helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/ut/helpers/helpers.cpp
 )

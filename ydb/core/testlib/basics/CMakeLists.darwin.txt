@@ -37,8 +37,8 @@ target_link_libraries(core-testlib-basics PUBLIC
   udf-service-exception_policy
 )
 target_sources(core-testlib-basics PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/appdata.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/helpers.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/runtime.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/services.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/appdata.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/runtime.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/services.cpp
 )

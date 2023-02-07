@@ -20,18 +20,18 @@ target_link_libraries(ydb-library-pdisk_io PUBLIC
   library-pdisk_io-protos
 )
 target_sources(ydb-library-pdisk_io PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio_mtp.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/file_params_darwin.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio_map.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/buffers.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/device_type.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/drivedata.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/sector_map.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/wcache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio_mtp.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/file_params_darwin.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio_map.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/buffers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/device_type.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/drivedata.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/sector_map.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/wcache.cpp
 )
 generate_enum_serilization(ydb-library-pdisk_io
-  \${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio.h
   INCLUDE_HEADERS
   ydb/library/pdisk_io/aio.h
 )

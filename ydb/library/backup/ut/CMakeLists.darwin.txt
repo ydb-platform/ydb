@@ -28,7 +28,7 @@ target_link_options(ydb-library-backup-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-backup-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/backup/ut/ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/backup/ut/ut.cpp
 )
 set_property(
   TARGET

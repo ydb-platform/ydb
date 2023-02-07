@@ -20,5 +20,5 @@ target_link_libraries(libs-checkpoint_storage-events PUBLIC
   yql-public-issue
 )
 target_sources(libs-checkpoint_storage-events PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpoint_storage/events/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpoint_storage/events/events.cpp
 )

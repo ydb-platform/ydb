@@ -29,6 +29,6 @@ target_link_options(bulk_upsert_simple PRIVATE
   -ldl
 )
 target_sources(bulk_upsert_simple PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/bulk_upsert_simple/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/bulk_upsert_simple/main.cpp
 )
 vcs_info(bulk_upsert_simple)

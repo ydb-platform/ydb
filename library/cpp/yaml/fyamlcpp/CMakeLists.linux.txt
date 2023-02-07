@@ -15,5 +15,5 @@ target_link_libraries(cpp-yaml-fyamlcpp PUBLIC
   contrib-libs-libfyaml
 )
 target_sources(cpp-yaml-fyamlcpp PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/yaml/fyamlcpp/fyamlcpp.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/yaml/fyamlcpp/fyamlcpp.cpp
 )

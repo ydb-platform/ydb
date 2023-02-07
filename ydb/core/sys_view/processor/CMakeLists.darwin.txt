@@ -24,16 +24,16 @@ target_link_libraries(core-sys_view-processor PUBLIC
   core-tx-scheme_cache
 )
 target_sources(core-sys_view-processor PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/schema.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/db_counters.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init_schema.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_configure.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_collect.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_aggregate.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_summary.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_metrics.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_top_partitions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/db_counters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_configure.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_collect.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_aggregate.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_summary.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_metrics.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_top_partitions.cpp
 )

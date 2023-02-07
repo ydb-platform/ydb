@@ -35,9 +35,9 @@ target_link_options(ydb-library-yql-public-udf-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-public-udf-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder_ut.cpp
 )
 set_property(
   TARGET

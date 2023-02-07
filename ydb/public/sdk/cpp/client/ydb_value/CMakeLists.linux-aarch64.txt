@@ -23,10 +23,10 @@ target_link_libraries(cpp-client-ydb_value PUBLIC
   ydb-library-uuid
 )
 target_sources(cpp-client-ydb_value PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.cpp
 )
 generate_enum_serilization(cpp-client-ydb_value
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.h
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.h
   INCLUDE_HEADERS
   ydb/public/sdk/cpp/client/ydb_value/value.h
 )

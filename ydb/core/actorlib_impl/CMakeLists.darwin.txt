@@ -36,15 +36,15 @@ target_link_libraries(ydb-core-actorlib_impl PUBLIC
   ydb-core-util
 )
 target_sources(ydb-core-actorlib_impl PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_tracker.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/connect_socket_protocol.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/load_network.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/long_timer.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/mad_squirrel.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/melancholic_gopher.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/name_service_client_protocol.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/node_identifier.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/read_data_protocol.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/read_http_reply_protocol.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/send_data_protocol.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_tracker.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/connect_socket_protocol.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/load_network.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/long_timer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/mad_squirrel.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/melancholic_gopher.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/name_service_client_protocol.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/node_identifier.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/read_data_protocol.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/read_http_reply_protocol.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/send_data_protocol.cpp
 )

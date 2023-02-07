@@ -20,6 +20,6 @@ target_link_libraries(lib-ydb_cli-import PUBLIC
   cpp-string_utils-csv
 )
 target_sources(lib-ydb_cli-import PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/import.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/cli_arrow_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/import.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/import/cli_arrow_helpers.cpp
 )

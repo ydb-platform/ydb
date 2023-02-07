@@ -17,5 +17,5 @@ target_link_libraries(messagebus_protobuf PUBLIC
   messagebus_actor
 )
 target_sources(messagebus_protobuf PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/messagebus/protobuf/ybusbuf.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/protobuf/ybusbuf.cpp
 )

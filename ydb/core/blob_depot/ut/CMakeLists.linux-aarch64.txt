@@ -30,8 +30,8 @@ target_link_options(ydb-core-blob_depot-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blob_depot-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/closed_interval_set_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/closed_interval_set_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range_ut.cpp
 )
 set_property(
   TARGET

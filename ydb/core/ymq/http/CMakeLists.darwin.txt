@@ -28,13 +28,13 @@ target_link_libraries(core-ymq-http PUBLIC
   library-http_proxy-error
 )
 target_sources(core-ymq-http PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/http.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/types.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/xml.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/xml_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/http.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/xml.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/xml_builder.cpp
 )
 target_ragel_lexers(core-ymq-http
   PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/parser.rl6
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/parser.rl6
   -CG2
 )

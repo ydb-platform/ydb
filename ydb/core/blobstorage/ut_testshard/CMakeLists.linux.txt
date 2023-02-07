@@ -49,7 +49,7 @@ target_link_options(ydb-core-blobstorage-ut_testshard PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_testshard PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_testshard/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_testshard/main.cpp
 )
 set_property(
   TARGET

@@ -19,5 +19,5 @@ target_link_libraries(contrib-libs-antlr3_cpp_runtime PUBLIC
   yutil
 )
 target_sources(contrib-libs-antlr3_cpp_runtime PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/antlr3_cpp_runtime/antlr3.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/antlr3_cpp_runtime/antlr3.cpp
 )

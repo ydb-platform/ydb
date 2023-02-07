@@ -39,10 +39,10 @@ target_link_options(ydb-core-engine-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-engine-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto_ut.cpp
 )
 set_property(
   TARGET

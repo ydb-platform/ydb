@@ -31,5 +31,5 @@ target_link_libraries(yq-libs-result_formatter PUBLIC
   common-schema-mkql
 )
 target_sources(yq-libs-result_formatter PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/result_formatter/result_formatter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/result_formatter/result_formatter.cpp
 )

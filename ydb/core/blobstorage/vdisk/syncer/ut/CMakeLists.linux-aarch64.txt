@@ -34,9 +34,9 @@ target_link_options(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp
 )
 set_property(
   TARGET

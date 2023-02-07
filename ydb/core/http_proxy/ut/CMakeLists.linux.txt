@@ -35,7 +35,7 @@ target_link_options(ydb-core-http_proxy-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-http_proxy-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/ut/json_proto_conversion_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/ut/json_proto_conversion_ut.cpp
 )
 set_property(
   TARGET

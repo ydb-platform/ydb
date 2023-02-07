@@ -17,5 +17,5 @@ target_link_libraries(vdisk-hulldb-cache_block PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-cache_block PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.cpp
 )

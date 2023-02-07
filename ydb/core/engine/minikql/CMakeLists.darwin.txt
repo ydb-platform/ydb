@@ -22,6 +22,6 @@ target_link_libraries(core-engine-minikql PUBLIC
   parser-pg_wrapper-interface
 )
 target_sources(core-engine-minikql PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/minikql/flat_local_tx_factory.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/engine/minikql/minikql_engine_host.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/minikql/flat_local_tx_factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/minikql/minikql_engine_host.cpp
 )

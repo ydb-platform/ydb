@@ -31,5 +31,5 @@ target_link_libraries(restricted-boost-random PUBLIC
   restricted-boost-utility
 )
 target_sources(restricted-boost-random PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/random/src/random_device.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/random/src/random_device.cpp
 )

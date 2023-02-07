@@ -36,7 +36,7 @@ target_link_options(ydb-core-blobstorage-ut_vdisk2 PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_vdisk2 PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk2/huge.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk2/huge.cpp
 )
 set_property(
   TARGET

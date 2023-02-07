@@ -21,15 +21,15 @@ target_link_libraries(llvm12-lib-Remarks PUBLIC
   llvm12-lib-Support
 )
 target_sources(llvm12-lib-Remarks PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/BitstreamRemarkParser.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/BitstreamRemarkSerializer.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/Remark.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkFormat.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkLinker.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkParser.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkSerializer.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkStreamer.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkStringTable.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/YAMLRemarkParser.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/YAMLRemarkSerializer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/BitstreamRemarkParser.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/BitstreamRemarkSerializer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/Remark.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkFormat.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkLinker.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkParser.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkSerializer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkStreamer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/RemarkStringTable.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/YAMLRemarkParser.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Remarks/YAMLRemarkSerializer.cpp
 )

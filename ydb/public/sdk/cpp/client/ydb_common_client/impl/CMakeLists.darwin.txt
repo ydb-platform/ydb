@@ -14,5 +14,5 @@ target_link_libraries(client-ydb_common_client-impl PUBLIC
   impl-ydb_internal-grpc_connections
 )
 target_sources(client-ydb_common_client-impl PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_common_client/impl/client.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_common_client/impl/client.cpp
 )

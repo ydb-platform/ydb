@@ -13,5 +13,5 @@ target_link_libraries(cpp-containers-top_keeper PUBLIC
   yutil
 )
 target_sources(cpp-containers-top_keeper PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/containers/top_keeper/top_keeper.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/containers/top_keeper/top_keeper.cpp
 )

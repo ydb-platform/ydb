@@ -35,7 +35,7 @@ target_link_options(ydb-library-mkql_proto-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-library-mkql_proto-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/mkql_proto_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/mkql_proto_ut.cpp
 )
 set_property(
   TARGET

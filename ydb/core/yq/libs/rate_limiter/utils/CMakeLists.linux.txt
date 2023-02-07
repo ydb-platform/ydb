@@ -14,5 +14,5 @@ target_link_libraries(libs-rate_limiter-utils PUBLIC
   yutil
 )
 target_sources(libs-rate_limiter-utils PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/utils/path.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/utils/path.cpp
 )

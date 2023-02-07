@@ -40,8 +40,8 @@ target_link_options(ydb-core-tx-columnshard-engines-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_insert_table.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_logs_engine.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_insert_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_logs_engine.cpp
 )
 set_property(
   TARGET

@@ -27,7 +27,7 @@ target_link_options(ydb-core-ymq-http-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-ymq-http-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp
 )
 set_property(
   TARGET

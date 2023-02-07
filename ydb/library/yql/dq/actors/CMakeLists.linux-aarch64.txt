@@ -22,6 +22,10 @@ target_link_libraries(yql-dq-actors PUBLIC
   dq-actors-protos
 )
 target_sources(yql-dq-actors PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/dq.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/dq_events_ids.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/dq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/dq_events_ids.cpp
+)
+target_proto_plugin(yql-dq-actors
+  grpc_cpp
+  grpc_cpp
 )

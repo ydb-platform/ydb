@@ -17,5 +17,5 @@ target_link_libraries(cpp-balloc-lib PUBLIC
   cpp-malloc-api
 )
 target_sources(cpp-balloc-lib PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/balloc/lib/alloc_stats.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/balloc/lib/alloc_stats.cpp
 )

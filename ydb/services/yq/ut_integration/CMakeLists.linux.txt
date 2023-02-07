@@ -48,8 +48,8 @@ target_link_options(ydb-services-yq-ut_integration PRIVATE
   -ldl
 )
 target_sources(ydb-services-yq-ut_integration PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/services/yq/ut_integration/ut_utils.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/yq/ut_integration/yq_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/yq/ut_integration/ut_utils.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/yq/ut_integration/yq_ut.cpp
 )
 set_property(
   TARGET

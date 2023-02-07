@@ -33,8 +33,8 @@ target_link_options(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
 )
 set_property(
   TARGET

@@ -24,5 +24,5 @@ target_link_libraries(ydb-services-metadata PUBLIC
   services-metadata-manager
 )
 target_sources(ydb-services-metadata PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/service.cpp
 )

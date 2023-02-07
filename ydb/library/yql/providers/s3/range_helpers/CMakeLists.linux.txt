@@ -22,6 +22,6 @@ target_link_libraries(providers-s3-range_helpers PUBLIC
   cpp-protobuf-util
 )
 target_sources(providers-s3-range_helpers PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/file_tree_builder.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/path_list_reader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/file_tree_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/path_list_reader.cpp
 )

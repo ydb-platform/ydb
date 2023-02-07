@@ -39,11 +39,11 @@ target_link_options(ydb-core-client-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-client-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/cancel_tx_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/client_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/flat_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/locks_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/query_stats_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/cancel_tx_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/client_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/flat_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/locks_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/query_stats_ut.cpp
 )
 set_property(
   TARGET

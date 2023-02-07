@@ -24,7 +24,7 @@ target_link_libraries(providers-ydb-comp_nodes PUBLIC
   providers-ydb-proto
 )
 target_sources(providers-ydb-comp_nodes PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_kik_scan.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_kik_scan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.cpp
 )

@@ -28,6 +28,6 @@ target_link_libraries(abseil-cpp-tstring-y_absl-status PUBLIC
   abseil-cpp-tstring-y_absl-types
 )
 target_sources(abseil-cpp-tstring-y_absl-status PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/status/status.cc
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/status/status_payload_printer.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/status/status.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/status/status_payload_printer.cc
 )

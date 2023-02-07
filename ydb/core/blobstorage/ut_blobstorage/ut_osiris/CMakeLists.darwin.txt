@@ -27,7 +27,7 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/osiris.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/osiris.cpp
 )
 set_property(
   TARGET

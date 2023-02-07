@@ -19,19 +19,23 @@ target_link_libraries(client-yc_private-operation PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(client-yc_private-operation PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/operation/operation.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/operation/operation.proto
 )
 target_proto_addincls(client-yc_private-operation
   ./
-  \${CMAKE_SOURCE_DIR}/
-  \${CMAKE_BINARY_DIR}
-  \${CMAKE_SOURCE_DIR}
-  \${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  \${CMAKE_BINARY_DIR}
-  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(client-yc_private-operation
-  --cpp_out=\${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
+target_proto_plugin(client-yc_private-operation
+  grpc_cpp
+  grpc_cpp
 )

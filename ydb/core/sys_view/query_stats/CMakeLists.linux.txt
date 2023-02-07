@@ -23,6 +23,6 @@ target_link_libraries(core-sys_view-query_stats PUBLIC
   core-sys_view-service
 )
 target_sources(core-sys_view-query_stats PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_metrics.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_metrics.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats.cpp
 )

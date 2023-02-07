@@ -26,6 +26,6 @@ target_link_options(surg PRIVATE
   CoreFoundation
 )
 target_sources(surg PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/surg/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/surg/main.cpp
 )
 vcs_info(surg)

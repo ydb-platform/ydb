@@ -32,8 +32,8 @@ target_link_options(ydb-core-metering-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-metering-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/metering/stream_ru_calculator_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/metering/time_grid_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/metering/stream_ru_calculator_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/metering/time_grid_ut.cpp
 )
 set_property(
   TARGET

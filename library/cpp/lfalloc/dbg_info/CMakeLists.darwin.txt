@@ -14,5 +14,5 @@ target_link_libraries(cpp-lfalloc-dbg_info PUBLIC
   cpp-malloc-api
 )
 target_sources(cpp-lfalloc-dbg_info PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/dbg_info/dbg_info.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/dbg_info/dbg_info.cpp
 )

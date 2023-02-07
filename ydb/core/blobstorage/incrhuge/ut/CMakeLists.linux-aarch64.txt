@@ -30,9 +30,9 @@ target_link_options(ydb-core-blobstorage-incrhuge-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-incrhuge-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_basic_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_id_dict_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_log_merger_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_basic_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_id_dict_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_log_merger_ut.cpp
 )
 set_property(
   TARGET

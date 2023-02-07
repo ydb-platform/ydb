@@ -31,8 +31,8 @@ target_link_options(ydb-core-ymq-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-ymq-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/queue_id_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/params_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/queue_id_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/params_ut.cpp
 )
 set_property(
   TARGET

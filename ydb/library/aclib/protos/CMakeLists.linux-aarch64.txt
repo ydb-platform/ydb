@@ -15,18 +15,18 @@ target_link_libraries(library-aclib-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(library-aclib-protos PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/aclib/protos/aclib.proto
+  ${CMAKE_SOURCE_DIR}/ydb/library/aclib/protos/aclib.proto
 )
 target_proto_addincls(library-aclib-protos
   ./
-  \${CMAKE_SOURCE_DIR}/
-  \${CMAKE_BINARY_DIR}
-  \${CMAKE_SOURCE_DIR}
-  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-  \${CMAKE_BINARY_DIR}
-  \${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
 target_proto_outs(library-aclib-protos
-  --cpp_out=\${CMAKE_BINARY_DIR}/
-  --cpp_styleguide_out=\${CMAKE_BINARY_DIR}/
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
 )

@@ -22,6 +22,6 @@ target_link_libraries(pq-gateway-native PUBLIC
   cpp-client-ydb_persqueue_core
 )
 target_sources(pq-gateway-native PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_session.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_session.cpp
 )

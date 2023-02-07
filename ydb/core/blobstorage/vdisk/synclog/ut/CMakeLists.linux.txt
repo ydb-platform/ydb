@@ -37,13 +37,13 @@ target_link_options(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/codecs_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/codecs_ut.cpp
 )
 set_property(
   TARGET

@@ -18,6 +18,6 @@ target_link_libraries(abseil-cpp-absl-profiling PUBLIC
   contrib-libs-cxxsupp
 )
 target_sources(abseil-cpp-absl-profiling PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/profiling/internal/exponential_biased.cc
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/profiling/internal/periodic_sampler.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/profiling/internal/exponential_biased.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/profiling/internal/periodic_sampler.cc
 )

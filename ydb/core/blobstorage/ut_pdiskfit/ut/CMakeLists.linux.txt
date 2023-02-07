@@ -30,7 +30,7 @@ target_link_options(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/ut/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/ut/main.cpp
 )
 set_property(
   TARGET

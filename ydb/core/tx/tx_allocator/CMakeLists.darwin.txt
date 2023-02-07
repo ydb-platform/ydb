@@ -22,8 +22,8 @@ target_link_libraries(core-tx-tx_allocator PUBLIC
   ydb-core-tablet_flat
 )
 target_sources(core-tx-tx_allocator PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator__reserve.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator__scheme.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator_impl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator__reserve.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator__scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator.cpp
 )

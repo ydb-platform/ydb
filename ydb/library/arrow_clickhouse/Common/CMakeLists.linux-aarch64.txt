@@ -19,6 +19,6 @@ target_link_libraries(library-arrow_clickhouse-Common PUBLIC
   libs-apache-arrow
 )
 target_sources(library-arrow_clickhouse-Common PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Common/Allocator.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Common/PODArray.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Common/Allocator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/Common/PODArray.cpp
 )

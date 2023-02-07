@@ -21,14 +21,14 @@ target_link_libraries(services-metadata-ds_table PUBLIC
   services-metadata-secret
 )
 target_sources(services-metadata-ds_table PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_refresh.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_subscribe.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_snapshot_simple.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_snapshot_base.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/behaviour_registrator_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/scheme_describe.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/table_exists.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/service.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/config.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/registration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_refresh.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_subscribe.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_snapshot_simple.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/accessor_snapshot_base.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/behaviour_registrator_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/scheme_describe.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/table_exists.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/config.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/ds_table/registration.cpp
 )

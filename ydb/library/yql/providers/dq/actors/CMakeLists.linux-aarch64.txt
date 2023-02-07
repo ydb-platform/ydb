@@ -48,17 +48,17 @@ target_link_libraries(providers-dq-actors PUBLIC
   dq-worker_manager-interface
 )
 target_sources(providers-dq-actors PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/compute_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/events.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/executer_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/execution_helpers.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/graph_execution_events_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/resource_allocator.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/task_controller.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/worker_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_aggregator.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_receiver.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/full_result_writer.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/proto_builder.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/compute_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/executer_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/execution_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/graph_execution_events_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/resource_allocator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/task_controller.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/worker_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_aggregator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_receiver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/full_result_writer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/proto_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues.cpp
 )

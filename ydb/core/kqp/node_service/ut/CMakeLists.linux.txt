@@ -37,7 +37,7 @@ target_link_options(ydb-core-kqp-node_service-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-node_service-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/node_service/kqp_node_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/node_service/kqp_node_ut.cpp
 )
 set_property(
   TARGET

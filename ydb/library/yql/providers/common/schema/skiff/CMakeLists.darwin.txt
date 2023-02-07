@@ -17,5 +17,5 @@ target_link_libraries(common-schema-skiff PUBLIC
   common-schema-parser
 )
 target_sources(common-schema-skiff PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/skiff/yql_skiff_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/skiff/yql_skiff_schema.cpp
 )

@@ -31,7 +31,7 @@ target_link_options(ydb-library-yql-utils-actors-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-utils-actors-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/http_sender_actor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/http_sender_actor_ut.cpp
 )
 set_property(
   TARGET

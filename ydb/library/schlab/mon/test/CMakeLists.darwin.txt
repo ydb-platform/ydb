@@ -24,13 +24,13 @@ target_link_options(mon-test PRIVATE
   -fPIC
 )
 target_sources(mon-test PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/test/test.cpp
-  \${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/test/58594e5c7af65697df8d9899a8761b06.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/test/test.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/test/58594e5c7af65697df8d9899a8761b06.cpp
 )
 resources(mon-test
-  \${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/test/58594e5c7af65697df8d9899a8761b06.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/test/58594e5c7af65697df8d9899a8761b06.cpp
   INPUTS
-  \${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/schviz-test0.json
+  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/schviz-test0.json
   KEYS
   schlab/schviz-test0.json
 )

@@ -42,8 +42,8 @@ target_link_options(ydb-core-tx-datashard-ut_followers PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_followers PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_followers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_followers.cpp
 )
 set_property(
   TARGET

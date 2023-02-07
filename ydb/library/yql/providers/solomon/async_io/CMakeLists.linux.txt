@@ -26,6 +26,6 @@ target_link_libraries(providers-solomon-async_io PUBLIC
   providers-solomon-proto
 )
 target_sources(providers-solomon-async_io PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/async_io/metrics_encoder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/async_io/metrics_encoder.cpp
 )

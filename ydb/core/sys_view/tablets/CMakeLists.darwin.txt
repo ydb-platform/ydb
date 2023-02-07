@@ -20,5 +20,5 @@ target_link_libraries(core-sys_view-tablets PUBLIC
   core-sys_view-common
 )
 target_sources(core-sys_view-tablets PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/tablets/tablets.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/tablets/tablets.cpp
 )

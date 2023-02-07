@@ -19,5 +19,5 @@ target_link_libraries(ydb-library-folder_service PUBLIC
   library-folder_service-proto
 )
 target_sources(ydb-library-folder_service PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/folder_service/folder_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/folder_service.cpp
 )

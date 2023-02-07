@@ -28,8 +28,8 @@ target_link_options(ydb-core-ymq-actor-yc_search_ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-ymq-actor-yc_search_ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/yc_search_ut/index_events_processor_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/yc_search_ut/test_events_writer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/yc_search_ut/index_events_processor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/yc_search_ut/test_events_writer.cpp
 )
 set_property(
   TARGET

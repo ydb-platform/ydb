@@ -39,13 +39,13 @@ target_link_options(ydb-core-blobstorage-dsproxy-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-dsproxy-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_put_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_quorum_tracker_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_sequence_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_patch_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_counters_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_fault_tolerance_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_get_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_put_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_quorum_tracker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_sequence_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_patch_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_counters_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_fault_tolerance_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_get_ut.cpp
 )
 set_property(
   TARGET

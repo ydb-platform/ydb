@@ -20,6 +20,6 @@ target_link_libraries(highwayhash-arch-avx2 PUBLIC
   yutil
 )
 target_sources(highwayhash-arch-avx2 PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/sip_tree_hash.cc
-  \${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/hh_avx2.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/sip_tree_hash.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/hh_avx2.cc
 )

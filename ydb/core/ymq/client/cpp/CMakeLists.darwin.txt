@@ -15,5 +15,5 @@ target_link_libraries(ymq-client-cpp PUBLIC
   lib-deprecated-client
 )
 target_sources(ymq-client-cpp PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/cpp/client.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/cpp/client.cpp
 )

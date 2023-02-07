@@ -39,8 +39,8 @@ target_link_options(ydb-core-tx-datashard-ut_read_table PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-datashard-ut_read_table PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_read_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_read_table.cpp
 )
 set_property(
   TARGET

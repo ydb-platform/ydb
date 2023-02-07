@@ -33,7 +33,7 @@ target_link_options(ydb-library-yql-utils-failure_injector-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-utils-failure_injector-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/failure_injector/failure_injector_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/failure_injector/failure_injector_ut.cpp
 )
 set_property(
   TARGET

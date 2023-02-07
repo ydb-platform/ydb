@@ -27,7 +27,7 @@ target_link_options(ydb-library-security-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-security-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/security/ut/util_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/security/ut/util_ut.cpp
 )
 set_property(
   TARGET

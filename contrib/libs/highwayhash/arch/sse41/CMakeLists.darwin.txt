@@ -20,5 +20,5 @@ target_link_libraries(highwayhash-arch-sse41 PUBLIC
   yutil
 )
 target_sources(highwayhash-arch-sse41 PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/hh_sse41.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/hh_sse41.cc
 )

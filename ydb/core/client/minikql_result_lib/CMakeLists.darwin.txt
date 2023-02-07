@@ -19,6 +19,6 @@ target_link_libraries(core-client-minikql_result_lib PUBLIC
   lib-deprecated-kicli
 )
 target_sources(core-client-minikql_result_lib PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/objects.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/objects.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter.cpp
 )

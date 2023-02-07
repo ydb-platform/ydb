@@ -42,8 +42,8 @@ target_link_options(ydb-core-tx-datashard-ut_reassign PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_reassign PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_reassign.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_reassign.cpp
 )
 set_property(
   TARGET

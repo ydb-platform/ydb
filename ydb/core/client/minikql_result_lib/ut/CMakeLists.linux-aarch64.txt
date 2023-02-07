@@ -35,8 +35,8 @@ target_link_options(ydb-core-client-minikql_result_lib-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-client-minikql_result_lib-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/objects_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/objects_ut.cpp
 )
 set_property(
   TARGET

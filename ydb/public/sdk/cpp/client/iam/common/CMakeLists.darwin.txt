@@ -19,5 +19,5 @@ target_link_libraries(client-iam-common PUBLIC
   client-ydb_types-credentials
 )
 target_sources(client-iam-common PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/common/iam.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/iam/common/iam.cpp
 )

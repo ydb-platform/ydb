@@ -32,8 +32,8 @@ target_link_libraries(providers-dq-task_runner PUBLIC
   providers-dq-counters
 )
 target_sources(providers-dq-task_runner PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/file_cache.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_local.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/file_cache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_local.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.cpp
 )

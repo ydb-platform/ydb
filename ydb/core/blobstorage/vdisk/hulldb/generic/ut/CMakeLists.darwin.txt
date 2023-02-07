@@ -32,8 +32,8 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-generic-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-generic-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst_ut.cpp
 )
 set_property(
   TARGET

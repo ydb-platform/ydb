@@ -37,7 +37,7 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block_ut.cpp
 )
 set_property(
   TARGET

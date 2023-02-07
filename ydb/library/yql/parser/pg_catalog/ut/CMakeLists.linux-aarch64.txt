@@ -39,8 +39,8 @@ target_link_options(ydb-library-yql-parser-pg_catalog-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-parser-pg_catalog-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_consts_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_consts_ut.cpp
 )
 set_property(
   TARGET

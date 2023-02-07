@@ -16,5 +16,5 @@ target_link_libraries(blobstorage-dsproxy-mock PUBLIC
   blobstorage-vdisk-common
 )
 target_sources(blobstorage-dsproxy-mock PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp
 )

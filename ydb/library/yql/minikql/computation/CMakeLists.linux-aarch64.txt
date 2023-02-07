@@ -36,18 +36,18 @@ target_link_libraries(yql-minikql-computation PUBLIC
   library-cpp-resource
 )
 target_sources(yql-minikql-computation PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_holders.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_impl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_custom_list.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_value_builder.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/presort.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_holders.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_custom_list.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_value_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/presort.cpp
 )
 
 add_global_library_for(yql-minikql-computation.global yql-minikql-computation)
@@ -79,18 +79,18 @@ target_link_libraries(yql-minikql-computation.global PUBLIC
   library-cpp-resource
 )
 target_sources(yql-minikql-computation.global PRIVATE
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/4dc9194f4b8472492eed05889d2e69e4.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/4dc9194f4b8472492eed05889d2e69e4.cpp
 )
 add_custom_command(
   OUTPUT
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_optimized.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_optimized.bc
   DEPENDS
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
   COMMAND
   ${LLVMOPT}
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
   -o
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_optimized.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_optimized.bc
   -O2
   -globalopt
   -globaldce
@@ -99,26 +99,26 @@ add_custom_command(
 )
 add_custom_command(
   OUTPUT
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
   DEPENDS
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp.bc
   COMMAND
   ${LLVMLINK}
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp.bc
   -o
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_merged.bc
 )
 llvm_compile_cxx(yql-minikql-computation.global
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp.bc
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack_bc.cpp.bc
   ${CLANGPLUSPLUS}
   -Wno-unknown-warning-option
   -emit-llvm
 )
 resources(yql-minikql-computation.global
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/4dc9194f4b8472492eed05889d2e69e4.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/4dc9194f4b8472492eed05889d2e69e4.cpp
   INPUTS
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_optimized.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/computation/mkql_pack.bc_optimized.bc
   KEYS
   /llvm_bc/mkql_pack.bc
 )

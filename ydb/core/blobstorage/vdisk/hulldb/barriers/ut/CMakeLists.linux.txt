@@ -36,7 +36,7 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-barriers-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-barriers-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_tree_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_tree_ut.cpp
 )
 set_property(
   TARGET

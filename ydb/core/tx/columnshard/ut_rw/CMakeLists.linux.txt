@@ -42,8 +42,8 @@ target_link_options(ydb-core-tx-columnshard-ut_rw PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-columnshard-ut_rw PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_rw/ut_columnshard_read_write.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_rw/ut_columnshard_read_write.cpp
 )
 set_property(
   TARGET

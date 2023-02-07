@@ -26,5 +26,5 @@ target_link_libraries(yql-providers-config PUBLIC
   providers-common-activation
 )
 target_sources(yql-providers-config PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/config/yql_config_provider.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/config/yql_config_provider.cpp
 )

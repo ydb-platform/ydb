@@ -30,8 +30,8 @@ target_link_options(ydb-library-yql-public-decimal-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-public-decimal-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_decimal_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_wide_int_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_decimal_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_wide_int_ut.cpp
 )
 set_property(
   TARGET

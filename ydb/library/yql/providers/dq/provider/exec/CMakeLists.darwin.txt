@@ -39,5 +39,5 @@ target_link_libraries(dq-provider-exec PUBLIC
   providers-result-expr_nodes
 )
 target_sources(dq-provider-exec PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.cpp
 )

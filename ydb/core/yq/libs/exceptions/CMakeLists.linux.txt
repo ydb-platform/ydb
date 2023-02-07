@@ -15,5 +15,5 @@ target_link_libraries(yq-libs-exceptions PUBLIC
   libs-config-protos
 )
 target_sources(yq-libs-exceptions PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/exceptions/exceptions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/exceptions/exceptions.cpp
 )

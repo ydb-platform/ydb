@@ -16,5 +16,5 @@ target_link_libraries(providers-function-common PUBLIC
   yutil
 )
 target_sources(providers-function-common PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/common/dq_function_types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/common/dq_function_types.cpp
 )

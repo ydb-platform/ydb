@@ -25,6 +25,6 @@ target_link_options(sqs PRIVATE
   CoreFoundation
 )
 target_sources(sqs PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
 )
 vcs_info(sqs)

@@ -35,11 +35,11 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it_ut.cpp
 )
 set_property(
   TARGET

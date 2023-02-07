@@ -28,7 +28,7 @@ target_link_options(ydb-core-pgproxy-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-pgproxy-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_ut.cpp
 )
 set_property(
   TARGET

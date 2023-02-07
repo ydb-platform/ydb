@@ -14,5 +14,5 @@ target_link_libraries(cpp-ytalloc-api PUBLIC
   cpp-yt-misc
 )
 target_sources(cpp-ytalloc-api PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/ytalloc/api/fallback.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/ytalloc/api/fallback.cpp
 )

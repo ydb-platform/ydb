@@ -40,7 +40,7 @@ target_link_options(ydb-core-persqueue-ut-slow PRIVATE
   -ldl
 )
 target_sources(ydb-core-persqueue-ut-slow PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/slow/pq_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/slow/pq_ut.cpp
 )
 set_property(
   TARGET

@@ -34,6 +34,6 @@ target_link_options(alloc PRIVATE
   -ldl
 )
 target_sources(alloc PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/alloc/alloc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/alloc/alloc.cpp
 )
 vcs_info(alloc)

@@ -37,8 +37,8 @@ target_link_options(ydb-core-kqp-rm_service-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-rm_service-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_resource_estimation_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_rm_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_resource_estimation_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/rm_service/kqp_rm_ut.cpp
 )
 set_property(
   TARGET

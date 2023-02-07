@@ -18,5 +18,5 @@ target_link_libraries(core-wrappers-ut_helpers PUBLIC
   library-cpp-cgiparam
 )
 target_sources(core-wrappers-ut_helpers PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/wrappers/ut_helpers/s3_mock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/ut_helpers/s3_mock.cpp
 )

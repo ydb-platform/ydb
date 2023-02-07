@@ -18,6 +18,6 @@ target_link_libraries(cpp-actors-dnscachelib PUBLIC
   cpp-deprecated-atomic
 )
 target_sources(cpp-actors-dnscachelib PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/dnscache.cpp
-  \${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/probes.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/dnscache.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/probes.cpp
 )

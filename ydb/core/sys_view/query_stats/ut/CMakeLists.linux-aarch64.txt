@@ -35,7 +35,7 @@ target_link_options(ydb-core-sys_view-query_stats-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-sys_view-query_stats-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
 )
 set_property(
   TARGET

@@ -36,8 +36,8 @@ target_link_options(ydb-core-kqp-runtime-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-kqp-runtime-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_spilling_file_ut.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_spilling_file_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp
 )
 set_property(
   TARGET

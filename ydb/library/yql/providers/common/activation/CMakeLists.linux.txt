@@ -15,5 +15,5 @@ target_link_libraries(providers-common-activation PUBLIC
   providers-common-proto
 )
 target_sources(providers-common-activation PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/activation/yql_activation.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/activation/yql_activation.cpp
 )

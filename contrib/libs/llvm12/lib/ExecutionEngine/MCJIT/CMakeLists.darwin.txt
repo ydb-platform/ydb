@@ -26,5 +26,5 @@ target_link_libraries(lib-ExecutionEngine-MCJIT PUBLIC
   llvm12-lib-Target
 )
 target_sources(lib-ExecutionEngine-MCJIT PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/ExecutionEngine/MCJIT/MCJIT.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/ExecutionEngine/MCJIT/MCJIT.cpp
 )

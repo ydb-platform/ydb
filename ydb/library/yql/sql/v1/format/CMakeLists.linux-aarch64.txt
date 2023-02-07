@@ -20,7 +20,7 @@ target_link_libraries(sql-v1-format PUBLIC
   cpp-protobuf-util
 )
 target_sources(sql-v1-format PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format.cpp
 )
 
 add_global_library_for(sql-v1-format.global sql-v1-format)
@@ -36,12 +36,12 @@ target_link_libraries(sql-v1-format.global PUBLIC
   cpp-protobuf-util
 )
 target_sources(sql-v1-format.global PRIVATE
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
 )
 resources(sql-v1-format.global
-  \${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/sql/v1/format/8b41f60c03c12372ee6c489297948988.cpp
   INPUTS
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
   KEYS
   SQLv1.g.in
 )

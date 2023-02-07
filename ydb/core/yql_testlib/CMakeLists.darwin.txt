@@ -36,5 +36,5 @@ target_link_libraries(ydb-core-yql_testlib PUBLIC
   providers-common-udf_resolve
 )
 target_sources(ydb-core-yql_testlib PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/yql_testlib/yql_testlib.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yql_testlib/yql_testlib.cpp
 )

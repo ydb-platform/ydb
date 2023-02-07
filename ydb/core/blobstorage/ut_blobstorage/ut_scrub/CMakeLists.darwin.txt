@@ -27,7 +27,7 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub.cpp
 )
 set_property(
   TARGET

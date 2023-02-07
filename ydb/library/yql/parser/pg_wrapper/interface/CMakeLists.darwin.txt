@@ -18,5 +18,5 @@ target_link_libraries(parser-pg_wrapper-interface PUBLIC
   yql-public-udf
 )
 target_sources(parser-pg_wrapper-interface PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/interface/interface.cpp
 )

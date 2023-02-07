@@ -39,18 +39,18 @@ target_link_libraries(providers-clickhouse-provider PUBLIC
   providers-dq-expr_nodes
 )
 target_sources(providers-clickhouse-provider PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_execution.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_type_ann.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource_type_ann.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_dq_integration.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_io_discovery.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_load_meta.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_logical_opt.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_mkql_compiler.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_physical_opt.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_settings.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_util.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_execution.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_dq_integration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_io_discovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_load_meta.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_logical_opt.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_mkql_compiler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_physical_opt.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_settings.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_util.cpp
 )

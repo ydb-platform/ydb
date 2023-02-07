@@ -36,7 +36,7 @@ target_link_options(ydb-core-kqp-ut-spilling PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-kqp-ut-spilling PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/spilling/kqp_scan_spilling_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/spilling/kqp_scan_spilling_ut.cpp
 )
 set_property(
   TARGET

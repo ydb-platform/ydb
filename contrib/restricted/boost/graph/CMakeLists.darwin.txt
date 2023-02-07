@@ -59,6 +59,6 @@ target_link_libraries(restricted-boost-graph PUBLIC
   restricted-boost-xpressive
 )
 target_sources(restricted-boost-graph PRIVATE
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/src/graphml.cpp
-  \${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/src/read_graphviz_new.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/src/graphml.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/graph/src/read_graphviz_new.cpp
 )

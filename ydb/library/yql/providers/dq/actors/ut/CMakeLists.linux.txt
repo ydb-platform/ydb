@@ -37,7 +37,7 @@ target_link_options(ydb-library-yql-providers-dq-actors-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-providers-dq-actors-ut PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues_ut.cpp
 )
 set_property(
   TARGET

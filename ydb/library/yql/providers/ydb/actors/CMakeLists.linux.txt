@@ -26,6 +26,6 @@ target_link_libraries(providers-ydb-actors PUBLIC
   providers-ydb-proto
 )
 target_sources(providers-ydb-actors PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/actors/yql_ydb_read_actor.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/actors/yql_ydb_read_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.cpp
 )

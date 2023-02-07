@@ -16,5 +16,5 @@ target_link_libraries(cpp-json-yson PUBLIC
   cpp-yson-json
 )
 target_sources(cpp-json-yson PRIVATE
-  \${CMAKE_SOURCE_DIR}/library/cpp/json/yson/json2yson.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/json/yson/json2yson.cpp
 )

@@ -30,6 +30,6 @@ target_link_libraries(ydb-core-io_formats PUBLIC
   public-lib-scheme_types
 )
 target_sources(ydb-core-io_formats PRIVATE
-  \${CMAKE_SOURCE_DIR}/ydb/core/io_formats/csv_ydb_dump.cpp
-  \${CMAKE_SOURCE_DIR}/ydb/core/io_formats/csv_arrow.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/io_formats/csv_ydb_dump.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/io_formats/csv_arrow.cpp
 )

@@ -116,21 +116,18 @@ TStatus WaitForQueue(std::deque<TAsyncStatus>& inFlightRequests, size_t maxQueue
         Y_UNUSED(NThreading::WaitAny(inFlightRequests));
         ui32 delta = 0;
         for (ui32 i = 0; i + delta < inFlightRequests.size();) {
-            inFlightRequests[i] = inFlightRequests[i + delta];
             if (inFlightRequests[i].HasValue() || inFlightRequests[i].HasException()) {
                 auto status = inFlightRequests[i].ExtractValueSync();
                 if (!status.IsSuccess()) {
                     problemResults.emplace_back(status);
                 }
                 ++delta;
+                inFlightRequests[i] = inFlightRequests[inFlightRequests.size() - delta];
             } else {
                 ++i;
             }
         }
-        while (delta) {
-            inFlightRequests.pop_back();
-            --delta;
-        }
+        inFlightRequests.resize(inFlightRequests.size() - delta);
     }
     if (problemResults.size()) {
         return problemResults.front();

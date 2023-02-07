@@ -1354,9 +1354,7 @@ void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx) {
     }
 
     UpdateWriteBufferIsFullState(ctx.Now());
-
     Requests.clear();
-
     Y_VERIFY(Responses.empty());
 
     ProcessReserveRequests(ctx);
@@ -1380,7 +1378,6 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
         }
     }
     UpdateWriteBufferIsFullState(ctx.Now());
-
     Requests.clear();
     for (const auto& w : Responses) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
@@ -1859,11 +1856,9 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicConverter->GetClientsideName(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
         Requests.emplace_back(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, WriteQuota->GetQuotedTime(), ctx.Now().MilliSeconds(), 0);
-
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
         UpdateWriteBufferIsFullState(ctx.Now());
         ProcessReserveRequests(ctx);
-
     } else {
         it->second.WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release()));
     }
@@ -5556,6 +5551,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 
     bool haveData = false;
     bool haveCheckDisk = false;
+
     if (!Requests.empty() && DiskIsFull) {
         CancelAllWritesOnIdle(ctx);
         AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
@@ -5566,7 +5562,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     bool haveDrop = CleanUp(request.Get(), haveData, ctx);
 
     ProcessReserveRequests(ctx);
-
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
         if (!Requests.empty()) { //there could be change ownership requests that
             bool res = ProcessWrites(request.Get(), ctx);

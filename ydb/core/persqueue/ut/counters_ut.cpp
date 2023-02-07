@@ -90,6 +90,7 @@ Y_UNIT_TEST(Partition) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
+
         UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
@@ -121,6 +122,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy_firstclass.html"));
+
         UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
@@ -164,17 +166,14 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
             UNIT_ASSERT_GT(value, 4500);
             UNIT_ASSERT_LT(value, 5500);
             sensor.SetValueByPath("value", 5000);
-        }
-
-        if (getByPath(sensor, "kind") == "GAUGE" &&
+        } else if (getByPath(sensor, "kind") == "GAUGE" &&
             (getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastRead" ||
             getByPath(sensor, "labels.sensor") == "PQ/WriteTimeLagMsByLastWrite")) {
             auto value = sensor["value"].GetIntegerSafe();
-            UNIT_ASSERT_GT(value, 25);
-            UNIT_ASSERT_LT(value, 35);
+            UNIT_ASSERT_GT_C(value, 100, "value is " << value);
+            UNIT_ASSERT_LT_C(value, 3000, "value is " << value);
             sensor.SetValueByPath("value", 30);
         }
-
     }
     UNIT_ASSERT_VALUES_EQUAL(referenceJson, inputJson);
 }

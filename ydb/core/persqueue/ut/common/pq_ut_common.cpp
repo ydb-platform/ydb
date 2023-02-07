@@ -68,6 +68,11 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             tabletConfig->AddReadRules("user");
             tabletConfig->AddReadFromTimestampsMs(parameters.readFromTimestampsMs);
             auto config = tabletConfig->MutablePartitionConfig();
+            if (parameters.speed > 0) {
+                config->SetWriteSpeedInBytesPerSecond(parameters.speed);
+                config->SetBurstSize(parameters.speed);
+            }
+
             config->SetMaxCountInPartition(parameters.maxCountInPartition);
             config->SetMaxSizeInPartition(parameters.maxSizeInPartition);
             if (parameters.storageLimitBytes > 0) {
@@ -168,7 +173,6 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestCo
                     }
                 }
             }
-            Cerr << "CMDGETOFFSET partition " << partition << " waiting for offset " << offset << ": " << resp << "\n";
             UNIT_ASSERT((offset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == offset);
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
@@ -409,6 +413,7 @@ std::pair<TString, TActorId> CmdSetOwner(const ui32 partition, TTestContext& tc,
             }
 
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+
             UNIT_ASSERT(result->Record.HasPartitionResponse());
             UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdGetOwnershipResult());
             UNIT_ASSERT(result->Record.GetPartitionResponse().GetCmdGetOwnershipResult().HasOwnerCookie());
@@ -416,6 +421,7 @@ std::pair<TString, TActorId> CmdSetOwner(const ui32 partition, TTestContext& tc,
             UNIT_ASSERT(!cookie.empty());
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {
+            Cerr << "SCHEDULER LIMIT REACHED\n";
             UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
         }
     }

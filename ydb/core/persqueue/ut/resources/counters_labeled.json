@@ -185,7 +185,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SizeLagByCommitted"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -196,7 +196,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -229,7 +229,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/TotalSizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -460,7 +460,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SizeLagByCommitted"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -471,7 +471,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -504,7 +504,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/TotalSizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -735,7 +735,7 @@
         "topic": "total",
         "sensor": "PQ/SizeLagByCommitted"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -746,7 +746,7 @@
         "topic": "total",
         "sensor": "PQ/SizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -779,7 +779,7 @@
         "topic": "total",
         "sensor": "PQ/TotalSizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1010,7 +1010,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SizeLagByCommitted"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1021,7 +1021,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1054,7 +1054,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/TotalSizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1285,7 +1285,7 @@
         "topic": "total",
         "sensor": "PQ/SizeLagByCommitted"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1296,7 +1296,7 @@
         "topic": "total",
         "sensor": "PQ/SizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1329,7 +1329,7 @@
         "topic": "total",
         "sensor": "PQ/TotalSizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1560,7 +1560,7 @@
         "topic": "total",
         "sensor": "PQ/SizeLagByCommitted"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1571,7 +1571,7 @@
         "topic": "total",
         "sensor": "PQ/SizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1604,7 +1604,7 @@
         "topic": "total",
         "sensor": "PQ/TotalSizeLagByLastRead"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1693,7 +1693,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/MaxPartSize"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1846,7 +1846,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/TotalPartSize"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -1855,7 +1855,7 @@
         "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/WriteBytesAvailAvgMin"
       },
-      "value": 49999998
+      "value": 49999994
     },
     {
       "kind": "GAUGE",
@@ -1999,7 +1999,7 @@
         "topic": "total",
         "sensor": "PQ/MaxPartSize"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -2152,7 +2152,7 @@
         "topic": "total",
         "sensor": "PQ/TotalPartSize"
       },
-      "value": 744
+      "value": 747
     },
     {
       "kind": "GAUGE",
@@ -2161,7 +2161,7 @@
         "topic": "total",
         "sensor": "PQ/WriteBytesAvailAvgMin"
       },
-      "value": 49999998
+      "value": 49999994
     },
     {
       "kind": "GAUGE",

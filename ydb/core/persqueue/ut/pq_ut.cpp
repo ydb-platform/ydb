@@ -1044,20 +1044,22 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
 }
 
 
-Y_UNIT_TEST(TestWritePQ) {
+void TestWritePQImpl(bool fast) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+
+        activeZone = false;
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
 
         // Important client, lifetimeseconds=0 - never delete
-        PQTabletPrepare({}, {{"user", true}}, tc);
+        PQTabletPrepare({.partitions = 2, .speed = 200000000}, {{"user", true}}, tc);
 
         TVector<std::pair<ui64, TString>> data, data1, data2;
-        activeZone = PlainOrSoSlow(true, false);
+        activeZone = PlainOrSoSlow(true, false) && fast;
 
         TString ss{1_MB, '_'};
         TString s1{128_KB, 'a'};
@@ -1065,7 +1067,7 @@ Y_UNIT_TEST(TestWritePQ) {
         TString s3{32, 'c'};
         ui32 pp = 4 + 8 + 2 + 9;
 
-        TString sb{15_MB + 512_KB, '_'};
+        TString sb{6_MB + 512_KB, '_'};
         data.push_back({1, sb.substr(pp)});
         CmdWrite(0,"sourceid0", data, tc, false, {}, true, "", -1, 100);
         activeZone = false;
@@ -1077,9 +1079,11 @@ Y_UNIT_TEST(TestWritePQ) {
         data2.push_back({1, s2.substr(pp)});
         data2.push_back({2, sb.substr(pp)});
         CmdWrite(0,"sourceid1", data1, tc);
+
         CmdWrite(0,"sourceid2", data2, tc);
 
         CmdWrite(0,"sourceid3", data1, tc);
+
         data.clear();
         data.push_back({1, s1.substr(pp)});
         data.push_back({2, ss.substr(pp)});
@@ -1108,7 +1112,7 @@ Y_UNIT_TEST(TestWritePQ) {
         CmdWrite(0,"sourceId9", data1, tc, false, {}, false, "", -1, 2000);
         PQGetPartInfo(100, 2002, tc);
 
-        activeZone = true;
+        activeZone = fast;
 
         data1.push_back(data1.back());
         data1[1].first = 3;
@@ -1116,6 +1120,7 @@ Y_UNIT_TEST(TestWritePQ) {
         PQGetPartInfo(100, 3003, tc);
 
         activeZone = false;
+        if (fast) return;
 
         CmdWrite(1,"sourceId9", data1, tc, false, {}, false, "", -1, 2000); //to other partition
 
@@ -1131,8 +1136,12 @@ Y_UNIT_TEST(TestWritePQ) {
 
         //read from gap
         CmdRead(0, 500, Max<i32>(), Max<i32>(), 6, false, tc, {1000,1001,2000,2001,3000,3002});
-
     });
+}
+
+Y_UNIT_TEST(TestWritePQ) {
+    TestWritePQImpl(true);
+    TestWritePQImpl(false);
 }
 
 

@@ -2,10 +2,14 @@
 
 #include "percentile_counter.h"
 #include "metering_sink.h"
+#include "transaction.h"
+
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/tx/tx_processing.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
@@ -23,18 +27,23 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     enum ECookie : ui64 {
         WRITE_CONFIG_COOKIE = 2,
         READ_CONFIG_COOKIE  = 3,
-        WRITE_STATE_COOKIE  = 4
+        WRITE_STATE_COOKIE  = 4,
+        WRITE_TX_COOKIE = 5,
     };
 
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 
-//    void ReplyError(const TActorContext& ctx, const TActorId& dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 
     void HandleWakeup(const TActorContext&);
 
-    void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext&);
+    void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx);
 
     void InitResponseBuilder(const ui64 responseCookie, const ui32 count, const ui32 counterId);
     void Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext&);
@@ -45,6 +54,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&);
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&);
 
     //when partition is ready it's sends event to tablet
     void Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext&);
@@ -125,8 +137,18 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
+    void SchedulePlanStepAck(ui64 step,
+                             const THashMap<TActorId, TVector<ui64>>& txAcks);
+    void SchedulePlanStepAccepted(const TActorId& target,
+                                  ui64 step);
+
+    ui64 GetAllowedStep() const;
+
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
+    static constexpr const char * KeyTxInfo() { return "_txinfo"; }
+
+    static NTabletPipe::TClientConfig GetPipeClientConfig();
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -185,6 +207,65 @@ private:
     NMetrics::TResourceMetrics *ResourceMetrics;
 
     TMeteringSink MeteringSink;
+
+    //
+    // транзакции
+    //
+    THashMap<ui64, TDistributedTransaction> Txs;
+    TQueue<std::pair<ui64, ui64>> TxQueue;
+    ui64 LastStep = 0;
+    ui64 LastTxId = 0;
+
+    TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
+    TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
+    THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
+    THashSet<ui64> DeleteTxs;
+    THashSet<ui64> ChangedTxs;
+    bool WriteTxsInProgress = false;
+    TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
+
+    TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
+    THolder<NTabletPipe::IClientCache> PipeClientCache;
+
+    void BeginWriteTxs(const TActorContext& ctx);
+    void EndWriteTxs(const NKikimrClient::TResponse& resp,
+                     const TActorContext& ctx);
+    void TryWriteTxs(const TActorContext& ctx);
+
+    void ProcessProposeTransactionQueue(const TActorContext& ctx);
+    void ProcessPlanStepQueue(const TActorContext& ctx);
+    void ProcessWriteTxs(const TActorContext& ctx,
+                         NKikimrClient::TKeyValueRequest& request);
+    void ProcessDeleteTxs(const TActorContext& ctx,
+                          NKikimrClient::TKeyValueRequest& request);
+    void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
+
+    void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
+
+    void SendEvReadSetToReceivers(const TActorContext& ctx,
+                                  TDistributedTransaction& tx);
+    void SendEvReadSetAckToSenders(const TActorContext& ctx,
+                                   TDistributedTransaction& tx);
+    void SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
+                                           TDistributedTransaction& tx);
+    void SendEvTxCommitToPartitions(const TActorContext& ctx,
+                                    TDistributedTransaction& tx);
+    void SendEvTxRollbackToPartitions(const TActorContext& ctx,
+                                      TDistributedTransaction& tx);
+    void SendEvProposeTransactionResult(const TActorContext& ctx,
+                                        const TDistributedTransaction& tx);
+
+    TDistributedTransaction* GetTransaction(const TActorContext& ctx,
+                                            ui64 txId);
+
+    void CheckTxState(const TActorContext& ctx,
+                      TDistributedTransaction& tx);
+
+    void WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::EState state);
+    void DeleteTx(TDistributedTransaction& tx);
+
+    void SendReplies(const TActorContext& ctx);
+    void CheckChangedTxStates(const TActorContext& ctx);
 };
 
 

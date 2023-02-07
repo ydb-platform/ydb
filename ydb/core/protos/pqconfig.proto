@@ -773,11 +773,11 @@ message TYdsShardIterator {
 }
 
 message TPartitionOperation {
-    required uint64 PartitionId = 1;
+    optional uint32 PartitionId = 1;
     optional uint64 Begin = 2;
     optional uint64 End = 3;
     optional string Consumer = 4;
-    required string Path = 5; // topic path
+    optional string Path = 5; // topic path
 };
 
 message TKqpTransaction {
@@ -789,17 +789,17 @@ message TKqpTransaction {
     }
 
     repeated TPartitionOperation Operations = 1;
-    required ELocksOp Op = 2;
+    optional ELocksOp Op = 2;
     repeated uint64 SendingShards = 3;
     repeated uint64 ReceivingShards = 4;
-    required bool Immediate = 5;
+    optional bool Immediate = 5;
     optional fixed64 LockTxId = 6;
 }
 
 message TEvProposeTransaction {
-    required NActorsProto.TActorId Source = 1;
-    required TKqpTransaction TxBody = 2;
-    required uint64 TxId = 3;
+    optional NActorsProto.TActorId Source = 1;
+    optional TKqpTransaction TxBody = 2;
+    optional uint64 TxId = 3;
 };
 
 message TEvProposeTransactionResult {
@@ -814,14 +814,63 @@ message TEvProposeTransactionResult {
         OVERLOADED = 8;
     };
 
-    required uint64 Origin = 1; // Tablet Id
-    required EStatus Status = 2;
-    required uint64 TxId = 3;
+    optional uint64 Origin = 1; // Tablet Id
+    optional EStatus Status = 2;
+    optional uint64 TxId = 3;
     optional uint64 MinStep = 4;
     optional uint64 MaxStep = 6;
-    optional uint64 Step = 7;
+    optional string StatusMessage = 7;
+    optional uint64 Step = 8;
 };
 
 message TEvCancelTransactionProposal {
-    required uint64 TxId = 1;
+    optional uint64 TxId = 1;
 };
+
+message TTransaction {
+    enum EState {
+        UNKNOWN = 0;
+        PREPARING = 1;
+        PREPARED = 2;     // хранится
+        PLANNING = 3;
+        PLANNED = 4;      // хранится. хотим выкинуть и не персистить
+        CALCULATING = 5;
+        CALCULATED = 6;
+        WAIT_RS = 7;      // хранится
+        EXECUTING = 8;
+        EXECUTED = 9;
+    };
+
+    optional uint64 TxId = 1;
+    optional EState State = 2;
+    optional uint64 MinStep = 3;
+    optional uint64 MaxStep = 4;
+    repeated uint64 Senders = 5;
+    repeated uint64 Receivers = 6;
+    repeated TPartitionOperation Operations = 7;
+    optional uint64 Step = 8;
+    optional bool SelfPredicate = 9;  // только предикаты партиций. предикаты коллег отдельно
+    optional bool AggrPredicate = 10; // заполненено одно из полей Senders or AggrPredicate
+};
+
+message TTabletTxInfo {
+    //
+    // использовать RangeRead. может венутьнеполный список
+    //
+    repeated uint64 TxIds = 1;
+
+    //
+    // оставить
+    //
+    optional uint64 LastStep = 2;
+    optional uint64 LastTxId = 3;
+
+    //
+    // держать в памяти
+    //
+    optional uint64 ActiveTxId = 4;
+    //
+    // выкинуть
+    //
+    optional uint64 ReadSetSeqNo = 5 [ default = 1 ];
+}

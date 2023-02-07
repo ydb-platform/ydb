@@ -21,7 +21,7 @@
 
 namespace NKikimr::NPQ {
 
-Y_UNIT_TEST_SUITE(TUserActionProcessorTests) {
+Y_UNIT_TEST_SUITE(TPartitionTests) {
 
 namespace NHelpers {
 
@@ -44,36 +44,15 @@ struct TCreateConsumerParams {
     ui64 ReadRuleGeneration = 0;
 };
 
-struct TTxOperation {
-    ui32 Partition;
-    TString Consumer;
-    ui64 Begin = 0;
-    ui64 End = 0;
-    TString Path;
-};
-
-struct TProposeTransactionParams {
-    ui64 TxId = 0;
-    TVector<ui64> Senders;
-    TVector<ui64> Receivers;
-    TVector<TTxOperation> TxOps;
-};
-
 }
 
-class TUserActionProcessorFixture : public NUnitTest::TBaseFixture {
+class TPartitionFixture : public NUnitTest::TBaseFixture {
 protected:
     struct TUserInfoMatcher {
-        TMaybe<TString> Consumer;
         TMaybe<TString> Session;
         TMaybe<ui64> Offset;
         TMaybe<ui32> Generation;
         TMaybe<ui32> Step;
-        TMaybe<ui64> ReadRuleGeneration;
-    };
-
-    struct TDeleteRangeMatcher {
-        TMaybe<TString> Consumer;
     };
 
     struct TCmdWriteMatcher {
@@ -81,7 +60,6 @@ protected:
         TMaybe<ui64> PlanStep;
         TMaybe<ui64> TxId;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
-        THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
 
     struct TProxyResponseMatcher {
@@ -115,10 +93,6 @@ protected:
         TMaybe<ui32> Partition;
     };
 
-    struct TChangePartitionConfigMatcher {
-        TMaybe<ui32> Partition;
-    };
-
     struct TTxOperationMatcher {
         TMaybe<ui32> Partition;
         TMaybe<TString> Consumer;
@@ -136,7 +110,6 @@ protected:
 
     using TCreatePartitionParams = NHelpers::TCreatePartitionParams;
     using TCreateConsumerParams = NHelpers::TCreateConsumerParams;
-    using TProposeTransactionParams = NHelpers::TProposeTransactionParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
@@ -193,7 +166,6 @@ protected:
                                        const TString& topic,
                                        bool immediate,
                                        ui64 txId);
-    void SendProposeTransactionRequest(const TProposeTransactionParams& params);
     void WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher = {});
 
     void SendCalcPredicate(ui64 step,
@@ -207,9 +179,6 @@ protected:
     void SendRollbackTx(ui64 step, ui64 txId);
     void WaitCommitTxDone(const TCommitTxDoneMatcher& matcher = {});
 
-    void SendChangePartitionConfig(const TVector<TCreateConsumerParams>& consumers = {});
-    void WaitPartitionConfigChanged(const TChangePartitionConfigMatcher& matcher = {});
-
     TTransaction MakeTransaction(ui64 step, ui64 txId,
                                  TString consumer,
                                  ui64 begin, ui64 end,
@@ -219,13 +188,9 @@ protected:
     TMaybe<TFinalizer> Finalizer;
 
     TActorId ActorId;
-
-    NPersQueue::TTopicConverterPtr TopicConverter;
-    NKikimrPQ::TPQTabletConfig Config;
-    TActorId Pipe;
 };
 
-void TUserActionProcessorFixture::SetUp(NUnitTest::TTestContext&)
+void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
 {
     Ctx.ConstructInPlace();
     Finalizer.ConstructInPlace(*Ctx);
@@ -234,14 +199,14 @@ void TUserActionProcessorFixture::SetUp(NUnitTest::TTestContext&)
     Ctx->Runtime->SetScheduledLimit(5'000);
 }
 
-void TUserActionProcessorFixture::TearDown(NUnitTest::TTestContext&)
+void TPartitionFixture::TearDown(NUnitTest::TTestContext&)
 {
 }
 
-void TUserActionProcessorFixture::CreatePartitionActor(ui32 id,
-                                                       const TVector<TCreateConsumerParams>& consumers,
-                                                       bool newPartition,
-                                                       TVector<TTransaction> txs)
+void TPartitionFixture::CreatePartitionActor(ui32 id,
+                                             const TVector<TCreateConsumerParams>& consumers,
+                                             bool newPartition,
+                                             TVector<TTransaction> txs)
 {
     using TKeyValueCounters = TProtobufTabletCounters<
         NKeyValue::ESimpleCounters_descriptor,
@@ -262,37 +227,39 @@ void TUserActionProcessorFixture::CreatePartitionActor(ui32 id,
     TAutoPtr<TCounters> counters(new TCounters());
     TAutoPtr<TTabletCountersBase> tabletCounters = counters->GetSecondTabletCounters().Release();
 
+    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
+    NPersQueue::TTopicConverterPtr topicConverter;
+    NKikimrPQ::TPQTabletConfig config;
+
     for (auto& c : consumers) {
-        Config.AddReadRules(c.Consumer);
+        config.AddReadRules(c.Consumer);
     }
 
-    Config.SetTopicName("rt3.dc1--account--topic");
-    Config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
-    Config.SetFederationAccount("account");
-    Config.SetLocalDC(true);
-    Config.SetYdbDatabasePath("");
+    config.SetTopicName("rt3.dc1--account--topic");
+    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+    config.SetFederationAccount("account");
+    config.SetLocalDC(true);
+    config.SetYdbDatabasePath("");
 
-    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
-
-    TopicConverter = factory.MakeTopicConverter(Config);
+    topicConverter = factory.MakeTopicConverter(config);
 
     auto actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,
                                      Ctx->Edge,
                                      Ctx->Edge,
-                                     TopicConverter,
+                                     topicConverter,
                                      true,
                                      "dcId",
                                      false,
-                                     Config,
+                                     config,
                                      *tabletCounters,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);
 }
 
-void TUserActionProcessorFixture::CreatePartition(const TCreatePartitionParams& params,
-                                                  const TVector<TCreateConsumerParams>& consumers)
+void TPartitionFixture::CreatePartition(const TCreatePartitionParams& params,
+                                        const TVector<TCreateConsumerParams>& consumers)
 {
     if ((params.Begin == 0) && (params.End == 0)) {
         CreatePartitionActor(params.Partition, consumers, true, {});
@@ -313,10 +280,10 @@ void TUserActionProcessorFixture::CreatePartition(const TCreatePartitionParams& 
     }
 }
 
-void TUserActionProcessorFixture::CreateSession(const TString& clientId,
-                                                const TString& sessionId,
-                                                ui32 generation, ui32 step,
-                                                ui64 cookie)
+void TPartitionFixture::CreateSession(const TString& clientId,
+                                      const TString& sessionId,
+                                      ui32 generation, ui32 step,
+                                      ui64 cookie)
 {
     SendCreateSession(cookie,clientId,sessionId, generation, step);
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session = sessionId, .Offset = 0}}}});
@@ -324,11 +291,11 @@ void TUserActionProcessorFixture::CreateSession(const TString& clientId,
     WaitProxyResponse({.Cookie = cookie});
 }
 
-void TUserActionProcessorFixture::SetOffset(const TString& clientId,
-                                            const TString& sessionId,
-                                            ui64 offset,
-                                            TMaybe<ui64> expected,
-                                            ui64 cookie)
+void TPartitionFixture::SetOffset(const TString& clientId,
+                                  const TString& sessionId,
+                                  ui64 offset,
+                                  TMaybe<ui64> expected,
+                                  ui64 cookie)
 {
     SendSetOffset(cookie, clientId, offset, sessionId);
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session = sessionId, .Offset = (expected ? *expected : offset)}}}});
@@ -336,11 +303,11 @@ void TUserActionProcessorFixture::SetOffset(const TString& clientId,
     WaitProxyResponse({.Cookie = cookie});
 }
 
-void TUserActionProcessorFixture::SendCreateSession(ui64 cookie,
-                                                    const TString& clientId,
-                                                    const TString& sessionId,
-                                                    ui32 generation,
-                                                    ui32 step)
+void TPartitionFixture::SendCreateSession(ui64 cookie,
+                                          const TString& clientId,
+                                          const TString& sessionId,
+                                          ui32 generation,
+                                          ui32 step)
 {
     auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie,
                                                      clientId,
@@ -352,10 +319,10 @@ void TUserActionProcessorFixture::SendCreateSession(ui64 cookie,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
-                                                const TString& clientId,
-                                                ui64 offset,
-                                                const TString& sessionId)
+void TPartitionFixture::SendSetOffset(ui64 cookie,
+                                      const TString& clientId,
+                                      ui64 offset,
+                                      const TString& sessionId)
 {
     auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie,
                                                      clientId,
@@ -366,15 +333,15 @@ void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::SendGetOffset(ui64 cookie,
-                                                const TString& clientId)
+void TPartitionFixture::SendGetOffset(ui64 cookie,
+                                      const TString& clientId)
 {
     auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie,
                                                        clientId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
+void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -382,13 +349,8 @@ void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetCookie(), 1);             // SET_OFFSET_COOKIE
 
     if (matcher.Count.Defined()) {
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
-                                 event->Record.CmdWriteSize() + event->Record.CmdDeleteRangeSize());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count, event->Record.CmdWriteSize());
     }
-
-    //
-    // TxMeta
-    //
     if (matcher.PlanStep.Defined()) {
         NKikimrPQ::TPartitionTxMeta meta;
         UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
@@ -401,12 +363,10 @@ void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
         UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
     }
-
-    //
-    // CmdWrite
-    //
     for (auto& [index, userInfo] : matcher.UserInfos) {
-        UNIT_ASSERT(index < event->Record.CmdWriteSize());
+        if (matcher.Count.Defined()) {
+            UNIT_ASSERT(index < *matcher.Count);
+        }
 
         NKikimrPQ::TUserInfo ud;
         UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(index).GetValue()));
@@ -427,23 +387,10 @@ void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             UNIT_ASSERT(ud.HasOffset());
             UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
         }
-        if (userInfo.ReadRuleGeneration) {
-            UNIT_ASSERT(ud.HasReadRuleGeneration());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
-        }
-    }
-
-    //
-    // CmdDeleteRange
-    //
-    for (auto& [index, deleteRange] : matcher.DeleteRanges) {
-        UNIT_ASSERT(index < event->Record.CmdDeleteRangeSize());
-
-        Y_UNUSED(deleteRange);
     }
 }
 
-void TUserActionProcessorFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher)
+void TPartitionFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -453,7 +400,7 @@ void TUserActionProcessorFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& match
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdGetStatusSize(), 1 + matcher.TxOps.size());
 }
 
-void TUserActionProcessorFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status)
+void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(status);
@@ -462,7 +409,7 @@ void TUserActionProcessorFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseSt
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
+void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>();
     UNIT_ASSERT(event != nullptr);
@@ -488,7 +435,7 @@ void TUserActionProcessorFixture::WaitProxyResponse(const TProxyResponseMatcher&
     }
 }
 
-void TUserActionProcessorFixture::WaitErrorResponse(const TErrorMatcher& matcher)
+void TPartitionFixture::WaitErrorResponse(const TErrorMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>();
     UNIT_ASSERT(event != nullptr);
@@ -506,7 +453,7 @@ void TUserActionProcessorFixture::WaitErrorResponse(const TErrorMatcher& matcher
     }
 }
 
-void TUserActionProcessorFixture::WaitDiskStatusRequest()
+void TPartitionFixture::WaitDiskStatusRequest()
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -514,7 +461,7 @@ void TUserActionProcessorFixture::WaitDiskStatusRequest()
     UNIT_ASSERT(event->Record.CmdGetStatusSize() > 0);
 }
 
-void TUserActionProcessorFixture::SendDiskStatusResponse()
+void TPartitionFixture::SendDiskStatusResponse()
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -526,7 +473,7 @@ void TUserActionProcessorFixture::SendDiskStatusResponse()
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitMetaReadRequest()
+void TPartitionFixture::WaitMetaReadRequest()
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -534,7 +481,7 @@ void TUserActionProcessorFixture::WaitMetaReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 2);
 }
 
-void TUserActionProcessorFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId)
+void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -571,7 +518,7 @@ void TUserActionProcessorFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitInfoRangeRequest()
+void TPartitionFixture::WaitInfoRangeRequest()
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -579,8 +526,8 @@ void TUserActionProcessorFixture::WaitInfoRangeRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadRangeSize(), 1);
 }
 
-void TUserActionProcessorFixture::SendInfoRangeResponse(ui32 partition,
-                                                        const TVector<TCreateConsumerParams>& consumers)
+void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
+                                              const TVector<TCreateConsumerParams>& consumers)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -616,7 +563,7 @@ void TUserActionProcessorFixture::SendInfoRangeResponse(ui32 partition,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitDataRangeRequest()
+void TPartitionFixture::WaitDataRangeRequest()
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -624,7 +571,7 @@ void TUserActionProcessorFixture::WaitDataRangeRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadRangeSize(), 1);
 }
 
-void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
+void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
 {
     Y_VERIFY(begin <= end);
 
@@ -643,12 +590,12 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
-                                                                ui64 begin, ui64 end,
-                                                                const TString& client,
-                                                                const TString& topic,
-                                                                bool immediate,
-                                                                ui64 txId)
+void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
+                                                      ui64 begin, ui64 end,
+                                                      const TString& client,
+                                                      const TString& topic,
+                                                      bool immediate,
+                                                      ui64 txId)
 {
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
 
@@ -666,50 +613,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
-{
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
-
-    //
-    // Source
-    //
-    ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
-
-    //
-    // TxBody
-    //
-    auto* body = event->Record.MutableTxBody();
-    for (auto& txOp : params.TxOps) {
-        auto* operation = body->MutableOperations()->Add();
-        operation->SetPartitionId(txOp.Partition);
-        operation->SetBegin(txOp.Begin);
-        operation->SetEnd(txOp.End);
-        operation->SetConsumer(txOp.Consumer);
-        operation->SetPath(txOp.Path);
-    }
-    for (ui64 tabletId : params.Senders) {
-        body->AddSendingShards(tabletId);
-    }
-    for (ui64 tabletId : params.Receivers) {
-        body->AddReceivingShards(tabletId);
-    }
-    body->SetImmediate(params.Senders.empty() && params.Receivers.empty());
-
-    //
-    // TxId
-    //
-    event->Record.SetTxId(params.TxId);
-
-    if (Pipe == TActorId()) {
-        Pipe = Ctx->Runtime->ConnectToPipe(Ctx->TabletId, Ctx->Edge, 0, GetPipeConfigWithRetries());
-    }
-
-    Ctx->Runtime->SendToPipe(Pipe,
-                             Ctx->Edge,
-                             event.Release());
-}
-
-void TUserActionProcessorFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
+void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
     UNIT_ASSERT(event != nullptr);
@@ -725,11 +629,11 @@ void TUserActionProcessorFixture::WaitProposeTransactionResponse(const TProposeT
     }
 }
 
-void TUserActionProcessorFixture::SendCalcPredicate(ui64 step,
-                                                    ui64 txId,
-                                                    const TString& consumer,
-                                                    ui64 begin,
-                                                    ui64 end)
+void TPartitionFixture::SendCalcPredicate(ui64 step,
+                                          ui64 txId,
+                                          const TString& consumer,
+                                          ui64 begin,
+                                          ui64 end)
 {
     auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(step, txId);
     event->AddOperation(consumer, begin, end);
@@ -737,7 +641,7 @@ void TUserActionProcessorFixture::SendCalcPredicate(ui64 step,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher)
+void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCalcPredicateResult>();
     UNIT_ASSERT(event != nullptr);
@@ -756,19 +660,19 @@ void TUserActionProcessorFixture::WaitCalcPredicateResult(const TCalcPredicateMa
     }
 }
 
-void TUserActionProcessorFixture::SendCommitTx(ui64 step, ui64 txId)
+void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId)
 {
     auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::SendRollbackTx(ui64 step, ui64 txId)
+void TPartitionFixture::SendRollbackTx(ui64 step, ui64 txId)
 {
     auto event = MakeHolder<TEvPQ::TEvTxRollback>(step, txId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TUserActionProcessorFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
+void TPartitionFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCommitDone>();
     UNIT_ASSERT(event != nullptr);
@@ -784,35 +688,10 @@ void TUserActionProcessorFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& m
     }
 }
 
-void TUserActionProcessorFixture::SendChangePartitionConfig(const TVector<TCreateConsumerParams>& consumers)
-{
-    auto config = Config;
-    config.ClearReadRules();
-    config.ClearReadRuleGenerations();
-
-    for (auto& c : consumers) {
-        config.AddReadRules(c.Consumer);
-        config.AddReadRuleGenerations(c.Generation);
-    }
-
-    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, config);
-    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
-}
-
-void TUserActionProcessorFixture::WaitPartitionConfigChanged(const TChangePartitionConfigMatcher& matcher)
-{
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionConfigChanged>();
-    UNIT_ASSERT(event != nullptr);
-
-    if (matcher.Partition) {
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Partition, event->Partition);
-    }
-}
-
-TTransaction TUserActionProcessorFixture::MakeTransaction(ui64 step, ui64 txId,
-                                                          TString consumer,
-                                                          ui64 begin, ui64 end,
-                                                          TMaybe<bool> predicate)
+TTransaction TPartitionFixture::MakeTransaction(ui64 step, ui64 txId,
+                                                TString consumer,
+                                                ui64 begin, ui64 end,
+                                                TMaybe<bool> predicate)
 {
     auto event = MakeSimpleShared<TEvPQ::TEvTxCalcPredicate>(step, txId);
     event->AddOperation(std::move(consumer), begin, end);
@@ -820,7 +699,7 @@ TTransaction TUserActionProcessorFixture::MakeTransaction(ui64 step, ui64 txId,
     return TTransaction(event, predicate);
 }
 
-Y_UNIT_TEST_F(Batching, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(Batching, TPartitionFixture)
 {
     CreatePartition();
 
@@ -864,7 +743,7 @@ Y_UNIT_TEST_F(Batching, TUserActionProcessorFixture)
     WaitErrorResponse({.Cookie=11, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
 }
 
-Y_UNIT_TEST_F(SetOffset, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
 {
     const ui32 partition = 0;
     const ui64 begin = 0;
@@ -916,7 +795,7 @@ Y_UNIT_TEST_F(SetOffset, TUserActionProcessorFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
-Y_UNIT_TEST_F(CommitOffsetRanges, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 {
     const ui32 partition = 0;
     const ui64 begin = 0;
@@ -986,7 +865,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TUserActionProcessorFixture)
     WaitProxyResponse({.Cookie=6, .Offset=4});
 }
 
-Y_UNIT_TEST_F(CorrectRange_Commit, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1011,7 +890,7 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TUserActionProcessorFixture)
     WaitCommitTxDone({.TxId=txId, .Partition=partition});
 }
 
-Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1047,7 +926,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TUserActionProcessorFixture)
     WaitCommitTxDone({.TxId=txId_1, .Partition=partition});
 }
 
-Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1078,7 +957,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TUserActionProcessorFixture)
                  }});
 }
 
-Y_UNIT_TEST_F(OldPlanStep, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1093,7 +972,7 @@ Y_UNIT_TEST_F(OldPlanStep, TUserActionProcessorFixture)
     WaitCommitTxDone({.TxId=txId, .Partition=partition});
 }
 
-Y_UNIT_TEST_F(AfterRestart_1, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1122,7 +1001,7 @@ Y_UNIT_TEST_F(AfterRestart_1, TUserActionProcessorFixture)
     WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=22222, .UserInfos={{1, {.Session="", .Offset=4}}}});
 }
 
-Y_UNIT_TEST_F(AfterRestart_2, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1146,7 +1025,7 @@ Y_UNIT_TEST_F(AfterRestart_2, TUserActionProcessorFixture)
     WaitCalcPredicateResult({.Step=step, .TxId=11111, .Partition=partition, .Predicate=true});
 }
 
-Y_UNIT_TEST_F(IncorrectRange, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1182,7 +1061,7 @@ Y_UNIT_TEST_F(IncorrectRange, TUserActionProcessorFixture)
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
 }
 
-Y_UNIT_TEST_F(CorrectRange_Rollback, TUserActionProcessorFixture)
+Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
 {
     const ui32 partition = 3;
     const ui64 begin = 0;
@@ -1206,205 +1085,6 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TUserActionProcessorFixture)
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
 }
 
-Y_UNIT_TEST_F(ChangeConfig, TUserActionProcessorFixture)
-{
-    const ui32 partition = 3;
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = 67891;
-
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end}, {
-                    {.Consumer="client-1", .Offset=0, .Session="session-1"},
-                    {.Consumer="client-2", .Offset=0, .Session="session-2"},
-                    {.Consumer="client-3", .Offset=0, .Session="session-3"}
-                    });
-
-    SendCalcPredicate(step, txId_1, "client-1", 0, 2);
-    SendChangePartitionConfig({{.Consumer="client-1", .Generation=0},
-                              { .Consumer="client-3", .Generation=7}});
-    //
-    // consumer 'client-2' will be deleted
-    //
-    SendCalcPredicate(step, txId_2, "client-2", 0, 2);
-
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
-    SendCommitTx(step, txId_1);
-
-    //
-    // consumer 'client-2' was deleted
-    //
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
-    SendRollbackTx(step, txId_2);
-
-    WaitCmdWrite({.Count=7,
-                 .PlanStep=step, .TxId=txId_2,
-                 .UserInfos={
-                 {1, {.Consumer="client-1", .Session="", .Offset=2}},
-                 {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
-                 },
-                 .DeleteRanges={
-                 {0, {.Consumer="client-2"}}
-                 }});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-    WaitPartitionConfigChanged({.Partition=partition});
 }
 
-Y_UNIT_TEST_F(EvProposeTransaction, TUserActionProcessorFixture)
-{
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = 67891;
-    const ui64 txId_3 = 67892;
-    const ui64 tablet2 = 22222;
-
-    SendProposeTransactionRequest({.TxId=txId_1,
-                                  .Senders={tablet2}, .Receivers={tablet2},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  {.Partition=0, .Consumer="consumer", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    SendProposeTransactionRequest({.TxId=txId_2,
-                                  .Senders={tablet2}, .Receivers={tablet2},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  {.Partition=0, .Consumer="consumer", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    SendProposeTransactionRequest({.TxId=txId_3,
-                                  .Senders={tablet2}, .Receivers={tablet2},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  {.Partition=0, .Consumer="consumer", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
-    //
-    // TODO(abcdef): проверить, что в команде CmdWrite есть информация только о txId_1
-    //
-
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    //
-    // TODO(abcdef): проверить, что в команде CmdWrite есть информация о txId_2 и txId_3
-    //
-
-    WaitProposeTransactionResponse({.TxId=txId_2,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-    WaitProposeTransactionResponse({.TxId=txId_3,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 }
-
-#if 0
-Y_UNIT_TEST_F(Distributed_Tx_Commit, TUserActionProcessorFixture)
-{
-    TTestContext tc;
-    auto setupEventFilter = [&tc]() {
-        return tc.InitialEventsFilter.Prepare();
-    };
-    auto testFunction = [&](const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone, true);
-        tc.Runtime->SetScheduledLimit(1000);
-
-        PQTabletPrepare({.partitions=1}, {}, tc);
-
-        const ui64 step = 12345;
-        const ui64 txId = 67890;
-        const ui32 partition = 0;
-        const TString consumer = "user";
-        const ui64 tablet_1 = tc.TabletId;
-        const ui64 tablet_2 = tc.TabletId + 1;
-
-        //
-        // TEvProposeTransaction от KqpDataExecuter
-        //
-
-        //
-        // список получателей
-        //
-        SendProposeTransactionRequest({.TxId=txId,
-                                      .Senders={tablet_1, tablet_2}, .Receivers={tablet_1, tablet_2},
-                                      .Partition=0, .Consumer=consumer, .Begin=0, .End=2});
-        WaitCmdWrite({.TxId=txId,
-                     .State=PREPARED,
-                     .Senders={tablet_1, tablet_2}, .Receivers={tablet_1, tablet_2},
-                     .Partition=0, .Consumer="user", .Begin=0, .End=2});
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-        //
-        // TEvMediatorPlanStep от медиатора
-        //
-        SendMediatorPlanStep({.Step=step, .TxIds={txId}});
-        WaitCmdWrite({.Step=step, .TxId=txId, .State=PLANNED});
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        WaitPlanStepAck({.Step=step, .TxIds={txIds}}); // TEvPlanStepAck для координатора
-        WaitPlanStepAccepted({.Step=step});
-
-        //
-        // TEvTxCalcPredicate для партиции
-        //
-
-        //
-        // работу с партицией не перехватывать
-        //
-        //WaitCalcPredicateRequest({.Step=step, .TxId=txId, .Consumer=consumer, .Begin=0, .End=2});
-        //SendCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=true});
-        WaitCmdWrite({.TxId=txId, .State=EXECUTING, .Partition=partition, .Predicate=true});
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-        //
-        // TEvReadSet другой таблетке
-        //
-        ui64 seqNo;
-        WaitReadSet({.Src=tablet_1, .Dst=tablet_2, .Step=step, .TxId=txId, .ReadSet={.Predicate=true}}, seqNo);
-
-        //
-        // TEvReadSet от другой таблетки
-        //
-        SendReadSet({.Src=tablet_2, .Dst=tablet_1, .Step=step, .TxId=txId, .ReadSet={.Predicate=true}, .SeqNo=11111});
-        //WaitCmdWrite();
-        //SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        //
-        // перенести после commit
-        //
-        WaitReadSetAck({.Src=tablet_1, .Dst=tablet_2, .Step=step, .TxId=txId, .SeqNo=11111});
-
-        //
-        // TEvReadSetAck от другой таблетки
-        //
-        //WaitCmdWrite();
-        //SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-        //
-        // TEvTxCommit для партиции
-        //
-        WaitCommitTx({.Step=step, .TxId=txId, .Consumer=consumer, .Begin=0, .End=2});
-        SendCommitTxDone({.Step=step, .TxId=txId, .Partition=0});
-
-        WaitCmdWrite({.TxId=txId, .State=EXECUTED});
-        // удалить транзакцию из шага
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
-        //
-        // TEvProposeTransactionResult для KqpDataExecuter
-        //
-        WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-        SendReadSetAck({.Src=tablet_2, .Dst=tablet_1, .Step=step, .TxId=txId, .SeqNo=seqNo});
-        //
-        // после сщ
-        WaitCmdDeleteRanges(...);
-    };
-}
-#endif
-
-} // Y_UNIT_TEST_SUITE(TUserActionProcessorTests)
-
-} // namespace NKikimr::NPQ

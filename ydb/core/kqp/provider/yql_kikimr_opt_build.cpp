@@ -366,7 +366,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         YQL_ENSURE(tablesData);
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
-        
+
         THashSet<std::string_view> updateColumns;
         const auto& updateStructType = update.Update().Ref().GetTypeAnn()->Cast<TStructExprType>();
         for (const auto& item : updateStructType->GetItems()) {
@@ -874,7 +874,7 @@ TYdbOperation GetTableOp(const TKiWriteTable& write) {
         return TYdbOperation::Replace;
     } else if (mode == "insert_revert") {
         return TYdbOperation::InsertRevert;
-    } else if (mode == "insert_abort") {
+    } else if (mode == "insert_abort" || mode == "append") {
         return TYdbOperation::InsertAbort;
     } else if (mode == "delete_on") {
         return TYdbOperation::DeleteOn;

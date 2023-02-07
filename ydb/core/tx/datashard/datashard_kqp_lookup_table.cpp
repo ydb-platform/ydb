@@ -30,13 +30,19 @@ void ValidateLookupKeys(const TType* inputType, const THashMap<TString, NScheme:
 
     for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
         auto name = rowType->GetMemberName(i);
-        auto dataType = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
 
         auto columnType = keyColumns.FindPtr(name);
         MKQL_ENSURE_S(columnType);
-
-        // TODO: support pg types
-        MKQL_ENSURE_S(dataType == columnType->GetTypeId(), "Key column type mismatch, column: " << name);
+        if (NKqp::StructHoldsPgType(*rowType, i)) {
+            auto pgTypeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
+            MKQL_ENSURE_S(
+                NPg::PgTypeIdFromTypeDesc(pgTypeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnType->GetTypeDesc()),
+                "Key column type mismatch, column: " << name
+            );
+        } else {
+            auto dataTypeId = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
+            MKQL_ENSURE_S(dataTypeId == columnType->GetTypeId(), "Key column type mismatch, column: " << name);
+        }
     }
 }
 
@@ -65,17 +71,17 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     auto keyTypes = AS_TYPE(TStructType, AS_TYPE(TStreamType, keysNode.GetStaticType())->GetItemType());
     result.KeyTypes.resize(keyTypes->GetMembersCount());
     for (ui32 i = 0; i < result.KeyTypes.size(); ++i) {
-        // TODO: support pg types
-        if (keyTypes->GetMemberType(i)->IsOptional()) {
-            auto type = AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType();
-            MKQL_ENSURE(type->GetKind() != TType::EKind::Pg, "pg types are not supported");
-            auto dataType = AS_TYPE(TDataType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(dataType->GetSchemeType());
+        NKikimr::NMiniKQL::TType* type = keyTypes->GetMemberType(i);
+        if (type->GetKind() == TType::EKind::Pg) {
+            auto itemType = AS_TYPE(TPgType, type);
+            result.KeyTypes[i] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
         } else {
-            auto type = keyTypes->GetMemberType(i);
-            MKQL_ENSURE(type->GetKind() != TType::EKind::Pg, "pg types are not supported");
-            auto dataType = AS_TYPE(TDataType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(dataType->GetSchemeType());
+            if (type->IsOptional()) {
+                type = AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType();
+            }
+            Y_ENSURE(type->GetKind() == TType::EKind::Data);
+            auto itemType = AS_TYPE(TDataType, type);
+            result.KeyTypes[i] = NScheme::TTypeInfo(itemType->GetSchemeType());
         }
     }
 

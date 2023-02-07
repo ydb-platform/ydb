@@ -74,6 +74,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-library-aclib
   ydb-library-binary_json
   ydb-library-dynumber
+  parser-pg_wrapper-interface
   api-protos
   lib-deprecated-kicli
   dq-actors-compute
@@ -330,6 +331,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-library-aclib
   ydb-library-binary_json
   ydb-library-dynumber
+  parser-pg_wrapper-interface
   api-protos
   lib-deprecated-kicli
   dq-actors-compute

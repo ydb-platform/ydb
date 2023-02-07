@@ -2430,7 +2430,7 @@ bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
             if (scanColumnsOnly) {
                 continue;
             }
-           
+
             bool hasNestedAggregations = false;
             ScanAggregations(group->Tail().TailPtr(), hasNestedAggregations);
             if (!allowAggregates && hasNestedAggregations) {
@@ -2793,6 +2793,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         bool hasFinalExtraSortColumns = false;
         TExprNode::TPtr groupExprs;
         TExprNode::TPtr result;
+        TExprNode::TPtr targetColumns;
 
         // pass 0 - from/values
         // pass 1 - join
@@ -2879,8 +2880,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         if (!EnsureAtom(*names->Child(i), ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
                         }
-
-                        outputItems.push_back(ctx.Expr.MakeType<TItemExprType>(names->Child(i)->Content(), tupleType->GetItems()[i]));
+                        TStringBuf columnName = targetColumns
+                            ? targetColumns->Child(i)->Content()
+                            : names->Child(i)->Content();
+                        outputItems.push_back(ctx.Expr.MakeType<TItemExprType>(columnName, tupleType->GetItems()[i]));
                     }
 
                     outputRowType = ctx.Expr.MakeType<TStructExprType>(outputItems);
@@ -3070,11 +3073,22 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
                         else {
                             if (column->Head().IsAtom()) {
-                                outputItems.push_back(ctx.Expr.MakeType<TItemExprType>(column->Head().Content(), column->Tail().GetTypeAnn()));
+                                TStringBuf columnName = targetColumns
+                                    ? targetColumns->Child(index)->Content()
+                                    : column->Head().Content();
+                                outputItems.push_back(ctx.Expr.MakeType<TItemExprType>(columnName, column->Tail().GetTypeAnn()));
                             } else {
                                 // star or qualified star
+                                size_t index = 0;
                                 for (const auto& item : column->Tail().GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
-                                    outputItems.push_back(hasExtTypes ? item : RemoveAlias(item, ctx.Expr));
+                                    auto itemRef = hasExtTypes ? item : RemoveAlias(item, ctx.Expr);
+                                    if (targetColumns) {
+                                        itemRef = ctx.Expr.MakeType<TItemExprType>(
+                                            targetColumns->Child(index++)->Content(),
+                                            itemRef->GetItemType()
+                                        );
+                                    }
+                                    outputItems.push_back(itemRef);
                                 }
                             }
 
@@ -3951,8 +3965,38 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "malformed projection_order"));
                         }
                     }
-
                     hasProjectionOrder = true;
+                } else if (optionName == "target_columns") {
+                    if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (pass == 0) {
+                        if (!EnsureTupleMinSize(option->Tail(), 1, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        for (const auto& child : option->Tail().Children()) {
+                            if (!EnsureAtom(*child, ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                        targetColumns = &option->Tail();
+                        if (auto values = GetSetting(options, "values")) {
+                            if (values->Child(1)->ChildrenSize() != targetColumns->ChildrenSize()) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                                    TStringBuilder() << "values and target_options sizes do not match"));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                    }
+                    if (auto projectionOrder = GetSetting(options, "projection_order")) {
+                        if (projectionOrder->ChildrenSize() != targetColumns->ChildrenSize()) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                                TStringBuilder() << "projection_order and target_options sizes do not match"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
                 } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
                         TStringBuilder() << "Unsupported option: " << optionName));

@@ -21,12 +21,12 @@ target_link_libraries(yql-dq-runtime PUBLIC
   ydb-library-mkql_proto
   yql-minikql-comp_nodes
   yql-minikql-computation
+  parser-pg_wrapper-interface
   yql-public-udf
   dq-actors-protos
   yql-dq-common
   yql-dq-expr_nodes
   yql-dq-type_ann
-  parser-pg_wrapper-interface
   common-schema-mkql
   tools-enum_parser-enum_serialization_runtime
 )

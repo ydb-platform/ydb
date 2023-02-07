@@ -9,6 +9,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 
 #include <util/generic/cast.h>
 
@@ -67,11 +68,15 @@ public:
                 NUdf::TUnboxedValue value = Row.GetElement(rowIndex);
 
                 if (value) {
-                    // TODO: support pg types
-                    Y_VERIFY(type.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-                    auto slot = NUdf::GetDataSlot(type.GetTypeId());
-                    MKQL_ENSURE(IsValidValue(slot, value),
-                        "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
+                    if (type.GetTypeId() != NScheme::NTypeIds::Pg) {
+                        auto slot = NUdf::GetDataSlot(type.GetTypeId());
+                        MKQL_ENSURE(IsValidValue(slot, value),
+                            "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
+                    } else {
+                        Y_UNUSED(
+                            NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()))
+                        );
+                    }
                 }
 
                 // NOTE: We have to copy values here as some values inlined in TUnboxedValue
@@ -179,8 +184,11 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     for (ui32 i = 0; i < rowTypes.size(); ++i) {
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(name, i).second);
-        // TODO: support pg types
-        rowTypes[i] = NScheme::TTypeInfo(NKqp::UnwrapDataTypeFromStruct(*rowType, i));
+        if (NKqp::StructHoldsPgType(*rowType, i)) {
+            rowTypes[i] = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
+        } else {
+            rowTypes[i] = NScheme::TTypeInfo(NKqp::UnwrapDataTypeFromStruct(*rowType, i));
+        }
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
@@ -189,9 +197,16 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
         auto it = inputIndex.find(columnInfo.Name);
         MKQL_ENSURE_S(it != inputIndex.end());
-        auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
-        // TODO: support pg types
-        MKQL_ENSURE_S(typeId == columnInfo.Type.GetTypeId(), "row key type missmatch with table key type");
+        if (NKqp::StructHoldsPgType(*rowType, i)) {
+            auto typeInfo = NKqp::UnwrapPgTypeFromStruct(*rowType, i);
+            MKQL_ENSURE_S(
+                NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()) == NPg::PgTypeIdFromTypeDesc(columnInfo.Type.GetTypeDesc()),
+                "row key type mismatch with table key type"
+            );
+        } else {
+            auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
+            MKQL_ENSURE_S(typeId == columnInfo.Type.GetTypeId(), "row key type mismatch with table key type");
+        }
         keyIndices[i] = it->second;
     }
 

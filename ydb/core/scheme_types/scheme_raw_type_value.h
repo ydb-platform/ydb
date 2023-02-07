@@ -53,6 +53,7 @@ public:
     TString ToString() const {
         TStringBuilder builder;
         // TODO: support pg types
+        Y_ENSURE(ValueType.GetTypeId() != NScheme::NTypeIds::Pg);
         builder << "(type:" << ValueType.GetTypeId();
         if (!IsEmpty()) {
             builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote();

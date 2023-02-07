@@ -70,21 +70,29 @@ TSmallVec<bool> GetSkipNullKeys(const TKqpReadTableSettings& settings, const TKi
     return skipNullKeys;
 }
 
-NMiniKQL::TType* CreateColumnType(NUdf::TDataTypeId typeId, const TKqlCompileContext& ctx) {
+NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, const TKqlCompileContext& ctx) {
+    auto typeId = typeInfo.GetTypeId();
     if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
         return ctx.PgmBuilder().NewDecimalType(22, 9);
+    } else if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
+        return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetTypeDesc()));
     } else {
         return ctx.PgmBuilder().NewDataType(typeId);
     }
 }
 
-void ValidateColumnType(const TTypeAnnotationNode* type, NUdf::TDataTypeId columnTypeId) {
+void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TTypeId columnTypeId) {
     YQL_ENSURE(type);
     bool isOptional;
-    const TDataExprType* dataType = nullptr;
-    YQL_ENSURE(IsDataOrOptionalOfData(type, isOptional, dataType));
-    auto schemeType = NUdf::GetDataTypeInfo(dataType->GetSlot()).TypeId;
-    YQL_ENSURE(schemeType == columnTypeId);
+    if (columnTypeId == NKikimr::NScheme::NTypeIds::Pg) {
+        const TPgExprType* pgType = nullptr;
+        YQL_ENSURE(IsPg(type, pgType));
+    } else {
+        const TDataExprType* dataType = nullptr;
+        YQL_ENSURE(IsDataOrOptionalOfData(type, isOptional, dataType));
+        auto schemeType = NUdf::GetDataTypeInfo(dataType->GetSlot()).TypeId;
+        YQL_ENSURE(schemeType == columnTypeId);
+    }
 }
 
 void ValidateColumnsType(const TStreamExprType* streamType, const TKikimrTableMetadata& tableMeta) {
@@ -95,9 +103,7 @@ void ValidateColumnsType(const TStreamExprType* streamType, const TKikimrTableMe
         auto columnData = tableMeta.Columns.FindPtr(member->GetName());
         YQL_ENSURE(columnData);
         auto columnDataType = columnData->TypeInfo.GetTypeId();
-        // TODO: support pg types
-        YQL_ENSURE(columnDataType != 0 && columnDataType != NScheme::NTypeIds::Pg);
-
+        YQL_ENSURE(columnDataType != 0);
         ValidateColumnType(member->GetItemType(), columnDataType);
     }
 }
@@ -110,8 +116,7 @@ void ValidateRangeBoundType(const TTupleExprType* keyTupleType, const TKikimrTab
         auto columnData = tableMeta.Columns.FindPtr(tableMeta.KeyColumnNames[i]);
         YQL_ENSURE(columnData);
         auto columnDataType = columnData->TypeInfo.GetTypeId();
-        // TODO: support pg types
-        YQL_ENSURE(columnDataType != 0 && columnDataType != NScheme::NTypeIds::Pg);
+        YQL_ENSURE(columnDataType != 0);
 
         ValidateColumnType(keyTupleType->GetItems()[i]->Cast<TOptionalExprType>()->GetItemType(), columnDataType);
     }
@@ -152,10 +157,9 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
         auto columnData = tableMeta.Columns.FindPtr(keyColumn);
         YQL_ENSURE(columnData);
         auto columnDataType = columnData->TypeInfo.GetTypeId();
-        // TODO: support pg types
-        YQL_ENSURE(columnDataType != 0 && columnDataType != NScheme::NTypeIds::Pg);
 
-        auto columnType = CreateColumnType(columnDataType, ctx);
+        YQL_ENSURE(columnDataType != 0);
+        auto columnType = CreateColumnType(columnData->TypeInfo, ctx);
 
         if (fromTuple.ArgCount() > i) {
             ValidateColumnType(fromTuple.Arg(i).Ref().GetTypeAnn(), columnDataType);

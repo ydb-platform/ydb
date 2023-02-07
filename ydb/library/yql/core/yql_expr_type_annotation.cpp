@@ -1791,6 +1791,34 @@ void EnsureAllNodesTypeAnnotated(const TExprNode& root) {
 
 namespace {
 
+bool IsPg(
+    TPosition pos,
+    const TTypeAnnotationNode* typeAnnotation,
+    const TPgExprType*& pgType,
+    TIssue& err,
+    bool& hasErrorType)
+{
+    err = {};
+    hasErrorType = false;
+
+    if (!typeAnnotation) {
+        err = TIssue(pos, TStringBuilder() << "Expected pg, but got lambda");
+        return false;
+    }
+
+    if (typeAnnotation->GetKind() == ETypeAnnotationKind::Pg) {
+        pgType = typeAnnotation->Cast<TPgExprType>();
+        return true;
+    }
+
+    if (!HasError(typeAnnotation, err)) {
+        err = TIssue(pos, TStringBuilder() << "Expected pg, but got: " << *typeAnnotation);
+    } else {
+        hasErrorType = true;
+    }
+    return false;
+}
+
 bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnotation, bool& isOptional,
     const TDataExprType*& dataType, TIssue& err, bool& hasErrorType)
 {
@@ -1845,6 +1873,12 @@ bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) {
     bool isOptional;
     const TDataExprType* dataType;
     return IsDataOrOptionalOfData(typeAnnotation, isOptional, dataType);
+}
+
+bool IsPg(const TTypeAnnotationNode* typeAnnotation, const TPgExprType*& pgType) {
+    TIssue err;
+    bool hasErrorType;
+    return IsPg({}, typeAnnotation, pgType, err, hasErrorType);
 }
 
 bool EnsureArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx) {

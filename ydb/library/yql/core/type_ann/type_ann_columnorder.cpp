@@ -42,30 +42,39 @@ void AddPrefix(TVector<TString>& columnOrder, const TString& prefix) {
 IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     TVector<TString> columnOrder;
-    auto result = GetSetting(node->Tail(), "result");
-    if (result) {
-        for (auto& col : result->Tail().ChildrenList()) {
-            if (col->Head().IsAtom()) {
-                auto alias = TString(col->Head().Content());
-                YQL_ENSURE(!alias.empty());
-                columnOrder.push_back(alias);
-            }
-            else {
-                YQL_ENSURE(col->Head().IsList());
-                for (const auto& x : col->Head().Children()) {
-                    auto alias = TString(x->Content());
+    if (auto targetColumnsOption = GetSetting(node->Tail(), "target_columns")) {
+        TExprNode::TPtr targetColumns = targetColumnsOption->Child(1);
+        for (const auto& targetColumn : targetColumns->ChildrenList()) {
+            columnOrder.emplace_back(targetColumn->Content());
+        }
+    } else {
+        auto result = GetSetting(node->Tail(), "result");
+        if (result) {
+            for (size_t i = 0; i < result->Tail().ChildrenSize(); i++) {
+                auto col = result->Tail().Child(i);
+                if (col->Head().IsAtom()) {
+                    auto alias = TString(col->Head().Content());
                     YQL_ENSURE(!alias.empty());
                     columnOrder.push_back(alias);
                 }
+                else {
+                    YQL_ENSURE(col->Head().IsList());
+                    for (const auto& x : col->Head().Children()) {
+                        auto alias = TString(x->Content());
+                        YQL_ENSURE(!alias.empty());
+                        columnOrder.push_back(alias);
+                    }
+                }
             }
-        }
-    } else {
-        auto values = GetSetting(node->Tail(), "values");
-        YQL_ENSURE(values);
-        for (const auto& x : values->Child(1)->Children()) {
-            auto alias = TString(x->Content());
-            YQL_ENSURE(!alias.empty());
-            columnOrder.push_back(alias);
+        } else {
+            auto values = GetSetting(node->Tail(), "values");
+            YQL_ENSURE(values);
+            TExprNode::TPtr valuesList = values->Child(1);
+            for (size_t i = 0; i < valuesList->ChildrenSize(); i++) {
+                auto alias = TString(valuesList->Child(i)->Content());
+                YQL_ENSURE(!alias.empty());
+                columnOrder.push_back(alias);
+            }
         }
     }
 

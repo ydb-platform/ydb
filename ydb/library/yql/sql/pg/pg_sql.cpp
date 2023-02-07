@@ -206,6 +206,11 @@ public:
                 DqEngineForce = true;
             }
         }
+
+        for (const auto& [cluster, provider] : Settings.ClusterMapping) {
+            Provider = provider;
+            break;
+        }
     }
 
     void OnResult(const List* raw) {
@@ -275,7 +280,7 @@ public:
     using TTraverseNodeStack = TStack<std::pair<const Node*, bool>>;
 
     [[nodiscard]]
-    TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner) {
+    TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner, TVector <TAstNode*> targetColumns = {}) {
         CTE.emplace_back();
         Y_DEFER {
             CTE.pop_back();
@@ -698,6 +703,9 @@ public:
             }
 
             TVector<TAstNode*> setItemOptions;
+            if (targetColumns) {
+                setItemOptions.push_back(QL(QA("target_columns"), QVL(targetColumns.data(), targetColumns.size())));
+            }
             if (ListLength(x->targetList) > 0) {
                 setItemOptions.push_back(QL(QA("result"), QVL(res.data(), res.size())));
             } else {
@@ -876,11 +884,6 @@ public:
 
     [[nodiscard]]
     TAstNode* ParseInsertStmt(const InsertStmt* value) {
-        if (ListLength(value->cols) > 0) {
-            AddError("InsertStmt: target columns are not supported");
-            return nullptr;
-        }
-
         if (!value->selectStmt) {
             AddError("InsertStmt: expected Select");
             return nullptr;
@@ -906,14 +909,45 @@ public:
             return nullptr;
         }
 
-        auto select = ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true);
+        TVector <TAstNode*> targetColumns;
+        if (value->cols) {
+            for (size_t i = 0; i < ListLength(value->cols); i++) {
+                auto node = ListNodeNth(value->cols, i);
+                if (NodeTag(node) != T_ResTarget) {
+                    NodeNotImplemented(value, node);
+                    return nullptr;
+                }
+                auto r = CAST_NODE(ResTarget, node);
+                if (!r->name) {
+                    AddError("SelectStmt: expected name");
+                    return nullptr;
+                }
+                targetColumns.push_back(QA(r->name));
+            }
+        }
+
+        auto select = ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true, targetColumns);
         if (!select) {
             return nullptr;
         }
 
-        auto writeOptions = QL(QL(QA("mode"), QA("append")));
-        Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
-            A("world"), insertDesc.Sink, insertDesc.Key, select, writeOptions)));
+        auto insertMode = (ProviderToInsertModeMap.contains(Provider))
+            ? ProviderToInsertModeMap.at(Provider)
+            : "append";
+
+        auto writeOptions = QL(QL(QA("mode"), QA(insertMode)));
+        Statements.push_back(L(
+            A("let"),
+            A("world"),
+            L(
+                A("Write!"),
+                A("world"),
+                insertDesc.Sink,
+                insertDesc.Key,
+                select,
+                writeOptions
+            )
+        ));
 
         return Statements.back();
     }
@@ -1154,11 +1188,6 @@ public:
         AT_LOCATION(value);
         if (StrLength(value->catalogname) > 0) {
             AddError("catalogname is not supported");
-            return {};
-        }
-
-        if (StrLength(value->schemaname) == 0) {
-            AddError("schemaname should be specified");
             return {};
         }
 
@@ -2782,6 +2811,13 @@ private:
     TVector<NYql::TPosition> Positions;
     TVector<ui32> RowStarts;
     ui32 QuerySize;
+    TString Provider;
+    static const THashMap<TStringBuf, TString> ProviderToInsertModeMap;
+};
+
+const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
+    {NYql::KikimrProviderName, "insert_abort"},
+    {NYql::YtProviderName, "append"}
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {

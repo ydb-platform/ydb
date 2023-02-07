@@ -6,6 +6,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/minikql/mkql_node_printer.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <array>
 
@@ -1299,7 +1300,7 @@ public:
 
     NUdf::TType* Build() const override {
         return NMiniKQL::TBlockType::Create(
-                    const_cast<NMiniKQL::TType*>(ItemType_), 
+                    const_cast<NMiniKQL::TType*>(ItemType_),
                     (IsScalar_ ? NMiniKQL::TBlockType::EShape::Scalar : NMiniKQL::TBlockType::EShape::Many),
                     Parent_.Env());
     }
@@ -2056,7 +2057,8 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Pg:
             return MakePgCompare((const TPgType*)type);
         default:
-            throw TTypeNotSupported() << "Data, Pg, Optional, Variant over Tuple, Tuple or List is expected for comparing";
+            throw TTypeNotSupported() << "Data, Pg, Optional, Variant over Tuple, Tuple or List is expected for comparing,"
+            << "but got: " << PrintNode(type);
     }
 }
 

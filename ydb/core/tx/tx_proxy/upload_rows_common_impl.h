@@ -337,9 +337,12 @@ private:
         } else if (reqColumns.empty()) {
             for (auto& [name, type] : SrcColumns) {
                 Ydb::Type ydbType;
-                // TODO: support pg types
-                Y_VERIFY(type.GetTypeId() != NScheme::NTypeIds::Pg);
-                ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type.GetTypeId());
+                if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    Ydb::PgType* pgType = ydbType.mutable_pg_type();
+                    pgType->set_oid(NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+                } else {
+                    ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type.GetTypeId());
+                }
                 reqColumns.emplace_back(name, std::move(ydbType));
             }
         }

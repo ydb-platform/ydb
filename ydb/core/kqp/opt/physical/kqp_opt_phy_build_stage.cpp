@@ -491,6 +491,7 @@ bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
                     // pass
                 } else if (tuple.Value().Maybe<TCoDataCtor>()) {
                     // TODO: support pg types
+                    Y_ENSURE(tuple.Value().Ref().GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Pg);
                     auto slot = tuple.Value().Ref().GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
                     auto typeId = NUdf::GetDataTypeInfo(slot).TypeId;
                     auto typeInfo = NScheme::TTypeInfo(typeId);

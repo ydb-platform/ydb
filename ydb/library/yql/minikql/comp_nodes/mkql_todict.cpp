@@ -781,8 +781,9 @@ public:
                 return ctx.HolderFactory.GetEmptyContainer();
         }
 
+        bool UseICompare = UseIHash && std::is_same_v<TSetAccumulator, TSortedSetAccumulator>;
         TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded,
-            UseIHash ? MakeCompareImpl(KeyType) : nullptr,
+            UseICompare ? MakeCompareImpl(KeyType) : nullptr,
             UseIHash ? MakeEquateImpl(KeyType) : nullptr,
             UseIHash ? MakeHashImpl(KeyType) : nullptr,
             ctx, itemsCountHint);

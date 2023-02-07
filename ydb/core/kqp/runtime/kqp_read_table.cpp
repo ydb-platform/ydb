@@ -23,6 +23,15 @@ TTableId ParseTableId(const TRuntimeNode& node) {
     return TTableId(ownerId, tableId, sysViewInfo, schemeVersion);
 }
 
+bool StructHoldsPgType(const TStructType& structType, ui32 index) {
+    return (structType.GetMemberType(index)->GetKind() == TType::EKind::Pg);
+}
+
+NScheme::TTypeInfo UnwrapPgTypeFromStruct(const TStructType& structType, ui32 index) {
+    TPgType* type = AS_TYPE(TPgType, structType.GetMemberType(index));
+    return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(type->GetTypeId()));
+}
+
 NUdf::TDataTypeId UnwrapDataTypeFromStruct(const TStructType& structType, ui32 index) {
     if (structType.GetMemberType(index)->GetKind() == TType::EKind::Optional) {
         auto type = AS_TYPE(TDataType, AS_TYPE(TOptionalType, structType.GetMemberType(index))->GetItemType());

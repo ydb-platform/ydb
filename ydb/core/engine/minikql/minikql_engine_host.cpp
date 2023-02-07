@@ -23,13 +23,12 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
     for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) {
         const TCell& cell = row[keyIdx];
         ui32 keyCol = tableInfo->KeyColumns[keyIdx];
-        // TODO: support pg types
-        NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
+        NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
         if (cell.IsNull()) {
             key.emplace_back();
             bytes += 1;
         } else {
-            key.emplace_back(cell.Data(), cell.Size(), vtype);
+            key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
             bytes += cell.Size();
         }
     }
@@ -891,10 +890,9 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     for (size_t i = 0; i < commands.size(); i++) {
         const TUpdateCommand& upd = commands[i];
         Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
-        // TODO: support pg types
-        NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType.GetTypeId();
+        auto vtypeinfo = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
-            upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
+            upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeinfo));
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
 

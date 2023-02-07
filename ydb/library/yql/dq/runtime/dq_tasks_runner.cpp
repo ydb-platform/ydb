@@ -12,6 +12,8 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -114,6 +116,14 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
                 innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
             }
             ValidateParamValue(paramName, innerType, value.GetVariantItem());
+            break;
+        }
+
+        case TType::EKind::Pg: {
+            auto pgType = static_cast<const TPgType*>(type);
+            if (value) {
+                Y_UNUSED(NYql::NCommon::PgValueToNativeBinary(value, pgType->GetTypeId()));
+            }
             break;
         }
 

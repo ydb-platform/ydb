@@ -745,7 +745,12 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
     return KeepColumnOrder(res, node, ctx, *optCtx.Types);
 }
 
-TExprNode::TPtr BuildValues(TPositionHandle pos, const TExprNode::TPtr& values, TExprContext& ctx) {
+TExprNode::TPtr BuildValues(
+    TPositionHandle pos,
+    const TExprNode::TPtr& values,
+    const TExprNode::TPtr& targetColumns,
+    TExprContext& ctx
+) {
     return ctx.Builder(pos)
         .Callable("OrderedMap")
             .Add(0, values->ChildPtr(2))
@@ -754,9 +759,12 @@ TExprNode::TPtr BuildValues(TPositionHandle pos, const TExprNode::TPtr& values, 
                 .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 index = 0; index < values->Child(1)->ChildrenSize(); ++index) {
+                        TStringBuf alias = targetColumns
+                            ? targetColumns->Child(1)->Child(index)->Content()
+                            : values->Child(1)->Child(index)->Content();
                         parent
                             .List(index)
-                                .Atom(0, values->Child(1)->Child(index)->Content())
+                                .Atom(0, alias)
                                 .Callable(1, "Nth")
                                     .Arg(0, "row")
                                     .Atom(1, ToString(index))
@@ -2986,13 +2994,15 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto sort = GetSetting(setItem->Tail(), "sort");
         auto extraSortColumns = GetSetting(setItem->Tail(), "final_extra_sort_columns");
         auto extraSortKeys = GetSetting(setItem->Tail(), "final_extra_sort_keys");
+        auto targetColumns = GetSetting(setItem->Tail(), "target_columns");
         bool oneRow = !from;
         TExprNode::TPtr list;
         if (values) {
             YQL_ENSURE(!result);
-            list = BuildValues(node->Pos(), values, ctx);
+            list = BuildValues(node->Pos(), values, targetColumns, ctx);
         } else {
             YQL_ENSURE(result);
+            YQL_ENSURE(!targetColumns, "target columns for projection are not supported yet");
             TExprNode::TPtr projectionLambda = BuildProjectionLambda(node->Pos(), result, subLinkId.Defined(), ctx);
             TExprNode::TPtr projectionArg = projectionLambda->Head().HeadPtr();
             TExprNode::TPtr projectionRoot = projectionLambda->TailPtr();

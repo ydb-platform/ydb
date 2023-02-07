@@ -96,7 +96,20 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
                 const auto& id = vslot.GetVSlotId();
                 const TPDiskId pdiskId(id.GetNodeId(), id.GetPDiskId());
-                UNIT_ASSERT(active.count(pdiskId));
+                if (!active.count(pdiskId)) {
+                    Ctest << "active# { ";
+                    for (auto id : active) {
+                        Ctest << id.ToString() << " ";
+                    }
+                    Ctest << " }" << Endl;
+                    Ctest << "faulty# { ";
+                    for (auto id : faulty) {
+                        Ctest << id.ToString() << " ";
+                    }
+                    Ctest << " }" << Endl;
+                    Ctest << "pdiskId# " << pdiskId.ToString() << Endl;
+                    UNIT_FAIL("non-active disk is present in group");
+                }
             }
             UNIT_ASSERT_C(CheckGroupLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Error on step# " << i
                 << ", ErrorReason# " << error);
@@ -108,6 +121,6 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
     }
 
     Y_UNIT_TEST(SelfHealMirror3dc) {
-        TestSelfHeal(3, 4, 1, 4, 48, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc);
+        TestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc);
     }
 }
